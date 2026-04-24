@@ -1,0 +1,334 @@
+// Stage 1 — полная схема БД (см. PROJECT_SPEC.md, DEVELOPMENT_PLAN.md).
+// Миграции: `npx prisma migrate dev --name stage1_init` (локально).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// --- Enums ---
+
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+  PENDING_VERIFICATION
+}
+
+enum GenerationType {
+  IMAGE
+  VIDEO
+}
+
+enum GenerationStatus {
+  CREATED
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  BLOCKED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum CreditTransactionType {
+  /// Покупка / зачисление кредитов (платёж)
+  PURCHASE
+  /// Резерв под генерацию
+  RESERVE
+  /// Списание после успешной генерации
+  CAPTURE
+  /// Возврат (ошибка провайдера и т.п.)
+  REFUND
+  /// Ручная корректировка админом
+  ADMIN_ADJUSTMENT
+  /// Промокод / бонус
+  PROMO
+}
+
+enum AiModelProvider {
+  KIE_AI
+  OTHER
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+// --- Models ---
+
+model User {
+  id             String     @id @default(cuid())
+  email          String     @unique
+  passwordHash   String
+  name           String?
+  role           UserRole   @default(USER)
+  status         UserStatus @default(ACTIVE)
+  balanceCredits Int        @default(0)
+  emailVerified  Boolean    @default(false)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  generations        Generation[]
+  payments           Payment[]
+  creditTransactions CreditTransaction[]
+  uploadedFiles      UploadedFile[]
+  adminActions       AdminAuditLog[]     @relation("AdminAuditActor")
+  appSettingsUpdated AppSetting[]        @relation("AppSettingUpdatedBy")
+
+  @@index([status])
+  @@index([role])
+  @@map("users")
+}
+
+model Plan {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  price     Decimal  @db.Decimal(12, 2)
+  currency  String   @db.VarChar(8)
+  credits   Int
+  /// Лимиты тарифа (JSON): квоты, флаги и т.д.
+  limits    Json?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("plans")
+}
+
+model AiModel {
+  id                     String            @id @default(cuid())
+  name                   String
+  slug                   String            @unique
+  provider               AiModelProvider
+  type                   GenerationType
+  apiModelId             String
+  endpoint               String?
+  costCredits            Int
+  realCost               Decimal?          @db.Decimal(12, 4)
+  isActive               Boolean           @default(true)
+  /// JSON Schema или иной JSON с описанием полей модели для админки/UI
+  settingsSchema         Json?
+  description            String?
+  supportsImageInput     Boolean           @default(false)
+  supportsVideoInput     Boolean           @default(false)
+  supportsNegativePrompt Boolean           @default(false)
+  supportsSeed           Boolean           @default(false)
+  maxDuration            Int?
+  availableAspectRatios  Json?
+  availableResolutions   Json?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  generations Generation[]
+
+  @@index([provider, isActive])
+  @@index([type, isActive])
+  @@map("ai_models")
+}
+
+model Generation {
+  id              String            @id @default(cuid())
+  userId          String
+  modelId         String
+  type            GenerationType
+  status          GenerationStatus  @default(CREATED)
+  prompt          String            @db.Text
+  negativePrompt  String?           @db.Text
+  /// Ссылки на входные файлы (JSON-массив и т.д.)
+  inputFiles      Json?
+  /// Результаты (URL, storage keys и т.д.) — медиа в S3-compatible storage
+  outputFiles     Json?
+  providerTaskId  String?
+  costCredits     Int               @default(0)
+  errorMessage    String?           @db.Text
+  metadata        Json?
+  createdAt       DateTime          @default(now())
+  completedAt     DateTime?
+  updatedAt       DateTime          @updatedAt
+
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  model               AiModel              @relation(fields: [modelId], references: [id], onDelete: Restrict)
+  creditTransactions  CreditTransaction[]
+  apiLogs             ApiLog[]
+  uploadedFiles       UploadedFile[]
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([modelId])
+  @@map("generations")
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  userId            String
+  provider          String        @db.VarChar(64)
+  providerPaymentId String?       @db.VarChar(255)
+  amount            Decimal       @db.Decimal(12, 2)
+  currency          String        @db.VarChar(8)
+  credits           Int
+  status            PaymentStatus @default(PENDING)
+  metadata          Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creditTransactions CreditTransaction[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@unique([provider, providerPaymentId])
+  @@map("payments")
+}
+
+model CreditTransaction {
+  id            String                @id @default(cuid())
+  userId        String
+  generationId  String?
+  paymentId     String?
+  type          CreditTransactionType
+  /// Изменение баланса в кредитах (+ начисление, − списание — по соглашению приложения)
+  amount        Int
+  reason        String?               @db.VarChar(512)
+  metadata      Json?
+  createdAt     DateTime              @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generation Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+  payment    Payment?    @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([generationId])
+  @@index([paymentId])
+  @@index([type])
+  @@map("credit_transactions")
+}
+
+model ApiLog {
+  id               String   @id @default(cuid())
+  generationId     String?
+  provider         String   @db.VarChar(64)
+  endpoint         String   @db.VarChar(2048)
+  /// Без секретов и ключей — фильтрация на уровне приложения
+  requestPayload   Json?
+  responsePayload  Json?
+  statusCode       Int?
+  errorMessage     String?  @db.Text
+  createdAt        DateTime @default(now())
+
+  generation Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  @@index([generationId, createdAt])
+  @@index([provider, createdAt])
+  @@map("api_logs")
+}
+
+model UploadedFile {
+  id           String   @id @default(cuid())
+  userId       String
+  generationId String?
+  fileName     String   @db.VarChar(512)
+  fileType     String   @db.VarChar(64)
+  mimeType     String   @db.VarChar(128)
+  size         Int
+  storageKey   String   @db.VarChar(1024)
+  url          String?  @db.VarChar(2048)
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generation Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([generationId])
+  @@index([storageKey])
+  @@map("uploaded_files")
+}
+
+model PromoCode {
+  id         String    @id @default(cuid())
+  code       String    @unique @db.VarChar(64)
+  /// Например PERCENT, FIXED_CREDITS — расширяется приложением
+  type       String    @db.VarChar(32)
+  value      Decimal   @db.Decimal(12, 4)
+  maxUses    Int?
+  usedCount  Int       @default(0)
+  expiresAt  DateTime?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@map("promo_codes")
+}
+
+model AdminAuditLog {
+  id           String   @id @default(cuid())
+  adminUserId  String
+  action       String   @db.VarChar(128)
+  targetType   String   @db.VarChar(64)
+  targetId     String?  @db.VarChar(64)
+  oldValue     Json?
+  newValue     Json?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  admin User @relation("AdminAuditActor", fields: [adminUserId], references: [id], onDelete: Restrict)
+
+  @@index([adminUserId, createdAt])
+  @@index([targetType, targetId])
+  @@map("admin_audit_logs")
+}
+
+model AppSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique @db.VarChar(128)
+  value       Json
+  type        String   @db.VarChar(64)
+  description String?  @db.Text
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  editor User? @relation("AppSettingUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@map("app_settings")
+}
+
+model WebhookEvent {
+  id           String              @id @default(cuid())
+  provider     String              @db.VarChar(64)
+  eventType    String              @db.VarChar(128)
+  payload      Json
+  status       WebhookEventStatus  @default(RECEIVED)
+  processedAt  DateTime?
+  errorMessage String?             @db.Text
+  createdAt    DateTime            @default(now())
+
+  @@index([provider, status, createdAt])
+  @@index([eventType])
+  @@map("webhook_events")
+}
