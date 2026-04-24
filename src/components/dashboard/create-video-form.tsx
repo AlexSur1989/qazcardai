@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,7 @@ const TERMINAL: GenerationStatus[] = [
 ];
 
 export function CreateVideoForm({ models, balanceCredits }: Props) {
+  const searchParams = useSearchParams();
   const [modelId, setModelId] = useState(models[0]?.id ?? "");
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
@@ -62,6 +64,17 @@ export function CreateVideoForm({ models, balanceCredits }: Props) {
   const [pollComplete, setPollComplete] = useState(false);
 
   const selected = models.find((m) => m.id === modelId);
+
+  useEffect(() => {
+    const mid = searchParams.get("modelId");
+    const pr = searchParams.get("prompt");
+    if (mid && models.some((m) => m.id === mid)) {
+      setModelId(mid);
+    }
+    if (pr != null && pr.length > 0) {
+      setPrompt(pr);
+    }
+  }, [searchParams, models]);
 
   const showInputUrls =
     selected?.supportsImageInput || selected?.supportsVideoInput;

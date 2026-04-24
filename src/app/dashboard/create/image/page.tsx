@@ -1,5 +1,6 @@
 import { Image as ImageIcon } from "lucide-react";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { auth } from "@/auth";
 import { CreateImageForm } from "@/components/dashboard/create-image-form";
@@ -63,7 +64,15 @@ export default async function CreateImagePage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <CreateImageForm models={models} balanceCredits={balanceCredits} />
+          <Suspense
+            fallback={
+              <p className="text-muted-foreground text-sm" aria-busy>
+                Загрузка формы…
+              </p>
+            }
+          >
+            <CreateImageForm models={models} balanceCredits={balanceCredits} />
+          </Suspense>
         </CardContent>
       </Card>
     </div>

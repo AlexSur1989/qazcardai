@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 import type { GenerationStatus } from "@/generated/prisma/enums";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ function outputUrlsFromFiles(output: unknown): string[] {
 }
 
 export function CreateImageForm({ models, balanceCredits }: Props) {
+  const searchParams = useSearchParams();
   const [modelId, setModelId] = useState(models[0]?.id ?? "");
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
@@ -72,6 +74,17 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
   const [pollComplete, setPollComplete] = useState(false);
 
   const selected = models.find((m) => m.id === modelId);
+
+  useEffect(() => {
+    const mid = searchParams.get("modelId");
+    const pr = searchParams.get("prompt");
+    if (mid && models.some((m) => m.id === mid)) {
+      setModelId(mid);
+    }
+    if (pr != null && pr.length > 0) {
+      setPrompt(pr);
+    }
+  }, [searchParams, models]);
 
   const applyPoll = useCallback(
     (data: {

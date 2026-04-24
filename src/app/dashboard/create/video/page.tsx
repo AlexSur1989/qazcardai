@@ -1,5 +1,6 @@
 import { Video } from "lucide-react";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { auth } from "@/auth";
 import { CreateVideoForm } from "@/components/dashboard/create-video-form";
@@ -65,7 +66,15 @@ export default async function CreateVideoPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <CreateVideoForm models={models} balanceCredits={balanceCredits} />
+          <Suspense
+            fallback={
+              <p className="text-muted-foreground text-sm" aria-busy>
+                Загрузка формы…
+              </p>
+            }
+          >
+            <CreateVideoForm models={models} balanceCredits={balanceCredits} />
+          </Suspense>
         </CardContent>
       </Card>
     </div>

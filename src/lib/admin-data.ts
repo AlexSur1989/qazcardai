@@ -1,6 +1,8 @@
+import type { GenerationStatus, GenerationType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 
 const LIST_LIMIT = 50;
+const ADMIN_GENERATIONS_LIMIT = 200;
 const SNAPSHOT = 5;
 
 export type AdminOverviewData = {
@@ -196,17 +198,78 @@ export async function getAdminModelsList() {
   }
 }
 
-export async function getAdminGenerationsList() {
+export type AdminGenerationFilters = {
+  userId?: string;
+  type?: GenerationType;
+  status?: GenerationStatus;
+  modelId?: string;
+  q?: string;
+};
+
+export async function getAdminGenerationsList(filters: AdminGenerationFilters = {}) {
   try {
+    const where = {
+      ...(filters.userId ? { userId: filters.userId } : {}),
+      ...(filters.type ? { type: filters.type } : {}),
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.modelId ? { modelId: filters.modelId } : {}),
+      ...(filters.q?.trim()
+        ? {
+            prompt: {
+              contains: filters.q.trim(),
+              mode: "insensitive" as const,
+            },
+          }
+        : {}),
+    };
     const rows = await prisma.generation.findMany({
-      take: LIST_LIMIT,
+      where,
+      take: ADMIN_GENERATIONS_LIMIT,
       orderBy: { createdAt: "desc" },
       include: {
-        user: { select: { email: true } },
+        user: { select: { id: true, email: true } },
         model: { select: { name: true, slug: true } },
       },
     });
     return { ok: true as const, rows };
+  } catch {
+    return { ok: false as const, error: "database" as const };
+  }
+}
+
+export async function getAdminGenerationById(id: string) {
+  try {
+    const g = await prisma.generation.findUnique({
+      where: { id },
+      include: {
+        user: { select: { id: true, email: true } },
+        model: { select: { id: true, name: true, slug: true, type: true } },
+      },
+    });
+    if (!g) {
+      return { ok: false as const, error: "not_found" as const };
+    }
+    return { ok: true as const, generation: g };
+  } catch {
+    return { ok: false as const, error: "database" as const };
+  }
+}
+
+/** Для селектов на странице /admin/generations. */
+export async function getAdminGenerationFilterOptions() {
+  try {
+    const [users, models] = await Promise.all([
+      prisma.user.findMany({
+        take: 300,
+        orderBy: { email: "asc" },
+        select: { id: true, email: true },
+      }),
+      prisma.aiModel.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, slug: true, type: true },
+      }),
+    ]);
+    return { ok: true as const, users, models };
   } catch {
     return { ok: false as const, error: "database" as const };
   }
