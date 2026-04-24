@@ -1,0 +1,61 @@
+import { NextResponse } from "next/server";
+
+import { prisma } from "@/lib/prisma";
+import { hashPassword } from "@/lib/password";
+import { UserRole, UserStatus } from "@/generated/prisma/enums";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export async function POST(req: Request) {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+  }
+
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Некорректное тело запроса" }, { status: 400 });
+  }
+
+  const { email: emailIn, password, name } = body as Record<string, unknown>;
+
+  if (typeof emailIn !== "string" || !EMAIL_RE.test(emailIn.trim())) {
+    return NextResponse.json({ error: "Укажите корректный email" }, { status: 400 });
+  }
+
+  if (typeof password !== "string" || password.length < 8) {
+    return NextResponse.json(
+      { error: "Пароль должен быть не короче 8 символов" },
+      { status: 400 },
+    );
+  }
+
+  const email = emailIn.toLowerCase().trim();
+  const nameStr =
+    typeof name === "string" && name.trim() ? name.trim().slice(0, 120) : null;
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    return NextResponse.json(
+      { error: "Пользователь с таким email уже зарегистрирован" },
+      { status: 409 },
+    );
+  }
+
+  const passwordHash = await hashPassword(password);
+
+  await prisma.user.create({
+    data: {
+      email,
+      passwordHash,
+      name: nameStr,
+      role: UserRole.USER,
+      status: UserStatus.ACTIVE,
+      balanceCredits: 0,
+      emailVerified: false,
+    },
+  });
+
+  return NextResponse.json({ ok: true }, { status: 201 });
+}

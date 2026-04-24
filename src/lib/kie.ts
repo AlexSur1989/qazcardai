@@ -1,6 +1,13 @@
-/**
- * Kie.ai API — только сервер / worker. Ключи из process.env (KIE_API_KEY).
- * Реализация — в следующих этапах.
- */
+import "server-only";
 
-export {};
+export {
+  buildKieRequestBodyForLog,
+  generateImage,
+  getKieGenerateRequestUrl,
+  getTaskStatus,
+  normalizeResponse,
+  redactKieLogPayload,
+  resolveKieRequestUrl,
+  type KieImageGenerateInput,
+  type NormalizedKieImageResult,
+} from "@/server/services/provider/kie";
