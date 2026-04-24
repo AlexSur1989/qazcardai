@@ -20,6 +20,12 @@ import {
   type KieImageGenerateInput,
   type KieVideoGenerateInput,
 } from "@/server/services/provider/kie";
+import {
+  StorageError,
+  deleteFile,
+  isStorageConfigured,
+  uploadFromUrl,
+} from "@/server/services/storage";
 
 const TERMINAL = new Set<string>([
   "COMPLETED",
@@ -61,8 +67,39 @@ function hasResultFiles(output: Prisma.JsonValue | null | undefined): boolean {
   return false;
 }
 
-function urlsToOutputJson(urls: string[], kind: "image" | "video"): Prisma.InputJsonValue {
-  return urls.map((url) => ({ url, kind })) as Prisma.InputJsonValue;
+function urlsToOutputJson(
+  urls: string[],
+  type: "IMAGE" | "VIDEO",
+): Prisma.InputJsonValue {
+  const kind = type === "IMAGE" ? "image" : "video";
+  return urls.map((url) => ({
+    url,
+    kind,
+    storageKey: null,
+    providerUrl: url,
+  })) as Prisma.InputJsonValue;
+}
+
+function guessExtFromUrl(sourceUrl: string, mediaKind: "image" | "video"): string {
+  try {
+    const path = new URL(sourceUrl).pathname;
+    const m = path.match(/\.([a-z0-9]+)$/i);
+    if (m) return m[1].toLowerCase();
+  } catch {
+    // ignore
+  }
+  return mediaKind === "video" ? "mp4" : "png";
+}
+
+function outputObjectKey(
+  userId: string,
+  generationId: string,
+  index: number,
+  sourceUrl: string,
+  mediaKind: "image" | "video",
+): string {
+  const ext = guessExtFromUrl(sourceUrl, mediaKind);
+  return `generations/${userId}/${generationId}/out-${index}.${ext}`;
 }
 
 function shouldRetryProviderKie(
@@ -228,7 +265,7 @@ export async function processGenerationJob(
     }
     const imageUrls = result.imageUrls ?? [];
     if (imageUrls.length > 0) {
-      await completeWithOutput(gen.id, "IMAGE", imageUrls);
+      await completeWithOutput(gen, "IMAGE", imageUrls);
       return;
     }
     if (result.taskId) {
@@ -285,11 +322,11 @@ export async function processGenerationJob(
         ? result.imageUrls
         : [];
     if (videoUrls.length > 0) {
-      await completeWithOutput(gen.id, "VIDEO", videoUrls);
+      await completeWithOutput(gen, "VIDEO", videoUrls);
       return;
     }
     if (result.imageUrls?.length) {
-      await completeWithOutput(gen.id, "VIDEO", result.imageUrls);
+      await completeWithOutput(gen, "VIDEO", result.imageUrls);
       return;
     }
     if (result.taskId) {
@@ -314,23 +351,109 @@ export async function processGenerationJob(
 }
 
 async function completeWithOutput(
-  genId: string,
+  gen: Generation,
   type: "IMAGE" | "VIDEO",
-  urls: string[],
+  providerUrls: string[],
 ): Promise<void> {
-  const kind = type === "IMAGE" ? "image" : "video";
-  await prisma.generation.update({
-    where: { id: genId },
-    data: {
-      status: "COMPLETED",
-      outputFiles: urlsToOutputJson(urls, kind),
-      completedAt: new Date(),
-    },
-  });
+  const mediaKind = type === "IMAGE" ? "image" : "video";
   try {
-    await confirmCredits(genId);
-  } catch {
-    // идемпотентность
+    if (!isStorageConfigured()) {
+      await prisma.generation.update({
+        where: { id: gen.id },
+        data: {
+          status: "COMPLETED",
+          outputFiles: urlsToOutputJson(providerUrls, type),
+          completedAt: new Date(),
+        },
+      });
+    } else {
+      const keysRolled: string[] = [];
+      type FileRow = {
+        fileName: string;
+        fileType: string;
+        mimeType: string;
+        size: number;
+        storageKey: string;
+        url: string;
+        metadata: Prisma.InputJsonValue;
+      };
+      const outputItems: Record<string, unknown>[] = [];
+      const fileRows: FileRow[] = [];
+      try {
+        for (let i = 0; i < providerUrls.length; i++) {
+          const src = providerUrls[i];
+          const key = outputObjectKey(gen.userId, gen.id, i, src, mediaKind);
+          const up = await uploadFromUrl(src, key);
+          keysRolled.push(up.key);
+          outputItems.push({
+            url: up.url,
+            storageKey: up.key,
+            kind: mediaKind,
+            providerUrl: src,
+            size: up.size,
+            contentType: up.contentType,
+          });
+          const ext = guessExtFromUrl(src, mediaKind);
+          fileRows.push({
+            fileName: `out-${i}.${ext}`.slice(0, 512),
+            fileType: mediaKind.slice(0, 64),
+            mimeType: up.contentType.slice(0, 128),
+            size: up.size,
+            storageKey: up.key.slice(0, 1024),
+            url: up.url.slice(0, 2048),
+            metadata: {
+              providerUrl: src,
+              source: "generation_output",
+            } as Prisma.InputJsonValue,
+          });
+        }
+
+        await prisma.$transaction(async (tx) => {
+          for (const f of fileRows) {
+            await tx.uploadedFile.create({
+              data: {
+                userId: gen.userId,
+                generationId: gen.id,
+                fileName: f.fileName,
+                fileType: f.fileType,
+                mimeType: f.mimeType,
+                size: f.size,
+                storageKey: f.storageKey,
+                url: f.url,
+                metadata: f.metadata,
+              },
+            });
+          }
+          await tx.generation.update({
+            where: { id: gen.id },
+            data: {
+              status: "COMPLETED",
+              outputFiles: outputItems as unknown as Prisma.InputJsonValue,
+              completedAt: new Date(),
+            },
+          });
+        });
+      } catch (e) {
+        for (const k of keysRolled) {
+          await deleteFile(k).catch(() => {});
+        }
+        throw e;
+      }
+    }
+
+    try {
+      await confirmCredits(gen.id);
+    } catch {
+      // идемпотентность
+    }
+  } catch (e) {
+    const msg =
+      e instanceof StorageError
+        ? `Хранилище: ${e.message}`
+        : e instanceof Error
+          ? e.message
+          : "Ошибка сохранения результата";
+    await markFailed(gen.id, msg.slice(0, 8000));
   }
 }
 
@@ -372,7 +495,7 @@ async function runPollToCompletion(
         statusCode: poll.httpStatus,
         errorMessage: null,
       });
-      await completeWithOutput(gen.id, "IMAGE", img);
+      await completeWithOutput(gen, "IMAGE", img);
       return;
     }
     if (model.type === "VIDEO" && (vid.length > 0 || img.length > 0)) {
@@ -386,7 +509,7 @@ async function runPollToCompletion(
         statusCode: poll.httpStatus,
         errorMessage: null,
       });
-      await completeWithOutput(gen.id, "VIDEO", urls);
+      await completeWithOutput(gen, "VIDEO", urls);
       return;
     }
   }

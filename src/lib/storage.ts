@@ -1,6 +1,11 @@
-/**
- * S3-compatible storage — Stage 10.
- * Медиа не храним постоянно на диске VPS.
- */
+import "server-only";
 
-export {};
+export {
+  StorageError,
+  deleteFile,
+  getSignedUrl,
+  isStorageConfigured,
+  publicObjectUrl,
+  uploadFile,
+  uploadFromUrl,
+} from "@/server/services/storage";
