@@ -5,7 +5,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export type CreateApiLogInput = {
-  generationId: string;
+  generationId?: string | null;
   provider: string;
   endpoint: string;
   requestPayload?: unknown;
@@ -17,7 +17,7 @@ export type CreateApiLogInput = {
 export async function createApiLog(data: CreateApiLogInput) {
   return prisma.apiLog.create({
     data: {
-      generationId: data.generationId,
+      generationId: data.generationId ?? undefined,
       provider: data.provider.slice(0, 64),
       endpoint: data.endpoint.slice(0, 2048),
       requestPayload:

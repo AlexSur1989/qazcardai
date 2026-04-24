@@ -39,7 +39,15 @@ function getPollConfig() {
   const max = Number.parseInt(process.env.GENERATION_POLL_MAX_ATTEMPTS ?? "30", 10) || 30;
   const intervalMs =
     Number.parseInt(process.env.GENERATION_POLL_INTERVAL_MS ?? "2000", 10) || 2000;
-  return { maxAttempts: max, intervalMs };
+  const maxWallMs = Number.parseInt(
+    process.env.GENERATION_POLL_MAX_WALL_MS ?? "0",
+    10,
+  );
+  return {
+    maxAttempts: max,
+    intervalMs,
+    maxWallMs: maxWallMs > 0 ? maxWallMs : 0,
+  };
 }
 
 function sleep(ms: number) {
@@ -222,6 +230,7 @@ export async function processGenerationJob(
       statusPath,
       pollCfg.maxAttempts,
       pollCfg.intervalMs,
+      pollCfg.maxWallMs,
     );
     return;
   }
@@ -281,6 +290,7 @@ export async function processGenerationJob(
           statusPath,
           pollCfg.maxAttempts,
           pollCfg.intervalMs,
+          pollCfg.maxWallMs,
         );
       }
     } else {
@@ -342,6 +352,7 @@ export async function processGenerationJob(
           statusPath,
           pollCfg.maxAttempts,
           pollCfg.intervalMs,
+          pollCfg.maxWallMs,
         );
       }
     } else {
@@ -350,7 +361,10 @@ export async function processGenerationJob(
   }
 }
 
-async function completeWithOutput(
+/**
+ * Сохранение результата (S3 при наличии), COMPLETED, confirmCredits. Используется worker и webhook Kie.
+ */
+export async function completeWithOutput(
   gen: Generation,
   type: "IMAGE" | "VIDEO",
   providerUrls: string[],
@@ -457,22 +471,56 @@ async function completeWithOutput(
   }
 }
 
+function isTerminalPollFailure(poll: {
+  success: boolean;
+  httpStatus: number;
+  errorMessage?: string;
+}): boolean {
+  if (poll.success) return false;
+  if (poll.httpStatus === 0) return false;
+  if (poll.httpStatus >= 400 && poll.httpStatus < 500) return true;
+  if (poll.errorMessage) {
+    if (poll.httpStatus >= 200 && poll.httpStatus < 300) {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function runPollToCompletion(
   gen: Generation,
   model: AiModel,
   defaultRecordInfoPath: string,
   maxAttempts: number,
   intervalMs: number,
+  maxWallMs: number,
 ): Promise<void> {
   const taskId = gen.providerTaskId;
   if (!taskId) {
     await markFailed(gen.id, "Нет taskId для polling");
     return;
   }
+  const startWall = maxWallMs > 0 ? Date.now() : 0;
   let lastRaw: unknown;
   let lastHttp = 0;
   let lastErr: string | null = null;
   for (let i = 0; i < maxAttempts; i++) {
+    if (maxWallMs > 0 && Date.now() - startWall > maxWallMs) {
+      await createApiLog({
+        generationId: gen.id,
+        provider: "KIE_AI",
+        endpoint: "poll/wall_timeout",
+        requestPayload: { taskId, maxWallMs, attempts: i },
+        responsePayload: { stopped: true },
+        statusCode: null,
+        errorMessage: "Превышен лимит времени polling (GENERATION_POLL_MAX_WALL_MS)",
+      });
+      await markFailed(
+        gen.id,
+        "Тайм-аут ожидания (макс. длительность polling)",
+      );
+      return;
+    }
     if (i > 0) {
       await sleep(intervalMs);
     }
@@ -481,6 +529,22 @@ async function runPollToCompletion(
     lastHttp = poll.httpStatus;
     lastErr = poll.errorMessage ?? null;
     if (!poll.success) {
+      if (isTerminalPollFailure(poll)) {
+        await createApiLog({
+          generationId: gen.id,
+          provider: "KIE_AI",
+          endpoint: "poll/terminal_error",
+          requestPayload: { taskId, attempt: i + 1 },
+          responsePayload: redactKieLogPayload(poll.rawResponse),
+          statusCode: poll.httpStatus,
+          errorMessage: poll.errorMessage ?? "Ошибка провайдера (poll)",
+        });
+        await markFailed(
+          gen.id,
+          poll.errorMessage ?? "Ошибка провайдера (poll)",
+        );
+        return;
+      }
       continue;
     }
     const img = poll.imageUrls ?? [];
