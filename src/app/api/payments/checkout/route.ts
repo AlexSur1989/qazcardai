@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { auth } from "@/auth";
+import {
+  getMaxJsonBodyBytes,
+  rejectOversizedBody,
+} from "@/lib/request-body-limits";
 import { getPaymentCheckoutProvider } from "@/server/services/payment-providers/registry";
 
 const bodySchema = z.object({
@@ -14,6 +18,9 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
+  const tooLarge = rejectOversizedBody(req, getMaxJsonBodyBytes());
+  if (tooLarge) return tooLarge;
+
   let json: unknown;
   try {
     json = await req.json();

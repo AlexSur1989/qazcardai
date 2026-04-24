@@ -26,7 +26,8 @@ const KIE_WEBHOOK_PROVIDER = "KIE_AI";
 
 /**
  * Проверка: Bearer / X-Webhook-Token; либо HMAC-SHA256 тела (hex) в X-Kie-Signature.
- * Если KIE_WEBHOOK_SECRET не задан — пропуск (только dev); в production задайте секрет.
+ * В **production** без KIE_WEBHOOK_SECRET — отклоняем (не открывать callback в интернете).
+ * В dev без секрета — пропуск для локальной отладки.
  */
 export function verifyKieWebhookAuth(
   request: Request,
@@ -34,7 +35,7 @@ export function verifyKieWebhookAuth(
 ): boolean {
   const secret = process.env.KIE_WEBHOOK_SECRET?.trim();
   if (!secret) {
-    return true;
+    return process.env.NODE_ENV !== "production";
   }
   const auth = request.headers.get("authorization")?.trim();
   if (auth?.toLowerCase().startsWith("bearer ")) {

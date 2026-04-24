@@ -13,4 +13,5 @@ export async function register() {
   }
   const { assertRequiredEnvOrThrow } = await import("@/lib/env");
   assertRequiredEnvOrThrow();
+  // Sentry: при необходимости подключите @sentry/nextjs по инструкции в README_DEPLOY.md (SENTRY_DSN).
 }

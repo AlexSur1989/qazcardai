@@ -231,6 +231,28 @@ docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES
 - Каталоги артефактов сборки: **`node_modules`**, **`.next`**, сгенерированный **Prisma Client** (подтягивается `npm ci` / `prisma generate` на сборке), пользовательские загрузки и медиа-результаты.
 - **Исключение**: `schema.prisma` и **миграции** в `prisma/migrations` — **должны** быть в репозитории.
 
+## Production checklist (перед запуском и после деплоя)
+
+Автоматизированные проверки в коде (не заменяют ручной осмотр):
+
+- **Секреты**: только в `.env` на сервере / secret store; в Git — только `.env.example` без реальных значений; `AUTH_SECRET`, ключи Kie/Stripe/S3 не в логах приложения.
+- **Kie.ai**: вызовы только на сервере и во воркере (`src/server/...`), не из клиентских компонентов; в **production** задайте **`KIE_WEBHOOK_SECRET`**, иначе callback `/api/webhooks/kie` будет отклонён.
+- **Заголовки безопасности**: отдаёт App Router (`next.config.ts`); Nginx может дублировать (см. `nginx.conf.example`).
+- **Размер тел запросов**: лимиты `API_MAX_JSON_BODY_BYTES` / `API_MAX_WEBHOOK_BODY_BYTES` (см. `.env.example`); при прокси учитывайте `client_max_body_size` в Nginx.
+- **Кредиты**: резерв/списание/возврат — в транзакциях (`src/server/services/credits.ts`); дубликаты webhook Stripe не начисляют повторно (`providerEventId` + статусы); провал генерации приводит к возврату резерва во воркере/процессоре.
+- **Доступ**: `/admin` — только роли `ADMIN` / `SUPER_ADMIN` (middleware + server actions); пользователь не читает чужие генерации через API (`/api/generations/[id]` проверяет `userId`).
+- **Файлы**: результаты в S3 (см. раздел про generated files); на диске VPS долгосрочно не копить видео/изображения.
+- **Health**: `GET /api/health` — для балансировщика и Docker healthcheck.
+- **Бэкапы БД**: регулярный `pg_dump` и хранение вне одного диска (см. выше).
+- **Мониторинг (по желанию)**: переменная `SENTRY_DSN` в `.env.example`; пакет **`@sentry/nextjs` не входит** в зависимости — подключайте вручную по [документации Sentry для Next.js](https://docs.sentry.io/platforms/javascript/guides/nextjs/), чтобы не тянуть SDK без необходимости.
+
+**Ручная проверка после деплоя (кратко):**
+
+1. Вход пользователя, создание тестовой генерации, просмотр только своей записи в истории и по прямой ссылке API.
+2. Пользователь с ролью `USER` не открывает `/admin` (редирект на `/dashboard`).
+3. Webhook Stripe: повтор одного события не удваивает кредиты (смотрите `WebhookEvent` в БД).
+4. `curl` на `/api/health` — `200` и `"status":"ok"` при рабочей БД и Redis.
+
 ---
 
 ## Сводка полезных команд

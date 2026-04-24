@@ -36,6 +36,11 @@ server {
 
     client_max_body_size 25m;
 
+    # Дублирует/дополняет заголовки из Next.js (next.config.ts). HSTS — только если HTTPS настроен.
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
     location / {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -44,6 +49,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
         proxy_pass http://ai_media_upstream;
     }
 }

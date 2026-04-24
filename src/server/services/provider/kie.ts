@@ -1,5 +1,26 @@
 import "server-only";
 
+/** Таймаут HTTP к Kie.ai (генерация и polling). Переопределение: KIE_FETCH_TIMEOUT_MS. */
+const DEFAULT_KIE_FETCH_TIMEOUT_MS = 120_000;
+
+function kieFetchTimeoutMs(): number {
+  const raw = process.env.KIE_FETCH_TIMEOUT_MS?.trim();
+  if (!raw) return DEFAULT_KIE_FETCH_TIMEOUT_MS;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 5_000 ? n : DEFAULT_KIE_FETCH_TIMEOUT_MS;
+}
+
+async function fetchKie(url: string, init: RequestInit): Promise<Response> {
+  const ms = kieFetchTimeoutMs();
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 const DEFAULT_IMAGE_GENERATE_PATH = "/api/v1/gpt4o-image/generate";
 const DEFAULT_IMAGE_RECORD_INFO_PATH = "/api/v1/gpt4o-image/record-info";
 const DEFAULT_VIDEO_GENERATE_PATH =
@@ -260,7 +281,7 @@ export async function generateImage(
   let httpStatus = 0;
   let text = "";
   try {
-    const res = await fetch(url, {
+    const res = await fetchKie(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -271,12 +292,16 @@ export async function generateImage(
     httpStatus = res.status;
     text = await res.text();
   } catch (e) {
-    const err = e instanceof Error ? e.message : "Сеть / fetch";
+    const aborted = e instanceof Error && e.name === "AbortError";
     return {
       success: false,
       httpStatus: 0,
-      rawResponse: { networkError: true },
-      errorMessage: err,
+      rawResponse: { networkError: true, aborted },
+      errorMessage: aborted
+        ? "Превышено время ожидания ответа провайдера"
+        : e instanceof Error
+          ? e.message
+          : "Сеть / fetch",
     };
   }
   let json: unknown;
@@ -360,7 +385,7 @@ export async function generateVideo(
   let httpStatus = 0;
   let text = "";
   try {
-    const res = await fetch(url, {
+    const res = await fetchKie(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -371,12 +396,16 @@ export async function generateVideo(
     httpStatus = res.status;
     text = await res.text();
   } catch (e) {
-    const err = e instanceof Error ? e.message : "Сеть / fetch";
+    const aborted = e instanceof Error && e.name === "AbortError";
     return {
       success: false,
       httpStatus: 0,
-      rawResponse: { networkError: true },
-      errorMessage: err,
+      rawResponse: { networkError: true, aborted },
+      errorMessage: aborted
+        ? "Превышено время ожидания ответа провайдера"
+        : e instanceof Error
+          ? e.message
+          : "Сеть / fetch",
     };
   }
   let json: unknown;
@@ -422,7 +451,7 @@ export async function getTaskStatus(
   let httpStatus = 0;
   let text = "";
   try {
-    const res = await fetch(finalUrl, {
+    const res = await fetchKie(finalUrl, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${key}`,
@@ -432,12 +461,16 @@ export async function getTaskStatus(
     httpStatus = res.status;
     text = await res.text();
   } catch (e) {
-    const err = e instanceof Error ? e.message : "Сеть / fetch";
+    const aborted = e instanceof Error && e.name === "AbortError";
     return {
       success: false,
       httpStatus: 0,
-      rawResponse: { networkError: true },
-      errorMessage: err,
+      rawResponse: { networkError: true, aborted },
+      errorMessage: aborted
+        ? "Превышено время ожидания ответа провайдера"
+        : e instanceof Error
+          ? e.message
+          : "Сеть / fetch",
     };
   }
   let json: unknown;

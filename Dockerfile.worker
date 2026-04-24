@@ -18,7 +18,11 @@ COPY tsconfig.json package.json ./
 ARG DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/build_placeholder
 ENV DATABASE_URL=${DATABASE_URL}
 
-RUN npx prisma generate
+RUN npx prisma generate \
+  && addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 --ingroup nodejs worker \
+  && chown -R worker:nodejs /app
 
 ENV NODE_ENV=production
+USER worker
 CMD ["npx", "tsx", "scripts/worker.ts"]

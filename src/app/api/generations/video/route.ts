@@ -5,6 +5,11 @@ import { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/auth";
 import { publicHttpUrlsOnly } from "@/lib/generation-input-limits";
 import { prisma } from "@/lib/prisma";
+import {
+  getMaxJsonBodyBytes,
+  rejectOversizedBody,
+} from "@/lib/request-body-limits";
+import { publicApiErrorMessage } from "@/lib/safe-api-error";
 import { validateVideoInputFiles } from "@/lib/video-input-limits";
 import { videoGenerationBodySchema } from "@/lib/validations/video-generation";
 import { CreditServiceError, getBalance, refundCredits, reserveCredits } from "@/server/services/credits";
@@ -32,6 +37,9 @@ export async function POST(req: Request) {
 
   const rate = await enforceGenerationRateLimit(userId);
   if (rate) return rate;
+
+  const tooLarge = rejectOversizedBody(req, getMaxJsonBodyBytes());
+  if (tooLarge) return tooLarge;
 
   let json: unknown;
   try {
@@ -211,8 +219,10 @@ export async function POST(req: Request) {
         { status: 402 },
       );
     }
-    const msg = e instanceof Error ? e.message : "Ошибка резерва кредитов";
-    return NextResponse.json({ error: msg }, { status: 400 });
+    return NextResponse.json(
+      { error: publicApiErrorMessage(e, "Ошибка резерва кредитов") },
+      { status: 400 },
+    );
   }
 
   try {
@@ -226,9 +236,13 @@ export async function POST(req: Request) {
     await prisma.generation
       .delete({ where: { id: gen.id } })
       .catch(() => {});
-    const msg = e instanceof Error ? e.message : "Очередь";
     return NextResponse.json(
-      { error: `Не удалось поставить в очередь: ${msg}` },
+      {
+        error: publicApiErrorMessage(
+          e,
+          "Не удалось поставить задачу в очередь. Повторите позже.",
+        ),
+      },
       { status: 503 },
     );
   }
