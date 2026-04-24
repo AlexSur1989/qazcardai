@@ -249,6 +249,82 @@ export async function refundCredits(generationId: string, reason = "Возвра
   });
 }
 
+/**
+ * Ручной возврат зарезервированных кредитов по генерации (админ).
+ * Пишет audit `generation.refunded` в той же транзакции.
+ */
+export async function adminManualRefundGeneration(args: {
+  generationId: string;
+  adminUserId: string;
+  reason: string;
+}): Promise<{ balance: number; idempotent: boolean }> {
+  const { generationId, adminUserId, reason } = args;
+  const r = reason.trim().slice(0, 512) || "Ручной возврат администратором";
+
+  return prisma.$transaction(async (tx) => {
+    const reserve = await tx.creditTransaction.findFirst({
+      where: { generationId, type: "RESERVE" },
+    });
+    if (!reserve) {
+      throw new CreditServiceError("NOT_FOUND", "Нет RESERVE по этой генерации");
+    }
+    const hasRefund = await tx.creditTransaction.findFirst({
+      where: { generationId, type: "REFUND" },
+    });
+    if (hasRefund) {
+      const b = await tx.user.findUnique({
+        where: { id: reserve.userId },
+        select: { balanceCredits: true },
+      });
+      return {
+        idempotent: true as const,
+        balance: b?.balanceCredits ?? 0,
+      };
+    }
+    const hasCapture = await tx.creditTransaction.findFirst({
+      where: { generationId, type: "CAPTURE" },
+    });
+    if (hasCapture) {
+      throw new CreditServiceError(
+        "CONFLICT",
+        "Возврат невозможен: по генерации уже подтверждёно списание",
+      );
+    }
+    const back = -reserve.amount;
+    if (back <= 0) {
+      throw new CreditServiceError("INVALID", "Некорректная сумма возврата");
+    }
+    const user = await tx.user.update({
+      where: { id: reserve.userId },
+      data: { balanceCredits: { increment: back } },
+      select: { balanceCredits: true },
+    });
+    await tx.creditTransaction.create({
+      data: {
+        userId: reserve.userId,
+        generationId,
+        type: "REFUND",
+        amount: back,
+        reason: r,
+      },
+    });
+    await tx.adminAuditLog.create({
+      data: {
+        adminUserId,
+        action: "generation.refunded",
+        targetType: "Generation",
+        targetId: generationId,
+        newValue: {
+          refundedCredits: back,
+          newBalance: user.balanceCredits,
+          reason: r,
+        } as Prisma.InputJsonValue,
+      },
+    });
+    return { idempotent: false as const, balance: user.balanceCredits };
+  });
+}
+
 export async function listTransactions(userId: string, options: ListTxOptions = {}) {
   const take = Math.min(options.take ?? 100, 500);
   return prisma.creditTransaction.findMany({
@@ -313,7 +389,7 @@ export async function adminAdjustCredits(args: {
     await tx.adminAuditLog.create({
       data: {
         adminUserId,
-        action: "user.credits_admin_adjustment",
+        action: "user.balance_changed",
         targetType: "User",
         targetId: userId,
         oldValue: { balanceCredits: before.balanceCredits } as Prisma.InputJsonValue,

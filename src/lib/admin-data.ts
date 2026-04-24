@@ -367,8 +367,24 @@ export async function getAdminAppSettingsList() {
     const rows = await prisma.appSetting.findMany({
       take: LIST_LIMIT,
       orderBy: { key: "asc" },
+      include: {
+        editor: { select: { id: true, email: true } },
+      },
     });
     return { ok: true as const, rows };
+  } catch {
+    return { ok: false as const, error: "database" as const };
+  }
+}
+
+export async function getAdminAppSettingById(id: string) {
+  try {
+    const row = await prisma.appSetting.findUnique({
+      where: { id },
+      include: { editor: { select: { email: true } } },
+    });
+    if (!row) return { ok: false as const, error: "not_found" as const };
+    return { ok: true as const, row };
   } catch {
     return { ok: false as const, error: "database" as const };
   }
@@ -407,14 +423,96 @@ export async function getAdminWebhookEventsList() {
   }
 }
 
-export async function getAdminAuditLogsList() {
+const AUDIT_PAGE_SIZE = 50;
+
+export type AdminAuditLogListFilters = {
+  action?: string;
+  adminUserId?: string;
+  targetType?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+};
+
+export async function getAdminAuditLogsList(filters: AdminAuditLogListFilters = {}) {
   try {
-    const rows = await prisma.adminAuditLog.findMany({
-      take: LIST_LIMIT,
-      orderBy: { createdAt: "desc" },
-      include: { admin: { select: { email: true } } },
+    const page = Math.max(1, filters.page ?? 1);
+    const skip = (page - 1) * AUDIT_PAGE_SIZE;
+
+    const where: Prisma.AdminAuditLogWhereInput = {};
+    if (filters.action?.trim()) {
+      where.action = { contains: filters.action.trim() };
+    }
+    if (filters.adminUserId?.trim()) {
+      where.adminUserId = filters.adminUserId.trim();
+    }
+    if (filters.targetType?.trim()) {
+      where.targetType = { contains: filters.targetType.trim() };
+    }
+    const fromD = filters.from?.trim() ? new Date(filters.from) : null;
+    const toRaw = filters.to?.trim() ? new Date(filters.to) : null;
+    if (fromD && !Number.isNaN(fromD.getTime())) {
+      const toD = toRaw && !Number.isNaN(toRaw.getTime()) ? new Date(toRaw) : null;
+      if (toD) {
+        toD.setUTCHours(23, 59, 59, 999);
+        where.createdAt = { gte: fromD, lte: toD };
+      } else {
+        where.createdAt = { gte: fromD };
+      }
+    } else if (toRaw && !Number.isNaN(toRaw.getTime())) {
+      const toD = new Date(toRaw);
+      toD.setUTCHours(23, 59, 59, 999);
+      where.createdAt = { lte: toD };
+    }
+
+    const [rows, total] = await Promise.all([
+      prisma.adminAuditLog.findMany({
+        where,
+        take: AUDIT_PAGE_SIZE,
+        skip,
+        orderBy: { createdAt: "desc" },
+        include: { admin: { select: { email: true } } },
+      }),
+      prisma.adminAuditLog.count({ where }),
+    ]);
+
+    return {
+      ok: true as const,
+      rows,
+      total,
+      page,
+      pageSize: AUDIT_PAGE_SIZE,
+    };
+  } catch {
+    return { ok: false as const, error: "database" as const };
+  }
+}
+
+export async function getAdminAdminsForFilter() {
+  try {
+    const users = await prisma.user.findMany({
+      where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } },
+      orderBy: { email: "asc" },
+      select: { id: true, email: true },
     });
-    return { ok: true as const, rows };
+    return { ok: true as const, users };
+  } catch {
+    return { ok: false as const, error: "database" as const };
+  }
+}
+
+/** Ручной возврат: есть RESERVE, нет CAPTURE и REFUND. */
+export async function getAdminGenerationRefundEligibility(generationId: string) {
+  try {
+    const [reserve, capture, refund] = await Promise.all([
+      prisma.creditTransaction.findFirst({ where: { generationId, type: "RESERVE" } }),
+      prisma.creditTransaction.findFirst({ where: { generationId, type: "CAPTURE" } }),
+      prisma.creditTransaction.findFirst({ where: { generationId, type: "REFUND" } }),
+    ]);
+    return {
+      ok: true as const,
+      canRefund: Boolean(reserve && !capture && !refund),
+    };
   } catch {
     return { ok: false as const, error: "database" as const };
   }

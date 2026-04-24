@@ -1,9 +1,17 @@
 import { notFound } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 
+import { AdminRefundGenerationForm } from "@/components/admin/admin-refund-generation-form";
 import { GenerationDetailView } from "@/components/dashboard/generation-detail-view";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { getAdminGenerationById } from "@/lib/admin-data";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { getAdminGenerationById, getAdminGenerationRefundEligibility } from "@/lib/admin-data";
 import type { UserGenerationDetail } from "@/lib/generation-history-data";
 
 export const metadata = { title: "Генерация — админ" };
@@ -16,6 +24,7 @@ export default async function AdminGenerationDetailPage({ params }: Props) {
 
   if (res.ok) {
     const g = res.generation;
+    const ref = await getAdminGenerationRefundEligibility(g.id);
     const detail: UserGenerationDetail = {
       id: g.id,
       userId: g.userId,
@@ -37,14 +46,31 @@ export default async function AdminGenerationDetailPage({ params }: Props) {
       },
     };
     return (
-      <GenerationDetailView
-        gen={detail}
-        backHref="/admin/generations"
-        backLabel="К списку генераций"
-        userEmail={g.user.email}
-        userIdForAdminLink={g.user.id}
-        showRepeat={false}
-      />
+      <div className="space-y-6">
+        <GenerationDetailView
+          gen={detail}
+          backHref="/admin/generations"
+          backLabel="К списку генераций"
+          userEmail={g.user.email}
+          userIdForAdminLink={g.user.id}
+          showRepeat={false}
+        />
+        {ref.ok && ref.canRefund ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Ручной возврат кредитов</CardTitle>
+              <CardDescription>
+                Доступно, пока по генерации есть <code>RESERVE</code> и нет{" "}
+                <code>CAPTURE</code>/<code>REFUND</code>. Создаётся движение и запись{" "}
+                <code>generation.refunded</code> в аудите.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AdminRefundGenerationForm generationId={g.id} />
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
     );
   }
 

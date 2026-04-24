@@ -158,7 +158,7 @@ export async function createAiModelAction(
     });
     await writeAdminAuditLog({
       adminUserId: userId,
-      action: "ai_model.create",
+      action: "model.created",
       targetType: "AiModel",
       targetId: created.id,
       newValue: modelSnapshot(created),
@@ -201,14 +201,29 @@ export async function updateAiModelAction(
       where: { id },
       data: toUpdateInput(parsed.data),
     });
+    const newSnapshot = modelSnapshot(updated);
     await writeAdminAuditLog({
       adminUserId: userId,
-      action: "ai_model.update",
+      action: "model.updated",
       targetType: "AiModel",
       targetId: id,
       oldValue: oldSnapshot,
-      newValue: modelSnapshot(updated),
+      newValue: newSnapshot,
     });
+    const costOld = String(oldSnapshot.costCredits);
+    const costNew = String(newSnapshot.costCredits);
+    const realOld = String(oldSnapshot.realCost);
+    const realNew = String(newSnapshot.realCost);
+    if (costOld !== costNew || realOld !== realNew) {
+      await writeAdminAuditLog({
+        adminUserId: userId,
+        action: "model.price_changed",
+        targetType: "AiModel",
+        targetId: id,
+        oldValue: { costCredits: oldSnapshot.costCredits, realCost: oldSnapshot.realCost },
+        newValue: { costCredits: newSnapshot.costCredits, realCost: newSnapshot.realCost },
+      });
+    }
   } catch (e) {
     if (isPrismaUnique(e)) {
       return { error: "Модель с таким slug уже есть" };
@@ -248,7 +263,7 @@ export async function deleteAiModelAction(
   await prisma.aiModel.delete({ where: { id } });
   await writeAdminAuditLog({
     adminUserId: userId,
-    action: "ai_model.delete",
+    action: "model.deleted",
     targetType: "AiModel",
     targetId: id,
     oldValue: snap,
@@ -284,7 +299,7 @@ export async function toggleAiModelActiveAction(formData: FormData): Promise<voi
   });
   await writeAdminAuditLog({
     adminUserId: userId,
-    action: "ai_model.set_active",
+    action: "model.active_changed",
     targetType: "AiModel",
     targetId: id,
     oldValue: { isActive: oldSnapshot.isActive },

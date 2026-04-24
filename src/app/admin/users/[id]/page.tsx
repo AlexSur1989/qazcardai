@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { UserStatus } from "@/generated/prisma/enums";
 import { AlertCircle, ArrowLeft } from "lucide-react";
 
+import { AdminUserStatusForm } from "@/components/admin/admin-user-status-form";
 import { AdminUserCreditsForm } from "@/components/admin/admin-user-credits-form";
 import { AdminEmpty } from "@/components/admin/admin-empty";
 import {
@@ -53,12 +55,24 @@ export default async function AdminUserDetailPage({ params }: Props) {
         <p className="text-muted-foreground text-xs">id: {user.id}</p>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Статус учётной записи</CardTitle>
+          <CardDescription>
+            Блокировка и разблокировка пишутся в аудит (<code>user.status_changed</code>).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AdminUserStatusForm userId={user.id} currentStatus={user.status as UserStatus} />
+        </CardContent>
+      </Card>
+
       <div className="grid gap-2 text-sm sm:grid-cols-2 sm:max-w-md">
         <p>
           <span className="text-muted-foreground">Роль:</span> {user.role}
         </p>
         <p>
-          <span className="text-muted-foreground">Статус:</span> {user.status}
+          <span className="text-muted-foreground">Статус (текущий):</span> {user.status}
         </p>
         <p>
           <span className="text-muted-foreground">Кредитов сейчас:</span>{" "}

@@ -1,3 +1,4 @@
+import { AppSettingsClientSection } from "@/components/admin/app-settings-client";
 import { AdminEmpty } from "@/components/admin/admin-empty";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -7,16 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { getAdminAppSettingsList } from "@/lib/admin-data";
-import { formatAdminDateTime, truncate } from "@/lib/admin-format";
 import { MODERATION_APP_SETTING_KEY } from "@/lib/moderation-defaults";
 import { AlertCircle } from "lucide-react";
 
@@ -36,81 +28,53 @@ export default async function AdminSettingsPage() {
       </div>
     );
   }
-  if (res.rows.length === 0) {
-    return (
+
+  return (
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Настройки приложения</h1>
-        <p className="text-muted-foreground mt-1 text-sm">Ключи и значения AppSetting.</p>
-        <div className="mt-6">
-          <AdminEmpty
-            title="Нет настроек в базе"
-            description="Сид и CRUD — на этапе 19 (план)."
-          />
-        </div>
+        <p className="text-muted-foreground mt-1 text-sm">
+          AppSetting: типы string, number, boolean, json. Поле <code className="text-xs">updatedBy</code>{" "}
+          заполняется при изменениях через эту страницу.
+        </p>
       </div>
-    );
-  }
-  return (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Настройки приложения</h1>
-      <p className="text-muted-foreground mt-1 text-sm">
-        Просмотр. Редактирование — в следующем этапе.
-      </p>
-      <Card className="mt-6">
+
+      <Card>
         <CardHeader>
           <CardTitle className="text-base">Модерация промптов</CardTitle>
           <CardDescription>
-            Запись в БД <code className="text-xs">AppSetting</code> с ключом{" "}
-            <code className="text-xs">{MODERATION_APP_SETTING_KEY}</code> (создание/правка
-            через Prisma/SQL/Studio). Пример value (JSON):
+            Системная запись с ключом{" "}
+            <code className="text-xs">{MODERATION_APP_SETTING_KEY}</code> — редактируйте как JSON
+            (удаление из панели отключено). Пример value:
           </CardDescription>
         </CardHeader>
         <CardContent>
           <pre className="bg-muted/60 overflow-x-auto rounded-md border p-3 font-mono text-xs">
 {`{
   "enabled": true,
-  "bannedSubstrings": ["слово1", "слово2"]
+  "bannedSubstrings": ["..."]
 }`}
           </pre>
-          <p className="text-muted-foreground mt-2 text-xs">
-            К списку по умолчанию в коде добавляется <code>bannedSubstrings</code> из
-            настройки. <code>enabled: false</code> — отключает проверку.
-          </p>
         </CardContent>
       </Card>
-      <div className="mt-6 overflow-x-auto rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Ключ</TableHead>
-              <TableHead>Тип</TableHead>
-              <TableHead>Значение (JSON)</TableHead>
-              <TableHead>Описание</TableHead>
-              <TableHead>Обновлён</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {res.rows.map((s) => (
-              <TableRow key={s.id}>
-                <TableCell className="font-mono text-xs">{s.key}</TableCell>
-                <TableCell className="text-xs">{s.type}</TableCell>
-                <TableCell
-                  className="text-muted-foreground max-w-xs text-xs"
-                  title={JSON.stringify(s.value)}
-                >
-                  {truncate(JSON.stringify(s.value), 64)}
-                </TableCell>
-                <TableCell className="text-muted-foreground max-w-xs text-xs">
-                  {s.description ? truncate(s.description, 64) : "—"}
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-xs">
-                  {formatAdminDateTime(s.updatedAt)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+
+      {res.rows.length === 0 ? (
+        <AdminEmpty
+          title="Нет настроек"
+          description="Создайте вручную или нажмите «Добавить отсутствующие примеры»."
+        />
+      ) : null}
+      <AppSettingsClientSection
+        rows={res.rows.map((r) => ({
+          id: r.id,
+          key: r.key,
+          type: r.type,
+          value: r.value,
+          description: r.description,
+          updatedAt: r.updatedAt.toISOString(),
+          editor: r.editor,
+        }))}
+      />
     </div>
   );
 }
