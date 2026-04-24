@@ -2,6 +2,7 @@ import { Wallet } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
+import { CreditPackagesSection } from "@/components/dashboard/credit-packages-section";
 import { DashboardSectionEmpty } from "@/components/dashboard/dashboard-section-empty";
 import {
   Card,
@@ -10,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Table,
   TableBody,
@@ -20,19 +22,43 @@ import {
 } from "@/components/ui/table";
 import { creditTypeLabel } from "@/lib/credit-labels";
 import { formatAdminDateTime } from "@/lib/admin-format";
+import { getResolvableCreditPackages } from "@/lib/credit-packages";
+import { isStripeSecretConfigured } from "@/lib/payment-config";
 import { getBalance, listTransactions } from "@/server/services/credits";
 
 export const metadata = {
   title: "Биллинг — AI Media",
 };
 
-export default async function BillingPage() {
+function first(v: string | string[] | undefined): string {
+  if (Array.isArray(v)) return v[0] ?? "";
+  return v ?? "";
+}
+
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function BillingPage({ searchParams }: PageProps) {
   const session = await auth();
   if (!session?.user?.id) {
     redirect("/auth/login?callbackUrl=/dashboard/billing");
   }
+  const sp = (await searchParams) ?? {};
+  const checkout = first(sp.checkout);
+
   const balance = await getBalance(session.user.id);
   const txs = await listTransactions(session.user.id, { take: 50 });
+  const packs = getResolvableCreditPackages();
+  const stripeReady = isStripeSecretConfigured();
+  const packageCards = packs.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    credits: p.credits,
+    amount: p.amount,
+    currency: p.currency,
+  }));
 
   return (
     <div className="space-y-6">
@@ -41,10 +67,26 @@ export default async function BillingPage() {
           Биллинг
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Баланс и история движений кредитов. Покупка пакетов — на этапе с
-          оплатой.
+          Покупка кредитов через Stripe. Начисление только после подтверждения на
+          сервере (webhook), а не по странице «успех» в браузере.
         </p>
       </div>
+
+      {checkout === "success" && (
+        <Alert>
+          <AlertTitle>Оплата отправлена</AlertTitle>
+          <AlertDescription>
+            Если кредиты ещё не появились, подождите несколько секунд — срабатывает
+            webhook Stripe. Обновите страницу.
+          </AlertDescription>
+        </Alert>
+      )}
+      {checkout === "cancel" && (
+        <Alert>
+          <AlertTitle>Оплата прервана</AlertTitle>
+          <AlertDescription>Вы отменили оплату. Баланс не менялся.</AlertDescription>
+        </Alert>
+      )}
 
       <Card>
         <CardHeader>
@@ -59,6 +101,8 @@ export default async function BillingPage() {
           <p className="text-muted-foreground mt-1 text-xs">кредитов</p>
         </CardContent>
       </Card>
+
+      <CreditPackagesSection packages={packageCards} stripeReady={stripeReady} />
 
       <Card>
         <CardHeader>
@@ -103,19 +147,6 @@ export default async function BillingPage() {
               </Table>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Пакеты и оплата</CardTitle>
-          <CardDescription>Stripe / другие провайдеры — позже</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <DashboardSectionEmpty
-            title="Оплата пока недоступна"
-            description="После этапа с платёжной интеграцией здесь появятся пакеты кредитов."
-          />
         </CardContent>
       </Card>
     </div>

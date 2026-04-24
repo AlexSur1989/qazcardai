@@ -18,6 +18,32 @@ export class CreditServiceError extends Error {
 
 export type ListTxOptions = { take?: number };
 
+/** Начисление кредитов за покупку внутри транзакции (webhook Stripe и т.п.). */
+export async function applyPurchaseInTransaction(
+  tx: Prisma.TransactionClient,
+  args: { userId: string; credits: number; paymentId: string; reason: string },
+) {
+  const { userId, credits, paymentId, reason } = args;
+  if (credits <= 0 || !Number.isInteger(credits)) {
+    throw new CreditServiceError("INVALID", "PURCHASE: неверная сумма кредитов");
+  }
+  const user = await tx.user.update({
+    where: { id: userId },
+    data: { balanceCredits: { increment: credits } },
+    select: { balanceCredits: true },
+  });
+  await tx.creditTransaction.create({
+    data: {
+      userId,
+      type: "PURCHASE",
+      amount: credits,
+      reason: reason.slice(0, 512),
+      paymentId,
+    },
+  });
+  return { balance: user.balanceCredits };
+}
+
 /** Текущий баланс (денормализованное поле user.balanceCredits). */
 export async function getBalance(userId: string): Promise<number> {
   const u = await prisma.user.findUnique({

@@ -1,8 +1,14 @@
-import type { GenerationStatus, GenerationType } from "@/generated/prisma/enums";
+import { Prisma } from "@/generated/prisma/client";
+import type {
+  GenerationStatus,
+  GenerationType,
+  PaymentStatus,
+} from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 
 const LIST_LIMIT = 50;
 const ADMIN_GENERATIONS_LIMIT = 200;
+const ADMIN_PAYMENTS_LIMIT = 200;
 const SNAPSHOT = 5;
 
 export type AdminOverviewData = {
@@ -275,14 +281,70 @@ export async function getAdminGenerationFilterOptions() {
   }
 }
 
-export async function getAdminPaymentsList() {
+export type AdminPaymentFilters = {
+  userId?: string;
+  status?: PaymentStatus;
+  provider?: string;
+};
+
+export async function getAdminPaymentsList(filters: AdminPaymentFilters = {}) {
   try {
+    const where = {
+      ...(filters.userId ? { userId: filters.userId } : {}),
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.provider?.trim()
+        ? { provider: filters.provider.trim() }
+        : {}),
+    };
     const rows = await prisma.payment.findMany({
-      take: LIST_LIMIT,
+      where,
+      take: ADMIN_PAYMENTS_LIMIT,
       orderBy: { createdAt: "desc" },
-      include: { user: { select: { email: true } } },
+      include: { user: { select: { email: true, id: true } } },
     });
     return { ok: true as const, rows };
+  } catch {
+    return { ok: false as const, error: "database" as const };
+  }
+}
+
+export type AdminPaymentWithDetail = Prisma.PaymentGetPayload<{
+  include: {
+    user: { select: { id: true; email: true } };
+    creditTransactions: { orderBy: { createdAt: "desc" } };
+  };
+}>;
+
+export type AdminPaymentDetailResult =
+  | { ok: true; payment: AdminPaymentWithDetail }
+  | { ok: false; error: "not_found" | "database" };
+
+export async function getAdminPaymentById(id: string): Promise<AdminPaymentDetailResult> {
+  try {
+    const payment = await prisma.payment.findUnique({
+      where: { id },
+      include: {
+        user: { select: { id: true, email: true } },
+        creditTransactions: { orderBy: { createdAt: "desc" } },
+      },
+    });
+    if (!payment) {
+      return { ok: false, error: "not_found" };
+    }
+    return { ok: true, payment };
+  } catch {
+    return { ok: false, error: "database" };
+  }
+}
+
+export async function getAdminPaymentFilterOptions() {
+  try {
+    const users = await prisma.user.findMany({
+      take: 400,
+      orderBy: { email: "asc" },
+      select: { id: true, email: true },
+    });
+    return { ok: true as const, users };
   } catch {
     return { ok: false as const, error: "database" as const };
   }

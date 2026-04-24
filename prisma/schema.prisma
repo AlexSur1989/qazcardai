@@ -322,6 +322,8 @@ model WebhookEvent {
   id           String              @id @default(cuid())
   provider     String              @db.VarChar(64)
   eventType    String              @db.VarChar(128)
+  /// ID события у провайдера (например Stripe evt_...). Для idempotency повторов webhook.
+  providerEventId String?          @db.VarChar(128)
   payload      Json
   status       WebhookEventStatus  @default(RECEIVED)
   processedAt  DateTime?
@@ -330,5 +332,6 @@ model WebhookEvent {
 
   @@index([provider, status, createdAt])
   @@index([eventType])
+  @@unique([provider, providerEventId])
   @@map("webhook_events")
 }

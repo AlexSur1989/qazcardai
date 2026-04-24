@@ -1,6 +1,18 @@
+import Link from "next/link";
+import { AlertCircle } from "lucide-react";
+
 import { AdminEmpty } from "@/components/admin/admin-empty";
+import { AdminPaymentsFiltersForm } from "@/components/admin/admin-payments-filters-form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -9,14 +21,51 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getAdminPaymentsList } from "@/lib/admin-data";
+import {
+  getAdminPaymentFilterOptions,
+  getAdminPaymentsList,
+} from "@/lib/admin-data";
 import { formatAdminDateTime } from "@/lib/admin-format";
-import { AlertCircle } from "lucide-react";
+import { paymentStatusLabel } from "@/lib/payment-labels";
+import { cn } from "@/lib/utils";
+import type { PaymentStatus } from "@/generated/prisma/enums";
 
 export const metadata = { title: "Платежи — админ" };
 
-export default async function AdminPaymentsPage() {
-  const res = await getAdminPaymentsList();
+const ALL_STATUS: PaymentStatus[] = [
+  "PENDING",
+  "PROCESSING",
+  "COMPLETED",
+  "FAILED",
+  "REFUNDED",
+  "CANCELLED",
+];
+
+function first(v: string | string[] | undefined): string {
+  if (Array.isArray(v)) return v[0] ?? "";
+  return v ?? "";
+}
+
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function AdminPaymentsPage({ searchParams }: PageProps) {
+  const sp = (await searchParams) ?? {};
+  const userId = first(sp.userId).trim() || undefined;
+  const statusRaw = first(sp.status);
+  const status: PaymentStatus | undefined = ALL_STATUS.includes(
+    statusRaw as PaymentStatus,
+  )
+    ? (statusRaw as PaymentStatus)
+    : undefined;
+  const provider = first(sp.provider).trim() || undefined;
+
+  const [res, opts] = await Promise.all([
+    getAdminPaymentsList({ userId, status, provider }),
+    getAdminPaymentFilterOptions(),
+  ]);
+
   if (!res.ok) {
     return (
       <div>
@@ -29,62 +78,112 @@ export default async function AdminPaymentsPage() {
       </div>
     );
   }
-  if (res.rows.length === 0) {
+  if (!opts.ok) {
     return (
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Платежи</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Учёт платежей провайдера.
-        </p>
-        <div className="mt-6">
-          <AdminEmpty
-            title="Платежей нет"
-            description="Появятся после внедрения оплаты."
-          />
-        </div>
+        <Alert className="mt-4" variant="destructive">
+          <AlertCircle />
+          <AlertTitle>Ошибка</AlertTitle>
+          <AlertDescription>Не удалось загрузить список пользователей.</AlertDescription>
+        </Alert>
       </div>
     );
   }
+
+  const hasFilters = Boolean(userId || status || provider);
+  const rows = res.rows;
+
   return (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Платежи</h1>
-      <p className="text-muted-foreground mt-1 text-sm">До 50 последних.</p>
-      <div className="mt-6 overflow-x-auto rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Пользователь</TableHead>
-              <TableHead>Провайдер</TableHead>
-              <TableHead className="text-right">Сумма</TableHead>
-              <TableHead>Кр.</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead>Создан</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {res.rows.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell className="max-w-[9rem] truncate text-xs">
-                  {p.user.email}
-                </TableCell>
-                <TableCell className="text-xs">{p.provider}</TableCell>
-                <TableCell className="text-right text-xs tabular-nums">
-                  {p.amount.toString()} {p.currency}
-                </TableCell>
-                <TableCell className="text-xs tabular-nums">{p.credits}</TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="text-xs">
-                    {p.status}
-                  </Badge>
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-xs">
-                  {formatAdminDateTime(p.createdAt)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Платежи</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Все транзакции. Кредиты начисляются по webhook, не по redirect с Stripe.
+        </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Фильтры</CardTitle>
+          <CardDescription>По пользователю, статусу, провайдеру (подстрока exact).</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AdminPaymentsFiltersForm
+            userIdValue={userId ?? ""}
+            statusValue={statusRaw}
+            providerValue={provider ?? ""}
+            users={opts.users}
+          />
+        </CardContent>
+      </Card>
+
+      {rows.length === 0 ? (
+        <div>
+          {hasFilters ? (
+            <AdminEmpty
+              title="Нет записей"
+              description="Сбросьте фильтр — в базе могут быть другие платежи."
+            />
+          ) : (
+            <AdminEmpty
+              title="Платежей нет"
+              description="Появятся после успешных оплат во вкладке биллинга."
+            />
+          )}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Пользователь</TableHead>
+                <TableHead>Провайдер</TableHead>
+                <TableHead className="text-right">Сумма</TableHead>
+                <TableHead>Кр.</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead>Создан</TableHead>
+                <TableHead className="w-[1%]" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="max-w-[10rem]">
+                    <Link
+                      href={`/admin/users/${p.userId}`}
+                      className="text-primary truncate text-xs underline"
+                    >
+                      {p.user.email}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-xs font-mono">{p.provider}</TableCell>
+                  <TableCell className="text-right text-xs tabular-nums">
+                    {p.amount.toString()} {p.currency}
+                  </TableCell>
+                  <TableCell className="text-xs tabular-nums">{p.credits}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs">
+                      {paymentStatusLabel(p.status)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-xs">
+                    {formatAdminDateTime(p.createdAt)}
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      href={`/admin/payments/${p.id}`}
+                      className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+                    >
+                      Детали
+                    </Link>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }
