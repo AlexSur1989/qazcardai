@@ -16,6 +16,8 @@ COPY . .
 ARG DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/build_placeholder
 ENV DATABASE_URL=${DATABASE_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
+# Полный .env в образе сборки обычно не передают — валидация env отключена только на этапе build.
+ENV SKIP_ENV_VALIDATION=1
 
 RUN npx prisma generate && npm run build
 
