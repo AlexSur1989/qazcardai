@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { auth } from "@/auth";
+import { PageHeader } from "@/components/layout/page-header";
 import { CreateImageForm } from "@/components/dashboard/create-image-form";
 import {
   Card,
@@ -11,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { CreateFormSkeleton } from "@/components/dashboard/create-form-skeleton";
 import { getBalance } from "@/server/services/credits";
 import { prisma } from "@/lib/prisma";
 
@@ -44,15 +46,15 @@ export default async function CreateImagePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">
-          Создать фото
-        </h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Модель из базы, задача в Redis/BullMQ, Kie.ai вызывается воркером.
-        </p>
-      </div>
-      <Card>
+      <PageHeader
+        title="Создать фото"
+        description="Выбор модели из каталога, постановка в очередь, воркер обращается к провайдеру. Статус обновляется на странице."
+        breadcrumbs={[
+          { label: "Кабинет", href: "/dashboard" },
+          { label: "Создать фото" },
+        ]}
+      />
+      <Card className="border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ImageIcon className="size-5" aria-hidden />
@@ -64,13 +66,7 @@ export default async function CreateImagePage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Suspense
-            fallback={
-              <p className="text-muted-foreground text-sm" aria-busy>
-                Загрузка формы…
-              </p>
-            }
-          >
+          <Suspense fallback={<CreateFormSkeleton />}>
             <CreateImageForm models={models} balanceCredits={balanceCredits} />
           </Suspense>
         </CardContent>

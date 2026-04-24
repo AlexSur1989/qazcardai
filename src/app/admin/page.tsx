@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 
+import { PageHeader } from "@/components/layout/page-header";
 import { AdminEmpty } from "@/components/admin/admin-empty";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -37,7 +38,7 @@ function StatCard({
   hint?: string;
 }) {
   return (
-    <Card>
+    <Card className="border-border/80 shadow-sm">
       <CardHeader className="pb-2">
         <CardDescription>{title}</CardDescription>
         <CardTitle className="text-3xl font-semibold tabular-nums">
@@ -54,7 +55,10 @@ export default async function AdminHomePage() {
   if (!res.ok) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Админ — обзор</h1>
+        <PageHeader
+          title="Обзор"
+          breadcrumbs={[{ label: "Админ", href: "/admin" }, { label: "Обзор" }]}
+        />
         <Alert variant="destructive">
           <AlertCircle />
           <AlertTitle>Нет доступа к данным</AlertTitle>
@@ -69,13 +73,11 @@ export default async function AdminHomePage() {
   const d = res.data;
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Обзор</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Счётчики и последние события. CRUD и глубокая аналитика — по мере
-          внедрения этапов.
-        </p>
-      </div>
+      <PageHeader
+        title="Обзор"
+        description="Счётчики, недавние ошибки API, вебхуки и записи аудита. Данные в реальном времени из базы."
+        breadcrumbs={[{ label: "Админ", href: "/admin" }, { label: "Обзор" }]}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard title="Пользователей" value={d.counts.users} />
@@ -89,7 +91,7 @@ export default async function AdminHomePage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
+        <Card className="border-border/80 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div>
               <CardTitle className="text-base">Ошибки API</CardTitle>
@@ -146,7 +148,7 @@ export default async function AdminHomePage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-border/80 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div>
               <CardTitle className="text-base">Webhooks</CardTitle>
@@ -198,7 +200,7 @@ export default async function AdminHomePage() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="border-border/80 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>
             <CardTitle className="text-base">Аудит администраторов</CardTitle>

@@ -2,6 +2,7 @@ import { Wallet } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
+import { PageHeader } from "@/components/layout/page-header";
 import { CreditPackagesSection } from "@/components/dashboard/credit-packages-section";
 import { DashboardSectionEmpty } from "@/components/dashboard/dashboard-section-empty";
 import {
@@ -62,15 +63,14 @@ export default async function BillingPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">
-          Биллинг
-        </h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Покупка кредитов через Stripe. Начисление только после подтверждения на
-          сервере (webhook), а не по странице «успех» в браузере.
-        </p>
-      </div>
+      <PageHeader
+        title="Биллинг"
+        description="Покупка кредитов через Stripe. Начисление после подтверждения на сервере (webhook), а не по странице «успех» в браузере."
+        breadcrumbs={[
+          { label: "Кабинет", href: "/dashboard" },
+          { label: "Биллинг" },
+        ]}
+      />
 
       {checkout === "success" && (
         <Alert>
@@ -88,7 +88,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
         </Alert>
       )}
 
-      <Card>
+      <Card className="border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Wallet className="size-5" aria-hidden />
@@ -104,7 +104,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
 
       <CreditPackagesSection packages={packageCards} stripeReady={stripeReady} />
 
-      <Card>
+      <Card className="border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">История кредитов</CardTitle>
           <CardDescription>До 50 последних операций</CardDescription>
@@ -116,7 +116,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
               description="Начисления, резервы и списания появятся здесь."
             />
           ) : (
-            <div className="overflow-x-auto rounded-lg border">
+            <div className="border-border/80 overflow-x-auto rounded-lg border bg-card shadow-sm">
               <Table>
                 <TableHeader>
                   <TableRow>

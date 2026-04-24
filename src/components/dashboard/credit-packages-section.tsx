@@ -67,7 +67,7 @@ export function CreditPackagesSection({ packages, stripeReady }: Props) {
 
   if (!stripeReady) {
     return (
-      <Card>
+      <Card className="border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">Пакеты кредитов</CardTitle>
           <CardDescription>
@@ -87,7 +87,7 @@ export function CreditPackagesSection({ packages, stripeReady }: Props) {
 
   if (packages.length === 0) {
     return (
-      <Card>
+      <Card className="border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">Пакеты кредитов</CardTitle>
           <CardDescription>
@@ -105,7 +105,7 @@ export function CreditPackagesSection({ packages, stripeReady }: Props) {
   }
 
   return (
-    <Card>
+    <Card className="border-border/80 shadow-sm">
       <CardHeader>
         <CardTitle className="text-base">Пакеты кредитов</CardTitle>
         <CardDescription>
@@ -124,7 +124,7 @@ export function CreditPackagesSection({ packages, stripeReady }: Props) {
           {packages.map((p) => (
             <li
               key={p.id}
-              className="border-border flex flex-col rounded-lg border p-4"
+              className="border-border/80 flex flex-col rounded-lg border bg-card/30 p-4 shadow-sm"
             >
               <p className="text-foreground font-medium">{p.name}</p>
               <p className="text-muted-foreground mt-1 text-xs">{p.description}</p>

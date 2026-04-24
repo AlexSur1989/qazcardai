@@ -3,6 +3,7 @@ import { AlertCircle, Image as ImageIcon, Video } from "lucide-react";
 
 import { auth } from "@/auth";
 import { DashboardSectionEmpty } from "@/components/dashboard/dashboard-section-empty";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   GenerationListFooter,
   GenerationPreviewList,
@@ -31,14 +32,10 @@ export default async function DashboardPage() {
   if (!data.ok) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-foreground text-2xl font-semibold tracking-tight">
-            Кабинет
-          </h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Обзор баланса, тарифа и последних операций
-          </p>
-        </div>
+        <PageHeader
+          title="Кабинет"
+          description="Баланс кредитов, план, активные и последние генерации."
+        />
         {data.error === "not_found" ? (
           <Alert variant="destructive">
             <AlertCircle />
@@ -66,17 +63,13 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">
-          Здравствуйте, {name}
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          Кредиты, тариф и недавние генерации. Генерация подключится на следующем этапе.
-        </p>
-      </div>
+      <PageHeader
+        title={`Здравствуйте, ${name}`}
+        description="Сводка по кредитам и задачам. Создание — в разделах «Создать фото» и «Создать видео»."
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
+        <Card className="border-border/80 shadow-sm">
           <CardHeader>
             <CardTitle>Баланс</CardTitle>
             <CardDescription>Доступные кредиты для генераций</CardDescription>
@@ -86,7 +79,7 @@ export default async function DashboardPage() {
             <p className="text-muted-foreground mt-1 text-xs">кредитов</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-border/80 shadow-sm">
           <CardHeader>
             <CardTitle>Тариф</CardTitle>
             <CardDescription>Активный план, если оформлен</CardDescription>
@@ -131,7 +124,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
+        <Card className="border-border/80 shadow-sm">
           <CardHeader>
             <CardTitle>Активные задачи</CardTitle>
             <CardDescription>
@@ -153,7 +146,7 @@ export default async function DashboardPage() {
             )}
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-border/80 shadow-sm">
           <CardHeader>
             <CardTitle>Последние генерации</CardTitle>
             <CardDescription>Недавние запросы (до 5)</CardDescription>

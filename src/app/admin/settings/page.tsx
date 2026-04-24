@@ -1,5 +1,6 @@
 import { AppSettingsClientSection } from "@/components/admin/app-settings-client";
 import { AdminEmpty } from "@/components/admin/admin-empty";
+import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Card,
@@ -18,9 +19,12 @@ export default async function AdminSettingsPage() {
   const res = await getAdminAppSettingsList();
   if (!res.ok) {
     return (
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Настройки приложения</h1>
-        <Alert className="mt-4" variant="destructive">
+      <div className="space-y-4">
+        <PageHeader
+          title="Настройки приложения"
+          breadcrumbs={[{ label: "Админ", href: "/admin" }, { label: "Настройки" }]}
+        />
+        <Alert variant="destructive">
           <AlertCircle />
           <AlertTitle>Ошибка загрузки</AlertTitle>
           <AlertDescription>Проверьте подключение к базе.</AlertDescription>
@@ -31,15 +35,18 @@ export default async function AdminSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Настройки приложения</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          AppSetting: типы string, number, boolean, json. Поле <code className="text-xs">updatedBy</code>{" "}
-          заполняется при изменениях через эту страницу.
-        </p>
-      </div>
+      <PageHeader
+        title="Настройки приложения"
+        description={
+          <>
+            AppSetting: типы string, number, boolean, json. Поле{" "}
+            <code className="text-xs">updatedBy</code> заполняется при изменениях через эту страницу.
+          </>
+        }
+        breadcrumbs={[{ label: "Админ", href: "/admin" }, { label: "Настройки" }]}
+      />
 
-      <Card>
+      <Card className="border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">Модерация промптов</CardTitle>
           <CardDescription>

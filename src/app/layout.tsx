@@ -20,7 +20,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "AI Media — генерация изображений и видео",
   description:
-    "SaaS для генерации AI-контента через Kie.ai. Этап 0: каркас приложения.",
+    "SaaS для AI-изображений и видео: кабинет, кредиты, история, админка, очереди и S3-хранилище.",
 };
 
 export default function RootLayout({

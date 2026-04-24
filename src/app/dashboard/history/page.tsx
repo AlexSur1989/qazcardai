@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { PageHeader } from "@/components/layout/page-header";
 import { HistoryFiltersForm } from "@/components/dashboard/history-filters-form";
 import { HistoryGenerationList } from "@/components/dashboard/history-generation-list";
 import { DashboardSectionEmpty } from "@/components/dashboard/dashboard-section-empty";
@@ -68,7 +69,10 @@ export default async function HistoryPage({ searchParams }: PageProps) {
   if (!data.ok) {
     return (
       <div className="space-y-4">
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">История</h1>
+        <PageHeader
+          title="История генераций"
+          breadcrumbs={[{ label: "Кабинет", href: "/dashboard" }, { label: "История" }]}
+        />
         <Alert variant="destructive">
           <AlertCircle />
           <AlertTitle>Не удалось загрузить историю</AlertTitle>
@@ -88,16 +92,15 @@ export default async function HistoryPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">
-          История генераций
-        </h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Только ваши запросы. Скачивание — готовых файлов, повтор — с теми же
-          modelId и промптом (в пределах длины URL).
-        </p>
-      </div>
-      <Card>
+      <PageHeader
+        title="История генераций"
+        description="Ваши запросы. Скачивание готовых файлов, повтор — с теми же modelId и промптом (в пределах длины URL)."
+        breadcrumbs={[
+          { label: "Кабинет", href: "/dashboard" },
+          { label: "История" },
+        ]}
+      />
+      <Card className="border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <History className="size-5" aria-hidden />
@@ -113,7 +116,7 @@ export default async function HistoryPage({ searchParams }: PageProps) {
           />
         </CardContent>
       </Card>
-      <Card>
+      <Card className="border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle>Записи</CardTitle>
           <CardDescription>

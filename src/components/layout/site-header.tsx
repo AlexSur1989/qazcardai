@@ -11,8 +11,8 @@ export function SiteHeader() {
   const { data: session, status } = useSession();
 
   return (
-    <header className="border-b border-border bg-card/80 backdrop-blur-sm">
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4">
+    <header className="border-border border-b bg-card/80 backdrop-blur-md supports-[backdrop-filter]:bg-card/60">
+      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4">
         <Link
           href="/"
           className="text-sm font-semibold tracking-tight text-foreground"

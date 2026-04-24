@@ -12,6 +12,7 @@ import {
 } from "@/server/actions/app-settings";
 import { canDeleteAppSettingKey } from "@/lib/app-setting-protected";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -107,6 +108,8 @@ function SeedForm() {
 function DeleteForm({ id, settingKey }: { id: string; settingKey: string }) {
   const deletable = canDeleteAppSettingKey(settingKey);
   const [state, formAction] = useFormState(deleteAppSettingAction, null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const formId = `app-setting-del-${id}`;
   if (!deletable) {
     return (
       <span className="text-muted-foreground text-xs" title="Системный ключ">
@@ -115,13 +118,37 @@ function DeleteForm({ id, settingKey }: { id: string; settingKey: string }) {
     );
   }
   return (
-    <form action={formAction} className="inline">
-      <input type="hidden" name="id" value={id} />
+    <div className="inline-block space-y-1">
       {state?.error ? <p className="text-destructive text-xs">{state.error}</p> : null}
-      <Button type="submit" variant="destructive" size="sm">
+      <form id={formId} action={formAction} className="hidden" aria-hidden>
+        <input type="hidden" name="id" value={id} />
+      </form>
+      <Button
+        type="button"
+        variant="destructive"
+        size="sm"
+        onClick={() => setConfirmOpen(true)}
+      >
         Удалить
       </Button>
-    </form>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Удалить настройку?"
+        description={
+          <>
+            Ключ: <code className="font-mono text-xs">{settingKey}</code>. Действие
+            нельзя откатить.
+          </>
+        }
+        confirmLabel="Удалить"
+        variant="destructive"
+        onConfirm={() => {
+          const f = document.getElementById(formId) as HTMLFormElement | null;
+          f?.requestSubmit();
+        }}
+      />
+    </div>
   );
 }
 
@@ -203,7 +230,7 @@ export function AppSettingsClientSection({
         <SeedForm />
       </div>
       <CreateForm />
-      <div className="overflow-x-auto rounded-lg border">
+      <div className="border-border/80 overflow-x-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b text-left text-xs">

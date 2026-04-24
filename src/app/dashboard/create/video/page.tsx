@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { auth } from "@/auth";
+import { PageHeader } from "@/components/layout/page-header";
 import { CreateVideoForm } from "@/components/dashboard/create-video-form";
 import {
   Card,
@@ -11,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { CreateFormSkeleton } from "@/components/dashboard/create-form-skeleton";
 import { getBalance } from "@/server/services/credits";
 import { prisma } from "@/lib/prisma";
 
@@ -46,15 +48,15 @@ export default async function CreateVideoPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">
-          Создать видео
-        </h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Запрос в очередь, без ожидания готового файла. Статус — по id генерации.
-        </p>
-      </div>
-      <Card>
+      <PageHeader
+        title="Создать видео"
+        description="Постановка в очередь, статусы и результат отслеживайте в истории и на этой странице (опрос по id)."
+        breadcrumbs={[
+          { label: "Кабинет", href: "/dashboard" },
+          { label: "Создать видео" },
+        ]}
+      />
+      <Card className="border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Video className="size-5" aria-hidden />
@@ -66,13 +68,7 @@ export default async function CreateVideoPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Suspense
-            fallback={
-              <p className="text-muted-foreground text-sm" aria-busy>
-                Загрузка формы…
-              </p>
-            }
-          >
+          <Suspense fallback={<CreateFormSkeleton />}>
             <CreateVideoForm models={models} balanceCredits={balanceCredits} />
           </Suspense>
         </CardContent>

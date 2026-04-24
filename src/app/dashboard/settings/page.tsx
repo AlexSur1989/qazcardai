@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Card,
@@ -27,9 +28,10 @@ export default async function SettingsPage() {
   if (!profile.ok) {
     return (
       <div className="space-y-4">
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">
-          Настройки
-        </h1>
+        <PageHeader
+          title="Настройки"
+          breadcrumbs={[{ label: "Кабинет", href: "/dashboard" }, { label: "Настройки" }]}
+        />
         <Alert variant="destructive">
           <AlertCircle />
           <AlertTitle>Не удалось загрузить профиль</AlertTitle>
@@ -45,15 +47,12 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">
-          Настройки аккаунта
-        </h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Данные из базы, доступны только вам. Расширенное редактирование — позже.
-        </p>
-      </div>
-      <Card>
+      <PageHeader
+        title="Настройки аккаунта"
+        description="Данные из базы, доступны только вам. Расширенное редактирование — позже."
+        breadcrumbs={[{ label: "Кабинет", href: "/dashboard" }, { label: "Настройки" }]}
+      />
+      <Card className="border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings2 className="size-5" aria-hidden />

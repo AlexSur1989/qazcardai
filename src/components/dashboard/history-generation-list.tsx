@@ -20,6 +20,8 @@ function statusBadgeClass(status: GenerationStatus): string {
     case "QUEUED":
     case "CREATED":
       return "border-primary/30 bg-primary/10";
+    case "REFUNDED":
+      return "border-amber-500/35 bg-amber-500/10 text-amber-900 dark:text-amber-100";
     default:
       return "";
   }

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export type CreateImageFormModel = {
   id: string;
@@ -193,23 +194,29 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
         outputUrls?: string[];
       };
       if (!res.ok) {
-        setError(data.error ?? `Ошибка ${res.status}`);
+        const msg = data.error ?? `Ошибка ${res.status}`;
+        setError(msg);
+        toast.error(msg);
         return;
       }
       if (data.generationId && data.status) {
         if (data.status === "BLOCKED") {
-          setError(
-            data.error ?? "Запрос не отправлен в провайдера: заблокирован модерацией.",
-          );
+          const msg =
+            data.error ?? "Запрос не отправлен в провайдера: заблокирован модерацией.";
+          setError(msg);
+          toast.warning(msg);
           return;
         }
         setResult({ generationId: data.generationId, status: data.status });
+        toast.success("Запрос поставлен в очередь");
         void fetchStatus(data.generationId);
       } else {
         setError("Некорректный ответ сервера");
+        toast.error("Некорректный ответ сервера");
       }
     } catch {
       setError("Сеть: не удалось выполнить запрос");
+      toast.error("Сеть: не удалось выполнить запрос");
     } finally {
       setLoading(false);
     }

@@ -19,6 +19,7 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/generated/prisma/enums";
@@ -50,11 +51,43 @@ type AdminSidebarProps = {
   role: UserRole;
 };
 
+function navItemActive(
+  pathname: string,
+  searchParams: URLSearchParams,
+  href: string,
+  label: string,
+): boolean {
+  if (href === "/admin") {
+    return pathname === "/admin";
+  }
+  const isGenerations = label === "Генерации";
+  const isModeration = label === "Модерация";
+  const blockedView =
+    pathname === "/admin/generations" && searchParams.get("status") === "BLOCKED";
+  if (isGenerations) {
+    return (
+      (pathname === "/admin/generations" && !blockedView) ||
+      (pathname.startsWith("/admin/generations/") && pathname !== "/admin/generations")
+    );
+  }
+  if (isModeration) {
+    return blockedView;
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function AdminSidebar({ userEmail, role }: AdminSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const items = nav.map((n) => ({
+    ...n,
+    isActive: navItemActive(pathname, searchParams, n.href, n.label),
+  }));
+
   return (
     <aside className="border-border bg-sidebar text-sidebar-foreground flex w-full shrink-0 flex-col border-b md:w-60 md:shrink-0 md:border-r md:border-b-0">
+      <MobileNavDrawer title="Админ" items={items} activeKey={`${pathname}?${searchParams.toString()}`} />
+
       <div className="border-border hidden items-center gap-2 border-b px-4 py-3 md:flex">
         <Shield className="text-sidebar-primary size-5 shrink-0" aria-hidden />
         <div className="min-w-0">
@@ -64,46 +97,29 @@ export function AdminSidebar({ userEmail, role }: AdminSidebarProps) {
           </p>
         </div>
       </div>
-      <p className="text-sidebar-foreground/80 px-4 pt-2 pb-0 text-xs md:hidden">
+      <p className="text-sidebar-foreground/80 hidden px-4 pt-2 pb-0 text-xs md:block">
         {userEmail} · {role}
       </p>
       <nav
-        className="flex flex-row gap-0.5 overflow-x-auto p-2 md:flex-col md:gap-0.5 md:overflow-visible"
+        className="hidden flex-col gap-0.5 p-2 md:flex"
         aria-label="Админ-разделы"
       >
-        {nav.map(({ href, label, icon: Icon }) => {
-          const isGenerations = label === "Генерации";
-          const isModeration = label === "Модерация";
-          const blockedView =
-            pathname === "/admin/generations" &&
-            searchParams.get("status") === "BLOCKED";
-          const active =
-            href === "/admin"
-              ? pathname === "/admin"
-              : isGenerations
-                ? (pathname === "/admin/generations" && !blockedView) ||
-                  (pathname.startsWith("/admin/generations/") &&
-                    pathname !== "/admin/generations")
-                : isModeration
-                  ? blockedView
-                  : pathname === href || pathname.startsWith(`${href}/`);
-          return (
-            <Link
-              key={href + label}
-              href={href}
-              className={cn(
-                buttonVariants({
-                  variant: active ? "secondary" : "ghost",
-                  size: "sm",
-                }),
-                "flex shrink-0 items-center justify-start gap-2",
-              )}
-            >
-              <Icon className="size-3.5" aria-hidden />
-              {label}
-            </Link>
-          );
-        })}
+        {items.map(({ href, label, icon: Icon, isActive }) => (
+          <Link
+            key={href + label}
+            href={href}
+            className={cn(
+              buttonVariants({
+                variant: isActive ? "secondary" : "ghost",
+                size: "sm",
+              }),
+              "flex items-center justify-start gap-2",
+            )}
+          >
+            <Icon className="size-3.5" aria-hidden />
+            {label}
+          </Link>
+        ))}
       </nav>
     </aside>
   );

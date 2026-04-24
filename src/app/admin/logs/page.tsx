@@ -1,4 +1,5 @@
 import { AdminEmpty } from "@/components/admin/admin-empty";
+import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Table,
@@ -18,9 +19,12 @@ export default async function AdminLogsPage() {
   const res = await getAdminApiLogsList();
   if (!res.ok) {
     return (
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">API логи</h1>
-        <Alert className="mt-4" variant="destructive">
+      <div className="space-y-4">
+        <PageHeader
+          title="API логи"
+          breadcrumbs={[{ label: "Админ", href: "/admin" }, { label: "Логи API" }]}
+        />
+        <Alert variant="destructive">
           <AlertCircle />
           <AlertTitle>Ошибка загрузки</AlertTitle>
           <AlertDescription>Проверьте подключение к базе.</AlertDescription>
@@ -30,12 +34,13 @@ export default async function AdminLogsPage() {
   }
   if (res.rows.length === 0) {
     return (
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">API логи</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Запросы к провайдерам (Kie.ai и др.).
-        </p>
-        <div className="mt-6">
+      <div className="space-y-6">
+        <PageHeader
+          title="API логи"
+          description="Запросы к провайдерам (Kie.ai и др.)."
+          breadcrumbs={[{ label: "Админ", href: "/admin" }, { label: "Логи API" }]}
+        />
+        <div>
           <AdminEmpty
             title="Логов нет"
             description="Появятся при интеграции генерации с провайдером."
@@ -45,10 +50,13 @@ export default async function AdminLogsPage() {
     );
   }
   return (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight">API логи</h1>
-      <p className="text-muted-foreground mt-1 text-sm">До 50 последних.</p>
-      <div className="mt-6 overflow-x-auto rounded-lg border">
+    <div className="space-y-6">
+      <PageHeader
+        title="API логи"
+        description="До 50 последних."
+        breadcrumbs={[{ label: "Админ", href: "/admin" }, { label: "Логи API" }]}
+      />
+      <div className="border-border/80 overflow-x-auto rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>

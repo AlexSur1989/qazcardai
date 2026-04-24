@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 
 import { buttonVariants } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   deleteAiModelAction,
   type AiModelActionState,
@@ -28,6 +29,8 @@ export function ModelRowActions({
     deleteAiModelAction,
     delInitial,
   );
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const deleteFormId = `admin-delete-model-${id}`;
 
   return (
     <div className="flex max-w-[14rem] flex-col gap-1 sm:flex-row sm:items-center sm:gap-1">
@@ -58,31 +61,39 @@ export function ModelRowActions({
         >
           Правка
         </Link>
-        <form action={deleteAction} className="inline">
+        <form id={deleteFormId} action={deleteAction} className="hidden" aria-hidden>
           <input type="hidden" name="id" value={id} />
-          <button
-            type="submit"
-            disabled={!canDelete}
-            className={cn(
-              buttonVariants({ size: "xs", variant: "destructive" }),
-              !canDelete && "pointer-events-none opacity-40",
-            )}
-            title={
-              canDelete
-                ? "Удалить"
-                : "Нельзя удалить: у модели есть генерации"
-            }
-            onClick={(e) => {
-              if (!canDelete) {
-                e.preventDefault();
-                return;
-              }
-              if (!window.confirm("Удалить эту AI-модель?")) e.preventDefault();
-            }}
-          >
-            Удалить
-          </button>
         </form>
+        <button
+          type="button"
+          disabled={!canDelete}
+          className={cn(
+            buttonVariants({ size: "xs", variant: "destructive" }),
+            !canDelete && "pointer-events-none opacity-40",
+          )}
+          title={
+            canDelete
+              ? "Удалить"
+              : "Нельзя удалить: у модели есть генерации"
+          }
+          onClick={() => {
+            if (canDelete) setConfirmOpen(true);
+          }}
+        >
+          Удалить
+        </button>
+        <ConfirmDialog
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          title="Удалить AI-модель?"
+          description="Модель будет удалена из каталога. Пока с ней не связаны генерации — операция разрешена."
+          confirmLabel="Удалить"
+          variant="destructive"
+          onConfirm={() => {
+            const f = document.getElementById(deleteFormId) as HTMLFormElement | null;
+            f?.requestSubmit();
+          }}
+        />
       </div>
     </div>
   );
