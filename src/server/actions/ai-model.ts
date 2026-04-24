@@ -10,6 +10,7 @@ import { canAccessAdminPanel } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { AiModelFormPayload } from "@/lib/validations/ai-model";
 import { parseAiModelFormData } from "@/lib/validations/ai-model";
+import { getAdminRateLimitError } from "@/server/services/rateLimitService";
 
 function isPrismaUnique(e: unknown): boolean {
   return (
@@ -143,6 +144,10 @@ export async function createAiModelAction(
   formData: FormData,
 ): Promise<AiModelActionState> {
   const { userId } = await getAdminContext();
+  const rateErr = await getAdminRateLimitError(userId);
+  if (rateErr) {
+    return { error: rateErr };
+  }
   const parsed = parseAiModelFormData(formData, "create");
   if (!parsed.ok) {
     return { error: parsed.message, fieldErrors: parsed.fieldErrors };
@@ -174,6 +179,10 @@ export async function updateAiModelAction(
   formData: FormData,
 ): Promise<AiModelActionState> {
   const { userId } = await getAdminContext();
+  const rateErr = await getAdminRateLimitError(userId);
+  if (rateErr) {
+    return { error: rateErr };
+  }
   const parsed = parseAiModelFormData(formData, "update");
   if (!parsed.ok) {
     return { error: parsed.message, fieldErrors: parsed.fieldErrors };
@@ -217,6 +226,10 @@ export async function deleteAiModelAction(
   formData: FormData,
 ): Promise<AiModelActionState> {
   const { userId } = await getAdminContext();
+  const rateErr = await getAdminRateLimitError(userId);
+  if (rateErr) {
+    return { error: rateErr };
+  }
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return { error: "Не указан id" };
@@ -246,6 +259,11 @@ export async function deleteAiModelAction(
 
 export async function toggleAiModelActiveAction(formData: FormData): Promise<void> {
   const { userId } = await getAdminContext();
+  const rateErr = await getAdminRateLimitError(userId);
+  if (rateErr) {
+    revalidatePath("/admin/models");
+    return;
+  }
   const id = String(formData.get("id") ?? "");
   const next = String(formData.get("nextActive") ?? "") === "true";
   if (!id) {

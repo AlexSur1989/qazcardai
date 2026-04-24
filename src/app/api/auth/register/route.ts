@@ -3,10 +3,14 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
 import { UserRole, UserStatus } from "@/generated/prisma/enums";
+import { enforceRegistrationRateLimit } from "@/server/services/rateLimitService";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: Request) {
+  const limited = await enforceRegistrationRateLimit(req);
+  if (limited) return limited;
+
   let body: unknown;
   try {
     body = await req.json();

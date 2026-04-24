@@ -8,6 +8,7 @@ import {
   adminAdjustCredits,
   CreditServiceError,
 } from "@/server/services/credits";
+import { getAdminRateLimitError } from "@/server/services/rateLimitService";
 
 export type AdminCreditsFormState = {
   error?: string;
@@ -24,6 +25,10 @@ export async function adminAdjustUserCreditsAction(
   }
   if (!canAccessAdminPanel(session.user.role)) {
     return { error: "Нет прав" };
+  }
+  const rateErr = await getAdminRateLimitError(session.user.id);
+  if (rateErr) {
+    return { error: rateErr };
   }
   const userId = String(formData.get("userId") ?? "").trim();
   const deltaStr = String(formData.get("delta") ?? "").trim();

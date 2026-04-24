@@ -12,6 +12,7 @@ import {
   createBlockedByModeration,
   moderateGenerationInput,
 } from "@/server/services/moderation";
+import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 
 function redisAndKieReady() {
   return (
@@ -27,6 +28,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
   const userId = session.user.id;
+
+  const rate = await enforceGenerationRateLimit(userId);
+  if (rate) return rate;
 
   let json: unknown;
   try {
