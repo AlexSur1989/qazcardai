@@ -197,6 +197,12 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
         return;
       }
       if (data.generationId && data.status) {
+        if (data.status === "BLOCKED") {
+          setError(
+            data.error ?? "Запрос не отправлен в провайдера: заблокирован модерацией.",
+          );
+          return;
+        }
         setResult({ generationId: data.generationId, status: data.status });
         void fetchStatus(data.generationId);
       } else {

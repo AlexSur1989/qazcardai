@@ -9,6 +9,10 @@ import { validateVideoInputFiles } from "@/lib/video-input-limits";
 import { videoGenerationBodySchema } from "@/lib/validations/video-generation";
 import { CreditServiceError, getBalance, refundCredits, reserveCredits } from "@/server/services/credits";
 import { enqueueGenerationJob } from "@/server/queues/generationQueue";
+import {
+  createBlockedByModeration,
+  moderateGenerationInput,
+} from "@/server/services/moderation";
 
 function generationInfraReady() {
   return (
@@ -143,6 +147,36 @@ export async function POST(req: Request) {
   if (body.resolution) metadata.resolution = body.resolution;
   if (body.seed !== undefined) metadata.seed = body.seed;
   if (body.durationSec != null) metadata.durationSec = body.durationSec;
+
+  const mod = await moderateGenerationInput({
+    prompt: body.prompt,
+    negativePrompt: body.negativePrompt ?? null,
+  });
+  if (!mod.allowed) {
+    const blocked = await createBlockedByModeration({
+      userId,
+      model,
+      type: "VIDEO",
+      prompt: body.prompt,
+      negativePrompt: body.negativePrompt ?? null,
+      inputFiles: body.inputFiles
+        ? (body.inputFiles as Prisma.InputJsonValue)
+        : undefined,
+      metadata:
+        Object.keys(metadata).length > 0
+          ? (metadata as Prisma.InputJsonValue)
+          : undefined,
+      mod,
+    });
+    return NextResponse.json(
+      {
+        generationId: blocked.id,
+        status: "BLOCKED" as const,
+        error: mod.reason,
+      },
+      { status: 201 },
+    );
+  }
 
   const gen = await prisma.generation.create({
     data: {

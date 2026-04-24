@@ -2,8 +2,9 @@
 
 import type { ComponentType } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
+  Ban,
   FileText,
   ImageIcon,
   LayoutDashboard,
@@ -31,6 +32,11 @@ const nav: {
   { href: "/admin/users", label: "Пользователи", icon: Users },
   { href: "/admin/models", label: "Модели", icon: ImageIcon },
   { href: "/admin/generations", label: "Генерации", icon: Video },
+  {
+    href: "/admin/generations?status=BLOCKED",
+    label: "Модерация",
+    icon: Ban,
+  },
   { href: "/admin/payments", label: "Платежи", icon: Wallet },
   { href: "/admin/promo-codes", label: "Промокоды", icon: Tag },
   { href: "/admin/settings", label: "Настройки", icon: Settings },
@@ -46,6 +52,7 @@ type AdminSidebarProps = {
 
 export function AdminSidebar({ userEmail, role }: AdminSidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   return (
     <aside className="border-border bg-sidebar text-sidebar-foreground flex w-full shrink-0 flex-col border-b md:w-60 md:shrink-0 md:border-r md:border-b-0">
       <div className="border-border hidden items-center gap-2 border-b px-4 py-3 md:flex">
@@ -65,13 +72,24 @@ export function AdminSidebar({ userEmail, role }: AdminSidebarProps) {
         aria-label="Админ-разделы"
       >
         {nav.map(({ href, label, icon: Icon }) => {
+          const isGenerations = label === "Генерации";
+          const isModeration = label === "Модерация";
+          const blockedView =
+            pathname === "/admin/generations" &&
+            searchParams.get("status") === "BLOCKED";
           const active =
             href === "/admin"
               ? pathname === "/admin"
-              : pathname === href || pathname.startsWith(`${href}/`);
+              : isGenerations
+                ? (pathname === "/admin/generations" && !blockedView) ||
+                  (pathname.startsWith("/admin/generations/") &&
+                    pathname !== "/admin/generations")
+                : isModeration
+                  ? blockedView
+                  : pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link
-              key={href}
+              key={href + label}
               href={href}
               className={cn(
                 buttonVariants({

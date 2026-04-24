@@ -156,6 +156,7 @@ export default async function AdminGenerationsPage({ searchParams }: PageProps) 
                 <TableHead>Модель</TableHead>
                 <TableHead>Тип</TableHead>
                 <TableHead>Статус</TableHead>
+                <TableHead className="max-w-[10rem]">Ошибка / модерация</TableHead>
                 <TableHead>Промпт</TableHead>
                 <TableHead className="text-right">Кр.</TableHead>
                 <TableHead>Создана</TableHead>
@@ -182,6 +183,12 @@ export default async function AdminGenerationsPage({ searchParams }: PageProps) 
                     <Badge variant="outline" className="text-xs">
                       {generationStatusLabel(g.status)}
                     </Badge>
+                  </TableCell>
+                  <TableCell
+                    className="text-muted-foreground max-w-[10rem] text-xs"
+                    title={g.errorMessage ?? ""}
+                  >
+                    {g.errorMessage ? truncate(g.errorMessage, 40) : "—"}
                   </TableCell>
                   <TableCell
                     className="text-muted-foreground max-w-[12rem] text-xs"

@@ -1,6 +1,13 @@
 import { AdminEmpty } from "@/components/admin/admin-empty";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   Table,
   TableBody,
   TableCell,
@@ -10,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { getAdminAppSettingsList } from "@/lib/admin-data";
 import { formatAdminDateTime, truncate } from "@/lib/admin-format";
+import { MODERATION_APP_SETTING_KEY } from "@/lib/moderation-defaults";
 import { AlertCircle } from "lucide-react";
 
 export const metadata = { title: "Настройки — админ" };
@@ -48,6 +56,28 @@ export default async function AdminSettingsPage() {
       <p className="text-muted-foreground mt-1 text-sm">
         Просмотр. Редактирование — в следующем этапе.
       </p>
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-base">Модерация промптов</CardTitle>
+          <CardDescription>
+            Запись в БД <code className="text-xs">AppSetting</code> с ключом{" "}
+            <code className="text-xs">{MODERATION_APP_SETTING_KEY}</code> (создание/правка
+            через Prisma/SQL/Studio). Пример value (JSON):
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <pre className="bg-muted/60 overflow-x-auto rounded-md border p-3 font-mono text-xs">
+{`{
+  "enabled": true,
+  "bannedSubstrings": ["слово1", "слово2"]
+}`}
+          </pre>
+          <p className="text-muted-foreground mt-2 text-xs">
+            К списку по умолчанию в коде добавляется <code>bannedSubstrings</code> из
+            настройки. <code>enabled: false</code> — отключает проверку.
+          </p>
+        </CardContent>
+      </Card>
       <div className="mt-6 overflow-x-auto rounded-lg border">
         <Table>
           <TableHeader>
