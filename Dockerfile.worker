@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1
+# Воркер BullMQ: отдельный процесс, тот же кодовый база, что и API.
+FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat openssl
+WORKDIR /app
+
+FROM base AS deps
+COPY package.json package-lock.json ./
+RUN npm ci
+
+FROM base AS runner
+COPY --from=deps /app/node_modules ./node_modules
+COPY prisma ./prisma
+COPY src ./src
+COPY scripts ./scripts
+COPY tsconfig.json package.json ./
+
+ARG DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/build_placeholder
+ENV DATABASE_URL=${DATABASE_URL}
+
+RUN npx prisma generate
+
+ENV NODE_ENV=production
+CMD ["npx", "tsx", "scripts/worker.ts"]

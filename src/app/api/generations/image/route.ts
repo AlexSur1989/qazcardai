@@ -3,26 +3,19 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 
 import { auth } from "@/auth";
-import { createApiLog } from "@/server/services/api-log";
-import {
-  CreditServiceError,
-  confirmCredits,
-  getBalance,
-  refundCredits,
-  reserveCredits,
-} from "@/server/services/credits";
-import {
-  buildKieRequestBodyForLog,
-  generateImage,
-  getKieGenerateRequestUrl,
-  redactKieLogPayload,
-} from "@/server/services/provider/kie";
-import {
-  publicHttpUrlsOnly,
-  validateImageInputFiles,
-} from "@/lib/generation-input-limits";
+import { publicHttpUrlsOnly, validateImageInputFiles } from "@/lib/generation-input-limits";
 import { prisma } from "@/lib/prisma";
 import { imageGenerationBodySchema } from "@/lib/validations/image-generation";
+import { CreditServiceError, getBalance, refundCredits, reserveCredits } from "@/server/services/credits";
+import { enqueueGenerationJob } from "@/server/queues/generationQueue";
+
+function redisAndKieReady() {
+  return (
+    Boolean(process.env.REDIS_URL?.trim()) &&
+    Boolean(process.env.KIE_API_KEY?.trim()) &&
+    Boolean(process.env.KIE_BASE_URL?.trim())
+  );
+}
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -50,12 +43,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: filesCheck.error }, { status: 400 });
   }
 
-  const kieReady =
-    Boolean(process.env.KIE_API_KEY?.trim()) &&
-    Boolean(process.env.KIE_BASE_URL?.trim());
-  if (!kieReady) {
+  if (!redisAndKieReady()) {
     return NextResponse.json(
-      { error: "Генерация недоступна: не настроены KIE_API_KEY и KIE_BASE_URL" },
+      { error: "Генерация недоступна: настройте REDIS_URL, KIE_API_KEY и KIE_BASE_URL" },
       { status: 503 },
     );
   }
@@ -136,7 +126,7 @@ export async function POST(req: Request) {
       userId,
       modelId: model.id,
       type: "IMAGE",
-      status: "CREATED",
+      status: "QUEUED",
       prompt: body.prompt,
       negativePrompt: body.negativePrompt ?? null,
       inputFiles: body.inputFiles
@@ -151,7 +141,7 @@ export async function POST(req: Request) {
   });
 
   try {
-    await reserveCredits(userId, model.costCredits, gen.id);
+    await reserveCredits(userId, model.costCredits, gen.id, "Резерв под изображение");
   } catch (e) {
     await prisma.generation.delete({ where: { id: gen.id } });
     if (e instanceof CreditServiceError && e.code === "INSUFFICIENT") {
@@ -164,109 +154,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 
-  await prisma.generation.update({
-    where: { id: gen.id },
-    data: { status: "PROCESSING" },
-  });
-
-  const kieInput = {
-    apiModelId: model.apiModelId,
-    endpoint: model.endpoint,
-    prompt: body.prompt,
-    negativePrompt: model.supportsNegativePrompt ? body.negativePrompt ?? null : null,
-    aspectRatio: body.aspectRatio ?? null,
-    resolution: body.resolution ?? null,
-    seed: model.supportsSeed ? body.seed ?? null : null,
-    inputFileUrls: model.supportsImageInput ? httpUrls : undefined,
-  };
-
-  let result: Awaited<ReturnType<typeof generateImage>>;
   try {
-    result = await generateImage(kieInput);
+    await enqueueGenerationJob(gen.id);
   } catch (e) {
-    const err = e instanceof Error ? e.message : "Ошибка провайдера";
-    result = {
-      success: false,
-      httpStatus: 0,
-      rawResponse: null,
-      errorMessage: err,
-    };
-  }
-
-  const requestUrl = getKieGenerateRequestUrl(kieInput);
-  const requestLog = {
-    requestUrl,
-    body: redactKieLogPayload(buildKieRequestBodyForLog(kieInput)),
-  };
-
-  const errText =
-    result.errorMessage ??
-    (!result.success ? "Провайдер не подтвердил успех" : null);
-
-  await createApiLog({
-    generationId: gen.id,
-    provider: "KIE_AI",
-    endpoint: requestUrl.slice(0, 2048),
-    requestPayload: requestLog,
-    responsePayload: redactKieLogPayload(result.rawResponse),
-    statusCode: result.httpStatus,
-    errorMessage: result.success ? null : errText,
-  });
-
-  if (!result.success) {
     try {
-      await refundCredits(gen.id, "Возврат: ошибка Kie.ai");
+      await refundCredits(gen.id, "Возврат: очередь недоступна");
     } catch {
-      // best effort
+      // ignore
     }
-    await prisma.generation.update({
-      where: { id: gen.id },
-      data: {
-        status: "FAILED",
-        errorMessage: errText?.slice(0, 8000) ?? "Ошибка провайдера",
-        completedAt: new Date(),
-      },
-    });
+    await prisma.generation
+      .delete({ where: { id: gen.id } })
+      .catch(() => {});
+    const msg = e instanceof Error ? e.message : "Очередь";
     return NextResponse.json(
-      {
-        generationId: gen.id,
-        status: "FAILED",
-        error: errText ?? "Ошибка генерации",
-      },
-      { status: 201 },
+      { error: `Не удалось поставить в очередь: ${msg}` },
+      { status: 503 },
     );
-  }
-
-  const imageUrls = result.imageUrls ?? [];
-  const hasImages = imageUrls.length > 0;
-  const nextStatus = hasImages ? "COMPLETED" : "PROCESSING";
-
-  const outputFiles = hasImages
-    ? (imageUrls.map((url) => ({ url })) as Prisma.InputJsonValue)
-    : undefined;
-
-  await prisma.generation.update({
-    where: { id: gen.id },
-    data: {
-      status: nextStatus,
-      providerTaskId: result.taskId ?? null,
-      outputFiles: outputFiles ?? undefined,
-      completedAt: hasImages ? new Date() : null,
-    },
-  });
-
-  try {
-    await confirmCredits(gen.id);
-  } catch {
-    // оставляем PROCESSING/COMPLETED; CAPTURE можно догнать вручную при сбое
   }
 
   return NextResponse.json(
     {
       generationId: gen.id,
-      status: nextStatus,
-      providerTaskId: result.taskId ?? null,
-      outputUrls: hasImages ? imageUrls : undefined,
+      status: "QUEUED" as const,
     },
     { status: 201 },
   );

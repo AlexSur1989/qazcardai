@@ -2,6 +2,10 @@ import "server-only";
 
 const DEFAULT_IMAGE_GENERATE_PATH = "/api/v1/gpt4o-image/generate";
 const DEFAULT_IMAGE_RECORD_INFO_PATH = "/api/v1/gpt4o-image/record-info";
+const DEFAULT_VIDEO_GENERATE_PATH =
+  process.env.KIE_VIDEO_GENERATE_PATH?.trim() || "/api/v1/video/generate";
+const DEFAULT_VIDEO_RECORD_INFO_PATH =
+  process.env.KIE_VIDEO_RECORD_INFO_PATH?.trim() || "/api/v1/video/record-info";
 
 function getKieBaseUrl(): string {
   const raw = process.env.KIE_BASE_URL?.trim();
@@ -17,6 +21,12 @@ function getKieApiKey(): string {
     throw new Error("KIE_API_KEY is not set");
   }
   return key;
+}
+
+export function getDefaultRecordInfoPath(
+  type: "IMAGE" | "VIDEO",
+): string {
+  return type === "VIDEO" ? DEFAULT_VIDEO_RECORD_INFO_PATH : DEFAULT_IMAGE_RECORD_INFO_PATH;
 }
 
 export function resolveKieRequestUrl(
@@ -54,9 +64,13 @@ export type NormalizedKieImageResult = {
   httpStatus: number;
   taskId?: string;
   imageUrls?: string[];
+  videoUrls?: string[];
   rawResponse: unknown;
   errorMessage?: string;
 };
+
+/** @deprecated use NormalizedKieImageResult — то же, для видео добавлено videoUrls */
+export type NormalizedKieTaskResult = NormalizedKieImageResult;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -103,6 +117,7 @@ export function normalizeResponse(
   const data = response.data;
   let taskId: string | undefined;
   let imageUrls: string[] | undefined;
+  let videoUrls: string[] | undefined;
 
   if (isRecord(data)) {
     if (typeof data.taskId === "string" && data.taskId) taskId = data.taskId;
@@ -116,19 +131,38 @@ export function normalizeResponse(
     } else if (typeof data.imageUrl === "string" && data.imageUrl) {
       imageUrls = [data.imageUrl];
     }
+    if (Array.isArray(data.videoUrls) && data.videoUrls.every((u) => typeof u === "string")) {
+      videoUrls = data.videoUrls;
+    } else if (Array.isArray(data.videos) && data.videos.every((u) => typeof u === "string")) {
+      videoUrls = data.videos;
+    } else if (typeof data.videoUrl === "string" && data.videoUrl) {
+      videoUrls = [data.videoUrl];
+    } else if (typeof data.outputUrl === "string" && data.outputUrl) {
+      if (/\.(mp4|webm|mov)(\?|$)/i.test(data.outputUrl)) {
+        videoUrls = [data.outputUrl];
+      } else if (!imageUrls) {
+        imageUrls = [data.outputUrl];
+      }
+    } else if (typeof data.resultUrl === "string" && data.resultUrl) {
+      videoUrls = [data.resultUrl];
+    }
   }
   if (!taskId && typeof response.taskId === "string") taskId = response.taskId;
   if (!imageUrls && Array.isArray(response.imageUrls) && response.imageUrls.every((u) => typeof u === "string")) {
     imageUrls = response.imageUrls as string[];
   }
+  if (!videoUrls && Array.isArray(response.videoUrls) && response.videoUrls.every((u) => typeof u === "string")) {
+    videoUrls = response.videoUrls as string[];
+  }
 
-  const success = Boolean(
-    (taskId && taskId.length > 0) || (imageUrls && imageUrls.length > 0),
+  const hasMedia = Boolean(
+    (imageUrls && imageUrls.length > 0) || (videoUrls && videoUrls.length > 0),
   );
+  const success = Boolean((taskId && taskId.length > 0) || hasMedia);
   if (!success) {
     return {
       ...base,
-      errorMessage: "Провайдер не вернул taskId и URL изображений",
+      errorMessage: "Провайдер не вернул taskId и URL результата",
     };
   }
   return {
@@ -137,6 +171,7 @@ export function normalizeResponse(
     rawResponse: response,
     taskId,
     imageUrls,
+    videoUrls,
   };
 }
 
@@ -258,12 +293,114 @@ export async function generateImage(
   return normalizeResponse(json, httpStatus);
 }
 
+// --- Видео: тот же нормализатор (taskId / videoUrls) ---
+
+export type KieVideoGenerateInput = {
+  apiModelId: string;
+  endpoint: string | null;
+  prompt: string;
+  negativePrompt?: string | null;
+  aspectRatio?: string | null;
+  resolution?: string | null;
+  seed?: number | null;
+  durationSec?: number | null;
+  inputFileUrls?: string[];
+};
+
+function buildVideoRequestBody(input: KieVideoGenerateInput): JsonRecord {
+  const size = input.aspectRatio?.trim() || "16:9";
+  const body: JsonRecord = {
+    prompt: input.prompt,
+    size,
+  };
+  if (process.env.KIE_SEND_MODEL_IN_BODY === "1" && input.apiModelId) {
+    body.model = input.apiModelId;
+  }
+  if (input.negativePrompt?.trim()) {
+    body.negativePrompt = input.negativePrompt.trim();
+  }
+  if (input.resolution?.trim()) {
+    body.resolution = input.resolution.trim();
+  }
+  if (input.seed !== undefined && input.seed !== null) {
+    body.seed = input.seed;
+  }
+  if (input.durationSec != null) {
+    body.duration = input.durationSec;
+  }
+  if (input.inputFileUrls && input.inputFileUrls.length > 0) {
+    body.filesUrl = input.inputFileUrls;
+  }
+  return body;
+}
+
+export function buildKieVideoRequestBodyForLog(input: KieVideoGenerateInput): JsonRecord {
+  return buildVideoRequestBody(input);
+}
+
+export function getKieVideoGenerateRequestUrl(input: KieVideoGenerateInput): string {
+  return resolveKieRequestUrl(
+    getKieBaseUrl(),
+    input.endpoint,
+    DEFAULT_VIDEO_GENERATE_PATH,
+  );
+}
+
+export async function generateVideo(
+  input: KieVideoGenerateInput,
+): Promise<NormalizedKieImageResult> {
+  const base = getKieBaseUrl();
+  const key = getKieApiKey();
+  const url = resolveKieRequestUrl(
+    base,
+    input.endpoint,
+    DEFAULT_VIDEO_GENERATE_PATH,
+  );
+  const body = buildVideoRequestBody(input);
+  let httpStatus = 0;
+  let text = "";
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify(body),
+    });
+    httpStatus = res.status;
+    text = await res.text();
+  } catch (e) {
+    const err = e instanceof Error ? e.message : "Сеть / fetch";
+    return {
+      success: false,
+      httpStatus: 0,
+      rawResponse: { networkError: true },
+      errorMessage: err,
+    };
+  }
+  let json: unknown;
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    return {
+      success: false,
+      httpStatus,
+      rawResponse: { parseError: true, textSnippet: text.slice(0, 500) },
+      errorMessage: "Ответ провайдера не JSON",
+    };
+  }
+  return normalizeResponse(json, httpStatus);
+}
+
 /**
  * Polling-статус по taskId (эндпоинт record-info / аналог). Расширяйте normalize при новых схемах.
+ * `defaultRecordInfoPath` — путь, если `endpointOverride` null (картинка / видео).
  */
 export async function getTaskStatus(
   taskId: string,
   endpointOverride: string | null,
+  defaultRecordInfoPath: string = DEFAULT_IMAGE_RECORD_INFO_PATH,
 ): Promise<NormalizedKieImageResult> {
   const base = getKieBaseUrl();
   const key = getKieApiKey();
@@ -277,7 +414,7 @@ export async function getTaskStatus(
         ? endpointOverride.startsWith("/")
           ? endpointOverride
           : `/${endpointOverride}`
-        : DEFAULT_IMAGE_RECORD_INFO_PATH;
+        : defaultRecordInfoPath;
     u = new URL(path, baseWithSlash);
   }
   u.searchParams.set("taskId", taskId);

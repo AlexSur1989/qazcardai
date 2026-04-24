@@ -48,7 +48,7 @@ export default async function CreateImagePage() {
           Создать фото
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Модель и стоимость — из базы; запрос к Kie.ai выполняется на сервере.
+          Модель из базы, задача в Redis/BullMQ, Kie.ai вызывается воркером.
         </p>
       </div>
       <Card>
@@ -58,8 +58,8 @@ export default async function CreateImagePage() {
             Генерация
           </CardTitle>
           <CardDescription>
-            Выберите модель, задайте промпт и при необходимости параметры. Кредиты
-            резервируются и списываются при успехе.
+            Кредиты резервируются при постановке; списание (CAPTURE) — когда появляется
+            результат, возврат при ошибке.
           </CardDescription>
         </CardHeader>
         <CardContent>

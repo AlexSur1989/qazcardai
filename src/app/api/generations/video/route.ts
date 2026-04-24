@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import { NextResponse } from "next/server";
 
 import { Prisma } from "@/generated/prisma/client";
@@ -8,8 +7,16 @@ import { publicHttpUrlsOnly } from "@/lib/generation-input-limits";
 import { prisma } from "@/lib/prisma";
 import { validateVideoInputFiles } from "@/lib/video-input-limits";
 import { videoGenerationBodySchema } from "@/lib/validations/video-generation";
-import { CreditServiceError, getBalance, reserveCredits } from "@/server/services/credits";
-import { followUpAfterVideoTaskCreated } from "@/server/services/video-generation-task";
+import { CreditServiceError, getBalance, refundCredits, reserveCredits } from "@/server/services/credits";
+import { enqueueGenerationJob } from "@/server/queues/generationQueue";
+
+function generationInfraReady() {
+  return (
+    Boolean(process.env.REDIS_URL?.trim()) &&
+    Boolean(process.env.KIE_API_KEY?.trim()) &&
+    Boolean(process.env.KIE_BASE_URL?.trim())
+  );
+}
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -35,6 +42,13 @@ export async function POST(req: Request) {
   const filesCheck = validateVideoInputFiles(body.inputFiles);
   if (!filesCheck.ok) {
     return NextResponse.json({ error: filesCheck.error }, { status: 400 });
+  }
+
+  if (!generationInfraReady()) {
+    return NextResponse.json(
+      { error: "Видео: настройте REDIS_URL, KIE_API_KEY и KIE_BASE_URL" },
+      { status: 503 },
+    );
   }
 
   const model = await prisma.aiModel.findFirst({
@@ -163,9 +177,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 
-  after(() => {
-    void followUpAfterVideoTaskCreated(gen.id);
-  });
+  try {
+    await enqueueGenerationJob(gen.id);
+  } catch (e) {
+    try {
+      await refundCredits(gen.id, "Возврат: очередь недоступна");
+    } catch {
+      // ignore
+    }
+    await prisma.generation
+      .delete({ where: { id: gen.id } })
+      .catch(() => {});
+    const msg = e instanceof Error ? e.message : "Очередь";
+    return NextResponse.json(
+      { error: `Не удалось поставить в очередь: ${msg}` },
+      { status: 503 },
+    );
+  }
 
   return NextResponse.json(
     {
