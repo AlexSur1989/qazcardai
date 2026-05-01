@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { getAppName } from "@/lib/app-name";
 import { cn } from "@/lib/utils";
 
 const legalLinks: { href: string; label: string }[] = [
@@ -18,8 +19,9 @@ export function SiteFooter() {
     >
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-8 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs">
-          <span className="text-foreground/80 font-medium">AI Media</span> — сервис
-          генерации контента. Материалы в разделах ниже — шаблоны, не юридический совет.
+          <span className="text-foreground/80 font-medium">{getAppName()}</span> —{" "}
+          AI-сервис для карточек товаров, фото и видео. Материалы в разделах ниже — шаблоны,
+          не юридический совет.
         </p>
         <nav
           className="flex flex-wrap gap-x-4 gap-y-1 text-xs"

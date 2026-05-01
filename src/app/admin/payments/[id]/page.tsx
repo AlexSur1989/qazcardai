@@ -26,7 +26,7 @@ import { creditTypeLabel } from "@/lib/credit-labels";
 import { paymentStatusLabel } from "@/lib/payment-labels";
 import { cn } from "@/lib/utils";
 
-export const metadata = { title: "Платёж — админ" };
+export const metadata = { title: "Платёж — QazCard AI" };
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -68,6 +68,10 @@ export default async function AdminPaymentDetailPage({ params }: Props) {
             <span className="font-mono">{p.provider}</span>
           </p>
           <p>
+            <span className="text-muted-foreground">Пакет: </span>
+            <span>{p.tokenPackage?.name ?? "—"}</span>
+          </p>
+          <p>
             <span className="text-muted-foreground">Сумма: </span>
             {p.amount.toString()} {p.currency}
           </p>
@@ -86,6 +90,10 @@ export default async function AdminPaymentDetailPage({ params }: Props) {
             <span className="font-mono break-all text-xs">
               {p.providerPaymentId ?? "—"}
             </span>
+          </p>
+          <p>
+            <span className="text-muted-foreground">Оплачен (paidAt): </span>
+            {p.paidAt ? formatAdminDateTime(p.paidAt) : "—"}
           </p>
           <p>
             <span className="text-muted-foreground">Создан: </span>

@@ -43,6 +43,10 @@ export function validateVideoInputFiles(
       nonVideoData.push(entry);
       continue;
     }
+    if (t.startsWith("/uploads/")) {
+      nonVideoData.push(entry);
+      continue;
+    }
     if (t.startsWith("data:video/")) {
       const m = t.match(VIDEO_DATA);
       if (!m) {

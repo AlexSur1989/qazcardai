@@ -1,7 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
-import { useState } from "react";
+import { useFormStatus } from "react-dom";
+import { useActionState, useState } from "react";
 
 import { createPromoCodeAction, updatePromoCodeAction } from "@/server/actions/promo-codes";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ function SubmitButton({ children }: { children: React.ReactNode }) {
 }
 
 function CreateForm() {
-  const [state, formAction] = useFormState(createPromoCodeAction, null);
+  const [state, formAction] = useActionState(createPromoCodeAction, null);
   return (
     <form action={formAction} className="mb-8 space-y-3 rounded-lg border p-4">
       <h2 className="text-sm font-medium">Новый промокод</h2>
@@ -76,7 +76,7 @@ function CreateForm() {
 
 function EditRow({ p }: { p: PromoRow }) {
   const [open, setOpen] = useState(false);
-  const [state, formAction] = useFormState(updatePromoCodeAction, null);
+  const [state, formAction] = useActionState(updatePromoCodeAction, null);
   if (!open) {
     return (
       <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>

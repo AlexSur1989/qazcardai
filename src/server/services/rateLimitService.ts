@@ -44,7 +44,7 @@ function wallMinute(): number {
  * Скользящее окно ~1 мин (по идентификатору) — Redis: фикс. минута; память: от первого запроса.
  */
 export async function checkRateLimit(
-  kind: "login" | "register" | "generation" | "upload" | "admin",
+  kind: "login" | "register" | "generation" | "upload" | "admin" | "classify" | "forgot_password" | "reset_password",
   id: string,
   limit: number,
   windowSec = 60,
@@ -95,12 +95,36 @@ export function rateLimitToResponse(d: RateLimitDenied): NextResponse {
   );
 }
 
+/**
+ * Тело ответа для Auth.js /api/auth/callback/credentials: клиентский `signIn(..., { redirect: false })`
+ * читает JSON с полем `url` (иначе падает `new URL(data.url)` в next-auth/react).
+ */
+export function loginRateLimitToNextAuthJsonResponse(
+  req: Request,
+  d: RateLimitDenied,
+): NextResponse {
+  const origin = new URL(req.url).origin;
+  const url = `${origin}/api/auth/signin?error=RateLimit`;
+  return NextResponse.json(
+    {
+      url,
+      error: d.message,
+      code: "RATE_LIMIT" as const,
+      retryAfter: d.retryAfterSec,
+    },
+    {
+      status: 429,
+      headers: { "Retry-After": String(d.retryAfterSec) },
+    },
+  );
+}
+
 export async function enforceLoginRateLimit(req: Request): Promise<NextResponse | null> {
   const settings = await getRateUploadSettings();
   const ip = getClientIpFromRequest(req);
   const res = await checkRateLimit("login", ip, settings.loginPerMinute, 60);
   if (res.allowed) return null;
-  return rateLimitToResponse(res);
+  return loginRateLimitToNextAuthJsonResponse(req, res);
 }
 
 export async function enforceRegistrationRateLimit(
@@ -111,6 +135,33 @@ export async function enforceRegistrationRateLimit(
   const res = await checkRateLimit("register", ip, settings.registrationPerMinute, 60);
   if (res.allowed) return null;
   return rateLimitToResponse(res);
+}
+
+/**
+ * Сброс пароля: лимит по IP и по email (нормализованному), чтобы снизить злоупотребления.
+ */
+export async function enforceForgotPasswordRateLimit(
+  req: Request,
+  emailNormalized: string,
+): Promise<NextResponse | null> {
+  const settings = await getRateUploadSettings();
+  const ip = getClientIpFromRequest(req);
+  const ipLimit = Math.max(3, settings.registrationPerMinute);
+  const r1 = await checkRateLimit("forgot_password", `ip:${ip}`, ipLimit, 60);
+  if (!r1.allowed) return rateLimitToResponse(r1);
+  const e = emailNormalized.slice(0, 256).toLowerCase();
+  const r2 = await checkRateLimit("forgot_password", `e:${e}`, 5, 60);
+  if (!r2.allowed) return rateLimitToResponse(r2);
+  return null;
+}
+
+export async function enforceResetPasswordRateLimit(
+  req: Request,
+): Promise<NextResponse | null> {
+  const ip = getClientIpFromRequest(req);
+  const r = await checkRateLimit("reset_password", `ip:${ip}`, 20, 60);
+  if (!r.allowed) return rateLimitToResponse(r);
+  return null;
 }
 
 export async function enforceGenerationRateLimit(
@@ -127,6 +178,15 @@ export async function enforceUploadRateLimit(
 ): Promise<NextResponse | null> {
   const settings = await getRateUploadSettings();
   const res = await checkRateLimit("upload", userId, settings.uploadPerMinute, 60);
+  if (res.allowed) return null;
+  return rateLimitToResponse(res);
+}
+
+/** Классификация карточки товара: ~15/мин на пользователя (независимо от generation). */
+export async function enforceProductClassifyRateLimit(
+  userId: string,
+): Promise<NextResponse | null> {
+  const res = await checkRateLimit("classify", userId, 15, 60);
   if (res.allowed) return null;
   return rateLimitToResponse(res);
 }

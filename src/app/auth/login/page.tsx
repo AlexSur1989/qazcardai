@@ -2,15 +2,21 @@
 
 import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
 
+function safePathCallback(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
+    return "/dashboard";
+  }
+  return raw;
+}
+
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
+  const callbackUrl = safePathCallback(searchParams.get("callbackUrl"));
   const registered = searchParams.get("registered") === "1";
 
   const [email, setEmail] = useState("");
@@ -29,15 +35,32 @@ function LoginForm() {
         redirect: false,
         callbackUrl,
       });
-      if (res?.error) {
-        setError("Неверный email или пароль");
-        setLoading(false);
+      if (res == null) {
+        setError("Нет ответа от сервера. Обновите страницу и попробуйте снова.");
         return;
       }
-      router.push(callbackUrl.startsWith("/") ? callbackUrl : "/dashboard");
-      router.refresh();
+      if (res.status === 429) {
+        setError("Слишком много попыток входа. Подождите минуту и повторите.");
+        return;
+      }
+      if (res.error) {
+        if (res.error === "RateLimit") {
+          setError("Слишком много попыток входа. Подождите минуту и повторите.");
+          return;
+        }
+        setError("Неверный email или пароль");
+        return;
+      }
+      if (res.ok) {
+        const next =
+          res.url && res.url.length > 0 ? res.url : callbackUrl;
+        window.location.assign(next);
+        return;
+      }
+      setError("Не удалось войти. Попробуйте снова.");
     } catch {
       setError("Не удалось войти. Попробуйте снова.");
+    } finally {
       setLoading(false);
     }
   }
@@ -45,12 +68,18 @@ function LoginForm() {
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-12">
       <h1 className="text-2xl font-semibold tracking-tight">Вход</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Нет аккаунта?{" "}
+        <p className="text-muted-foreground flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <span>Нет аккаунта?{" "}
         <Link href="/auth/register" className="text-primary underline-offset-4 hover:underline">
           Регистрация
-        </Link>
-      </p>
+        </Link></span>
+          <Link
+            href="/forgot-password"
+            className="text-primary shrink-0 underline-offset-4 hover:underline"
+          >
+            Забыли пароль?
+          </Link>
+        </p>
 
       {registered ? (
         <p className="mt-4 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">

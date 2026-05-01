@@ -2,12 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
-import { auth } from "@/auth";
-import { canAccessAdminPanel } from "@/lib/auth";
 import {
   adminManualRefundGeneration,
   CreditServiceError,
 } from "@/server/services/credits";
+import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { getAdminRateLimitError } from "@/server/services/rateLimitService";
 
 export type AdminGenRefundState = { error?: string; ok?: boolean } | null;
@@ -16,11 +15,11 @@ export async function adminRefundGenerationAction(
   _prev: AdminGenRefundState,
   formData: FormData,
 ): Promise<AdminGenRefundState> {
-  const session = await auth();
-  if (!session?.user?.id || !canAccessAdminPanel(session.user.role)) {
+  const current = await getFreshAdminSessionUser();
+  if (!current.ok) {
     return { error: "Нет доступа" };
   }
-  const rateErr = await getAdminRateLimitError(session.user.id);
+  const rateErr = await getAdminRateLimitError(current.user.id);
   if (rateErr) return { error: rateErr };
 
   const generationId = String(formData.get("generationId") ?? "").trim();
@@ -30,7 +29,7 @@ export async function adminRefundGenerationAction(
   try {
     await adminManualRefundGeneration({
       generationId,
-      adminUserId: session.user.id,
+      adminUserId: current.user.id,
       reason: reason || "Ручной возврат",
     });
   } catch (e) {

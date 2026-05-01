@@ -2,8 +2,13 @@ import { NextResponse } from "next/server";
 
 import { Prisma } from "@/generated/prisma/client";
 
-import { auth } from "@/auth";
-import { publicHttpUrlsOnly, validateImageInputFiles } from "@/lib/generation-input-limits";
+import {
+  kieReachableImageUrlsFromInputFiles,
+  KIE_REQUIRES_PUBLIC_IMAGE_URLS_RU,
+  publicHttpUrlsOnly,
+  validateImageInputFiles,
+} from "@/lib/generation-input-limits";
+import { isMockKie } from "@/lib/kie-mock";
 import { prisma } from "@/lib/prisma";
 import {
   getMaxJsonBodyBytes,
@@ -12,12 +17,15 @@ import {
 import { publicApiErrorMessage } from "@/lib/safe-api-error";
 import { imageGenerationBodySchema } from "@/lib/validations/image-generation";
 import { CreditServiceError, getBalance, refundCredits, reserveCredits } from "@/server/services/credits";
+import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { enqueueGenerationJob } from "@/server/queues/generationQueue";
-import {
-  createBlockedByModeration,
-  moderateGenerationInput,
-} from "@/server/services/moderation";
+import { MODERATION_USER_MESSAGE, moderateGenerationInput } from "@/server/services/moderation";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
+import {
+  modelHasSettingsSchema,
+  validateAndNormalizeModelSettings,
+} from "@/server/services/model-settings";
+import { calculateGenerationCredits } from "@/server/services/pricing";
 
 function redisAndKieReady() {
   return (
@@ -28,11 +36,14 @@ function redisAndKieReady() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const current = await getFreshSessionUser();
+  if (!current.ok) {
+    if (current.reason === "inactive") {
+      return NextResponse.json({ error: "Аккаунт недоступен" }, { status: 403 });
+    }
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
-  const userId = session.user.id;
+  const userId = current.user.id;
 
   const rate = await enforceGenerationRateLimit(userId);
   if (rate) return rate;
@@ -54,11 +65,6 @@ export async function POST(req: Request) {
   }
   const body = parsed.data;
 
-  const filesCheck = validateImageInputFiles(body.inputFiles);
-  if (!filesCheck.ok) {
-    return NextResponse.json({ error: filesCheck.error }, { status: 400 });
-  }
-
   if (!redisAndKieReady()) {
     return NextResponse.json(
       { error: "Генерация недоступна: настройте REDIS_URL, KIE_API_KEY и KIE_BASE_URL" },
@@ -71,6 +77,7 @@ export async function POST(req: Request) {
       id: body.modelId,
       isActive: true,
       type: "IMAGE",
+      scope: "GENERAL",
     },
   });
   if (!model) {
@@ -92,16 +99,42 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  if (body.inputFiles?.length && !model.supportsImageInput) {
+  const hasSchema = modelHasSettingsSchema(model.settingsSchema);
+  let normalizedSettings: Record<string, unknown> = {};
+  if (hasSchema) {
+    const v = validateAndNormalizeModelSettings(
+      model.settingsSchema,
+      body.settings as Record<string, unknown>,
+    );
+    if (!v.ok) {
+      return NextResponse.json({ error: v.message }, { status: 400 });
+    }
+    normalizedSettings = v.settings;
+  }
+
+  const imageUrlsFromSettings =
+    hasSchema && Array.isArray(normalizedSettings.imageUrls)
+      ? normalizedSettings.imageUrls.filter((x): x is string => typeof x === "string")
+      : [];
+  const inputFilesCombined = [...(body.inputFiles ?? []), ...imageUrlsFromSettings];
+
+  if (inputFilesCombined.length > 0 && !model.supportsImageInput) {
     return NextResponse.json(
       { error: "Эта модель не поддерживает входные изображения" },
       { status: 400 },
     );
   }
 
-  const httpUrls = publicHttpUrlsOnly(body.inputFiles);
-  if (body.inputFiles?.length && model.supportsImageInput) {
-    const hasData = body.inputFiles.some((s) => s.trim().startsWith("data:"));
+  const filesCheck = validateImageInputFiles(
+    inputFilesCombined.length > 0 ? inputFilesCombined : undefined,
+  );
+  if (!filesCheck.ok) {
+    return NextResponse.json({ error: filesCheck.error }, { status: 400 });
+  }
+
+  const httpUrls = publicHttpUrlsOnly(inputFilesCombined);
+  if (inputFilesCombined.length > 0 && model.supportsImageInput) {
+    const hasData = inputFilesCombined.some((s) => s.trim().startsWith("data:"));
     if (hasData) {
       return NextResponse.json(
         {
@@ -111,7 +144,11 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    if (httpUrls.length === 0) {
+    if (!isMockKie() && model.provider === "KIE_AI") {
+      if (kieReachableImageUrlsFromInputFiles(inputFilesCombined).length === 0) {
+        return NextResponse.json({ error: KIE_REQUIRES_PUBLIC_IMAGE_URLS_RU }, { status: 400 });
+      }
+    } else if (httpUrls.length === 0) {
       return NextResponse.json(
         { error: "Укажите хотя бы один публичный URL изображения" },
         { status: 400 },
@@ -119,51 +156,49 @@ export async function POST(req: Request) {
     }
   }
 
+  const metadata: Record<string, unknown> = {};
+  if (hasSchema) {
+    metadata.settings = normalizedSettings;
+  } else {
+    if (body.aspectRatio) metadata.aspectRatio = body.aspectRatio;
+    if (body.resolution) metadata.resolution = body.resolution;
+    if (body.seed !== undefined) metadata.seed = body.seed;
+  }
+
+  const mod = await moderateGenerationInput({
+    prompt: body.prompt,
+    negativePrompt: body.negativePrompt ?? null,
+    userId,
+    modelId: model.id,
+    flow: "image",
+  });
+  if (!mod.allowed) {
+    return NextResponse.json(
+      {
+        error: MODERATION_USER_MESSAGE,
+        reason: mod.reason,
+        rule: mod.rule,
+        matchedText: mod.matchedText,
+      },
+      { status: 400 },
+    );
+  }
+
+  const costCreditsCalculated = calculateGenerationCredits(
+    model,
+    normalizedSettings,
+  );
+
   let balance: number;
   try {
     balance = await getBalance(userId);
   } catch {
     return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
   }
-  if (balance < model.costCredits) {
+  if (balance < costCreditsCalculated) {
     return NextResponse.json(
       { error: "Недостаточно кредитов" },
       { status: 402 },
-    );
-  }
-
-  const metadata: Record<string, unknown> = {};
-  if (body.aspectRatio) metadata.aspectRatio = body.aspectRatio;
-  if (body.resolution) metadata.resolution = body.resolution;
-  if (body.seed !== undefined) metadata.seed = body.seed;
-
-  const mod = await moderateGenerationInput({
-    prompt: body.prompt,
-    negativePrompt: body.negativePrompt ?? null,
-  });
-  if (!mod.allowed) {
-    const blocked = await createBlockedByModeration({
-      userId,
-      model,
-      type: "IMAGE",
-      prompt: body.prompt,
-      negativePrompt: body.negativePrompt ?? null,
-      inputFiles: body.inputFiles
-        ? (body.inputFiles as Prisma.InputJsonValue)
-        : undefined,
-      metadata:
-        Object.keys(metadata).length > 0
-          ? (metadata as Prisma.InputJsonValue)
-          : undefined,
-      mod,
-    });
-    return NextResponse.json(
-      {
-        generationId: blocked.id,
-        status: "BLOCKED" as const,
-        error: mod.reason,
-      },
-      { status: 201 },
     );
   }
 
@@ -175,10 +210,10 @@ export async function POST(req: Request) {
       status: "QUEUED",
       prompt: body.prompt,
       negativePrompt: body.negativePrompt ?? null,
-      inputFiles: body.inputFiles
-        ? (body.inputFiles as Prisma.InputJsonValue)
+      inputFiles: inputFilesCombined.length
+        ? (inputFilesCombined as Prisma.InputJsonValue)
         : undefined,
-      costCredits: model.costCredits,
+      costCredits: costCreditsCalculated,
       metadata:
         Object.keys(metadata).length > 0
           ? (metadata as Prisma.InputJsonValue)
@@ -187,7 +222,12 @@ export async function POST(req: Request) {
   });
 
   try {
-    await reserveCredits(userId, model.costCredits, gen.id, "Резерв под изображение");
+    await reserveCredits(
+      userId,
+      costCreditsCalculated,
+      gen.id,
+      "Резерв под изображение",
+    );
   } catch (e) {
     await prisma.generation.delete({ where: { id: gen.id } });
     if (e instanceof CreditServiceError && e.code === "INSUFFICIENT") {

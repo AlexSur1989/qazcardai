@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { auth } from "@/auth";
 import { canAccessAdminPanel } from "@/lib/auth";
 import { parseOutputFilesList } from "@/lib/generation-output-utils";
 import { prisma } from "@/lib/prisma";
+import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { getSignedUrl, isStorageConfigured } from "@/server/services/storage";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -17,8 +17,11 @@ export async function GET(req: Request, context: Ctx) {
     return NextResponse.json({ error: "Некорректный id" }, { status: 400 });
   }
 
-  const session = await auth();
-  if (!session?.user?.id) {
+  const current = await getFreshSessionUser();
+  if (!current.ok) {
+    if (current.reason === "inactive") {
+      return NextResponse.json({ error: "Аккаунт недоступен" }, { status: 403 });
+    }
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
 
@@ -38,8 +41,8 @@ export async function GET(req: Request, context: Ctx) {
     return NextResponse.json({ error: "Не найдено" }, { status: 404 });
   }
 
-  const isAdmin = canAccessAdminPanel(session.user.role);
-  if (generation.userId !== session.user.id && !isAdmin) {
+  const isAdmin = canAccessAdminPanel(current.user.role);
+  if (generation.userId !== current.user.id && !isAdmin) {
     return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
   }
 

@@ -1,7 +1,39 @@
 /**
  * Обязательные переменные окружения (Stage 17).
  * Значения секретов никогда не логируем — только имена отсутствующих переменных.
+ *
+ * QUEUE_MODE:
+ * - `inline` — локальная разработка без Redis/Bull; `REDIS_URL` не обязателен.
+ * - `redis` (по умолчанию) — BullMQ, нужен `REDIS_URL` и процесс `npm run worker`.
  */
+
+import {
+  isLocalUploadStorageEffective,
+  isUploadStorageLocalExplicitInProduction,
+} from "@/lib/upload-storage-mode";
+
+function isQueueModeInline(): boolean {
+  return process.env.QUEUE_MODE?.trim().toLowerCase() === "inline";
+}
+
+/** В development при локальном хранилище (по умолчанию) S3-переменные не обязательны. */
+function shouldRequireS3Env(): boolean {
+  if (isUploadStorageLocalExplicitInProduction()) {
+    return false;
+  }
+  if (process.env.NODE_ENV === "production") {
+    return true;
+  }
+  return !isLocalUploadStorageEffective();
+}
+
+const S3_ENV_NAMES = [
+  "S3_ENDPOINT",
+  "S3_REGION",
+  "S3_ACCESS_KEY_ID",
+  "S3_SECRET_ACCESS_KEY",
+  "S3_BUCKET",
+] as const;
 
 /** Проверяемые критичные ключи (без вывода значений). */
 export const REQUIRED_ENV_NAMES = [
@@ -9,10 +41,7 @@ export const REQUIRED_ENV_NAMES = [
   "KIE_API_KEY",
   "KIE_BASE_URL",
   "REDIS_URL",
-  "S3_ENDPOINT",
-  "S3_ACCESS_KEY_ID",
-  "S3_SECRET_ACCESS_KEY",
-  "S3_BUCKET",
+  ...S3_ENV_NAMES,
 ] as const;
 
 function hasValue(name: (typeof REQUIRED_ENV_NAMES)[number]): boolean {
@@ -21,8 +50,9 @@ function hasValue(name: (typeof REQUIRED_ENV_NAMES)[number]): boolean {
 
 /**
  * Секрет сессии NextAuth: принимаем AUTH_SECRET или NEXTAUTH_SECRET (не логируем).
+ * Экспорт для проверок (например чек-лист запуска).
  */
-function hasAuthSecret(): boolean {
+export function hasAuthSecret(): boolean {
   return Boolean(
     process.env.AUTH_SECRET?.trim() ?? process.env.NEXTAUTH_SECRET?.trim(),
   );
@@ -34,10 +64,19 @@ function hasAuthSecret(): boolean {
 export function getMissingRequiredEnv(): string[] {
   const m: string[] = [];
   for (const n of REQUIRED_ENV_NAMES) {
+    if (n === "REDIS_URL" && isQueueModeInline()) {
+      continue;
+    }
+    if ((S3_ENV_NAMES as readonly string[]).includes(n) && !shouldRequireS3Env()) {
+      continue;
+    }
     if (!hasValue(n)) m.push(n);
   }
   if (!hasAuthSecret()) {
     m.push("AUTH_SECRET (или NEXTAUTH_SECRET)");
+  }
+  if (isUploadStorageLocalExplicitInProduction()) {
+    m.push("UPLOAD_STORAGE=local запрещён в production (нужен S3)");
   }
   return m;
 }

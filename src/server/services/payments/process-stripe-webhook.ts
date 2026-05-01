@@ -4,6 +4,10 @@ import type Stripe from "stripe";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { applyPurchaseInTransaction } from "@/server/services/credits";
+import {
+  purchaseTokenPackageInTransaction,
+} from "@/server/services/tokenPackages";
+import { trySendPaymentSuccessEmail } from "@/server/services/notificationsIntegration";
 
 import { getStripeClient } from "./stripe";
 
@@ -111,9 +115,12 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
     throw new Error("validation: session not paid");
   }
 
+  let shouldSendSuccessEmail = false;
+
   await prisma.$transaction(async (tx) => {
     const pay = await tx.payment.findFirst({
       where: { id: paymentId, userId, provider: "stripe" },
+      include: { tokenPackage: true },
     });
     if (!pay) {
       throw new Error("validation: payment not found");
@@ -152,13 +159,45 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
       throw new Error("concurrent update on payment");
     }
 
-    await applyPurchaseInTransaction(tx, {
-      userId,
-      credits,
-      paymentId,
-      reason: "Покупка кредитов (Stripe)",
-    });
+    const reason = pay.tokenPackage?.name
+      ? `Token package purchase: ${pay.tokenPackage.name}`
+      : "Token package purchase (Stripe)";
+
+    if (pay.tokenPackageId && pay.tokenPackage) {
+      await purchaseTokenPackageInTransaction(tx, {
+        userId,
+        paymentId,
+        credits,
+        reason,
+        pkg: pay.tokenPackage,
+      });
+    } else {
+      await applyPurchaseInTransaction(tx, {
+        userId,
+        credits,
+        paymentId,
+        reason,
+      });
+    }
+    shouldSendSuccessEmail = true;
   });
+
+  if (shouldSendSuccessEmail) {
+    const pay = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { tokenPackage: true },
+    });
+    if (pay) {
+      const pkgName = pay.tokenPackage?.name ?? "Токены";
+      void trySendPaymentSuccessEmail({
+        userId: pay.userId,
+        packageName: pkgName,
+        credits: pay.credits,
+        amount: pay.amount.toString(),
+        currency: pay.currency,
+      });
+    }
+  }
 }
 
 function mergeJsonMeta(

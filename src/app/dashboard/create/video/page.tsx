@@ -2,7 +2,6 @@ import { Video } from "lucide-react";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
-import { auth } from "@/auth";
 import { PageHeader } from "@/components/layout/page-header";
 import { CreateVideoForm } from "@/components/dashboard/create-video-form";
 import {
@@ -14,21 +13,22 @@ import {
 } from "@/components/ui/card";
 import { CreateFormSkeleton } from "@/components/dashboard/create-form-skeleton";
 import { getBalance } from "@/server/services/credits";
+import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { prisma } from "@/lib/prisma";
 
 export const metadata = {
-  title: "Создать видео — AI Media",
+  title: "Создать видео — QazCard AI",
 };
 
 export default async function CreateVideoPage() {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const current = await getFreshSessionUser();
+  if (!current.ok) {
     redirect("/auth/login?callbackUrl=/dashboard/create/video");
   }
 
   const [models, balanceCredits] = await Promise.all([
     prisma.aiModel.findMany({
-      where: { isActive: true, type: "VIDEO" },
+      where: { isActive: true, type: "VIDEO", scope: "GENERAL" },
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -36,6 +36,7 @@ export default async function CreateVideoPage() {
         slug: true,
         costCredits: true,
         description: true,
+        settingsSchema: true,
         supportsNegativePrompt: true,
         supportsImageInput: true,
         supportsVideoInput: true,
@@ -43,12 +44,13 @@ export default async function CreateVideoPage() {
         maxDuration: true,
       },
     }),
-    getBalance(session.user.id),
+    getBalance(current.user.id),
   ]);
 
   return (
     <div className="space-y-6">
       <PageHeader
+        variant="qaz"
         title="Создать видео"
         description="Постановка в очередь, статусы и результат отслеживайте в истории и на этой странице (опрос по id)."
         breadcrumbs={[
@@ -56,7 +58,7 @@ export default async function CreateVideoPage() {
           { label: "Создать видео" },
         ]}
       />
-      <Card className="border-border/80 shadow-sm">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Video className="size-5" aria-hidden />

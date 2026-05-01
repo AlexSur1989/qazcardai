@@ -3,10 +3,9 @@
 import { revalidatePath } from "next/cache";
 
 import type { UserStatus } from "@/generated/prisma/enums";
-import { auth } from "@/auth";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
-import { canAccessAdminPanel } from "@/lib/auth";
 import { getAdminRateLimitError } from "@/server/services/rateLimitService";
+import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { prisma } from "@/lib/prisma";
 
 export type AdminUserStatusState = { error?: string; ok?: boolean } | null;
@@ -17,11 +16,11 @@ export async function updateUserStatusAction(
   _prev: AdminUserStatusState,
   formData: FormData,
 ): Promise<AdminUserStatusState> {
-  const session = await auth();
-  if (!session?.user?.id || !canAccessAdminPanel(session.user.role)) {
+  const current = await getFreshAdminSessionUser();
+  if (!current.ok) {
     return { error: "Нет доступа" };
   }
-  const rateErr = await getAdminRateLimitError(session.user.id);
+  const rateErr = await getAdminRateLimitError(current.user.id);
   if (rateErr) return { error: rateErr };
 
   const userId = String(formData.get("userId") ?? "").trim();
@@ -47,7 +46,7 @@ export async function updateUserStatusAction(
   });
 
   await writeAdminAuditLog({
-    adminUserId: session.user.id,
+    adminUserId: current.user.id,
     action: "user.status_changed",
     targetType: "User",
     targetId: userId,

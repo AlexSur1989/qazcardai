@@ -1,14 +1,14 @@
 import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
-import { getCreditPackageById } from "@/lib/credit-packages";
 import { prisma } from "@/lib/prisma";
+import { getTokenPackageByIdForCheckout } from "@/server/services/token-packages-catalog";
 
 import { createStripeCheckoutSession } from "./stripe";
 import type { CreateCheckoutResult } from "./types";
 
 /**
- * Создаёт Payment (PENDING) и Stripe Checkout. Кредиты начисляются только в webhook.
+ * Создаёт Payment (PENDING) и Stripe Checkout. Токены начисляются только в webhook.
  */
 export async function createStripeCheckoutForUser(
   userId: string,
@@ -18,22 +18,32 @@ export async function createStripeCheckoutForUser(
   if (!process.env.STRIPE_SECRET_KEY?.trim()) {
     return { ok: false, error: "not_configured" };
   }
-  const pkg = getCreditPackageById(packageId);
+  const pkg = await getTokenPackageByIdForCheckout(packageId, {
+    requireActive: true,
+  });
   if (!pkg) {
+    return { ok: false, error: "package_unavailable" };
+  }
+  const totalTokens = pkg.baseTokens + pkg.bonusTokens;
+  if (totalTokens <= 0) {
     return { ok: false, error: "package_unavailable" };
   }
   const payment = await prisma.payment.create({
     data: {
       userId,
+      tokenPackageId: pkg.id,
       provider: "stripe",
-      amount: pkg.amountDecimal,
-      currency: pkg.currency,
-      credits: pkg.credits,
+      amount: new Prisma.Decimal(pkg.priceKzt),
+      currency: "kzt",
+      credits: totalTokens,
       status: "PENDING",
       metadata: {
-        packageId: pkg.id,
-        stripePriceId: pkg.stripePriceId,
-        envKey: pkg.stripePriceEnvKey,
+        tokenPackageId: pkg.id,
+        tokenPackageSlug: pkg.slug,
+        priceKzt: pkg.priceKzt,
+        baseTokens: pkg.baseTokens,
+        bonusTokens: pkg.bonusTokens,
+        totalTokens,
       } satisfies Prisma.InputJsonObject,
     },
   });
@@ -41,9 +51,11 @@ export async function createStripeCheckoutForUser(
     paymentId: payment.id,
     userId,
     userEmail,
-    credits: pkg.credits,
+    credits: totalTokens,
     packageId: pkg.id,
-    stripePriceId: pkg.stripePriceId,
+    name: pkg.name,
+    description: pkg.description,
+    priceKzt: pkg.priceKzt,
   });
   return { ok: true, url };
 }

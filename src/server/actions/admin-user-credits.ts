@@ -2,12 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
-import { auth } from "@/auth";
-import { canAccessAdminPanel } from "@/lib/auth";
 import {
   adminAdjustCredits,
   CreditServiceError,
 } from "@/server/services/credits";
+import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { getAdminRateLimitError } from "@/server/services/rateLimitService";
 
 export type AdminCreditsFormState = {
@@ -19,14 +18,20 @@ export async function adminAdjustUserCreditsAction(
   _prev: AdminCreditsFormState,
   formData: FormData,
 ): Promise<AdminCreditsFormState> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return { error: "Сессия истекла" };
-  }
-  if (!canAccessAdminPanel(session.user.role)) {
+  const current = await getFreshAdminSessionUser();
+  if (!current.ok) {
+    if (current.reason === "unauthenticated") {
+      return { error: "Сессия истекла" };
+    }
+    if (current.reason === "inactive") {
+      return { error: "Аккаунт недоступен" };
+    }
     return { error: "Нет прав" };
   }
-  const rateErr = await getAdminRateLimitError(session.user.id);
+  if (current.user.role !== "SUPER_ADMIN") {
+    return { error: "Только SUPER_ADMIN может менять баланс" };
+  }
+  const rateErr = await getAdminRateLimitError(current.user.id);
   if (rateErr) {
     return { error: rateErr };
   }
@@ -46,7 +51,7 @@ export async function adminAdjustUserCreditsAction(
   try {
     await adminAdjustCredits({
       userId,
-      adminUserId: session.user.id,
+      adminUserId: current.user.id,
       delta,
       reason,
     });
@@ -60,5 +65,7 @@ export async function adminAdjustUserCreditsAction(
   revalidatePath("/admin/users");
   revalidatePath(`/admin/users/${userId}`);
   revalidatePath("/admin/audit-logs");
+  revalidatePath("/admin/finance");
+  revalidatePath("/admin/credit-transactions");
   return { ok: true };
 }

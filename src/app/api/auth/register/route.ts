@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
+import { getAppSetting } from "@/server/services/appSettings";
+import { trySendWelcomeEmailForNewUser } from "@/server/services/notificationsIntegration";
 import { UserRole, UserStatus } from "@/generated/prisma/enums";
 import { enforceRegistrationRateLimit } from "@/server/services/rateLimitService";
 
@@ -49,17 +51,25 @@ export async function POST(req: Request) {
 
   const passwordHash = await hashPassword(password);
 
-  await prisma.user.create({
+  const freeRaw = await getAppSetting("FREE_CREDITS_FOR_NEW_USERS");
+  const freeCredits =
+    typeof freeRaw === "number" && Number.isFinite(freeRaw) && freeRaw >= 0
+      ? Math.min(Math.floor(freeRaw), 1_000_000)
+      : 0;
+
+  const user = await prisma.user.create({
     data: {
       email,
       passwordHash,
       name: nameStr,
       role: UserRole.USER,
       status: UserStatus.ACTIVE,
-      balanceCredits: 0,
+      balanceCredits: freeCredits,
       emailVerified: false,
     },
   });
+
+  void trySendWelcomeEmailForNewUser({ userId: user.id });
 
   return NextResponse.json({ ok: true }, { status: 201 });
 }

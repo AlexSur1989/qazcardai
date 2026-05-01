@@ -87,7 +87,7 @@ export function AdminPaymentsFiltersForm({
           id="ap-provider"
           name="provider"
           defaultValue={providerValue}
-          placeholder="stripe"
+          placeholder="stripe | KASPI"
           className="h-9"
         />
       </div>

@@ -14,7 +14,7 @@ import {
 import { getAdminGenerationById, getAdminGenerationRefundEligibility } from "@/lib/admin-data";
 import type { UserGenerationDetail } from "@/lib/generation-history-data";
 
-export const metadata = { title: "Генерация — админ" };
+export const metadata = { title: "Генерация — QazCard AI" };
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -39,6 +39,7 @@ export default async function AdminGenerationDetailPage({ params }: Props) {
       costCredits: g.costCredits,
       createdAt: g.createdAt,
       completedAt: g.completedAt,
+      providerTaskId: g.providerTaskId,
       model: {
         id: g.model.id,
         name: g.model.name,
@@ -54,6 +55,7 @@ export default async function AdminGenerationDetailPage({ params }: Props) {
           userEmail={g.user.email}
           userIdForAdminLink={g.user.id}
           showRepeat={false}
+          adminBilingualLabels
         />
         {ref.ok && ref.canRefund ? (
           <Card>

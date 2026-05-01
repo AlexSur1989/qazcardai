@@ -30,7 +30,7 @@ import { paymentStatusLabel } from "@/lib/payment-labels";
 import { cn } from "@/lib/utils";
 import type { PaymentStatus } from "@/generated/prisma/enums";
 
-export const metadata = { title: "Платежи — админ" };
+export const metadata = { title: "Платежи — QazCard AI" };
 
 const ALL_STATUS: PaymentStatus[] = [
   "PENDING",
@@ -139,47 +139,68 @@ export default async function AdminPaymentsPage({ searchParams }: PageProps) {
               <TableRow>
                 <TableHead>Пользователь</TableHead>
                 <TableHead>Провайдер</TableHead>
+                <TableHead>Пакет</TableHead>
                 <TableHead className="text-right">Сумма</TableHead>
                 <TableHead>Кр.</TableHead>
+                <TableHead>mock</TableHead>
+                <TableHead>Оплачен</TableHead>
                 <TableHead>Статус</TableHead>
                 <TableHead>Создан</TableHead>
                 <TableHead className="w-[1%]" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="max-w-[10rem]">
-                    <Link
-                      href={`/admin/users/${p.userId}`}
-                      className="text-primary truncate text-xs underline"
-                    >
-                      {p.user.email}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-xs font-mono">{p.provider}</TableCell>
-                  <TableCell className="text-right text-xs tabular-nums">
-                    {p.amount.toString()} {p.currency}
-                  </TableCell>
-                  <TableCell className="text-xs tabular-nums">{p.credits}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">
-                      {paymentStatusLabel(p.status)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-xs">
-                    {formatAdminDateTime(p.createdAt)}
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/admin/payments/${p.id}`}
-                      className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
-                    >
-                      Детали
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {rows.map((p) => {
+                const meta =
+                  p.metadata &&
+                  typeof p.metadata === "object" &&
+                  !Array.isArray(p.metadata)
+                    ? (p.metadata as Record<string, unknown>)
+                    : null;
+                const mock = meta && typeof meta.mock === "boolean" ? meta.mock : null;
+                return (
+                  <TableRow key={p.id}>
+                    <TableCell className="max-w-[10rem]">
+                      <Link
+                        href={`/admin/users/${p.userId}`}
+                        className="text-primary truncate text-xs underline"
+                      >
+                        {p.user.email}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-xs font-mono">{p.provider}</TableCell>
+                    <TableCell className="max-w-[8rem] truncate text-xs">
+                      {p.tokenPackage?.name ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">
+                      {p.amount.toString()} {p.currency}
+                    </TableCell>
+                    <TableCell className="text-xs tabular-nums">{p.credits}</TableCell>
+                    <TableCell className="text-xs">
+                      {mock === true ? "yes" : mock === false ? "no" : "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-xs">
+                      {p.paidAt ? formatAdminDateTime(p.paidAt) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {paymentStatusLabel(p.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-xs">
+                      {formatAdminDateTime(p.createdAt)}
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/admin/payments/${p.id}`}
+                        className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+                      >
+                        Детали
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

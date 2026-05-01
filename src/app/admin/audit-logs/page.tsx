@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/table";
 import { AlertCircle } from "lucide-react";
 
-export const metadata = { title: "Аудит — админ" };
+export const metadata = { title: "Аудит — QazCard AI" };
 
 type SearchProps = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 

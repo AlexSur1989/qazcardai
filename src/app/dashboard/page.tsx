@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { AlertCircle, Image as ImageIcon, Video } from "lucide-react";
+import { AlertCircle, Image as ImageIcon, Package, Video } from "lucide-react";
 
-import { auth } from "@/auth";
 import { DashboardSectionEmpty } from "@/components/dashboard/dashboard-section-empty";
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -18,16 +17,26 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getDashboardSnapshot } from "@/lib/dashboard-data";
+import { formatKzt, formatRuDate } from "@/lib/format-kzt";
 import { cn } from "@/lib/utils";
 import { redirect } from "next/navigation";
+import { getUserLastTokenPackage } from "@/server/services/tokenPackages";
+import { getFreshSessionUser } from "@/server/services/fresh-session-user";
+
+export const metadata = {
+  title: "Кабинет — QazCard AI",
+};
 
 export default async function DashboardPage() {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const current = await getFreshSessionUser();
+  if (!current.ok) {
     redirect("/auth/login?callbackUrl=/dashboard");
   }
 
-  const data = await getDashboardSnapshot(session.user.id);
+  const [data, lastPack] = await Promise.all([
+    getDashboardSnapshot(current.user.id),
+    getUserLastTokenPackage(current.user.id),
+  ]);
 
   if (!data.ok) {
     return (
@@ -59,27 +68,28 @@ export default async function DashboardPage() {
   }
 
   const { balanceCredits, activePlan, recent, active } = data;
-  const name = session.user.name?.trim() || session.user.email;
+  const name = current.user.name?.trim() || current.user.email;
 
   return (
     <div className="space-y-8">
       <PageHeader
+        variant="qaz"
         title={`Здравствуйте, ${name}`}
-        description="Сводка по кредитам и задачам. Создание — в разделах «Создать фото» и «Создать видео»."
+        description="Сводка по балансу токенов и задачам. Быстрые действия — карточка товара, фото и видео."
       />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card className="border-border/80 shadow-sm">
+        <Card>
           <CardHeader>
             <CardTitle>Баланс</CardTitle>
-            <CardDescription>Доступные кредиты для генераций</CardDescription>
+            <CardDescription>Доступно токенов для генераций</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-semibold tabular-nums">{balanceCredits}</p>
-            <p className="text-muted-foreground mt-1 text-xs">кредитов</p>
+            <p className="text-muted-foreground mt-1 text-xs">токенов</p>
           </CardContent>
         </Card>
-        <Card className="border-border/80 shadow-sm">
+        <Card>
           <CardHeader>
             <CardTitle>Тариф</CardTitle>
             <CardDescription>Активный план, если оформлен</CardDescription>
@@ -100,31 +110,76 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <Card>
+        <CardHeader>
+          <CardTitle>Ваш пакет</CardTitle>
+          <CardDescription>Последний приобретённый пакет токенов (разовая покупка)</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {lastPack ? (
+            <>
+              <p className="text-xl font-semibold">{lastPack.packageName}</p>
+              <p className="text-foreground text-lg font-medium tabular-nums">
+                {lastPack.totalTokens} токенов
+                {lastPack.bonusTokens > 0 ? (
+                  <span className="text-muted-foreground block text-sm font-normal">
+                    +{lastPack.bonusTokens} бонусных токенов
+                  </span>
+                ) : null}
+              </p>
+              <p className="text-muted-foreground text-sm">
+                Куплен: {formatRuDate(lastPack.purchasedAt)} · {formatKzt(lastPack.priceKzt)}
+              </p>
+            </>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-muted-foreground text-sm">Пакет ещё не приобретён</p>
+              <Link
+                href="/dashboard/billing"
+                className={cn(buttonVariants({ size: "sm" }), "inline-flex w-fit")}
+              >
+                Купить токены
+              </Link>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Link
+          href="/dashboard/create/product-card"
+          className={cn(
+            buttonVariants({ size: "lg" }),
+            "inline-flex w-full min-h-10 items-center justify-center gap-2 sm:w-auto",
+          )}
+        >
+          <Package className="size-4 shrink-0" data-icon="inline-start" />
+          Создать карточку товара
+        </Link>
         <Link
           href="/dashboard/create/image"
           className={cn(
             buttonVariants({ size: "lg" }),
-            "inline-flex sm:w-auto",
+            "inline-flex w-full min-h-10 items-center justify-center gap-2 sm:w-auto",
           )}
         >
-          <ImageIcon className="size-4" data-icon="inline-start" />
+          <ImageIcon className="size-4 shrink-0" data-icon="inline-start" />
           Создать фото
         </Link>
         <Link
           href="/dashboard/create/video"
           className={cn(
             buttonVariants({ size: "lg", variant: "secondary" }),
-            "inline-flex sm:w-auto",
+            "inline-flex w-full min-h-10 items-center justify-center gap-2 border sm:w-auto",
           )}
         >
-          <Video className="size-4" data-icon="inline-start" />
+          <Video className="size-4 shrink-0" data-icon="inline-start" />
           Создать видео
         </Link>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="border-border/80 shadow-sm">
+        <Card>
           <CardHeader>
             <CardTitle>Активные задачи</CardTitle>
             <CardDescription>
@@ -146,7 +201,7 @@ export default async function DashboardPage() {
             )}
           </CardContent>
         </Card>
-        <Card className="border-border/80 shadow-sm">
+        <Card>
           <CardHeader>
             <CardTitle>Последние генерации</CardTitle>
             <CardDescription>Недавние запросы (до 5)</CardDescription>

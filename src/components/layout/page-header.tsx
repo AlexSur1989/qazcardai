@@ -11,13 +11,24 @@ type PageHeaderProps = {
   description?: ReactNode;
   breadcrumbs?: BreadcrumbItem[];
   className?: string;
+  /** Градиентный блок в стиле лендинга Qaz */
+  variant?: "default" | "qaz";
 };
 
-export function PageHeader({ title, description, breadcrumbs, className }: PageHeaderProps) {
-  return (
-    <div className={cn("space-y-2", className)}>
+export function PageHeader({
+  title,
+  description,
+  breadcrumbs,
+  className,
+  variant = "default",
+}: PageHeaderProps) {
+  const inner = (
+    <>
       {breadcrumbs && breadcrumbs.length > 0 ? (
-        <nav aria-label="Навигация" className="text-muted-foreground flex flex-wrap items-center gap-1 text-xs">
+        <nav
+          aria-label="Навигация"
+          className="text-muted-foreground flex flex-wrap items-center gap-1 text-xs"
+        >
           {breadcrumbs.map((b, i) => (
             <span key={`${b.label}-${i}`} className="flex items-center gap-1">
               {i > 0 ? <ChevronRight className="size-3 opacity-60" aria-hidden /> : null}
@@ -40,6 +51,12 @@ export function PageHeader({ title, description, breadcrumbs, className }: PageH
           {description}
         </div>
       ) : null}
-    </div>
+    </>
   );
+
+  if (variant === "qaz") {
+    return <div className={cn("qaz-hero space-y-2", className)}>{inner}</div>;
+  }
+
+  return <div className={cn("space-y-2", className)}>{inner}</div>;
 }

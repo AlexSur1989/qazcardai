@@ -3,6 +3,7 @@ import "server-only";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import { Prisma } from "@/generated/prisma/client";
+import { explainKieErrorForUser } from "@/lib/kie-error-hints";
 import { prisma } from "@/lib/prisma";
 import { createApiLog } from "@/server/services/api-log";
 import {
@@ -183,7 +184,10 @@ export async function processKieIncomingWebhook(
     } else if (!norm.success && norm.errorMessage) {
       await markFailed(
         gen.id,
-        `Kie webhook: ${norm.errorMessage}`.slice(0, 8000),
+        explainKieErrorForUser(
+          `Kie webhook: ${norm.errorMessage}`,
+          "Ошибка Kie (webhook)",
+        ),
       );
     }
 

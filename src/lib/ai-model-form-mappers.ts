@@ -5,6 +5,8 @@ export type AiModelFormFieldValues = {
   slug: string;
   provider: string;
   type: string;
+  scope: string;
+  productCardModelType: string;
   apiModelId: string;
   endpoint: string;
   costCredits: number;
@@ -26,6 +28,8 @@ export function fromDbModelToFormFields(m: {
   slug: string;
   provider: string;
   type: string;
+  scope: string;
+  productCardModelType: string | null;
   apiModelId: string;
   endpoint: string | null;
   costCredits: number;
@@ -46,6 +50,8 @@ export function fromDbModelToFormFields(m: {
     slug: m.slug,
     provider: m.provider,
     type: m.type,
+    scope: m.scope,
+    productCardModelType: m.productCardModelType ?? "",
     apiModelId: m.apiModelId,
     endpoint: m.endpoint ?? "",
     costCredits: m.costCredits,

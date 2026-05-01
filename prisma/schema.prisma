@@ -78,6 +78,14 @@ enum WebhookEventStatus {
   FAILED
 }
 
+/// Факт покупки пакета токенов (не подписка) — для истории и «последнего пакета».
+enum UserTokenPackageStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
 // --- Models ---
 
 model User {
@@ -98,10 +106,36 @@ model User {
   uploadedFiles      UploadedFile[]
   adminActions       AdminAuditLog[]     @relation("AdminAuditActor")
   appSettingsUpdated AppSetting[]        @relation("AppSettingUpdatedBy")
+  userTokenPackages  UserTokenPackage[]
+  productCardProjects ProductCardProject[]
+  moderationLogs    ModerationLog[]
+  legalPagesUpdated  LegalPage[]     @relation("LegalPageUpdatedBy")
+  /// Throttle: не дублировать LOW_BALANCE слишком часто
+  lastLowBalanceEmailAt DateTime?
+  passwordResetTokens PasswordResetToken[]
 
   @@index([status])
   @@index([role])
   @@map("users")
+}
+
+/// Восстановление пароля: в БД только hash токена (SHA-256 hex).
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+  ipAddress  String?   @db.VarChar(128)
+  userAgent  String?   @db.VarChar(512)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([usedAt])
+  @@map("password_reset_tokens")
 }
 
 model Plan {
@@ -120,12 +154,40 @@ model Plan {
   @@map("plans")
 }
 
+/// Пакеты внутренних токенов (оплата в ₸, начисление totalTokens).
+model TokenPackage {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  priceKzt     Int
+  baseTokens   Int
+  bonusTokens  Int      @default(0)
+  /// Дублирует baseTokens + bonusTokens; пересчитывается в приложении.
+  totalTokens  Int
+  description  String?
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  payments          Payment[]
+  userTokenPackages UserTokenPackage[]
+
+  @@index([isActive, sortOrder])
+  @@map("token_packages")
+}
+
 model AiModel {
   id                     String            @id @default(cuid())
   name                   String
   slug                   String            @unique
   provider               AiModelProvider
   type                   GenerationType
+  /// Область использования модели: GENERAL — обычные генерации, PRODUCT_CARD — только карточка товара.
+  scope                  String            @default("GENERAL") @db.VarChar(32)
+  /// Роль модели внутри Product Card flow: PRODUCT_CLASSIFIER / PRODUCT_CONCEPT_IMAGE / PRODUCT_MARKETPLACE_CARD / PRODUCT_VIDEO.
+  productCardModelType   String?           @db.VarChar(64)
   apiModelId             String
   endpoint               String?
   costCredits            Int
@@ -133,6 +195,12 @@ model AiModel {
   isActive               Boolean           @default(true)
   /// JSON Schema или иной JSON с описанием полей модели для админки/UI
   settingsSchema         Json?
+  /// Правила динамической цены (matrix и т.д.)
+  pricingSchema          Json?
+  /// Соответствие полей настроек телу запроса провайдера (например Kie Market createTask)
+  payloadMapping         Json?
+  /// Относительный путь или URL для polling статуса задачи (recordInfo)
+  statusEndpoint         String?
   description            String?
   supportsImageInput     Boolean           @default(false)
   supportsVideoInput     Boolean           @default(false)
@@ -144,10 +212,13 @@ model AiModel {
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
-  generations Generation[]
+  generations   Generation[]
+  moderationLogs ModerationLog[]
 
   @@index([provider, isActive])
   @@index([type, isActive])
+  @@index([scope, type, isActive])
+  @@index([scope, productCardModelType, isActive])
   @@map("ai_models")
 }
 
@@ -176,6 +247,7 @@ model Generation {
   creditTransactions  CreditTransaction[]
   apiLogs             ApiLog[]
   uploadedFiles       UploadedFile[]
+  moderationLogs     ModerationLog[]
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
@@ -186,23 +258,58 @@ model Generation {
 model Payment {
   id                String        @id @default(cuid())
   userId            String
+  /// Связь с каталогом пакетов токенов (если оплата — за пакет).
+  tokenPackageId    String?
   provider          String        @db.VarChar(64)
   providerPaymentId String?       @db.VarChar(255)
   amount            Decimal       @db.Decimal(12, 2)
   currency          String        @db.VarChar(8)
+  /// Начисляемые токены (в БД: credits).
   credits           Int
   status            PaymentStatus @default(PENDING)
+  /// Время подтверждения оплаты (webhook / server-side confirm).
+  paidAt            DateTime?
   metadata          Json?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenPackage  TokenPackage? @relation(fields: [tokenPackageId], references: [id], onDelete: SetNull)
   creditTransactions CreditTransaction[]
+  userTokenPackage   UserTokenPackage?
 
   @@index([userId, createdAt])
   @@index([status])
+  @@index([tokenPackageId])
   @@unique([provider, providerPaymentId])
   @@map("payments")
+}
+
+model UserTokenPackage {
+  id            String   @id @default(cuid())
+  userId        String
+  packageId     String
+  /// Stripe/PDF — один раз на успешный платёж; у ручного гранта null.
+  paymentId     String?  @unique
+  /// Снимок на момент покупки
+  packageName   String
+  priceKzt      Int
+  baseTokens    Int
+  bonusTokens   Int
+  totalTokens   Int
+  status        UserTokenPackageStatus @default(COMPLETED)
+  purchasedAt   DateTime               @default(now())
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenPackage TokenPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  payment      Payment?     @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([userId, purchasedAt])
+  @@index([packageId])
+  @@index([status])
+  @@map("user_token_packages")
 }
 
 model CreditTransaction {
@@ -262,6 +369,7 @@ model UploadedFile {
 
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   generation Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+  productCardProjectsAsSource ProductCardProject[] @relation("ProductCardSourceImage")
 
   @@index([userId, createdAt])
   @@index([generationId])
@@ -316,6 +424,109 @@ model AppSetting {
   editor User? @relation("AppSettingUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
 
   @@map("app_settings")
+}
+
+/// Проект «карточка товара» (маркетплейс-флоу): одно исходное фото, категория, три вкладки генерации.
+model ProductCardProject {
+  id                 String   @id @default(cuid())
+  userId             String
+  title              String?
+  sourceImageFileId  String?
+  sourceImageUrl     String?
+  /// До 4 исходных фото товара: main/side/back/detail. Legacy-поля выше хранят main.
+  sourceImages       Json?
+  detectedCategory   String?  @db.VarChar(64)
+  selectedCategory   String?  @db.VarChar(64)
+  /// ai | manual | mock
+  categorySource     String?  @db.VarChar(32)
+  classificationConfidence Float?
+  classificationReason     String?  @db.Text
+  status             String   @default("DRAFT") @db.VarChar(32)
+  /// conceptGenerationIds, lastGenerationId и т.д.
+  metadata           Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceImageFile UploadedFile? @relation("ProductCardSourceImage", fields: [sourceImageFileId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([sourceImageFileId])
+  @@map("product_card_projects")
+}
+
+/// Блокировки и события модерации (операционный лог, не путать с AdminAuditLog).
+model ModerationLog {
+  id            String   @id @default(cuid())
+  userId        String?
+  generationId  String?
+  modelId       String?
+  flow          String?  @db.VarChar(64)
+  promptPreview String?  @db.VarChar(500)
+  reason        String
+  rule          String?  @db.VarChar(128)
+  matchedText   String?  @db.VarChar(512)
+  severity      String?  @db.VarChar(16)
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  generation Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+  model      AiModel?    @relation(fields: [modelId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@index([generationId])
+  @@index([modelId])
+  @@map("moderation_logs")
+}
+
+/// Юридические страницы (CMS-лайт; публично только PUBLISHED).
+model LegalPage {
+  id          String   @id @default(cuid())
+  slug        String   @unique @db.VarChar(64)
+  title       String
+  content     String   @db.Text
+  status      String   @default("DRAFT") @db.VarChar(32)
+  version     Int      @default(1)
+  publishedAt DateTime?
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  metadata    Json?
+
+  updatedByUser User? @relation("LegalPageUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@index([slug])
+  @@index([status])
+  @@map("legal_pages")
+}
+
+/// Шаблоны email для уведомлений (секреты не храним — только в env)
+model EmailTemplate {
+  id         String   @id @default(cuid())
+  key        String   @unique
+  name       String
+  subject    String
+  bodyText   String?  @db.Text
+  bodyHtml   String?  @db.Text
+  isActive   Boolean  @default(true)
+  variables  Json?
+  version    Int      @default(1)
+  updatedBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([isActive, key])
+  @@map("email_templates")
+}
+
+/// Throttle критичных писем админам (anti-spam)
+model AdminEmailThrottle {
+  id         String   @id
+  lastSentAt DateTime
+
+  @@map("admin_email_throttles")
 }
 
 model WebhookEvent {

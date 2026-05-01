@@ -1,5 +1,6 @@
-export function formatAdminDateTime(d: Date): string {
-  return d.toLocaleString("ru-RU", {
+export function formatAdminDateTime(d: Date | string): string {
+  const x = typeof d === "string" ? new Date(d) : d;
+  return x.toLocaleString("ru-RU", {
     dateStyle: "short",
     timeStyle: "short",
   });

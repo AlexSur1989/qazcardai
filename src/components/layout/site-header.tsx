@@ -5,6 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { canAccessAdminPanel } from "@/lib/auth";
+import { getAppName } from "@/lib/app-name";
 import { cn } from "@/lib/utils";
 
 export function SiteHeader() {
@@ -17,7 +18,7 @@ export function SiteHeader() {
           href="/"
           className="text-sm font-semibold tracking-tight text-foreground"
         >
-          AI Media
+          {getAppName()}
         </Link>
         <nav className="flex flex-wrap items-center justify-end gap-2">
           {status === "authenticated" && session?.user ? (

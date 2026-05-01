@@ -14,7 +14,7 @@ import { getAdminUsersList } from "@/lib/admin-data";
 import { formatAdminDateTime } from "@/lib/admin-format";
 import { AlertCircle } from "lucide-react";
 
-export const metadata = { title: "Пользователи — админ" };
+export const metadata = { title: "Пользователи — QazCard AI" };
 
 export default async function AdminUsersPage() {
   const res = await getAdminUsersList();

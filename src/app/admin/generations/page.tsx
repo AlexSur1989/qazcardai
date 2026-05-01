@@ -26,11 +26,12 @@ import {
   getAdminGenerationFilterOptions,
 } from "@/lib/admin-data";
 import { formatAdminDateTime, truncate } from "@/lib/admin-format";
+import { adminTerm } from "@/lib/admin-terms";
 import { generationStatusLabel } from "@/lib/generation-labels";
 import { cn } from "@/lib/utils";
 import type { GenerationStatus, GenerationType } from "@/generated/prisma/enums";
 
-export const metadata = { title: "Генерации — админ" };
+export const metadata = { title: "Генерации — QazCard AI" };
 
 const ALL_STATUS: GenerationStatus[] = [
   "CREATED",
@@ -152,21 +153,36 @@ export default async function AdminGenerationsPage({ searchParams }: PageProps) 
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Пользователь</TableHead>
-                <TableHead>Модель</TableHead>
-                <TableHead>Тип</TableHead>
-                <TableHead>Статус</TableHead>
-                <TableHead className="max-w-[10rem]">Ошибка / модерация</TableHead>
+                <TableHead className="min-w-[7rem] text-[0.7rem] leading-tight">
+                  {adminTerm("userEmail")}
+                </TableHead>
+                <TableHead className="min-w-[8rem] text-[0.7rem] leading-tight">
+                  {adminTerm("model")}
+                </TableHead>
+                <TableHead className="text-[0.7rem] leading-tight">
+                  {adminTerm("providerTaskId")}
+                </TableHead>
+                <TableHead className="text-[0.7rem] leading-tight">Тип</TableHead>
+                <TableHead className="text-[0.7rem] leading-tight">
+                  {adminTerm("status")}
+                </TableHead>
+                <TableHead className="max-w-[10rem] text-[0.7rem] leading-tight">
+                  {adminTerm("errorMessage")}
+                </TableHead>
                 <TableHead>Промпт</TableHead>
-                <TableHead className="text-right">Кр.</TableHead>
-                <TableHead>Создана</TableHead>
+                <TableHead className="text-right text-[0.7rem] leading-tight">
+                  {adminTerm("costCredits")}
+                </TableHead>
+                <TableHead className="text-[0.7rem] leading-tight">
+                  {adminTerm("createdAt")}
+                </TableHead>
                 <TableHead className="w-[1%]" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((g) => (
                 <TableRow key={g.id}>
-                  <TableCell className="max-w-[10rem]">
+                  <TableCell className="max-w-[7rem]">
                     <Link
                       href={`/admin/users/${g.userId}`}
                       className="text-primary truncate text-xs underline"
@@ -177,6 +193,12 @@ export default async function AdminGenerationsPage({ searchParams }: PageProps) 
                   </TableCell>
                   <TableCell className="max-w-[7rem] truncate text-xs">
                     {g.model.name}
+                  </TableCell>
+                  <TableCell
+                    className="max-w-[8rem] truncate font-mono text-[0.65rem]"
+                    title={g.providerTaskId ?? undefined}
+                  >
+                    {g.providerTaskId ? truncate(g.providerTaskId, 24) : "—"}
                   </TableCell>
                   <TableCell className="text-xs">{g.type}</TableCell>
                   <TableCell>

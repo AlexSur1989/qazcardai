@@ -2,20 +2,19 @@
 
 import { revalidatePath } from "next/cache";
 
-import { auth } from "@/auth";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
-import { canAccessAdminPanel } from "@/lib/auth";
+import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { getAdminRateLimitError } from "@/server/services/rateLimitService";
 import { prisma } from "@/lib/prisma";
 
 export type PromoCodeActionState = { error?: string; ok?: boolean } | null;
 
 function requireAdmin() {
-  return auth().then((session) => {
-    if (!session?.user?.id || !canAccessAdminPanel(session.user.role)) {
+  return getFreshAdminSessionUser().then((current) => {
+    if (!current.ok) {
       return { error: "Нет доступа" as const };
     }
-    return { userId: session.user.id };
+    return { userId: current.user.id };
   });
 }
 

@@ -5,6 +5,14 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --color-kaz-sky: var(--kaz-sky);
+  --color-kaz-sky-dark: var(--kaz-sky-dark);
+  --color-kaz-sky-deep: var(--kaz-sky-deep);
+  --color-kaz-gold: var(--kaz-gold);
+  --color-kaz-gold-bright: var(--kaz-gold-bright);
+  --color-kaz-gold-dark: var(--kaz-gold-dark);
+  --color-qaz-bg: var(--qaz-bg);
+  --color-qaz-border: var(--qaz-border);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
@@ -49,38 +57,59 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  /* QazCard AI / Казахстан — палитра лендинга (светлая тема) */
+  --kaz-sky: #00afca;
+  --kaz-sky-dark: #008fa8;
+  --kaz-sky-deep: #006b82;
+  --kaz-gold: #e6b31e;
+  --kaz-gold-bright: #f5c842;
+  --kaz-gold-dark: #b8890a;
+  --qaz-bg: #e8f5f9;
+  --qaz-card: #ffffff;
+  --qaz-text: #0c2d38;
+  --qaz-muted: #4a6e7a;
+  --qaz-border: #b8dce6;
+  --qaz-gradient: linear-gradient(
+    150deg,
+    #7dcee0 0%,
+    #c8ebf2 40%,
+    #f0f7fa 70%,
+    #fff6d9 100%
+  );
+  --qaz-shadow: 0 4px 24px rgba(0, 80, 100, 0.1);
+  /* shadcn — сопоставление с Qaz (не удаляйте ключи) */
+  --background: var(--qaz-bg);
+  --foreground: var(--qaz-text);
+  --card: var(--qaz-card);
+  --card-foreground: var(--qaz-text);
+  --popover: var(--qaz-card);
+  --popover-foreground: var(--qaz-text);
+  --primary: var(--kaz-sky);
+  --primary-foreground: #ffffff;
+  --secondary: #f2fafc;
+  --secondary-foreground: var(--qaz-text);
+  --muted: #e4f2f7;
+  --muted-foreground: var(--qaz-muted);
+  --accent: #e0f2f7;
+  --accent-foreground: var(--qaz-text);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --border: var(--qaz-border);
+  --input: var(--qaz-border);
+  --ring: var(--kaz-sky);
+  --chart-1: #00afca;
+  --chart-2: #e6b31e;
+  --chart-3: #006b82;
+  --chart-4: #4a6e7a;
+  --chart-5: #7dcee0;
+  --radius: 1rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: var(--qaz-text);
+  --sidebar-primary: var(--kaz-sky);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8f5f9;
+  --sidebar-accent-foreground: var(--kaz-sky-deep);
+  --sidebar-border: var(--qaz-border);
+  --sidebar-ring: var(--kaz-sky);
 }
 
 .dark {
@@ -126,5 +155,41 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer components {
+  /* Визуальная система лендинга Qaz (Tailwind) */
+  .qaz-hero {
+    border-radius: calc(var(--radius) * 1.25);
+    border: 1px solid var(--qaz-border);
+    padding: 1.5rem 1.25rem;
+    background: var(--qaz-gradient);
+    box-shadow: var(--qaz-shadow);
+  }
+  @media (min-width: 640px) {
+    .qaz-hero {
+      padding: 2rem 1.75rem;
+    }
+  }
+  .qaz-surface {
+    border-radius: calc(var(--radius) * 1.25);
+    border: 1px solid var(--qaz-border);
+    background: var(--qaz-card);
+    box-shadow: var(--qaz-shadow);
+  }
+  .qaz-surface-muted {
+    border-radius: calc(var(--radius) * 1.25);
+    border: 1px solid var(--qaz-border);
+    background: #f6fcfe;
+    box-shadow: var(--qaz-shadow);
+  }
+  .qaz-estimate {
+    background: linear-gradient(
+      145deg,
+      rgba(125, 206, 224, 0.2) 0%,
+      rgba(255, 246, 217, 0.35) 100%
+    );
+    border-color: var(--qaz-border);
   }
 }

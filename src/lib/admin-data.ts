@@ -191,6 +191,8 @@ export async function getAdminModelsList() {
         name: true,
         slug: true,
         type: true,
+        scope: true,
+        productCardModelType: true,
         provider: true,
         isActive: true,
         costCredits: true,
@@ -272,7 +274,7 @@ export async function getAdminGenerationFilterOptions() {
       }),
       prisma.aiModel.findMany({
         orderBy: { name: "asc" },
-        select: { id: true, name: true, slug: true, type: true },
+        select: { id: true, name: true, slug: true, type: true, scope: true, productCardModelType: true },
       }),
     ]);
     return { ok: true as const, users, models };
@@ -300,7 +302,10 @@ export async function getAdminPaymentsList(filters: AdminPaymentFilters = {}) {
       where,
       take: ADMIN_PAYMENTS_LIMIT,
       orderBy: { createdAt: "desc" },
-      include: { user: { select: { email: true, id: true } } },
+      include: {
+        user: { select: { email: true, id: true } },
+        tokenPackage: { select: { id: true, name: true } },
+      },
     });
     return { ok: true as const, rows };
   } catch {
@@ -311,6 +316,7 @@ export async function getAdminPaymentsList(filters: AdminPaymentFilters = {}) {
 export type AdminPaymentWithDetail = Prisma.PaymentGetPayload<{
   include: {
     user: { select: { id: true; email: true } };
+    tokenPackage: { select: { id: true; name: true } };
     creditTransactions: { orderBy: { createdAt: "desc" } };
   };
 }>;
@@ -325,6 +331,7 @@ export async function getAdminPaymentById(id: string): Promise<AdminPaymentDetai
       where: { id },
       include: {
         user: { select: { id: true, email: true } },
+        tokenPackage: { select: { id: true, name: true } },
         creditTransactions: { orderBy: { createdAt: "desc" } },
       },
     });
@@ -400,6 +407,8 @@ export async function getAdminApiLogsList() {
         generationId: true,
         provider: true,
         endpoint: true,
+        requestPayload: true,
+        responsePayload: true,
         statusCode: true,
         errorMessage: true,
         createdAt: true,

@@ -1,21 +1,24 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { auth } from "@/auth";
 import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
+import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { getPaymentCheckoutProvider } from "@/server/services/payment-providers/registry";
 
 const bodySchema = z.object({
-  packageId: z.string().min(1).max(64),
+  packageId: z.string().cuid("Некорректный идентификатор пакета"),
   provider: z.enum(["stripe"]).default("stripe"),
 });
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const current = await getFreshSessionUser();
+  if (!current.ok) {
+    if (current.reason === "inactive") {
+      return NextResponse.json({ error: "Аккаунт недоступен" }, { status: 403 });
+    }
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
   const tooLarge = rejectOversizedBody(req, getMaxJsonBodyBytes());
@@ -40,8 +43,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Провайдер не найден" }, { status: 400 });
   }
   const res = await p.createCheckout({
-    userId: session.user.id,
-    userEmail: session.user.email,
+    userId: current.user.id,
+    userEmail: current.user.email,
     packageId,
   });
   if (!res.ok) {

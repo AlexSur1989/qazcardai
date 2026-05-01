@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 
 import { adminRefundGenerationAction } from "@/server/actions/admin-generation-refund";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ function SubmitButton() {
 }
 
 export function AdminRefundGenerationForm({ generationId }: { generationId: string }) {
-  const [state, formAction] = useFormState(adminRefundGenerationAction, null);
+  const [state, formAction] = useActionState(adminRefundGenerationAction, null);
   return (
     <form action={formAction} className="space-y-2">
       <input type="hidden" name="generationId" value={generationId} />

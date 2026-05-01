@@ -115,6 +115,8 @@ export type UserGenerationDetail = {
   createdAt: Date;
   completedAt: Date | null;
   model: { id: string; name: string; slug: string };
+  /** Только для админ-просмотра */
+  providerTaskId?: string | null;
 };
 
 export type UserGenerationDetailResult =

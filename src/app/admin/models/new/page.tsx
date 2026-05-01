@@ -1,6 +1,6 @@
 import { AiModelForm } from "@/components/admin/ai-model-form";
 
-export const metadata = { title: "Новая AI-модель — админ" };
+export const metadata = { title: "Новая AI-модель — QazCard AI" };
 
 export default function AdminNewModelPage() {
   return (

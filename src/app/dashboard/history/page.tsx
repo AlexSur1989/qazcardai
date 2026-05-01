@@ -1,4 +1,3 @@
-import { auth } from "@/auth";
 import { PageHeader } from "@/components/layout/page-header";
 import { HistoryFiltersForm } from "@/components/dashboard/history-filters-form";
 import { HistoryGenerationList } from "@/components/dashboard/history-generation-list";
@@ -15,9 +14,10 @@ import type { GenerationStatus, GenerationType } from "@/generated/prisma/enums"
 import { getUserHistoryList, type UserHistoryFilters } from "@/lib/generation-history-data";
 import { redirect } from "next/navigation";
 import { AlertCircle, History } from "lucide-react";
+import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 
 export const metadata = {
-  title: "История генераций — AI Media",
+  title: "История генераций — QazCard AI",
 };
 
 function first(v: string | string[] | undefined): string {
@@ -41,8 +41,8 @@ type PageProps = {
 };
 
 export default async function HistoryPage({ searchParams }: PageProps) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const current = await getFreshSessionUser();
+  if (!current.ok) {
     redirect("/auth/login?callbackUrl=/dashboard/history");
   }
 
@@ -64,7 +64,7 @@ export default async function HistoryPage({ searchParams }: PageProps) {
     ...(q ? { q } : {}),
   };
 
-  const data = await getUserHistoryList(session.user.id, filters);
+  const data = await getUserHistoryList(current.user.id, filters);
 
   if (!data.ok) {
     return (
@@ -93,6 +93,7 @@ export default async function HistoryPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6">
       <PageHeader
+        variant="qaz"
         title="История генераций"
         description="Ваши запросы. Скачивание готовых файлов, повтор — с теми же modelId и промптом (в пределах длины URL)."
         breadcrumbs={[
@@ -100,7 +101,7 @@ export default async function HistoryPage({ searchParams }: PageProps) {
           { label: "История" },
         ]}
       />
-      <Card className="border-border/80 shadow-sm">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <History className="size-5" aria-hidden />
@@ -116,7 +117,7 @@ export default async function HistoryPage({ searchParams }: PageProps) {
           />
         </CardContent>
       </Card>
-      <Card className="border-border/80 shadow-sm">
+      <Card>
         <CardHeader>
           <CardTitle>Записи</CardTitle>
           <CardDescription>

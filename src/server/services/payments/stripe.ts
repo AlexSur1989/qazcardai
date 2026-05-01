@@ -27,13 +27,29 @@ export async function createStripeCheckoutSession(args: {
   userEmail: string | null | undefined;
   credits: number;
   packageId: string;
-  stripePriceId: string;
+  name: string;
+  description: string | null;
+  /** Сумма в тенге (KZT, zero-decimal в Stripe). */
+  priceKzt: number;
 }): Promise<{ url: string }> {
   const base = getAppBaseUrl();
   const stripe = getStripeClient();
+  const desc = args.description?.trim();
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
-    line_items: [{ price: args.stripePriceId, quantity: 1 }],
+    line_items: [
+      {
+        price_data: {
+          currency: "kzt",
+          product_data: {
+            name: args.name,
+            ...(desc ? { description: desc.slice(0, 500) } : {}),
+          },
+          unit_amount: args.priceKzt,
+        },
+        quantity: 1,
+      },
+    ],
     success_url: `${base}/dashboard/billing?checkout=success`,
     cancel_url: `${base}/dashboard/billing?checkout=cancel`,
     client_reference_id: args.paymentId,

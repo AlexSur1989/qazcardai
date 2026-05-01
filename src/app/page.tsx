@@ -1,6 +1,8 @@
+/** Главная: короткий маркетинговый экран (без отдельного SEO-лендинг-компонента). */
 import Link from "next/link";
 import { ArrowRight, ImageIcon, Shield, Sparkles, Video } from "lucide-react";
 
+import { getAppName } from "@/lib/app-name";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,15 +21,15 @@ export default function HomePage() {
       <main className="relative mx-auto flex w-full max-w-5xl flex-col gap-16 px-4 py-16 md:py-24">
         <div className="mx-auto max-w-3xl space-y-6 text-center">
           <p className="text-primary text-sm font-medium tracking-wide uppercase">
-            AI Media
+            {getAppName()}
           </p>
           <h1 className="text-balance text-3xl font-semibold tracking-tight md:text-5xl">
-            Генерация изображений и видео для вашего продакшена
+            Карточки товаров, фото и видео для маркетплейсов и соцсетей
           </h1>
           <p className="text-muted-foreground text-pretty mx-auto max-w-2xl text-lg leading-relaxed">
-            Личный кабинет, кредиты, история задач и админ-панель. Медиа хранятся в
-            объектном хранилище, провайдер вызывается на сервере — без утечки ключей в
-            браузер.
+            AI-сервис для создания карточек товаров, фото и видео для маркетплейсов и
+            соцсетей. Личный кабинет, токены, история задач; ключи к моделям остаются на
+            сервере.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <Button nativeButton={false} render={<Link href="/auth/register" />} size="lg">
@@ -88,7 +90,7 @@ export default function HomePage() {
 
         <div className="text-muted-foreground flex flex-col items-center gap-2 text-center text-sm">
           <Sparkles className="size-5 opacity-60" aria-hidden />
-          <p>Готовы к развёртыванию на VPS (Docker, PostgreSQL, Redis, S3).</p>
+          <p>Генерация изображений, видео и карточек товара в одном кабинете.</p>
         </div>
       </main>
     </div>

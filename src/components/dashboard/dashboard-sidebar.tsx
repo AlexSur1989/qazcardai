@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   ImageIcon,
   LayoutDashboard,
+  Package,
   Settings,
   Sparkles,
   Video,
@@ -13,6 +14,7 @@ import {
 
 import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
 import { buttonVariants } from "@/components/ui/button";
+import { getAppName } from "@/lib/app-name";
 import { cn } from "@/lib/utils";
 
 const nav: {
@@ -23,6 +25,11 @@ const nav: {
   { href: "/dashboard", label: "Обзор", icon: LayoutDashboard },
   { href: "/dashboard/create/image", label: "Создать фото", icon: ImageIcon },
   { href: "/dashboard/create/video", label: "Создать видео", icon: Video },
+  {
+    href: "/dashboard/create/product-card",
+    label: "Создать карточку товара",
+    icon: Package,
+  },
   { href: "/dashboard/history", label: "История", icon: Sparkles },
   { href: "/dashboard/billing", label: "Биллинг", icon: Wallet },
   { href: "/dashboard/settings", label: "Настройки", icon: Settings },
@@ -47,8 +54,8 @@ export function DashboardSidebar({ userEmail }: DashboardSidebarProps) {
   }));
 
   return (
-    <aside className="border-border bg-sidebar text-sidebar-foreground flex w-full shrink-0 flex-col border-b md:w-56 md:shrink-0 md:border-r md:border-b-0">
-      <MobileNavDrawer title="Кабинет" items={items} activeKey={pathname} />
+    <aside className="border-border flex w-full shrink-0 flex-col border-b bg-white/90 text-sidebar-foreground backdrop-blur-md supports-[backdrop-filter]:bg-white/80 md:sticky md:top-0 md:h-screen md:w-56 md:shrink-0 md:overflow-y-auto md:border-r md:border-b-0">
+      <MobileNavDrawer title={getAppName()} items={items} activeKey={pathname} />
 
       <p className="text-sidebar-foreground/80 hidden py-1 pr-2 pl-4 text-xs break-all md:block">
         {userEmail}
@@ -67,6 +74,8 @@ export function DashboardSidebar({ userEmail }: DashboardSidebarProps) {
                 size: "sm",
               }),
               "flex items-center justify-start gap-2",
+              isActive &&
+                "border border-primary/35 bg-primary/10 font-medium text-kaz-sky-deep shadow-sm",
             )}
           >
             <Icon className="size-3.5" aria-hidden />

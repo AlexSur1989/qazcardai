@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { getAdminPromoCodesList } from "@/lib/admin-data";
 import { AlertCircle } from "lucide-react";
 
-export const metadata = { title: "Промокоды — админ" };
+export const metadata = { title: "Промокоды — QazCard AI" };
 
 export default async function AdminPromoCodesPage() {
   const res = await getAdminPromoCodesList();

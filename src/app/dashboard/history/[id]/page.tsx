@@ -1,13 +1,13 @@
 import { notFound, redirect } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 
-import { auth } from "@/auth";
 import { GenerationDetailView } from "@/components/dashboard/generation-detail-view";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { getUserGenerationDetail } from "@/lib/generation-history-data";
+import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 
 export const metadata = {
-  title: "Детали генерации — AI Media",
+  title: "Детали генерации — QazCard AI",
 };
 
 type Props = { params: Promise<{ id: string }> };
@@ -18,14 +18,14 @@ export default async function HistoryDetailPage({ params }: Props) {
     notFound();
   }
 
-  const session = await auth();
-  if (!session?.user?.id) {
+  const current = await getFreshSessionUser();
+  if (!current.ok) {
     redirect(
       `/auth/login?callbackUrl=${encodeURIComponent(`/dashboard/history/${id}`)}`,
     );
   }
 
-  const res = await getUserGenerationDetail(session.user.id, id);
+  const res = await getUserGenerationDetail(current.user.id, id);
   if (res.ok) {
     return (
       <GenerationDetailView

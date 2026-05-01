@@ -1,4 +1,10 @@
+import { toAbsoluteIfAppPath } from "@/lib/app-base-url";
+
 const DATA_URL_PREFIX = /^data:image\/(png|jpeg|jpg|webp|gif|jfif|pjpeg|pjp);base64,(.+)$/i;
+
+/** Сообщение при попытке реального Kie с localhost /uploads/ без публичного CDN. */
+export const KIE_REQUIRES_PUBLIC_IMAGE_URLS_RU =
+  "Для реальной генерации Kie нужны публичные URL изображений (S3/R2/CDN), доступные из интернета. Локальные адреса (localhost, /uploads/ и т.п.) Kie скачать не может. Настройте хранилище с публичным URL или задайте MOCK_KIE=true для локального теста без Kie.";
 
 function getMaxImageBytes(): number {
   const raw = process.env.MAX_IMAGE_UPLOAD_MB;
@@ -35,6 +41,9 @@ export function validateImageInputFiles(inputFiles: string[] | undefined): Input
     if (t.startsWith("http://") || t.startsWith("https://")) {
       continue;
     }
+    if (t.startsWith("/uploads/")) {
+      continue;
+    }
     if (t.startsWith("data:")) {
       const m = t.match(DATA_URL_PREFIX);
       if (!m) {
@@ -56,7 +65,8 @@ export function validateImageInputFiles(inputFiles: string[] | undefined): Input
     }
     return {
       ok: false,
-      error: "Каждое вложение должно быть data URL (base64) или публичным https URL",
+      error:
+        "Каждое вложение должно быть data URL (base64), путём /uploads/... (локальное хранилище) или публичным http(s) URL",
     };
   }
   return { ok: true };
@@ -66,5 +76,35 @@ export function publicHttpUrlsOnly(inputFiles: string[] | undefined): string[] {
   if (!inputFiles?.length) return [];
   return inputFiles
     .map((s) => s.trim())
+    .map((s) => {
+      if (s.startsWith("http://") || s.startsWith("https://")) return s;
+      if (s.startsWith("/uploads/")) return toAbsoluteIfAppPath(s);
+      return "";
+    })
     .filter((s) => s.startsWith("https://") || s.startsWith("http://"));
+}
+
+/** Host не должен быть localhost / loopback / частная сеть — иначе Kie.ai не скачает файл. */
+export function isUrlPubliclyReachableForKie(url: string): boolean {
+  const t = url.trim();
+  if (!t.startsWith("http://") && !t.startsWith("https://")) return false;
+  let host: string;
+  try {
+    host = new URL(t).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") return false;
+  if (host.endsWith(".localhost")) return false;
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return false;
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)) return false;
+  if (/^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(host)) return false;
+  return true;
+}
+
+/** URL после нормализации /uploads/ → только те, что Kie сможет скачать снаружи. */
+export function kieReachableImageUrlsFromInputFiles(
+  inputFiles: string[] | undefined,
+): string[] {
+  return publicHttpUrlsOnly(inputFiles).filter(isUrlPubliclyReachableForKie);
 }

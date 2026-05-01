@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import type { AiModelFormFieldValues } from "@/lib/ai-model-form-mappers";
+import { adminTerm } from "@/lib/admin-terms";
 
 const initial: AiModelActionState = null;
 
@@ -25,6 +26,8 @@ function defaults(): AiModelFormFieldValues {
     slug: "",
     provider: "KIE_AI",
     type: "IMAGE",
+    scope: "GENERAL",
+    productCardModelType: "",
     apiModelId: "",
     endpoint: "",
     costCredits: 0,
@@ -112,7 +115,7 @@ export function AiModelForm({ mode, modelId, initialData }: AiModelFormProps) {
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="provider">Провайдер *</Label>
+            <Label htmlFor="provider">{adminTerm("provider")} *</Label>
             <select
               id="provider"
               name="provider"
@@ -124,7 +127,7 @@ export function AiModelForm({ mode, modelId, initialData }: AiModelFormProps) {
             </select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="type">Тип *</Label>
+            <Label htmlFor="type">Тип (IMAGE/VIDEO) *</Label>
             <select
               id="type"
               name="type"
@@ -136,8 +139,40 @@ export function AiModelForm({ mode, modelId, initialData }: AiModelFormProps) {
             </select>
           </div>
         </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="scope">Scope / Область использования *</Label>
+            <select
+              id="scope"
+              name="scope"
+              defaultValue={d.scope}
+              className="border-border bg-background text-foreground h-8 w-full rounded-lg border px-2.5 text-sm"
+            >
+              <option value="GENERAL">GENERAL</option>
+              <option value="PRODUCT_CARD">PRODUCT_CARD</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="productCardModelType">Product Card model type</Label>
+            <select
+              id="productCardModelType"
+              name="productCardModelType"
+              defaultValue={d.productCardModelType}
+              className="border-border bg-background text-foreground h-8 w-full rounded-lg border px-2.5 text-sm"
+            >
+              <option value="">—</option>
+              <option value="PRODUCT_CLASSIFIER">PRODUCT_CLASSIFIER</option>
+              <option value="PRODUCT_CONCEPT_IMAGE">PRODUCT_CONCEPT_IMAGE</option>
+              <option value="PRODUCT_MARKETPLACE_CARD">PRODUCT_MARKETPLACE_CARD</option>
+              <option value="PRODUCT_VIDEO">PRODUCT_VIDEO</option>
+            </select>
+            {state?.fieldErrors?.productCardModelType ? (
+              <p className="text-destructive text-xs">{state.fieldErrors.productCardModelType}</p>
+            ) : null}
+          </div>
+        </div>
         <div className="space-y-1.5">
-          <Label htmlFor="apiModelId">ID в API (apiModelId) *</Label>
+          <Label htmlFor="apiModelId">{adminTerm("apiModelId")} *</Label>
           <Input
             id="apiModelId"
             name="apiModelId"
@@ -148,7 +183,7 @@ export function AiModelForm({ mode, modelId, initialData }: AiModelFormProps) {
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="endpoint">Endpoint (URL)</Label>
+          <Label htmlFor="endpoint">{adminTerm("endpoint")}</Label>
           <Input
             id="endpoint"
             name="endpoint"
@@ -173,7 +208,7 @@ export function AiModelForm({ mode, modelId, initialData }: AiModelFormProps) {
         <h2 className="text-foreground text-sm font-medium">Стоимость</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="costCredits">Кредиты (списание) *</Label>
+            <Label htmlFor="costCredits">{adminTerm("costCredits")} *</Label>
             <Input
               id="costCredits"
               name="costCredits"
@@ -190,7 +225,7 @@ export function AiModelForm({ mode, modelId, initialData }: AiModelFormProps) {
             ) : null}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="realCost">Себестоимость (учёт)</Label>
+            <Label htmlFor="realCost">{adminTerm("realCost")}</Label>
             <Input
               id="realCost"
               name="realCost"
@@ -207,14 +242,14 @@ export function AiModelForm({ mode, modelId, initialData }: AiModelFormProps) {
         <div className="grid gap-2 sm:grid-cols-2">
           {(
             [
-              ["supportsImageInput", "Вход: изображение", d.supportsImageInput],
-              ["supportsVideoInput", "Вход: видео", d.supportsVideoInput],
+              ["supportsImageInput", adminTerm("supportsImageInput"), d.supportsImageInput],
+              ["supportsVideoInput", adminTerm("supportsVideoInput"), d.supportsVideoInput],
               [
                 "supportsNegativePrompt",
-                "Negative prompt",
+                adminTerm("supportsNegativePrompt"),
                 d.supportsNegativePrompt,
               ],
-              ["supportsSeed", "Seed", d.supportsSeed],
+              ["supportsSeed", adminTerm("supportsSeed"), d.supportsSeed],
             ] as const
           ).map(([name, label, checked]) => (
             <label key={name} className="flex items-center gap-2 text-sm">
@@ -254,11 +289,11 @@ export function AiModelForm({ mode, modelId, initialData }: AiModelFormProps) {
       <section className="space-y-3">
         <h2 className="text-foreground text-sm font-medium">JSON (UI / опции)</h2>
         <p className="text-muted-foreground text-xs">
-          Пусто или валидный JSON. `settingsSchema` — схема полей для будущих форм
+          Пусто или валидный JSON. {adminTerm("settingsSchema")} — поля для форм
           генерации.
         </p>
         <div className="space-y-1.5">
-          <Label htmlFor="settingsSchema">settingsSchema</Label>
+          <Label htmlFor="settingsSchema">{adminTerm("settingsSchema")}</Label>
           <Textarea
             id="settingsSchema"
             name="settingsSchema"

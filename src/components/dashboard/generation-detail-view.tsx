@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Download, RotateCcw } from "lucide-react";
 
+import { adminTerm } from "@/lib/admin-terms";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,8 @@ type Props = {
   userIdForAdminLink?: string;
   /** Скрыть «Повторить» (например в админке, если не нужно) */
   showRepeat?: boolean;
+  /** Админка: bilingual для технических полей + providerTaskId */
+  adminBilingualLabels?: boolean;
 };
 
 export function GenerationDetailView({
@@ -54,6 +57,7 @@ export function GenerationDetailView({
   userEmail,
   userIdForAdminLink,
   showRepeat = true,
+  adminBilingualLabels = false,
 }: Props) {
   const files = parseOutputFilesList(gen.outputFiles);
   const canDownload = (i: number) => {
@@ -75,7 +79,7 @@ export function GenerationDetailView({
           {backLabel}
         </Link>
         <h1 className="text-foreground text-2xl font-semibold tracking-tight">
-          Генерация
+          {adminBilingualLabels ? adminTerm("generation") : "Генерация"}
         </h1>
         <p className="text-muted-foreground mt-1 font-mono text-xs break-all">
           {gen.id}
@@ -119,7 +123,9 @@ export function GenerationDetailView({
 
       <div className="grid gap-6 sm:max-w-2xl">
         <div>
-          <p className="text-muted-foreground text-xs font-medium">Модель</p>
+          <p className="text-muted-foreground text-xs font-medium">
+            {adminBilingualLabels ? adminTerm("model") : "Модель"}
+          </p>
           <p className="text-foreground text-sm">
             {gen.model.name}{" "}
             <span className="text-muted-foreground">({gen.model.slug})</span>
@@ -137,8 +143,20 @@ export function GenerationDetailView({
             {gen.negativePrompt?.trim() ? gen.negativePrompt : "—"}
           </p>
         </div>
+        {adminBilingualLabels ? (
+          <div>
+            <p className="text-muted-foreground text-xs font-medium">
+              {adminTerm("providerTaskId")}
+            </p>
+            <p className="text-foreground mt-0.5 font-mono text-sm break-all">
+              {gen.providerTaskId ?? "—"}
+            </p>
+          </div>
+        ) : null}
         <div>
-          <p className="text-muted-foreground text-xs font-medium">Настройки (metadata)</p>
+          <p className="text-muted-foreground text-xs font-medium">
+            {adminBilingualLabels ? adminTerm("metadata") : "Метаданные"}
+          </p>
           <pre className="bg-muted/50 text-foreground mt-1 max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs">
             {gen.metadata == null
               ? "—"
@@ -146,7 +164,9 @@ export function GenerationDetailView({
           </pre>
         </div>
         <div>
-          <p className="text-muted-foreground text-xs font-medium">inputFiles</p>
+          <p className="text-muted-foreground text-xs font-medium">
+            {adminBilingualLabels ? adminTerm("inputFiles") : "Входные файлы"}
+          </p>
           <pre className="bg-muted/50 text-foreground mt-1 max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs">
             {gen.inputFiles == null
               ? "—"
@@ -154,7 +174,9 @@ export function GenerationDetailView({
           </pre>
         </div>
         <div>
-          <p className="text-muted-foreground text-xs font-medium">outputFiles</p>
+          <p className="text-muted-foreground text-xs font-medium">
+            {adminBilingualLabels ? adminTerm("outputFiles") : "Результаты"}
+          </p>
           <pre className="bg-muted/50 text-foreground mt-1 max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs">
             {gen.outputFiles == null
               ? "—"
@@ -197,7 +219,9 @@ export function GenerationDetailView({
 
         {gen.errorMessage ? (
           <div>
-            <p className="text-destructive text-xs font-medium">errorMessage</p>
+            <p className="text-destructive text-xs font-medium">
+              {adminBilingualLabels ? adminTerm("errorMessage") : "Ошибка"}
+            </p>
             <p className="text-destructive mt-0.5 whitespace-pre-wrap text-sm">
               {gen.errorMessage}
             </p>
@@ -206,18 +230,24 @@ export function GenerationDetailView({
 
         <div className="grid gap-1 text-sm sm:grid-cols-2">
           <p>
-            <span className="text-muted-foreground">Стоимость (кр.):</span>{" "}
+            <span className="text-muted-foreground">
+              {adminBilingualLabels ? adminTerm("costCredits") : "Стоимость (токены)"}:
+            </span>{" "}
             <span className="tabular-nums font-medium">{gen.costCredits}</span>
           </p>
           <p>
-            <span className="text-muted-foreground">Создана:</span>{" "}
+            <span className="text-muted-foreground">
+              {adminBilingualLabels ? adminTerm("createdAt") : "Создана"}:
+            </span>{" "}
             {gen.createdAt.toLocaleString("ru-RU", {
               dateStyle: "short",
               timeStyle: "short",
             })}
           </p>
           <p className="sm:col-span-2">
-            <span className="text-muted-foreground">Завершена:</span>{" "}
+            <span className="text-muted-foreground">
+              {adminBilingualLabels ? adminTerm("completedAt") : "Завершена"}:
+            </span>{" "}
             {gen.completedAt
               ? gen.completedAt.toLocaleString("ru-RU", {
                   dateStyle: "short",

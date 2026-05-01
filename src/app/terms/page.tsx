@@ -1,47 +1,37 @@
 import type { Metadata } from "next";
 
-import { LegalPageLayout } from "@/components/layout/legal-page-layout";
+import { PublicLegalPageFromDb } from "@/components/legal/public-legal-page-from-db";
+import { TermsStaticFallback } from "@/components/legal/static-fallbacks";
+import { getPublicLegalPage } from "@/server/services/legalPages";
 
-export const metadata: Metadata = {
-  title: "Условия использования — AI Media",
+export const dynamic = "force-dynamic";
+
+const fallbackMeta: Metadata = {
+  title: "Условия использования — QazCard AI",
   description: "Черновик пользовательского соглашения (шаблон).",
 };
 
-export default function TermsPage() {
-  return (
-    <LegalPageLayout
-      title="Условия использования"
-      lastUpdatedLabel="Версия-шаблон. Дата обновления указывается после юридической вычитки."
-    >
-      <p>
-        Настоящий документ задаёт общие рамки отношений между сервисом и пользователем.
-        Конкретные определения (например, «Сервис», «Пользователь», «Контент») и детали
-        подписки/кредитов следует согласовать с юристом и привести к единому глоссарию в
-        связке с политикой возвратов и политикой контента.
-      </p>
-      <h2>Принятие условий</h2>
-      <p>
-        Использование сайта и функций подразумевает ознакомление с документами в
-        подвале страницы. До юридической финализации достаточно явно указать, что
-        продолжение использования означает согласие с актуальной редакцией.
-      </p>
-      <h2>Учётная запись и безопасность</h2>
-      <p>
-        Пользователь отвечает за достоверность контактных данных и за конфиденциальность
-        учётных данных. Рекомендуется описать возрастные ограничения и запрет на передачу
-        доступа третьим лицам — в формулировках, которые одобрит юрист.
-      </p>
-      <h2>Ограничение ответственности (общая формулировка)</h2>
-      <p>
-        Сервис может предоставляться «как есть». Юридически корректный объём отказа от
-        гарантий и потолок ответственности зависит от страны и контрагента; здесь намеренно
-        нет жёстких цифр — их подставит юрист.
-      </p>
-      <h2>Изменения</h2>
-      <p>
-        Администрация может обновлять документы; разумно уведомлять пользователей (e-mail,
-        баннер в кабинете) и хранить историю версий. Текст уведомлений — отдельная правка.
-      </p>
-    </LegalPageLayout>
-  );
+export async function generateMetadata(): Promise<Metadata> {
+  const row = await getPublicLegalPage("terms");
+  if (row) {
+    return {
+      title: `${row.title} — QazCard AI`,
+      description: "Пользовательское соглашение QazCard AI.",
+    };
+  }
+  return fallbackMeta;
+}
+
+export default async function TermsPage() {
+  const row = await getPublicLegalPage("terms");
+  if (row) {
+    return (
+      <PublicLegalPageFromDb
+        title={row.title}
+        content={row.content}
+        publishedAt={row.publishedAt}
+      />
+    );
+  }
+  return <TermsStaticFallback />;
 }

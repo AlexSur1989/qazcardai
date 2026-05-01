@@ -1,4 +1,3 @@
-import { auth } from "@/auth";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -12,18 +11,19 @@ import { Separator } from "@/components/ui/separator";
 import { getUserProfile } from "@/lib/user-profile";
 import { redirect } from "next/navigation";
 import { AlertCircle, Settings2 } from "lucide-react";
+import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 
 export const metadata = {
-  title: "Настройки — AI Media",
+  title: "Настройки — QazCard AI",
 };
 
 export default async function SettingsPage() {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const current = await getFreshSessionUser();
+  if (!current.ok) {
     redirect("/auth/login?callbackUrl=/dashboard/settings");
   }
 
-  const profile = await getUserProfile(session.user.id);
+  const profile = await getUserProfile(current.user.id);
 
   if (!profile.ok) {
     return (

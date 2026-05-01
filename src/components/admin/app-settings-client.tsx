@@ -1,7 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
-import { useState } from "react";
+import { useFormStatus } from "react-dom";
+import { useActionState, useState } from "react";
 
 import {
   createAppSettingAction,
@@ -49,7 +49,7 @@ function valueToInput(value: unknown, type: string): string {
 }
 
 function CreateForm() {
-  const [state, formAction] = useFormState(createAppSettingAction, null);
+  const [state, formAction] = useActionState(createAppSettingAction, null);
   return (
     <form action={formAction} className="space-y-3 rounded-lg border p-4">
       <h2 className="text-sm font-medium">Создать настройку</h2>
@@ -93,7 +93,7 @@ function CreateForm() {
 }
 
 function SeedForm() {
-  const [state, formAction] = useFormState(seedExampleAppSettingsAction, null);
+  const [state, formAction] = useActionState(seedExampleAppSettingsAction, null);
   return (
     <form action={formAction} className="inline">
       {state?.message ? (
@@ -107,7 +107,7 @@ function SeedForm() {
 
 function DeleteForm({ id, settingKey }: { id: string; settingKey: string }) {
   const deletable = canDeleteAppSettingKey(settingKey);
-  const [state, formAction] = useFormState(deleteAppSettingAction, null);
+  const [state, formAction] = useActionState(deleteAppSettingAction, null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const formId = `app-setting-del-${id}`;
   if (!deletable) {
@@ -154,7 +154,7 @@ function DeleteForm({ id, settingKey }: { id: string; settingKey: string }) {
 
 function EditBlock({ row }: { row: Row }) {
   const [open, setOpen] = useState(false);
-  const [state, formAction] = useFormState(updateAppSettingAction, null);
+  const [state, formAction] = useActionState(updateAppSettingAction, null);
 
   if (!open) {
     return (

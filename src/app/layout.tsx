@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { APP_DESCRIPTION, getAppName } from "@/lib/app-name";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { AppProviders } from "@/components/providers/app-providers";
@@ -18,9 +19,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Media — генерация изображений и видео",
-  description:
-    "SaaS для AI-изображений и видео: кабинет, кредиты, история, админка, очереди и S3-хранилище.",
+  title: getAppName(),
+  description: APP_DESCRIPTION,
 };
 
 export default function RootLayout({

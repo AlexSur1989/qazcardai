@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentType } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 
@@ -23,15 +23,21 @@ type Props = {
 };
 
 export function MobileNavDrawer({ title, items, activeKey }: Props) {
+  return (
+    <MobileNavDrawerShell
+      key={activeKey ?? "mobile-nav"}
+      title={title}
+      items={items}
+    />
+  );
+}
+
+function MobileNavDrawerShell({ title, items }: Omit<Props, "activeKey">) {
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    setOpen(false);
-  }, [activeKey]);
-
   return (
-    <div className="border-border flex items-center justify-between border-b px-3 py-2 md:hidden">
-      <span className="text-foreground text-sm font-medium">{title}</span>
+    <div className="border-border flex items-center justify-between border-b bg-white/90 px-3 py-2 backdrop-blur-sm md:hidden">
+      <span className="text-foreground text-sm font-semibold tracking-tight">{title}</span>
       <button
         type="button"
         className={cn(
@@ -72,6 +78,8 @@ export function MobileNavDrawer({ title, items, activeKey }: Props) {
                     size: "sm",
                   }),
                   "justify-start gap-2",
+                  isActive &&
+                    "border border-primary/35 bg-primary/10 font-medium text-kaz-sky-deep",
                 )}
                 onClick={() => setOpen(false)}
               >
@@ -85,3 +93,4 @@ export function MobileNavDrawer({ title, items, activeKey }: Props) {
     </div>
   );
 }
+

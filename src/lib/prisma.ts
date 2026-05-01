@@ -21,6 +21,31 @@ function createPrismaClient(): PrismaClient {
   return new PrismaClient({ adapter });
 }
 
+/**
+ * После `prisma generate` с новыми моделями dev-сервер может оставить в global
+ * старый PrismaClient без новых delegate — тогда сыпется
+ * "Cannot read properties of undefined (reading 'findFirst' / 'findMany')".
+ * Сбрасываем синглтон (см. также tokenPackage, userTokenPackage, productCardProject).
+ */
+const REQUIRED_PRISMA_DELEGATES = [
+  "tokenPackage",
+  "userTokenPackage",
+  "productCardProject",
+  "legalPage",
+  "emailTemplate",
+  "adminEmailThrottle",
+  "passwordResetToken",
+] as const;
+
+if (process.env.NODE_ENV === "development" && globalForPrisma.prisma) {
+  const c = globalForPrisma.prisma as unknown as Record<string, unknown>;
+  const stale = REQUIRED_PRISMA_DELEGATES.some((k) => typeof c[k] === "undefined");
+  if (stale) {
+    void globalForPrisma.prisma.$disconnect().catch(() => undefined);
+    globalForPrisma.prisma = undefined;
+  }
+}
+
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== "production") {

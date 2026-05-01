@@ -3,18 +3,18 @@
 import { revalidatePath } from "next/cache";
 
 import { Prisma } from "@/generated/prisma/client";
-import { auth } from "@/auth";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
 import {
   canDeleteAppSettingKey,
   isValidAppSettingKey,
 } from "@/lib/app-setting-protected";
-import { canAccessAdminPanel } from "@/lib/auth";
-import { clearModerationConfigCache } from "@/server/services/moderation/config";
+import { clearModerationConfigCache } from "@/server/services/moderation";
+import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { clearRateUploadSettingsCache } from "@/lib/rate-upload-settings";
 import { MODERATION_APP_SETTING_KEY } from "@/lib/moderation-defaults";
 import { RATE_UPLOAD_APP_SETTING_KEY } from "@/lib/rate-upload-settings";
 import { getAdminRateLimitError } from "@/server/services/rateLimitService";
+import { isSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export type AppSettingActionState = {
@@ -66,12 +66,15 @@ function parseValueByType(
   }
 }
 
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user?.id || !canAccessAdminPanel(session.user.role)) {
+async function requireSuperAdmin() {
+  const current = await getFreshAdminSessionUser();
+  if (!current.ok) {
     return { error: "Нет доступа" as const };
   }
-  return { userId: session.user.id };
+  if (!isSuperAdmin(current.user.role)) {
+    return { error: "Только SUPER_ADMIN может менять настройки" as const };
+  }
+  return { userId: current.user.id };
 }
 
 function maybeClearCaches(key: string) {
@@ -83,7 +86,7 @@ export async function createAppSettingAction(
   _prev: AppSettingActionState,
   formData: FormData,
 ): Promise<AppSettingActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requireSuperAdmin();
   if ("error" in ctx) return { error: ctx.error };
   const rateErr = await getAdminRateLimitError(ctx.userId);
   if (rateErr) return { error: rateErr };
@@ -134,7 +137,7 @@ export async function updateAppSettingAction(
   _prev: AppSettingActionState,
   formData: FormData,
 ): Promise<AppSettingActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requireSuperAdmin();
   if ("error" in ctx) return { error: ctx.error };
   const rateErr = await getAdminRateLimitError(ctx.userId);
   if (rateErr) return { error: rateErr };
@@ -191,7 +194,7 @@ export async function deleteAppSettingAction(
   _prev: AppSettingActionState,
   formData: FormData,
 ): Promise<AppSettingActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requireSuperAdmin();
   if ("error" in ctx) return { error: ctx.error };
   const rateErr = await getAdminRateLimitError(ctx.userId);
   if (rateErr) return { error: rateErr };
@@ -287,7 +290,7 @@ export async function seedExampleAppSettingsAction(
   _prev: AppSettingActionState,
   _formData: FormData,
 ): Promise<AppSettingActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requireSuperAdmin();
   if ("error" in ctx) return { error: ctx.error };
   const rateErr = await getAdminRateLimitError(ctx.userId);
   if (rateErr) return { error: rateErr };

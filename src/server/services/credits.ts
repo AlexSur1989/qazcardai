@@ -4,6 +4,7 @@ import type { CreditTransactionType } from "@/generated/prisma/enums";
 import { Prisma } from "@/generated/prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { trySendLowBalanceEmail } from "@/server/services/notificationsIntegration";
 
 export class CreditServiceError extends Error {
   code: "INSUFFICIENT" | "NOT_FOUND" | "INVALID" | "CONFLICT" | "FORBIDDEN";
@@ -147,6 +148,9 @@ export async function reserveCredits(
       },
     });
     return { balance: user.balanceCredits };
+  }).then((r) => {
+    void trySendLowBalanceEmail(userId);
+    return r;
   });
 }
 
@@ -389,14 +393,16 @@ export async function adminAdjustCredits(args: {
     await tx.adminAuditLog.create({
       data: {
         adminUserId,
-        action: "user.balance_changed",
+        action: "USER_CREDITS_ADJUSTED",
         targetType: "User",
         targetId: userId,
         oldValue: { balanceCredits: before.balanceCredits } as Prisma.InputJsonValue,
-        newValue: {
-          balanceCredits: updated.balanceCredits,
-          delta,
-          reason: reason.slice(0, 512),
+        newValue: { balanceCredits: updated.balanceCredits } as Prisma.InputJsonValue,
+        metadata: {
+          amount: delta,
+          reason: reason.slice(0, 300),
+          oldBalance: before.balanceCredits,
+          newBalance: updated.balanceCredits,
         } as Prisma.InputJsonValue,
       },
     });

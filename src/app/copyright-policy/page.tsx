@@ -1,42 +1,37 @@
 import type { Metadata } from "next";
 
-import { LegalPageLayout } from "@/components/layout/legal-page-layout";
+import { PublicLegalPageFromDb } from "@/components/legal/public-legal-page-from-db";
+import { CopyrightPolicyStaticFallback } from "@/components/legal/static-fallbacks";
+import { getPublicLegalPage } from "@/server/services/legalPages";
 
-export const metadata: Metadata = {
-  title: "Политика в отношении авторского права — AI Media",
+export const dynamic = "force-dynamic";
+
+const fallbackMeta: Metadata = {
+  title: "Политика в отношении авторского права — QazCard AI",
   description: "Черновик политики в отношении авторских прав и обращений (шаблон).",
 };
 
-export default function CopyrightPolicyPage() {
-  return (
-    <LegalPageLayout
-      title="Авторское право и обращения по контенту"
-      lastUpdatedLabel="Шаблон: для реальных takedown/DMCA-регимов — отдельная проработка."
-    >
-      <p>
-        Сервис уважает права интеллектуальной собственности. Нижний текст — общая схема, без
-        жёстких сроков и юрисдикций; юрист должен встроить процедуру (notice-and-takedown
-        и аналоги) в применимое к вам право.
-      </p>
-      <h2>Права на результаты генерации</h2>
-      <p>
-        Кто владеет выходными данными, зависит от условий поставщика моделей, типа лицензии
-        и соглашения с пользователем. Здесь нет готовой формулировки «пользователю
-        передаются все права» — это решает юрист и контракты с провайдером.
-      </p>
-      <h2>Нарушения, заявленные третьими лицами</h2>
-      <p>
-        Если вы считаете, что материал в сервисе нарушает ваши права, подготовьте обращение,
-        идентифицирующее объект, право и обоснование. Требования к реквизитам заявителя
-        (имя, адрес, подпись, добросовестное заявление) — по консультации юриста и выбранной
-        процедуре.
-      </p>
-      <h2>Действия сервиса</h2>
-      <p>
-        После проверки заявки в разумных сроках (сроки не фиксированы в шаблоне) возможны
-        удаление/ограничение доступа, уведомление пользователя, повторные обращения. Детали
-        хранения логов и идентификаторов — в privacy-политике.
-      </p>
-    </LegalPageLayout>
-  );
+export async function generateMetadata(): Promise<Metadata> {
+  const row = await getPublicLegalPage("copyright-policy");
+  if (row) {
+    return {
+      title: `${row.title} — QazCard AI`,
+      description: "Политика авторских прав QazCard AI.",
+    };
+  }
+  return fallbackMeta;
+}
+
+export default async function CopyrightPolicyPage() {
+  const row = await getPublicLegalPage("copyright-policy");
+  if (row) {
+    return (
+      <PublicLegalPageFromDb
+        title={row.title}
+        content={row.content}
+        publishedAt={row.publishedAt}
+      />
+    );
+  }
+  return <CopyrightPolicyStaticFallback />;
 }

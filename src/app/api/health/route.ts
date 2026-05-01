@@ -8,8 +8,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 type DbStatus = "ok" | "error";
-type RedisStatus = "ok" | "error" | "not_configured";
+type RedisStatus = "ok" | "error" | "not_configured" | "skipped";
 type AppStatus = "ok" | "degraded" | "error";
+type QueueModeHealth = "redis" | "inline";
 
 async function checkDatabase(): Promise<DbStatus> {
   try {
@@ -45,20 +46,29 @@ async function checkRedis(): Promise<RedisStatus> {
  */
 export async function GET() {
   const timestamp = new Date().toISOString();
+  const queueMode: QueueModeHealth =
+    process.env.QUEUE_MODE?.trim().toLowerCase() === "inline"
+      ? "inline"
+      : "redis";
 
-  const [database, redis] = await Promise.all([checkDatabase(), checkRedis()]);
+  const database = await checkDatabase();
+  const redis: RedisStatus =
+    queueMode === "inline" ? "skipped" : await checkRedis();
 
   let status: AppStatus;
   if (database === "error") {
     status = "error";
-  } else if (redis === "error") {
-    status = "degraded";
-  } else {
+  } else if (queueMode === "inline") {
     status = "ok";
+  } else if (redis === "ok") {
+    status = "ok";
+  } else {
+    status = "degraded";
   }
 
   const body = {
     status,
+    queueMode,
     database,
     redis,
     timestamp,

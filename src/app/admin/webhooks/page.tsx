@@ -11,9 +11,19 @@ import {
 } from "@/components/ui/table";
 import { getAdminWebhookEventsList } from "@/lib/admin-data";
 import { formatAdminDateTime, truncate } from "@/lib/admin-format";
+import { adminTerm } from "@/lib/admin-terms";
 import { AlertCircle } from "lucide-react";
 
-export const metadata = { title: "Webhooks — админ" };
+function jsonPreview(v: unknown, max: number): string {
+  if (v == null) return "—";
+  try {
+    return truncate(JSON.stringify(v), max);
+  } catch {
+    return "—";
+  }
+}
+
+export const metadata = { title: "Webhooks — QazCard AI" };
 
 export default async function AdminWebhooksPage() {
   const res = await getAdminWebhookEventsList();
@@ -53,16 +63,38 @@ export default async function AdminWebhooksPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Время</TableHead>
-              <TableHead>Провайдер</TableHead>
-              <TableHead>Тип</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead>Ошибка</TableHead>
+              <TableHead className="min-w-[6rem] text-[0.7rem] leading-tight">
+                {adminTerm("webhookEvent")}
+              </TableHead>
+              <TableHead className="min-w-[5rem] text-[0.7rem] leading-tight">
+                {adminTerm("createdAt")}
+              </TableHead>
+              <TableHead className="min-w-[5rem] text-[0.7rem] leading-tight">
+                {adminTerm("provider")}
+              </TableHead>
+              <TableHead className="min-w-[6rem] text-[0.7rem] leading-tight">
+                {adminTerm("eventType")}
+              </TableHead>
+              <TableHead className="min-w-[8rem] max-w-[12rem] text-[0.7rem] leading-tight">
+                {adminTerm("payload")}
+              </TableHead>
+              <TableHead className="min-w-[4rem] text-[0.7rem] leading-tight">
+                {adminTerm("status")}
+              </TableHead>
+              <TableHead className="min-w-[6rem] text-[0.7rem] leading-tight">
+                {adminTerm("processedAt")}
+              </TableHead>
+              <TableHead className="min-w-[6rem] max-w-[8rem] text-[0.7rem] leading-tight">
+                {adminTerm("errorMessage")}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {res.rows.map((w) => (
               <TableRow key={w.id}>
+                <TableCell className="font-mono text-[0.65rem] text-xs break-all">
+                  {truncate(w.id, 12)}
+                </TableCell>
                 <TableCell className="whitespace-nowrap text-xs">
                   {formatAdminDateTime(w.createdAt)}
                 </TableCell>
@@ -70,10 +102,19 @@ export default async function AdminWebhooksPage() {
                 <TableCell className="max-w-[8rem] truncate text-xs">
                   {w.eventType}
                 </TableCell>
+                <TableCell
+                  className="text-muted-foreground max-w-[12rem] align-top text-[0.65rem] leading-snug"
+                  title={jsonPreview(w.payload, 8000)}
+                >
+                  {jsonPreview(w.payload, 96)}
+                </TableCell>
                 <TableCell>
                   <Badge variant="outline" className="text-xs">
                     {w.status}
                   </Badge>
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-xs">
+                  {w.processedAt ? formatAdminDateTime(w.processedAt) : "—"}
                 </TableCell>
                 <TableCell
                   className="text-muted-foreground max-w-xs text-xs"

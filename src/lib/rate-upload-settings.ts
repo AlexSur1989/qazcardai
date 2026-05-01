@@ -86,6 +86,36 @@ export async function getRateUploadSettings(): Promise<RateUploadSettings> {
   } catch {
     // БД может быть недоступна при старте
   }
+  try {
+    const [imgRow, vidRow] = await Promise.all([
+      prisma.appSetting.findUnique({
+        where: { key: "MAX_IMAGE_UPLOAD_MB" },
+        select: { value: true },
+      }),
+      prisma.appSetting.findUnique({
+        where: { key: "MAX_VIDEO_UPLOAD_MB" },
+        select: { value: true },
+      }),
+    ]);
+    if (
+      imgRow &&
+      typeof imgRow.value === "number" &&
+      Number.isFinite(imgRow.value) &&
+      imgRow.value > 0
+    ) {
+      merged.maxImageUploadMb = imgRow.value;
+    }
+    if (
+      vidRow &&
+      typeof vidRow.value === "number" &&
+      Number.isFinite(vidRow.value) &&
+      vidRow.value > 0
+    ) {
+      merged.maxVideoUploadMb = vidRow.value;
+    }
+  } catch {
+    /* */
+  }
   cache = { at: now, value: merged };
   return merged;
 }

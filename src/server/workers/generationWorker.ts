@@ -6,6 +6,7 @@ import {
   markGenerationExhausted,
   processGenerationJob,
 } from "@/server/services/generationProcessor";
+import { trySendAdminWorkerErrorEmail } from "@/server/services/notificationsIntegration";
 
 function getConnection() {
   const url = process.env.REDIS_URL?.trim();
@@ -56,6 +57,7 @@ export function createGenerationWorker() {
     if (id) {
       const msg = err instanceof Error ? err.message : String(err);
       void markGenerationExhausted(id, msg);
+      void trySendAdminWorkerErrorEmail({ generationId: id, errorMessage: msg });
     }
   });
 

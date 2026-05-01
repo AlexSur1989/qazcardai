@@ -4,12 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { Prisma } from "@/generated/prisma/client";
-import { auth } from "@/auth";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
-import { canAccessAdminPanel } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { AiModelFormPayload } from "@/lib/validations/ai-model";
 import { parseAiModelFormData } from "@/lib/validations/ai-model";
+import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { getAdminRateLimitError } from "@/server/services/rateLimitService";
 
 function isPrismaUnique(e: unknown): boolean {
@@ -27,14 +26,14 @@ export type AiModelActionState = {
 } | null;
 
 async function getAdminContext(): Promise<{ userId: string }> {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const current = await getFreshAdminSessionUser();
+  if (!current.ok) {
+    if (current.reason === "forbidden") {
+      redirect("/dashboard");
+    }
     redirect("/auth/login?callbackUrl=/admin/models");
   }
-  if (!canAccessAdminPanel(session.user.role)) {
-    redirect("/dashboard");
-  }
-  return { userId: session.user.id };
+  return { userId: current.user.id };
 }
 
 function jsonIn(v: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull {
@@ -50,6 +49,8 @@ function toCreateInput(
     slug: d.slug,
     provider: d.provider,
     type: d.type,
+    scope: d.scope,
+    productCardModelType: d.productCardModelType,
     apiModelId: d.apiModelId,
     endpoint: d.endpoint,
     costCredits: d.costCredits,
@@ -75,6 +76,8 @@ function toUpdateInput(
     slug: d.slug,
     provider: d.provider,
     type: d.type,
+    scope: d.scope,
+    productCardModelType: d.productCardModelType,
     apiModelId: d.apiModelId,
     endpoint: d.endpoint,
     costCredits: d.costCredits,
@@ -98,6 +101,8 @@ function modelSnapshot(
     slug: string;
     provider: string;
     type: string;
+    scope: string;
+    productCardModelType: string | null;
     apiModelId: string;
     endpoint: string | null;
     costCredits: number;
@@ -119,6 +124,8 @@ function modelSnapshot(
     slug: m.slug,
     provider: m.provider,
     type: m.type,
+    scope: m.scope,
+    productCardModelType: m.productCardModelType,
     apiModelId: m.apiModelId,
     endpoint: m.endpoint,
     costCredits: m.costCredits,

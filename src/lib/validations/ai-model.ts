@@ -23,6 +23,17 @@ const coreSchema = z.object({
   type: z.enum(["IMAGE", "VIDEO"], {
     message: "Выберите тип",
   }),
+  scope: z.enum(["GENERAL", "PRODUCT_CARD"], {
+    message: "Выберите область использования",
+  }),
+  productCardModelType: z
+    .enum([
+      "PRODUCT_CLASSIFIER",
+      "PRODUCT_CONCEPT_IMAGE",
+      "PRODUCT_MARKETPLACE_CARD",
+      "PRODUCT_VIDEO",
+    ])
+    .nullable(),
   apiModelId: z
     .string()
     .trim()
@@ -151,6 +162,15 @@ export function parseAiModelFormData(
     slug: get("slug") ?? "",
     provider: (get("provider") ?? "KIE_AI") as "KIE_AI" | "OTHER",
     type: (get("type") ?? "IMAGE") as "IMAGE" | "VIDEO",
+    scope: (get("scope") ?? "GENERAL") as "GENERAL" | "PRODUCT_CARD",
+    productCardModelType:
+      get("productCardModelType") && get("productCardModelType") !== "null"
+        ? (get("productCardModelType") as
+            | "PRODUCT_CLASSIFIER"
+            | "PRODUCT_CONCEPT_IMAGE"
+            | "PRODUCT_MARKETPLACE_CARD"
+            | "PRODUCT_VIDEO")
+        : null,
     apiModelId: get("apiModelId") ?? "",
     endpoint: get("endpoint"),
     costCredits: get("costCredits") ?? "0",
@@ -186,6 +206,20 @@ export function parseAiModelFormData(
       ok: false,
       message: parsed.error.issues[0]?.message ?? "Ошибка валидации",
       fieldErrors: fe,
+    };
+  }
+  if (parsed.data.scope === "GENERAL" && parsed.data.productCardModelType != null) {
+    return {
+      ok: false,
+      message: "Для GENERAL модели productCardModelType должен быть пустым",
+      fieldErrors: { productCardModelType: "Оставьте пустым для GENERAL" },
+    };
+  }
+  if (parsed.data.scope === "PRODUCT_CARD" && parsed.data.productCardModelType == null) {
+    return {
+      ok: false,
+      message: "Для PRODUCT_CARD модели укажите productCardModelType",
+      fieldErrors: { productCardModelType: "Укажите тип Product Card модели" },
     };
   }
 

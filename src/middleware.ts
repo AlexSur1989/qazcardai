@@ -4,16 +4,9 @@ import { getToken } from "next-auth/jwt";
 
 import type { UserRole } from "@/generated/prisma/enums";
 
-function authSecret(): string {
-  const s =
-    process.env.AUTH_SECRET ??
-    process.env.NEXTAUTH_SECRET;
-  if (!s) {
-    throw new Error(
-      "AUTH_SECRET or NEXTAUTH_SECRET must be set for middleware (see .env.example)",
-    );
-  }
-  return s;
+function getMiddlewareJwtSecret(): string | null {
+  const s = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+  return s?.trim() || null;
 }
 
 function isAdminRouteRole(role: unknown): role is UserRole {
@@ -31,9 +24,17 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  const secret = getMiddlewareJwtSecret();
+  if (!secret) {
+    return new NextResponse(
+      "Server configuration error: set AUTH_SECRET or NEXTAUTH_SECRET in .env (see .env.example).",
+      { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } },
+    );
+  }
+
   const token = await getToken({
     req,
-    secret: authSecret(),
+    secret,
   });
 
   if (!token?.sub) {

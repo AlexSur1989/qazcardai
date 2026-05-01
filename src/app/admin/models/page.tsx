@@ -16,9 +16,10 @@ import {
 } from "@/components/ui/table";
 import { getAdminModelsList } from "@/lib/admin-data";
 import { formatAdminDateTime } from "@/lib/admin-format";
+import { adminTerm } from "@/lib/admin-terms";
 import { cn } from "@/lib/utils";
 
-export const metadata = { title: "Модели — админ" };
+export const metadata = { title: "Модели — QazCard AI" };
 
 export default async function AdminModelsPage() {
   const res = await getAdminModelsList();
@@ -73,12 +74,20 @@ export default async function AdminModelsPage() {
               <TableRow>
                 <TableHead>Название</TableHead>
                 <TableHead>Slug</TableHead>
-                <TableHead>Тип</TableHead>
-                <TableHead>Провайдер</TableHead>
+                <TableHead className="text-[0.7rem] leading-tight">Тип</TableHead>
+                <TableHead className="text-[0.7rem] leading-tight">Scope</TableHead>
+                <TableHead className="text-[0.7rem] leading-tight">Product Card роль</TableHead>
+                <TableHead className="text-[0.7rem] leading-tight">
+                  {adminTerm("provider")}
+                </TableHead>
                 <TableHead>Активна</TableHead>
-                <TableHead className="text-right">Кр.</TableHead>
+                <TableHead className="text-right text-[0.7rem] leading-tight">
+                  {adminTerm("costCredits")}
+                </TableHead>
                 <TableHead>Генер.</TableHead>
-                <TableHead>Создана</TableHead>
+                <TableHead className="text-[0.7rem] leading-tight">
+                  {adminTerm("createdAt")}
+                </TableHead>
                 <TableHead className="w-[1%] min-w-[10rem]">Действия</TableHead>
               </TableRow>
             </TableHeader>
@@ -88,6 +97,8 @@ export default async function AdminModelsPage() {
                   <TableCell className="text-xs font-medium">{m.name}</TableCell>
                   <TableCell className="text-xs font-mono">{m.slug}</TableCell>
                   <TableCell className="text-xs">{m.type}</TableCell>
+                  <TableCell className="text-xs">{m.scope}</TableCell>
+                  <TableCell className="text-xs">{m.productCardModelType ?? "—"}</TableCell>
                   <TableCell className="text-xs">{m.provider}</TableCell>
                   <TableCell className="text-xs">{m.isActive ? "да" : "нет"}</TableCell>
                   <TableCell className="text-right text-xs tabular-nums">

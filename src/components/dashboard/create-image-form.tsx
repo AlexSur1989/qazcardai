@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import type { GenerationStatus } from "@/generated/prisma/enums";
@@ -11,7 +10,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import {
+  defaultsFromSchema,
+  getSchemaFields,
+} from "@/lib/generation-form-settings-schema";
 import { toast } from "sonner";
+import { DynamicModelSettingsFields } from "@/components/dashboard/dynamic-model-settings-fields";
+import { GenerationCostCard } from "@/components/dashboard/generation-cost-card";
+import { GenerationResultAside } from "@/components/dashboard/generation-result-aside";
 
 export type CreateImageFormModel = {
   id: string;
@@ -19,6 +25,7 @@ export type CreateImageFormModel = {
   slug: string;
   costCredits: number;
   description: string | null;
+  settingsSchema?: unknown;
   supportsNegativePrompt: boolean;
   supportsImageInput: boolean;
   supportsSeed: boolean;
@@ -37,28 +44,47 @@ const TERMINAL: GenerationStatus[] = [
   "BLOCKED",
 ];
 
-function outputUrlsFromFiles(output: unknown): string[] {
-  if (output == null) return [];
-  if (!Array.isArray(output)) return [];
-  return output
-    .map((x) => {
-      if (x && typeof x === "object" && "url" in x && typeof (x as { url: string }).url === "string") {
-        return (x as { url: string }).url;
-      }
-      return null;
-    })
-    .filter((u): u is string => u != null);
-}
-
 export function CreateImageForm({ models, balanceCredits }: Props) {
   const searchParams = useSearchParams();
-  const [modelId, setModelId] = useState(models[0]?.id ?? "");
-  const [prompt, setPrompt] = useState("");
+  const [modelId, setModelId] = useState(() => {
+    const mid = searchParams.get("modelId");
+    if (mid && models.some((m) => m.id === mid)) {
+      return mid;
+    }
+    return models[0]?.id ?? "";
+  });
+  const [prompt, setPrompt] = useState(() => {
+    const pr = searchParams.get("prompt");
+    return pr != null && pr.length > 0 ? pr : "";
+  });
   const [negativePrompt, setNegativePrompt] = useState("");
   const [aspectRatio, setAspectRatio] = useState("");
   const [resolution, setResolution] = useState("");
   const [seed, setSeed] = useState("");
   const [inputFileUrls, setInputFileUrls] = useState("");
+
+  const selected = useMemo(
+    () => models.find((m) => m.id === modelId),
+    [models, modelId],
+  );
+
+  const schemaFields = useMemo(
+    () => getSchemaFields(selected?.settingsSchema),
+    [selected?.settingsSchema],
+  );
+  const hasDynamicSettings = schemaFields.length > 0;
+
+  const [dynSettings, setDynSettings] = useState<Record<string, unknown>>(() => {
+    const mid = searchParams.get("modelId");
+    const initialId =
+      mid && models.some((m) => m.id === mid) ? mid : models[0]?.id ?? "";
+    const m = models.find((x) => x.id === initialId);
+    return defaultsFromSchema(m?.settingsSchema);
+  });
+
+  const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null);
+  const [estimateLoading, setEstimateLoading] = useState(true);
+  const [estimateFailed, setEstimateFailed] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,18 +100,18 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
   } | null>(null);
   const [pollComplete, setPollComplete] = useState(false);
 
-  const selected = models.find((m) => m.id === modelId);
+  const showInputUrls =
+    !hasDynamicSettings && selected?.supportsImageInput;
 
-  useEffect(() => {
-    const mid = searchParams.get("modelId");
-    const pr = searchParams.get("prompt");
-    if (mid && models.some((m) => m.id === mid)) {
-      setModelId(mid);
-    }
-    if (pr != null && pr.length > 0) {
-      setPrompt(pr);
-    }
-  }, [searchParams, models]);
+  const insufficientBalance =
+    estimatedCredits != null && balanceCredits < estimatedCredits;
+
+  const submitDisabled =
+    loading ||
+    estimateLoading ||
+    estimateFailed ||
+    estimatedCredits == null ||
+    insufficientBalance;
 
   const applyPoll = useCallback(
     (data: {
@@ -128,6 +154,64 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
   );
 
   useEffect(() => {
+    if (!selected?.id) {
+      queueMicrotask(() => {
+        setEstimatedCredits(null);
+        setEstimateLoading(false);
+        setEstimateFailed(false);
+      });
+      return;
+    }
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setEstimateLoading(true);
+        setEstimateFailed(false);
+      }
+    });
+
+    const settingsPayload = hasDynamicSettings ? dynSettings : {};
+
+    const t = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch("/api/generations/estimate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              modelId: selected.id,
+              settings: settingsPayload,
+            }),
+          });
+          const data = (await res.json()) as { credits?: number; error?: string };
+          if (cancelled) return;
+          if (res.ok && typeof data.credits === "number") {
+            setEstimatedCredits(data.credits);
+            setEstimateFailed(false);
+          } else {
+            setEstimatedCredits(null);
+            setEstimateFailed(true);
+          }
+        } catch {
+          if (cancelled) return;
+          setEstimatedCredits(null);
+          setEstimateFailed(true);
+        } finally {
+          if (!cancelled) {
+            setEstimateLoading(false);
+          }
+        }
+      })();
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [selected?.id, hasDynamicSettings, dynSettings]);
+
+  useEffect(() => {
     if (!result?.generationId || pollComplete) {
       return;
     }
@@ -136,12 +220,17 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
       void fetchStatus(id);
     };
     tick();
-    const t = setInterval(tick, 3000);
-    return () => clearInterval(t);
+    const interval = setInterval(tick, 3000);
+    return () => clearInterval(interval);
   }, [result?.generationId, fetchStatus, pollComplete]);
+
+  function setDynField(name: string, value: unknown) {
+    setDynSettings((prev) => ({ ...prev, [name]: value }));
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitDisabled) return;
     setError(null);
     setResult(null);
     setPoll(null);
@@ -163,50 +252,64 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
       modelId,
       prompt: prompt.trim(),
     };
-    if (selected?.supportsNegativePrompt && negativePrompt.trim()) {
-      body.negativePrompt = negativePrompt.trim();
-    }
-    if (aspectRatio.trim()) body.aspectRatio = aspectRatio.trim();
-    if (resolution.trim()) body.resolution = resolution.trim();
-    if (selected?.supportsSeed && seed.trim() !== "") {
-      const n = parseInt(seed, 10);
-      if (!Number.isInteger(n)) {
-        setError("Seed: целое число");
-        return;
+
+    if (hasDynamicSettings) {
+      body.settings = dynSettings;
+    } else {
+      if (selected?.supportsNegativePrompt && negativePrompt.trim()) {
+        body.negativePrompt = negativePrompt.trim();
       }
-      body.seed = n;
-    }
-    if (selected?.supportsImageInput && lines.length > 0) {
-      body.inputFiles = lines;
+      if (aspectRatio.trim()) body.aspectRatio = aspectRatio.trim();
+      if (resolution.trim()) body.resolution = resolution.trim();
+      if (selected?.supportsSeed && seed.trim() !== "") {
+        const n = parseInt(seed, 10);
+        if (!Number.isInteger(n)) {
+          setError("Seed: целое число");
+          return;
+        }
+        body.seed = n;
+      }
+      if (showInputUrls && lines.length > 0) {
+        body.inputFiles = lines;
+      }
     }
 
     setLoading(true);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 30_000);
     try {
       const res = await fetch("/api/generations/image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
       const data = (await res.json()) as {
         error?: string;
+        message?: string;
         generationId?: string;
         status?: string;
         outputUrls?: string[];
       };
       if (!res.ok) {
-        const msg = data.error ?? `Ошибка ${res.status}`;
+        const msg = [
+          (typeof data.message === "string" && data.message.trim()
+            ? data.message
+            : null) ??
+            (typeof data.error === "string" ? data.error : null) ??
+            `Ошибка ${res.status}`,
+          typeof (data as { reason?: string }).reason === "string" &&
+          (data as { reason?: string }).reason!.trim() !== ""
+            ? (data as { reason: string }).reason
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" — ");
         setError(msg);
         toast.error(msg);
         return;
       }
       if (data.generationId && data.status) {
-        if (data.status === "BLOCKED") {
-          const msg =
-            data.error ?? "Запрос не отправлен в провайдера: заблокирован модерацией.";
-          setError(msg);
-          toast.warning(msg);
-          return;
-        }
         setResult({ generationId: data.generationId, status: data.status });
         toast.success("Запрос поставлен в очередь");
         void fetchStatus(data.generationId);
@@ -214,10 +317,18 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
         setError("Некорректный ответ сервера");
         toast.error("Некорректный ответ сервера");
       }
-    } catch {
-      setError("Сеть: не удалось выполнить запрос");
-      toast.error("Сеть: не удалось выполнить запрос");
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        const msg =
+          "Превышено время ожидания ответа (30 с). Попробуйте снова или проверьте сервер.";
+        setError(msg);
+        toast.error(msg);
+      } else {
+        setError("Сеть: не удалось выполнить запрос");
+        toast.error("Сеть: не удалось выполнить запрос");
+      }
     } finally {
+      window.clearTimeout(timeoutId);
       setLoading(false);
     }
   }
@@ -233,169 +344,151 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
     );
   }
 
-  const pollUrls = poll ? outputUrlsFromFiles(poll.outputFiles) : [];
-
   return (
-    <form onSubmit={onSubmit} className="max-w-2xl space-y-6">
-      <p className="text-muted-foreground text-sm">
-        Баланс: <span className="text-foreground font-medium tabular-nums">{balanceCredits}</span> кред. Запрос
-        в очередь (Redis + worker), готовый URL приходит в статусе.
-      </p>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertTitle>Не удалось запустить</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {result && (
-        <Alert>
-          <AlertTitle>Задача поставлена</AlertTitle>
-          <AlertDescription className="space-y-2 text-sm">
-            <p>
-              ID: <code className="text-xs break-all">{result.generationId}</code> —{" "}
-              <strong>{result.status}</strong>
-            </p>
-            {poll && (
-              <p>
-                Статус: <strong>{poll.status}</strong>
-                {poll.errorMessage && (
-                  <span className="text-destructive block">{poll.errorMessage}</span>
-                )}
-              </p>
-            )}
-            {pollUrls.length > 0 && (
-              <ul className="list-disc pl-4 space-y-1">
-                {pollUrls.map((u) => (
-                  <li key={u}>
-                    <a
-                      href={u}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary underline"
-                    >
-                      {u.length > 72 ? `${u.slice(0, 72)}…` : u}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="text-muted-foreground text-xs">
-              Обновление статуса каждые 3 с (GET /api/generations/:id).
-            </p>
-            <Link
-              href="/dashboard"
-              className="text-primary text-sm font-medium inline-block underline"
-            >
-              К списку в кабинете
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <div className="space-y-2">
-        <Label htmlFor="modelId">Модель</Label>
-        <select
-          id="modelId"
-          name="modelId"
-          value={modelId}
-          onChange={(e) => setModelId(e.target.value)}
-          className={cn(
-            "border-input file:text-foreground placeholder:text-muted-foreground",
-            "focus-visible:ring-ring flex h-9 w-full min-w-0 rounded-md border bg-transparent",
-            "px-3 py-1 text-sm shadow-sm outline-none focus-visible:ring-2",
-          )}
-        >
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name} — {m.costCredits} кред
-            </option>
-          ))}
-        </select>
-        {selected?.description && (
-          <p className="text-muted-foreground text-xs">{selected.description}</p>
+    <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+      <form onSubmit={onSubmit} className="min-w-0 flex-1 space-y-6">
+        {error && (
+          <Alert variant="destructive">
+            <AlertTitle>Не удалось запустить</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
-      </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="prompt">Промпт</Label>
-        <Textarea
-          id="prompt"
-          name="prompt"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          rows={4}
-          required
-          placeholder="Опишите изображение"
+        <div className="space-y-2">
+          <Label htmlFor="modelId">Модель</Label>
+          <select
+            id="modelId"
+            name="modelId"
+            value={modelId}
+            onChange={(e) => {
+              const id = e.target.value;
+              setModelId(id);
+              const m = models.find((x) => x.id === id);
+              setDynSettings(defaultsFromSchema(m?.settingsSchema));
+            }}
+            className={cn(
+              "border-input file:text-foreground placeholder:text-muted-foreground",
+              "focus-visible:ring-ring flex h-9 w-full min-w-0 rounded-md border bg-transparent",
+              "px-3 py-1 text-sm shadow-sm outline-none focus-visible:ring-2",
+            )}
+          >
+            {models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name} — от {m.costCredits} кред
+              </option>
+            ))}
+          </select>
+          {selected?.description && (
+            <p className="text-muted-foreground text-xs">{selected.description}</p>
+          )}
+        </div>
+
+        {hasDynamicSettings && (
+          <DynamicModelSettingsFields
+            schemaFields={schemaFields}
+            dynSettings={dynSettings}
+            setDynField={setDynField}
+          />
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="prompt">Промпт</Label>
+          <Textarea
+            id="prompt"
+            name="prompt"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={4}
+            required
+            placeholder="Опишите изображение"
+          />
+        </div>
+
+        {!hasDynamicSettings && selected?.supportsNegativePrompt && (
+          <div className="space-y-2">
+            <Label htmlFor="neg">Негативный промпт (опционально)</Label>
+            <Textarea
+              id="neg"
+              value={negativePrompt}
+              onChange={(e) => setNegativePrompt(e.target.value)}
+              rows={2}
+            />
+          </div>
+        )}
+
+        {!hasDynamicSettings && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="ar">Соотношение (например 1:1, 3:2)</Label>
+              <Input
+                id="ar"
+                value={aspectRatio}
+                onChange={(e) => setAspectRatio(e.target.value)}
+                placeholder="1:1"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="res">Разрешение (если применимо)</Label>
+              <Input
+                id="res"
+                value={resolution}
+                onChange={(e) => setResolution(e.target.value)}
+                placeholder="опционально"
+              />
+            </div>
+          </div>
+        )}
+
+        {!hasDynamicSettings && selected?.supportsSeed && (
+          <div className="space-y-2">
+            <Label htmlFor="seed">Seed (опционально)</Label>
+            <Input
+              id="seed"
+              inputMode="numeric"
+              value={seed}
+              onChange={(e) => setSeed(e.target.value)}
+              placeholder="целое число"
+            />
+          </div>
+        )}
+
+        {showInputUrls && (
+          <div className="space-y-2">
+            <Label htmlFor="ref">
+              URL референс-изображений (http/https, по одному в строке)
+            </Label>
+            <Textarea
+              id="ref"
+              value={inputFileUrls}
+              onChange={(e) => setInputFileUrls(e.target.value)}
+              rows={3}
+              placeholder="https://…"
+              className="font-mono text-xs"
+            />
+          </div>
+        )}
+
+        <Button type="submit" disabled={submitDisabled}>
+          {loading ? "Отправка…" : "Сгенерировать"}
+        </Button>
+      </form>
+
+      <aside className="flex w-full flex-col gap-6 lg:sticky lg:top-4 lg:w-80 lg:shrink-0">
+        <GenerationResultAside
+          modelKind="IMAGE"
+          generationId={result?.generationId ?? null}
+          status={poll?.status ?? result?.status ?? null}
+          errorMessage={poll?.errorMessage ?? null}
+          outputFiles={poll?.outputFiles ?? null}
+          submitting={loading}
         />
-      </div>
-
-      {selected?.supportsNegativePrompt && (
-        <div className="space-y-2">
-          <Label htmlFor="neg">Негативный промпт (опционально)</Label>
-          <Textarea
-            id="neg"
-            value={negativePrompt}
-            onChange={(e) => setNegativePrompt(e.target.value)}
-            rows={2}
-          />
-        </div>
-      )}
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="ar">Соотношение (например 1:1, 3:2)</Label>
-          <Input
-            id="ar"
-            value={aspectRatio}
-            onChange={(e) => setAspectRatio(e.target.value)}
-            placeholder="1:1"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="res">Разрешение (если применимо)</Label>
-          <Input
-            id="res"
-            value={resolution}
-            onChange={(e) => setResolution(e.target.value)}
-            placeholder="опционально"
-          />
-        </div>
-      </div>
-
-      {selected?.supportsSeed && (
-        <div className="space-y-2">
-          <Label htmlFor="seed">Seed (опционально)</Label>
-          <Input
-            id="seed"
-            inputMode="numeric"
-            value={seed}
-            onChange={(e) => setSeed(e.target.value)}
-            placeholder="целое число"
-          />
-        </div>
-      )}
-
-      {selected?.supportsImageInput && (
-        <div className="space-y-2">
-          <Label htmlFor="ref">
-            URL референс-изображений (http/https, по одному в строке)
-          </Label>
-          <Textarea
-            id="ref"
-            value={inputFileUrls}
-            onChange={(e) => setInputFileUrls(e.target.value)}
-            rows={3}
-            placeholder="https://…"
-            className="font-mono text-xs"
-          />
-        </div>
-      )}
-
-      <Button type="submit" disabled={loading}>
-        {loading ? "Отправка…" : "Создать"}
-      </Button>
-    </form>
+        <GenerationCostCard
+          estimateLoading={estimateLoading}
+          estimateFailed={estimateFailed}
+          credits={estimatedCredits}
+          balanceCredits={balanceCredits}
+        />
+      </aside>
+    </div>
   );
 }

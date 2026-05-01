@@ -2,6 +2,11 @@ import { z } from "zod";
 
 export const videoGenerationBodySchema = z.object({
   modelId: z.string().trim().min(1, "Укажите модель"),
+  /** Динамические поля модели (Kling и др.); цена на сервере пересчитывается. */
+  settings: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .transform((v) => v ?? {}),
   prompt: z
     .string()
     .trim()
@@ -45,6 +50,8 @@ export const videoGenerationBodySchema = z.object({
     .max(8, "Слишком много файлов")
     .optional()
     .transform((v) => (v == null || v.length === 0 ? undefined : v)),
+  /** Не используется для списания — расчёт только на сервере. */
+  clientEstimateCredits: z.number().optional().nullable(),
 });
 
 export type VideoGenerationBody = z.infer<typeof videoGenerationBodySchema>;

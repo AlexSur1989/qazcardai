@@ -11,9 +11,19 @@ import {
 } from "@/components/ui/table";
 import { getAdminApiLogsList } from "@/lib/admin-data";
 import { formatAdminDateTime, truncate } from "@/lib/admin-format";
+import { adminTerm } from "@/lib/admin-terms";
 import { AlertCircle } from "lucide-react";
 
-export const metadata = { title: "API логи — админ" };
+function jsonPreview(v: unknown, max: number): string {
+  if (v == null) return "—";
+  try {
+    return truncate(JSON.stringify(v), max);
+  } catch {
+    return "—";
+  }
+}
+
+export const metadata = { title: "API логи — QazCard AI" };
 
 export default async function AdminLogsPage() {
   const res = await getAdminApiLogsList();
@@ -60,12 +70,30 @@ export default async function AdminLogsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Время</TableHead>
-              <TableHead>Gen ID</TableHead>
-              <TableHead>Провайдер</TableHead>
-              <TableHead>Endpoint</TableHead>
-              <TableHead>HTTP</TableHead>
-              <TableHead>Ошибка</TableHead>
+              <TableHead className="min-w-[7rem] text-[0.7rem] leading-tight">
+                {adminTerm("createdAt")}
+              </TableHead>
+              <TableHead className="min-w-[6rem] text-[0.7rem] leading-tight">
+                {adminTerm("generationId")}
+              </TableHead>
+              <TableHead className="min-w-[5rem] text-[0.7rem] leading-tight">
+                {adminTerm("provider")}
+              </TableHead>
+              <TableHead className="min-w-[6rem] text-[0.7rem] leading-tight">
+                {adminTerm("endpoint")}
+              </TableHead>
+              <TableHead className="min-w-[8rem] max-w-[10rem] text-[0.7rem] leading-tight">
+                {adminTerm("requestPayload")}
+              </TableHead>
+              <TableHead className="min-w-[8rem] max-w-[10rem] text-[0.7rem] leading-tight">
+                {adminTerm("responsePayload")}
+              </TableHead>
+              <TableHead className="w-12 text-[0.7rem] leading-tight">
+                {adminTerm("statusCode")}
+              </TableHead>
+              <TableHead className="min-w-[6rem] max-w-[8rem] text-[0.7rem] leading-tight">
+                {adminTerm("errorMessage")}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -83,6 +111,18 @@ export default async function AdminLogsPage() {
                   title={row.endpoint}
                 >
                   {truncate(row.endpoint, 40)}
+                </TableCell>
+                <TableCell
+                  className="text-muted-foreground max-w-[10rem] align-top text-[0.65rem] leading-snug"
+                  title={jsonPreview(row.requestPayload, 5000)}
+                >
+                  {jsonPreview(row.requestPayload, 80)}
+                </TableCell>
+                <TableCell
+                  className="text-muted-foreground max-w-[10rem] align-top text-[0.65rem] leading-snug"
+                  title={jsonPreview(row.responsePayload, 5000)}
+                >
+                  {jsonPreview(row.responsePayload, 80)}
                 </TableCell>
                 <TableCell className="text-xs">
                   {row.statusCode ?? "—"}

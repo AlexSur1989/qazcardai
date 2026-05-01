@@ -1,9 +1,8 @@
 import { Wallet } from "lucide-react";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
 import { PageHeader } from "@/components/layout/page-header";
-import { CreditPackagesSection } from "@/components/dashboard/credit-packages-section";
+import { TokenPackagesBillingSection } from "@/components/dashboard/token-packages-billing-section";
 import { DashboardSectionEmpty } from "@/components/dashboard/dashboard-section-empty";
 import {
   Card,
@@ -23,12 +22,20 @@ import {
 } from "@/components/ui/table";
 import { creditTypeLabel } from "@/lib/credit-labels";
 import { formatAdminDateTime } from "@/lib/admin-format";
-import { getResolvableCreditPackages } from "@/lib/credit-packages";
 import { isStripeSecretConfigured } from "@/lib/payment-config";
+import { isKaspiBillingEnabled } from "@/lib/kaspi-config";
+import { formatKzt, formatRuDate } from "@/lib/format-kzt";
+import { userTokenPackageStatusLabel } from "@/lib/user-token-package-labels";
+import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { getBalance, listTransactions } from "@/server/services/credits";
+import { listActiveTokenPackagesForBilling } from "@/server/services/token-packages-catalog";
+import {
+  getUserLastTokenPackage,
+  getUserTokenPackageHistory,
+} from "@/server/services/tokenPackages";
 
 export const metadata = {
-  title: "Биллинг — AI Media",
+  title: "Биллинг — QazCard AI",
 };
 
 function first(v: string | string[] | undefined): string {
@@ -41,31 +48,38 @@ type PageProps = {
 };
 
 export default async function BillingPage({ searchParams }: PageProps) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const current = await getFreshSessionUser();
+  if (!current.ok) {
     redirect("/auth/login?callbackUrl=/dashboard/billing");
   }
   const sp = (await searchParams) ?? {};
   const checkout = first(sp.checkout);
 
-  const balance = await getBalance(session.user.id);
-  const txs = await listTransactions(session.user.id, { take: 50 });
-  const packs = getResolvableCreditPackages();
+  const [balance, txs, packRows, lastBought, packHistory] = await Promise.all([
+    getBalance(current.user.id),
+    listTransactions(current.user.id, { take: 50 }),
+    listActiveTokenPackagesForBilling(),
+    getUserLastTokenPackage(current.user.id),
+    getUserTokenPackageHistory(current.user.id, 100),
+  ]);
   const stripeReady = isStripeSecretConfigured();
-  const packageCards = packs.map((p) => ({
+  const kaspiReady = isKaspiBillingEnabled();
+  const packageCards = packRows.map((p) => ({
     id: p.id,
     name: p.name,
-    description: p.description,
-    credits: p.credits,
-    amount: p.amount,
-    currency: p.currency,
+    priceKzt: p.priceKzt,
+    baseTokens: p.baseTokens,
+    bonusTokens: p.bonusTokens,
+    totalTokens: p.totalTokens,
+    description: p.description ?? null,
   }));
 
   return (
     <div className="space-y-6">
       <PageHeader
+        variant="qaz"
         title="Биллинг"
-        description="Покупка кредитов через Stripe. Начисление после подтверждения на сервере (webhook), а не по странице «успех» в браузере."
+        description="Покупка пакетов токенов. Начисление после подтверждения на сервере (webhook), а не по странице «успех» в браузере."
         breadcrumbs={[
           { label: "Кабинет", href: "/dashboard" },
           { label: "Биллинг" },
@@ -76,8 +90,16 @@ export default async function BillingPage({ searchParams }: PageProps) {
         <Alert>
           <AlertTitle>Оплата отправлена</AlertTitle>
           <AlertDescription>
-            Если кредиты ещё не появились, подождите несколько секунд — срабатывает
+            Если токены ещё не появились, подождите несколько секунд — срабатывает
             webhook Stripe. Обновите страницу.
+          </AlertDescription>
+        </Alert>
+      )}
+      {checkout === "kaspi_success" && (
+        <Alert>
+          <AlertTitle>Kaspi: оплата подтверждена на сервере</AlertTitle>
+          <AlertDescription>
+            Токены должны отобразиться на балансе. При задержке обновите страницу.
           </AlertDescription>
         </Alert>
       )}
@@ -88,25 +110,100 @@ export default async function BillingPage({ searchParams }: PageProps) {
         </Alert>
       )}
 
+      {lastBought ? (
+        <div className="bg-muted/40 rounded-lg border px-4 py-3 text-sm">
+          <p className="text-muted-foreground text-xs">Последний купленный пакет</p>
+          <p className="text-foreground mt-1 font-medium">
+            {lastBought.packageName} — {lastBought.totalTokens} токенов
+            {lastBought.bonusTokens > 0
+              ? ` · +${lastBought.bonusTokens} бонусных токенов`
+              : ""}
+          </p>
+          <p className="text-muted-foreground mt-1 text-xs">
+            Куплен: {formatRuDate(lastBought.purchasedAt)} · {formatKzt(lastBought.priceKzt)}
+          </p>
+        </div>
+      ) : null}
+
       <Card className="border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Wallet className="size-5" aria-hidden />
-            Баланс
+            Баланс токенов
           </CardTitle>
           <CardDescription>Доступно для генераций</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-3xl font-semibold tabular-nums">{balance}</p>
-          <p className="text-muted-foreground mt-1 text-xs">кредитов</p>
+          <p className="text-muted-foreground mt-1 text-xs">токенов</p>
         </CardContent>
       </Card>
 
-      <CreditPackagesSection packages={packageCards} stripeReady={stripeReady} />
+      <TokenPackagesBillingSection
+        packages={packageCards}
+        stripeReady={stripeReady}
+        kaspiReady={kaspiReady}
+      />
 
       <Card className="border-border/80 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">История кредитов</CardTitle>
+          <CardTitle className="text-base">История пакетов</CardTitle>
+          <CardDescription>Разовые покупки пакетов токенов</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {packHistory.length === 0 ? (
+            <DashboardSectionEmpty
+              title="Пока нет покупок"
+              description="Купленные пакеты отобразятся здесь после оплаты или начисления администратором."
+            />
+          ) : (
+            <div className="border-border/80 overflow-x-auto rounded-lg border bg-card shadow-sm">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Дата</TableHead>
+                    <TableHead>Пакет</TableHead>
+                    <TableHead className="text-right">Цена</TableHead>
+                    <TableHead className="text-right">База</TableHead>
+                    <TableHead className="text-right">Бонус</TableHead>
+                    <TableHead className="text-right">Итого</TableHead>
+                    <TableHead>Статус</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {packHistory.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {formatRuDate(r.purchasedAt)}
+                      </TableCell>
+                      <TableCell className="text-xs font-medium">{r.packageName}</TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">
+                        {formatKzt(r.priceKzt)}
+                      </TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">
+                        {r.baseTokens}
+                      </TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">
+                        {r.bonusTokens}
+                      </TableCell>
+                      <TableCell className="text-right text-xs font-medium tabular-nums">
+                        {r.totalTokens}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {userTokenPackageStatusLabel(r.status)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/80 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-base">История токенов</CardTitle>
           <CardDescription>До 50 последних операций</CardDescription>
         </CardHeader>
         <CardContent>
@@ -122,7 +219,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
                   <TableRow>
                     <TableHead>Дата</TableHead>
                     <TableHead>Тип</TableHead>
-                    <TableHead className="text-right">Сумма</TableHead>
+                    <TableHead className="text-right">Токены</TableHead>
                     <TableHead>Комментарий</TableHead>
                   </TableRow>
                 </TableHeader>

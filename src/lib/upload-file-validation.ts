@@ -6,6 +6,7 @@ import { getRateUploadSettings } from "@/lib/rate-upload-settings";
 export type UploadKind = "image" | "video";
 
 /** Что мы принимаем (строго по MIME) + проверка сигнатур для изображений и основных видео. */
+/** Статические allowlist'ы. TODO: подключить AppSetting (ALLOWED_*_MIME_TYPES), когда договоримся с async-валидацией. */
 const IMAGE_MIMES = new Set([
   "image/png",
   "image/jpeg",
@@ -169,4 +170,223 @@ export function validateUploadBuffer(
   }
 
   return { ok: true, mime: rawMime, maxBytes: limits.maxBytes };
+}
+
+const MAX_KLING_MOTION_REF_BYTES = 10 * 1024 * 1024;
+const MAX_KLING_MOTION_VIDEO_BYTES = 100 * 1024 * 1024;
+
+/** Макс. длительность motion video для Kling Motion Control (сек), см. подсказки в UI. */
+export const MAX_KLING_MOTION_VIDEO_DURATION_SECONDS = 30;
+
+const KLING_MOTION_VIDEO_MIMES = new Set(["video/mp4", "video/quicktime"]);
+
+/**
+ * Kling 3.0 Motion Control — только JPEG/PNG, до 10 МБ, проверка сигнатур.
+ */
+export function validateKlingMotionReferenceImageBuffer(
+  fileName: string,
+  clientMime: string,
+  size: number,
+  buffer: Buffer,
+): UploadValidationError | UploadValidationOk {
+  const rawMime = clientMime?.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (!rawMime) {
+    return { ok: false, message: "Укажите корректный Content-Type", code: "INVALID_TYPE" };
+  }
+  const effective =
+    rawMime === "image/jpg" || rawMime === "image/pjpeg" ? "image/jpeg" : rawMime;
+  if (effective !== "image/jpeg" && effective !== "image/png") {
+    return {
+      ok: false,
+      message: "Reference image: допустимы JPEG или PNG (до 10 МБ)",
+      code: "INVALID_TYPE",
+    };
+  }
+  if (size > MAX_KLING_MOTION_REF_BYTES) {
+    return {
+      ok: false,
+      message: "Reference image: максимум 10 МБ",
+      code: "FILE_TOO_LARGE",
+    };
+  }
+  if (size < 16) {
+    return { ok: false, message: "Файл пустой или слишком короткий", code: "INVALID_TYPE" };
+  }
+  if (effective === "image/jpeg") {
+    if (!looksLikeJpeg(buffer)) {
+      return {
+        ok: false,
+        message: "Содержимое не похоже на JPEG",
+        code: "MAGIC_MISMATCH",
+      };
+    }
+  } else if (!looksLikePng(buffer)) {
+    return {
+      ok: false,
+      message: "Содержимое не похоже на PNG",
+      code: "MAGIC_MISMATCH",
+    };
+  }
+  const nameLower = (fileName || "").toLowerCase();
+  if (nameLower.endsWith(".php") || nameLower.endsWith(".exe") || nameLower.endsWith(".sh")) {
+    return { ok: false, message: "Недопустимое расширение файла", code: "UNSAFE" };
+  }
+  return { ok: true, mime: effective, maxBytes: MAX_KLING_MOTION_REF_BYTES };
+}
+
+/**
+ * Kling 3.0 Motion Control — MP4/QuickTime, до 100 МБ.
+ */
+export function validateKlingMotionVideoBuffer(
+  fileName: string,
+  clientMime: string,
+  size: number,
+  buffer: Buffer,
+): UploadValidationError | UploadValidationOk {
+  const rawMime = clientMime?.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (!KLING_MOTION_VIDEO_MIMES.has(rawMime)) {
+    return {
+      ok: false,
+      message: "Motion video: допустимы MP4 и QuickTime (MOV), до 100 МБ",
+      code: "INVALID_TYPE",
+    };
+  }
+  if (size > MAX_KLING_MOTION_VIDEO_BYTES) {
+    return {
+      ok: false,
+      message: "Motion video: максимум 100 МБ",
+      code: "FILE_TOO_LARGE",
+    };
+  }
+  if (size < 32) {
+    return { ok: false, message: "Файл пустой или слишком короткий", code: "INVALID_TYPE" };
+  }
+  if (!validateVideoMagic(rawMime, buffer)) {
+    return {
+      ok: false,
+      message: "Содержимое не похоже на MP4/MOV",
+      code: "MAGIC_MISMATCH",
+    };
+  }
+  const nameLower = (fileName || "").toLowerCase();
+  if (nameLower.endsWith(".php") || nameLower.endsWith(".exe") || nameLower.endsWith(".sh")) {
+    return { ok: false, message: "Недопустимое расширение файла", code: "UNSAFE" };
+  }
+  return { ok: true, mime: rawMime, maxBytes: MAX_KLING_MOTION_VIDEO_BYTES };
+}
+
+const MAX_PRODUCT_CARD_IMAGE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Исходник «карточка товара»: JPEG, PNG, WebP, до 10 МБ.
+ */
+export function validateProductCardSourceImageBuffer(
+  fileName: string,
+  clientMime: string,
+  size: number,
+  buffer: Buffer,
+): UploadValidationError | UploadValidationOk {
+  const rawMime = clientMime?.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (!rawMime) {
+    return { ok: false, message: "Укажите корректный Content-Type", code: "INVALID_TYPE" };
+  }
+  const effective =
+    rawMime === "image/jpg" || rawMime === "image/pjpeg" ? "image/jpeg" : rawMime;
+  if (effective !== "image/jpeg" && effective !== "image/png" && effective !== "image/webp") {
+    return {
+      ok: false,
+      message: "Для карточки товара: JPEG, PNG или WebP (до 10 МБ)",
+      code: "INVALID_TYPE",
+    };
+  }
+  if (size > MAX_PRODUCT_CARD_IMAGE_BYTES) {
+    return {
+      ok: false,
+      message: "Изображение: максимум 10 МБ",
+      code: "FILE_TOO_LARGE",
+    };
+  }
+  if (size < 16) {
+    return { ok: false, message: "Файл пустой или слишком короткий", code: "INVALID_TYPE" };
+  }
+  if (effective === "image/jpeg") {
+    if (!looksLikeJpeg(buffer)) {
+      return {
+        ok: false,
+        message: "Содержимое не похоже на JPEG",
+        code: "MAGIC_MISMATCH",
+      };
+    }
+  } else if (effective === "image/png") {
+    if (!looksLikePng(buffer)) {
+      return {
+        ok: false,
+        message: "Содержимое не похоже на PNG",
+        code: "MAGIC_MISMATCH",
+      };
+    }
+  } else if (!looksLikeWebp(buffer)) {
+    return {
+      ok: false,
+      message: "Содержимое не похоже на WebP",
+      code: "MAGIC_MISMATCH",
+    };
+  }
+  const nameLower = (fileName || "").toLowerCase();
+  if (nameLower.endsWith(".php") || nameLower.endsWith(".exe") || nameLower.endsWith(".sh")) {
+    return { ok: false, message: "Недопустимое расширение файла", code: "UNSAFE" };
+  }
+  return { ok: true, mime: effective, maxBytes: MAX_PRODUCT_CARD_IMAGE_BYTES };
+}
+
+const MAX_SEEDANCE_AUDIO_BYTES = 15 * 1024 * 1024;
+
+const SEEDANCE_AUDIO_MIMES = new Set([
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/aac",
+  "audio/ogg",
+]);
+
+/**
+ * Референс-аудио для Seedance (Kie): распространённые MIME, до 50 МБ.
+ */
+export function validateSeedanceReferenceAudioBuffer(
+  fileName: string,
+  clientMime: string,
+  size: number,
+  _buffer: Buffer,
+): UploadValidationError | UploadValidationOk {
+  const rawMime = clientMime?.split(";")[0]?.trim().toLowerCase() ?? "";
+  const effective =
+    rawMime === "audio/mp3" || rawMime === "audio/x-mpeg"
+      ? "audio/mpeg"
+      : rawMime;
+  if (!effective || !SEEDANCE_AUDIO_MIMES.has(effective)) {
+    return {
+      ok: false,
+      message:
+        "Аудио: допустимы MP3, WAV, M4A, AAC, OGG (тип audio/* из списка), до 15 МБ",
+      code: "INVALID_TYPE",
+    };
+  }
+  if (size > MAX_SEEDANCE_AUDIO_BYTES) {
+    return {
+      ok: false,
+      message: "Аудио: максимум 15 МБ (как в консоли Kie)",
+      code: "FILE_TOO_LARGE",
+    };
+  }
+  if (size < 32) {
+    return { ok: false, message: "Файл пустой или слишком короткий", code: "INVALID_TYPE" };
+  }
+  const nameLower = (fileName || "").toLowerCase();
+  if (nameLower.endsWith(".php") || nameLower.endsWith(".exe") || nameLower.endsWith(".sh")) {
+    return { ok: false, message: "Недопустимое расширение файла", code: "UNSAFE" };
+  }
+  return { ok: true, mime: effective, maxBytes: MAX_SEEDANCE_AUDIO_BYTES };
 }

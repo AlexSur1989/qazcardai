@@ -1,3 +1,4 @@
+import "@/lib/bootstrap-auth-public-url";
 import { shouldSkipEnvValidationInThisProcess } from "@/lib/env";
 
 /**

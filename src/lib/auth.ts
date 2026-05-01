@@ -4,3 +4,7 @@ import type { UserRole } from "@/generated/prisma/enums";
 export function canAccessAdminPanel(role: UserRole): boolean {
   return role === "ADMIN" || role === "SUPER_ADMIN";
 }
+
+export function isSuperAdmin(role: UserRole): boolean {
+  return role === "SUPER_ADMIN";
+}

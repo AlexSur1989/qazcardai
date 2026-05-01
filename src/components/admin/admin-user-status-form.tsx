@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useFormStatus } from "react-dom";
+import { useActionState } from "react";
 
 import { updateUserStatusAction } from "@/server/actions/admin-user-status";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ export function AdminUserStatusForm({
   userId: string;
   currentStatus: UserStatus;
 }) {
-  const [state, formAction] = useFormState(updateUserStatusAction, null);
+  const [state, formAction] = useActionState(updateUserStatusAction, null);
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
       <input type="hidden" name="userId" value={userId} />

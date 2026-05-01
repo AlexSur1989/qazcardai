@@ -16,9 +16,11 @@ const initial: AdminCreditsFormState = null;
 
 type Props = {
   userId: string;
+  /** Только SUPER_ADMIN может отправлять форму */
+  canAdjust: boolean;
 };
 
-export function AdminUserCreditsForm({ userId }: Props) {
+export function AdminUserCreditsForm({ userId, canAdjust }: Props) {
   const [state, formAction] = useActionState(
     adminAdjustUserCreditsAction,
     initial,
@@ -34,6 +36,14 @@ export function AdminUserCreditsForm({ userId }: Props) {
   return (
     <form id="admin-credits-form" action={formAction} className="space-y-3">
       <input type="hidden" name="userId" value={userId} />
+      {!canAdjust ? (
+        <Alert>
+          <AlertTitle>Только просмотр</AlertTitle>
+          <AlertDescription>
+            Корректировка баланса доступна только роли SUPER_ADMIN.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {state?.error ? (
         <Alert variant="destructive">
           <AlertTitle>Ошибка</AlertTitle>
@@ -66,7 +76,11 @@ export function AdminUserCreditsForm({ userId }: Props) {
           <Input id="reason" name="reason" required placeholder="Кратко" />
         </div>
       </div>
-      <button type="submit" className={cn(buttonVariants())}>
+      <button
+        type="submit"
+        className={cn(buttonVariants())}
+        disabled={!canAdjust}
+      >
         Применить
       </button>
     </form>

@@ -2,6 +2,10 @@ import { z } from "zod";
 
 export const imageGenerationBodySchema = z.object({
   modelId: z.string().trim().min(1, "Укажите модель"),
+  settings: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .transform((v) => v ?? {}),
   prompt: z
     .string()
     .trim()
