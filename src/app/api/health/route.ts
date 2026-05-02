@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import IORedis from "ioredis";
 
 import { appPackageName, appPackageVersion } from "@/lib/app-meta";
 import { prisma } from "@/lib/prisma";
+import { getQueueMode } from "@/server/queue-mode";
+import { pingRedisUrl } from "@/server/queues/redisConnection";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,19 +27,8 @@ async function checkRedis(): Promise<RedisStatus> {
   if (!url) {
     return "not_configured";
   }
-  const c = new IORedis(url, {
-    connectTimeout: 2_000,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
-  });
-  try {
-    const pong = await c.ping();
-    return pong === "PONG" ? "ok" : "error";
-  } catch {
-    return "error";
-  } finally {
-    c.disconnect();
-  }
+  const ok = await pingRedisUrl(url);
+  return ok ? "ok" : "error";
 }
 
 /**
@@ -46,10 +36,7 @@ async function checkRedis(): Promise<RedisStatus> {
  */
 export async function GET() {
   const timestamp = new Date().toISOString();
-  const queueMode: QueueModeHealth =
-    process.env.QUEUE_MODE?.trim().toLowerCase() === "inline"
-      ? "inline"
-      : "redis";
+  const queueMode: QueueModeHealth = getQueueMode();
 
   const database = await checkDatabase();
   const redis: RedisStatus =

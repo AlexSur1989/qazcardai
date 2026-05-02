@@ -1,18 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
+import { postAuthLandingPath } from "@/lib/auth";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const landingForAuthed =
+    status === "authenticated" && session?.user
+      ? postAuthLandingPath(null, session.user.role)
+      : null;
+
+  useEffect(() => {
+    if (!landingForAuthed) return;
+    router.replace(landingForAuthed);
+  }, [landingForAuthed, router]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,6 +53,22 @@ export default function RegisterPage() {
       setError("Ошибка сети. Попробуйте снова.");
       setLoading(false);
     }
+  }
+
+  if (status === "loading") {
+    return (
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-12">
+        <p className="text-sm text-muted-foreground">Загрузка…</p>
+      </main>
+    );
+  }
+
+  if (status === "authenticated" && session?.user) {
+    return (
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-12">
+        <p className="text-sm text-muted-foreground">Перенаправление…</p>
+      </main>
+    );
   }
 
   return (

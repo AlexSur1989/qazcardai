@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { signIn, useSession } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
+import { postAuthLandingPath } from "@/lib/auth";
 
 function safePathCallback(raw: string | null): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
@@ -15,9 +16,22 @@ function safePathCallback(raw: string | null): string {
 }
 
 function LoginForm() {
+  const router = useRouter();
+  const { data: session, status } = useSession();
   const searchParams = useSearchParams();
-  const callbackUrl = safePathCallback(searchParams.get("callbackUrl"));
+  const rawCallbackParam = searchParams.get("callbackUrl");
+  const callbackUrl = safePathCallback(rawCallbackParam);
   const registered = searchParams.get("registered") === "1";
+
+  const landingForAuthed =
+    status === "authenticated" && session?.user
+      ? postAuthLandingPath(rawCallbackParam, session.user.role)
+      : null;
+
+  useEffect(() => {
+    if (!landingForAuthed) return;
+    router.replace(landingForAuthed);
+  }, [landingForAuthed, router]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -63,6 +77,22 @@ function LoginForm() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (status === "loading") {
+    return (
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-12">
+        <p className="text-sm text-muted-foreground">Загрузка…</p>
+      </main>
+    );
+  }
+
+  if (status === "authenticated" && session?.user) {
+    return (
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-12">
+        <p className="text-sm text-muted-foreground">Перенаправление…</p>
+      </main>
+    );
   }
 
   return (

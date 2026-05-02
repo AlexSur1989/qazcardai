@@ -21,7 +21,11 @@ export function SiteHeader() {
           {getAppName()}
         </Link>
         <nav className="flex flex-wrap items-center justify-end gap-2">
-          {status === "authenticated" && session?.user ? (
+          {status === "loading" ? (
+            <span className="text-muted-foreground text-xs" aria-busy="true">
+              …
+            </span>
+          ) : status === "authenticated" && session?.user ? (
             <>
               <span className="text-muted-foreground hidden max-w-[10rem] truncate text-xs sm:inline sm:max-w-xs">
                 {session.user.email}
