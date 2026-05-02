@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import type { CreditTransactionType } from "@/generated/prisma/enums";
 import { Prisma } from "@/generated/prisma/client";
 
@@ -19,14 +18,14 @@ export class CreditServiceError extends Error {
 
 export type ListTxOptions = { take?: number };
 
-/** Начисление кредитов за покупку внутри транзакции (webhook Stripe и т.п.). */
+/** РќР°С‡РёСЃР»РµРЅРёРµ РєСЂРµРґРёС‚РѕРІ Р·Р° РїРѕРєСѓРїРєСѓ РІРЅСѓС‚СЂРё С‚СЂР°РЅР·Р°РєС†РёРё (webhook Stripe Рё С‚.Рї.). */
 export async function applyPurchaseInTransaction(
   tx: Prisma.TransactionClient,
   args: { userId: string; credits: number; paymentId: string; reason: string },
 ) {
   const { userId, credits, paymentId, reason } = args;
   if (credits <= 0 || !Number.isInteger(credits)) {
-    throw new CreditServiceError("INVALID", "PURCHASE: неверная сумма кредитов");
+    throw new CreditServiceError("INVALID", "PURCHASE: РЅРµРІРµСЂРЅР°СЏ СЃСѓРјРјР° РєСЂРµРґРёС‚РѕРІ");
   }
   const user = await tx.user.update({
     where: { id: userId },
@@ -45,21 +44,21 @@ export async function applyPurchaseInTransaction(
   return { balance: user.balanceCredits };
 }
 
-/** Текущий баланс (денормализованное поле user.balanceCredits). */
+/** РўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ (РґРµРЅРѕСЂРјР°Р»РёР·РѕРІР°РЅРЅРѕРµ РїРѕР»Рµ user.balanceCredits). */
 export async function getBalance(userId: string): Promise<number> {
   const u = await prisma.user.findUnique({
     where: { id: userId },
     select: { balanceCredits: true },
   });
   if (!u) {
-    throw new CreditServiceError("NOT_FOUND", "Пользователь не найден");
+    throw new CreditServiceError("NOT_FOUND", "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ");
   }
   return u.balanceCredits;
 }
 
 /**
- * Начисление кредитов (amount &gt; 0).
- * type: PURCHASE, PROMO или по смыслу; для внутреннего бонуса — PROMO.
+ * РќР°С‡РёСЃР»РµРЅРёРµ РєСЂРµРґРёС‚РѕРІ (amount &gt; 0).
+ * type: PURCHASE, PROMO РёР»Рё РїРѕ СЃРјС‹СЃР»Сѓ; РґР»СЏ РІРЅСѓС‚СЂРµРЅРЅРµРіРѕ Р±РѕРЅСѓСЃР° вЂ” PROMO.
  */
 export async function addCredits(
   userId: string,
@@ -69,7 +68,7 @@ export async function addCredits(
   options?: { paymentId?: string; metadata?: unknown },
 ) {
   if (amount <= 0 || !Number.isInteger(amount)) {
-    throw new CreditServiceError("INVALID", "Сумма начисления — целое число > 0");
+    throw new CreditServiceError("INVALID", "РЎСѓРјРјР° РЅР°С‡РёСЃР»РµРЅРёСЏ вЂ” С†РµР»РѕРµ С‡РёСЃР»Рѕ > 0");
   }
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.update({
@@ -95,17 +94,17 @@ export async function addCredits(
 }
 
 /**
- * Резерв под генерацию: списывает amount с баланса, пишет RESERVE, связывает с generationId.
- * amount — положительное число (сколько кредитов зарезервировано), в БД пишем amount как отрицательное движение.
+ * Р РµР·РµСЂРІ РїРѕРґ РіРµРЅРµСЂР°С†РёСЋ: СЃРїРёСЃС‹РІР°РµС‚ amount СЃ Р±Р°Р»Р°РЅСЃР°, РїРёС€РµС‚ RESERVE, СЃРІСЏР·С‹РІР°РµС‚ СЃ generationId.
+ * amount вЂ” РїРѕР»РѕР¶РёС‚РµР»СЊРЅРѕРµ С‡РёСЃР»Рѕ (СЃРєРѕР»СЊРєРѕ РєСЂРµРґРёС‚РѕРІ Р·Р°СЂРµР·РµСЂРІРёСЂРѕРІР°РЅРѕ), РІ Р‘Р” РїРёС€РµРј amount РєР°Рє РѕС‚СЂРёС†Р°С‚РµР»СЊРЅРѕРµ РґРІРёР¶РµРЅРёРµ.
  */
 export async function reserveCredits(
   userId: string,
   amount: number,
   generationId: string,
-  reason = "Резерв под генерацию",
+  reason = "Р РµР·РµСЂРІ РїРѕРґ РіРµРЅРµСЂР°С†РёСЋ",
 ) {
   if (amount <= 0 || !Number.isInteger(amount)) {
-    throw new CreditServiceError("INVALID", "Резерв: целое amount > 0");
+    throw new CreditServiceError("INVALID", "Р РµР·РµСЂРІ: С†РµР»РѕРµ amount > 0");
   }
   return prisma.$transaction(async (tx) => {
     const u = await tx.user.findUnique({
@@ -113,12 +112,12 @@ export async function reserveCredits(
       select: { balanceCredits: true },
     });
     if (!u) {
-      throw new CreditServiceError("NOT_FOUND", "Пользователь не найден");
+      throw new CreditServiceError("NOT_FOUND", "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ");
     }
     if (u.balanceCredits < amount) {
       throw new CreditServiceError(
         "INSUFFICIENT",
-        "Недостаточно кредитов",
+        "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РєСЂРµРґРёС‚РѕРІ",
       );
     }
     const existing = await tx.creditTransaction.findFirst({
@@ -127,7 +126,7 @@ export async function reserveCredits(
     if (existing) {
       throw new CreditServiceError(
         "CONFLICT",
-        "По этой генерации резерв уже создан",
+        "РџРѕ СЌС‚РѕР№ РіРµРЅРµСЂР°С†РёРё СЂРµР·РµСЂРІ СѓР¶Рµ СЃРѕР·РґР°РЅ",
       );
     }
     const user = await tx.user.update({
@@ -136,7 +135,7 @@ export async function reserveCredits(
       select: { balanceCredits: true },
     });
     if (user.balanceCredits < 0) {
-      throw new CreditServiceError("INSUFFICIENT", "Недостаточно кредитов");
+      throw new CreditServiceError("INSUFFICIENT", "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РєСЂРµРґРёС‚РѕРІ");
     }
     await tx.creditTransaction.create({
       data: {
@@ -155,7 +154,7 @@ export async function reserveCredits(
 }
 
 /**
- * Подтверждение списания: после успеха генерации. Баланс не меняем (уже уменьшен при RESERVE).
+ * РџРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ СЃРїРёСЃР°РЅРёСЏ: РїРѕСЃР»Рµ СѓСЃРїРµС…Р° РіРµРЅРµСЂР°С†РёРё. Р‘Р°Р»Р°РЅСЃ РЅРµ РјРµРЅСЏРµРј (СѓР¶Рµ СѓРјРµРЅСЊС€РµРЅ РїСЂРё RESERVE).
  */
 export async function confirmCredits(generationId: string) {
   return prisma.$transaction(async (tx) => {
@@ -163,7 +162,7 @@ export async function confirmCredits(generationId: string) {
       where: { generationId, type: "RESERVE" },
     });
     if (!reserve) {
-      throw new CreditServiceError("NOT_FOUND", "Нет RESERVE по этой генерации");
+      throw new CreditServiceError("NOT_FOUND", "РќРµС‚ RESERVE РїРѕ СЌС‚РѕР№ РіРµРЅРµСЂР°С†РёРё");
     }
     const hasCapture = await tx.creditTransaction.findFirst({
       where: { generationId, type: "CAPTURE" },
@@ -179,7 +178,7 @@ export async function confirmCredits(generationId: string) {
       where: { generationId, type: "REFUND" },
     });
     if (hasRefund) {
-      throw new CreditServiceError("CONFLICT", "Уже выполнен возврат по этой генерации");
+      throw new CreditServiceError("CONFLICT", "РЈР¶Рµ РІС‹РїРѕР»РЅРµРЅ РІРѕР·РІСЂР°С‚ РїРѕ СЌС‚РѕР№ РіРµРЅРµСЂР°С†РёРё");
     }
     await tx.creditTransaction.create({
       data: {
@@ -187,7 +186,7 @@ export async function confirmCredits(generationId: string) {
         generationId,
         type: "CAPTURE",
         amount: 0,
-        reason: "Списание подтверждено (резерв списан ранее)",
+        reason: "РЎРїРёСЃР°РЅРёРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРѕ (СЂРµР·РµСЂРІ СЃРїРёСЃР°РЅ СЂР°РЅРµРµ)",
       },
     });
     const bRow = await tx.user.findUnique({
@@ -199,15 +198,15 @@ export async function confirmCredits(generationId: string) {
 }
 
 /**
- * Возврат зарезервированных кредитов (ошибка провайдера и т.п.).
+ * Р’РѕР·РІСЂР°С‚ Р·Р°СЂРµР·РµСЂРІРёСЂРѕРІР°РЅРЅС‹С… РєСЂРµРґРёС‚РѕРІ (РѕС€РёР±РєР° РїСЂРѕРІР°Р№РґРµСЂР° Рё С‚.Рї.).
  */
-export async function refundCredits(generationId: string, reason = "Возврат: ошибка провайдера") {
+export async function refundCredits(generationId: string, reason = "Р’РѕР·РІСЂР°С‚: РѕС€РёР±РєР° РїСЂРѕРІР°Р№РґРµСЂР°") {
   return prisma.$transaction(async (tx) => {
     const reserve = await tx.creditTransaction.findFirst({
       where: { generationId, type: "RESERVE" },
     });
     if (!reserve) {
-      throw new CreditServiceError("NOT_FOUND", "Нет RESERVE по этой генерации");
+      throw new CreditServiceError("NOT_FOUND", "РќРµС‚ RESERVE РїРѕ СЌС‚РѕР№ РіРµРЅРµСЂР°С†РёРё");
     }
     const hasRefund = await tx.creditTransaction.findFirst({
       where: { generationId, type: "REFUND" },
@@ -228,12 +227,12 @@ export async function refundCredits(generationId: string, reason = "Возвра
     if (hasCapture) {
       throw new CreditServiceError(
         "CONFLICT",
-        "Возврат невозможен: по генерации уже подтверждёно списание",
+        "Р’РѕР·РІСЂР°С‚ РЅРµРІРѕР·РјРѕР¶РµРЅ: РїРѕ РіРµРЅРµСЂР°С†РёРё СѓР¶Рµ РїРѕРґС‚РІРµСЂР¶РґС‘РЅРѕ СЃРїРёСЃР°РЅРёРµ",
       );
     }
     const back = -reserve.amount;
     if (back <= 0) {
-      throw new CreditServiceError("INVALID", "Некорректная сумма возврата");
+      throw new CreditServiceError("INVALID", "РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ СЃСѓРјРјР° РІРѕР·РІСЂР°С‚Р°");
     }
     const user = await tx.user.update({
       where: { id: reserve.userId },
@@ -254,8 +253,8 @@ export async function refundCredits(generationId: string, reason = "Возвра
 }
 
 /**
- * Ручной возврат зарезервированных кредитов по генерации (админ).
- * Пишет audit `generation.refunded` в той же транзакции.
+ * Р СѓС‡РЅРѕР№ РІРѕР·РІСЂР°С‚ Р·Р°СЂРµР·РµСЂРІРёСЂРѕРІР°РЅРЅС‹С… РєСЂРµРґРёС‚РѕРІ РїРѕ РіРµРЅРµСЂР°С†РёРё (Р°РґРјРёРЅ).
+ * РџРёС€РµС‚ audit `generation.refunded` РІ С‚РѕР№ Р¶Рµ С‚СЂР°РЅР·Р°РєС†РёРё.
  */
 export async function adminManualRefundGeneration(args: {
   generationId: string;
@@ -263,14 +262,14 @@ export async function adminManualRefundGeneration(args: {
   reason: string;
 }): Promise<{ balance: number; idempotent: boolean }> {
   const { generationId, adminUserId, reason } = args;
-  const r = reason.trim().slice(0, 512) || "Ручной возврат администратором";
+  const r = reason.trim().slice(0, 512) || "Р СѓС‡РЅРѕР№ РІРѕР·РІСЂР°С‚ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂРѕРј";
 
   return prisma.$transaction(async (tx) => {
     const reserve = await tx.creditTransaction.findFirst({
       where: { generationId, type: "RESERVE" },
     });
     if (!reserve) {
-      throw new CreditServiceError("NOT_FOUND", "Нет RESERVE по этой генерации");
+      throw new CreditServiceError("NOT_FOUND", "РќРµС‚ RESERVE РїРѕ СЌС‚РѕР№ РіРµРЅРµСЂР°С†РёРё");
     }
     const hasRefund = await tx.creditTransaction.findFirst({
       where: { generationId, type: "REFUND" },
@@ -291,12 +290,12 @@ export async function adminManualRefundGeneration(args: {
     if (hasCapture) {
       throw new CreditServiceError(
         "CONFLICT",
-        "Возврат невозможен: по генерации уже подтверждёно списание",
+        "Р’РѕР·РІСЂР°С‚ РЅРµРІРѕР·РјРѕР¶РµРЅ: РїРѕ РіРµРЅРµСЂР°С†РёРё СѓР¶Рµ РїРѕРґС‚РІРµСЂР¶РґС‘РЅРѕ СЃРїРёСЃР°РЅРёРµ",
       );
     }
     const back = -reserve.amount;
     if (back <= 0) {
-      throw new CreditServiceError("INVALID", "Некорректная сумма возврата");
+      throw new CreditServiceError("INVALID", "РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ СЃСѓРјРјР° РІРѕР·РІСЂР°С‚Р°");
     }
     const user = await tx.user.update({
       where: { id: reserve.userId },
@@ -348,8 +347,8 @@ export async function listTransactions(userId: string, options: ListTxOptions = 
 }
 
 /**
- * Ручная корректировка баланса админом. delta: + начислить, − списать.
- * Пишет CreditTransaction (ADMIN_ADJUSTMENT) и AdminAuditLog.
+ * Р СѓС‡РЅР°СЏ РєРѕСЂСЂРµРєС‚РёСЂРѕРІРєР° Р±Р°Р»Р°РЅСЃР° Р°РґРјРёРЅРѕРј. delta: + РЅР°С‡РёСЃР»РёС‚СЊ, в€’ СЃРїРёСЃР°С‚СЊ.
+ * РџРёС€РµС‚ CreditTransaction (ADMIN_ADJUSTMENT) Рё AdminAuditLog.
  */
 export async function adminAdjustCredits(args: {
   userId: string;
@@ -359,7 +358,7 @@ export async function adminAdjustCredits(args: {
 }): Promise<{ newBalance: number }> {
   const { userId, adminUserId, delta, reason } = args;
   if (!Number.isInteger(delta) || delta === 0) {
-    throw new CreditServiceError("INVALID", "Укажите ненулевое целое delta");
+    throw new CreditServiceError("INVALID", "РЈРєР°Р¶РёС‚Рµ РЅРµРЅСѓР»РµРІРѕРµ С†РµР»РѕРµ delta");
   }
   return prisma.$transaction(async (tx) => {
     const before = await tx.user.findUnique({
@@ -367,13 +366,13 @@ export async function adminAdjustCredits(args: {
       select: { balanceCredits: true },
     });
     if (!before) {
-      throw new CreditServiceError("NOT_FOUND", "Пользователь не найден");
+      throw new CreditServiceError("NOT_FOUND", "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ");
     }
     const next = before.balanceCredits + delta;
     if (next < 0) {
       throw new CreditServiceError(
         "INSUFFICIENT",
-        "Списание сделало бы баланс отрицательным",
+        "РЎРїРёСЃР°РЅРёРµ СЃРґРµР»Р°Р»Рѕ Р±С‹ Р±Р°Р»Р°РЅСЃ РѕС‚СЂРёС†Р°С‚РµР»СЊРЅС‹Рј",
       );
     }
     const updated = await tx.user.update({

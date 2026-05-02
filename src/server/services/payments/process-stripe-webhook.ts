@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import type Stripe from "stripe";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -17,7 +16,7 @@ type ProcessResult =
   | { status: 500 };
 
 /**
- * rawBody — тело запроса как строка, то же, что ушло в constructEvent.
+ * rawBody вЂ” С‚РµР»Рѕ Р·Р°РїСЂРѕСЃР° РєР°Рє СЃС‚СЂРѕРєР°, С‚Рѕ Р¶Рµ, С‡С‚Рѕ СѓС€Р»Рѕ РІ constructEvent.
  */
 export async function processStripeWebhookRequest(args: {
   rawBody: string;
@@ -188,7 +187,7 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
       include: { tokenPackage: true },
     });
     if (pay) {
-      const pkgName = pay.tokenPackage?.name ?? "Токены";
+      const pkgName = pay.tokenPackage?.name ?? "РўРѕРєРµРЅС‹";
       void trySendPaymentSuccessEmail({
         userId: pay.userId,
         packageName: pkgName,

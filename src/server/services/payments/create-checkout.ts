@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getTokenPackageByIdForCheckout } from "@/server/services/token-packages-catalog";
@@ -8,7 +7,7 @@ import { createStripeCheckoutSession } from "./stripe";
 import type { CreateCheckoutResult } from "./types";
 
 /**
- * Создаёт Payment (PENDING) и Stripe Checkout. Токены начисляются только в webhook.
+ * РЎРѕР·РґР°С‘С‚ Payment (PENDING) Рё Stripe Checkout. РўРѕРєРµРЅС‹ РЅР°С‡РёСЃР»СЏСЋС‚СЃСЏ С‚РѕР»СЊРєРѕ РІ webhook.
  */
 export async function createStripeCheckoutForUser(
   userId: string,

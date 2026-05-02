@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import { auth } from "@/auth";
 import type { UserRole, UserStatus } from "@/generated/prisma/enums";
 import { canAccessAdminPanel } from "@/lib/auth";

@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import type { AiModel } from "@/generated/prisma/client";
 import type { GenerationType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
@@ -47,27 +46,27 @@ export async function requireProductCardModel(
 }
 
 /**
- * Default image model для «Фото с концепциями».
+ * Default image model РґР»СЏ В«Р¤РѕС‚Рѕ СЃ РєРѕРЅС†РµРїС†РёСЏРјРёВ».
  */
 export async function resolveDefaultProductConceptImageModel(): Promise<AiModel | null> {
   return resolveStrictProductCardModel("PRODUCT_CONCEPT_IMAGE");
 }
 
 /**
- * Карточка маркетплейса.
+ * РљР°СЂС‚РѕС‡РєР° РјР°СЂРєРµС‚РїР»РµР№СЃР°.
  */
 export async function resolveDefaultMarketplaceCardModel(): Promise<AiModel | null> {
   return resolveStrictProductCardModel("PRODUCT_MARKETPLACE_CARD");
 }
 
 /**
- * Видео «карточка товара» (image-to-video).
+ * Р’РёРґРµРѕ В«РєР°СЂС‚РѕС‡РєР° С‚РѕРІР°СЂР°В» (image-to-video).
  */
 export async function resolveDefaultProductVideoModel(): Promise<AiModel | null> {
   return resolveStrictProductCardModel("PRODUCT_VIDEO");
 }
 
-/** Классификатор категории по фото (Product Card). */
+/** РљР»Р°СЃСЃРёС„РёРєР°С‚РѕСЂ РєР°С‚РµРіРѕСЂРёРё РїРѕ С„РѕС‚Рѕ (Product Card). */
 export async function resolveDefaultProductClassifierModel(): Promise<AiModel | null> {
   return resolveStrictProductCardModel("PRODUCT_CLASSIFIER");
 }

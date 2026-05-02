@@ -1,9 +1,8 @@
-import "server-only";
-
+﻿
 import { prisma } from "@/lib/prisma";
 
 /**
- * Безопасный лог входящего webhook Kaspi (ApiLog). Не передавать ключи и Authorization.
+ * Р‘РµР·РѕРїР°СЃРЅС‹Р№ Р»РѕРі РІС…РѕРґСЏС‰РµРіРѕ webhook Kaspi (ApiLog). РќРµ РїРµСЂРµРґР°РІР°С‚СЊ РєР»СЋС‡Рё Рё Authorization.
  */
 export async function logKaspiWebhookApi(args: {
   endpoint: string;
@@ -22,6 +21,6 @@ export async function logKaspiWebhookApi(args: {
       },
     });
   } catch {
-    // не ломаем webhook при сбое логирования
+    // РЅРµ Р»РѕРјР°РµРј webhook РїСЂРё СЃР±РѕРµ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ
   }
 }

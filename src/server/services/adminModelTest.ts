@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import { Prisma } from "@/generated/prisma/client";
 import type { AiModel, Generation } from "@/generated/prisma/client";
 import { publicHttpUrlsOnly } from "@/lib/generation-input-limits";
@@ -62,12 +61,12 @@ export type AdminTestPricingInfo = {
 function pricingNote(model: AiModel): string {
   const ps = model.pricingSchema;
   if (!isRecord(ps) || ps.type !== "matrix") {
-    return "Без matrix — используется costCredits модели.";
+    return "Р‘РµР· matrix вЂ” РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ costCredits РјРѕРґРµР»Рё.";
   }
   if (isRecord(ps.manualOverrides)) {
-    return "Проверьте manualOverrides в Pricing Studio (приоритет над auto).";
+    return "РџСЂРѕРІРµСЂСЊС‚Рµ manualOverrides РІ Pricing Studio (РїСЂРёРѕСЂРёС‚РµС‚ РЅР°Рґ auto).";
   }
-  return "Оценка по pricingSchema и настройкам.";
+  return "РћС†РµРЅРєР° РїРѕ pricingSchema Рё РЅР°СЃС‚СЂРѕР№РєР°Рј.";
 }
 
 type VideoBuildOk = {
@@ -93,7 +92,7 @@ type BuildErr = { ok: false; error: string; statusCode: number };
 type BuildAll = (VideoBuildOk | ImageBuildOk) | BuildErr;
 
 /**
- * Сбор KIE-ввода и JSON payload; совпадает с /api/generations (video|image) без queue/moderation/credits.
+ * РЎР±РѕСЂ KIE-РІРІРѕРґР° Рё JSON payload; СЃРѕРІРїР°РґР°РµС‚ СЃ /api/generations (video|image) Р±РµР· queue/moderation/credits.
  */
 export async function buildAdminModelKieInput(args: {
   model: AiModel;
@@ -105,7 +104,7 @@ export async function buildAdminModelKieInput(args: {
   const warnings: string[] = [];
 
   if (!body.prompt?.trim()) {
-    return { ok: false, error: "Укажите prompt", statusCode: 400 };
+    return { ok: false, error: "РЈРєР°Р¶РёС‚Рµ prompt", statusCode: 400 };
   }
 
   if (model.type === "IMAGE") {
@@ -120,7 +119,7 @@ export async function buildAdminModelKieInput(args: {
       userIdForOwnership,
     );
   }
-  return { ok: false, error: "Поддерживаются IMAGE и VIDEO", statusCode: 400 };
+  return { ok: false, error: "РџРѕРґРґРµСЂР¶РёРІР°СЋС‚СЃСЏ IMAGE Рё VIDEO", statusCode: 400 };
 }
 
 function buildImageTest(
@@ -141,10 +140,10 @@ function buildImageTest(
     normalizedSettings = v.settings;
   }
   if (body.negativePrompt && !model.supportsNegativePrompt) {
-    return { ok: false, error: "Модель не поддерживает negative prompt", statusCode: 400 };
+    return { ok: false, error: "РњРѕРґРµР»СЊ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ negative prompt", statusCode: 400 };
   }
   if (body.seed !== undefined && !model.supportsSeed) {
-    return { ok: false, error: "Модель не поддерживает seed", statusCode: 400 };
+    return { ok: false, error: "РњРѕРґРµР»СЊ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ seed", statusCode: 400 };
   }
   const imageUrlsFromSettings =
     hasSchema && Array.isArray(normalizedSettings.imageUrls)
@@ -152,11 +151,11 @@ function buildImageTest(
       : [];
   const inputFilesCombined = [...(body.inputFiles ?? []), ...imageUrlsFromSettings];
   if (inputFilesCombined.length > 0 && !model.supportsImageInput) {
-    return { ok: false, error: "Модель не поддерживает входные изображения", statusCode: 400 };
+    return { ok: false, error: "РњРѕРґРµР»СЊ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ РІС…РѕРґРЅС‹Рµ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ", statusCode: 400 };
   }
   if (inputFilesCombined.length > 0) {
     if (publicHttpUrlsOnly(inputFilesCombined).length === 0) {
-      return { ok: false, error: "Нужен публичный http(s) URL", statusCode: 400 };
+      return { ok: false, error: "РќСѓР¶РµРЅ РїСѓР±Р»РёС‡РЅС‹Р№ http(s) URL", statusCode: 400 };
     }
   }
 
@@ -194,7 +193,7 @@ function buildImageTest(
       costCredits,
       pricingSource: isRecord(model.pricingSchema) && model.pricingSchema.pricingSource
         ? String(model.pricingSchema.pricingSource)
-        : "модель / costCredits",
+        : "РјРѕРґРµР»СЊ / costCredits",
       note: pricingNote(model),
     },
     warnings,
@@ -224,7 +223,7 @@ async function buildVideoTest(
       if (!Number.isInteger(d) || d < 1 || d > model.maxDuration) {
         return {
           ok: false,
-          error: `Длительность: от 1 до ${model.maxDuration} с`,
+          error: `Р”Р»РёС‚РµР»СЊРЅРѕСЃС‚СЊ: РѕС‚ 1 РґРѕ ${model.maxDuration} СЃ`,
           statusCode: 400,
         };
       }
@@ -267,7 +266,7 @@ async function buildVideoTest(
         }
       } else {
         warnings.push(
-          "Админ-тест: владельцев URL для Motion Control не проверяем.",
+          "РђРґРјРёРЅ-С‚РµСЃС‚: РІР»Р°РґРµР»СЊС†РµРІ URL РґР»СЏ Motion Control РЅРµ РїСЂРѕРІРµСЂСЏРµРј.",
         );
       }
     }
@@ -275,14 +274,14 @@ async function buildVideoTest(
     if (model.maxDuration == null) {
       return {
         ok: false,
-        error: "Длительность для этой модели не настраивается",
+        error: "Р”Р»РёС‚РµР»СЊРЅРѕСЃС‚СЊ РґР»СЏ СЌС‚РѕР№ РјРѕРґРµР»Рё РЅРµ РЅР°СЃС‚СЂР°РёРІР°РµС‚СЃСЏ",
         statusCode: 400,
       };
     }
     if (body.durationSec > model.maxDuration) {
       return {
         ok: false,
-        error: `Максимальная длительность: ${model.maxDuration} с`,
+        error: `РњР°РєСЃРёРјР°Р»СЊРЅР°СЏ РґР»РёС‚РµР»СЊРЅРѕСЃС‚СЊ: ${model.maxDuration} СЃ`,
         statusCode: 400,
       };
     }
@@ -296,10 +295,10 @@ async function buildVideoTest(
       : null) ?? body.negativePrompt?.trim() ?? null;
 
   if (negativePromptMerged && !model.supportsNegativePrompt) {
-    return { ok: false, error: "Модель не поддерживает negative prompt", statusCode: 400 };
+    return { ok: false, error: "РњРѕРґРµР»СЊ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ negative prompt", statusCode: 400 };
   }
   if (body.seed !== undefined && !model.supportsSeed) {
-    return { ok: false, error: "Модель не поддерживает seed", statusCode: 400 };
+    return { ok: false, error: "РњРѕРґРµР»СЊ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ seed", statusCode: 400 };
   }
 
   const imageUrlsFromSettings = (() => {
@@ -331,19 +330,19 @@ async function buildVideoTest(
     !model.supportsImageInput &&
     !model.supportsVideoInput
   ) {
-    return { ok: false, error: "Модель не поддерживает вложения", statusCode: 400 };
+    return { ok: false, error: "РњРѕРґРµР»СЊ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ РІР»РѕР¶РµРЅРёСЏ", statusCode: 400 };
   }
   if (inputFilesCombined.length > 0) {
     const hasData = inputFilesCombined.some((s) => s.trim().startsWith("data:"));
     if (hasData) {
       return {
         ok: false,
-        error: "Используйте публичные http(s) URL (не data:)",
+        error: "РСЃРїРѕР»СЊР·СѓР№С‚Рµ РїСѓР±Р»РёС‡РЅС‹Рµ http(s) URL (РЅРµ data:)",
         statusCode: 400,
       };
     }
     if (publicHttpUrlsOnly(inputFilesCombined).length === 0) {
-      return { ok: false, error: "Нужен публичный http(s) URL", statusCode: 400 };
+      return { ok: false, error: "РќСѓР¶РµРЅ РїСѓР±Р»РёС‡РЅС‹Р№ http(s) URL", statusCode: 400 };
     }
   }
 
@@ -382,7 +381,7 @@ async function buildVideoTest(
       costCredits,
       pricingSource: isRecord(model.pricingSchema) && model.pricingSchema.pricingSource
         ? String(model.pricingSchema.pricingSource)
-        : "модель / matrix / costCredits",
+        : "РјРѕРґРµР»СЊ / matrix / costCredits",
       note: pricingNote(model),
     },
     warnings,
@@ -519,7 +518,7 @@ function finalizeRealTest(
   const providerResponse = redactKieLogPayload(result.rawResponse);
   const errMsg = result.success
     ? null
-    : (result.errorMessage ?? "Ошибка провайдера").slice(0, 10_000);
+    : (result.errorMessage ?? "РћС€РёР±РєР° РїСЂРѕРІР°Р№РґРµСЂР°").slice(0, 10_000);
 
   void createApiLog({
     generationId: null,
@@ -558,7 +557,7 @@ function finalizeRealTest(
   if (!result.success) {
     return {
       ok: false as const,
-      error: result.errorMessage ?? "Ошибка Kie",
+      error: result.errorMessage ?? "РћС€РёР±РєР° Kie",
       statusCode: result.httpStatus >= 400 && result.httpStatus < 600
         ? result.httpStatus
         : 502,

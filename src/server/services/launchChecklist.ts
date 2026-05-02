@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import IORedis from "ioredis";
 import { Queue } from "bullmq";
 
@@ -113,7 +112,7 @@ async function checkWorkersCount(): Promise<{
       severity: process.env.NODE_ENV === "production" ? "warning" : "ok",
       detail:
         process.env.NODE_ENV === "production"
-          ? "QUEUE_MODE=inline не предназначен для production — нужен redis и отдельный worker."
+          ? "QUEUE_MODE=inline РЅРµ РїСЂРµРґРЅР°Р·РЅР°С‡РµРЅ РґР»СЏ production вЂ” РЅСѓР¶РµРЅ redis Рё РѕС‚РґРµР»СЊРЅС‹Р№ worker."
           : null,
       fixHref: process.env.NODE_ENV === "production" ? "/admin/settings" : null,
     };
@@ -122,7 +121,7 @@ async function checkWorkersCount(): Promise<{
   if (!url) {
     return {
       severity: "required",
-      detail: "Задайте REDIS_URL и процесс npm run worker.",
+      detail: "Р—Р°РґР°Р№С‚Рµ REDIS_URL Рё РїСЂРѕС†РµСЃСЃ npm run worker.",
       fixHref: "/admin/settings",
     };
   }
@@ -136,7 +135,7 @@ async function checkWorkersCount(): Promise<{
       return {
         severity: "required",
         detail:
-          "Нет зарегистрированных worker для очереди генераций. Запустите процесс worker.",
+          "РќРµС‚ Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°РЅРЅС‹С… worker РґР»СЏ РѕС‡РµСЂРµРґРё РіРµРЅРµСЂР°С†РёР№. Р—Р°РїСѓСЃС‚РёС‚Рµ РїСЂРѕС†РµСЃСЃ worker.",
         fixHref: "/admin/settings",
       };
     }
@@ -145,7 +144,7 @@ async function checkWorkersCount(): Promise<{
     return {
       severity: "warning",
       detail:
-        "Не удалось определить число worker (на части Redis‑окружений команда недоступна). Проверьте worker вручную.",
+        "РќРµ СѓРґР°Р»РѕСЃСЊ РѕРїСЂРµРґРµР»РёС‚СЊ С‡РёСЃР»Рѕ worker (РЅР° С‡Р°СЃС‚Рё RedisвЂ‘РѕРєСЂСѓР¶РµРЅРёР№ РєРѕРјР°РЅРґР° РЅРµРґРѕСЃС‚СѓРїРЅР°). РџСЂРѕРІРµСЂСЊС‚Рµ worker РІСЂСѓС‡РЅСѓСЋ.",
       fixHref: "/admin/settings",
     };
   } finally {
@@ -167,9 +166,9 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "database_url",
         "DATABASE_URL configured",
-        "База данных настроена",
+        "Р‘Р°Р·Р° РґР°РЅРЅС‹С… РЅР°СЃС‚СЂРѕРµРЅР°",
         "required",
-        "Переменная DATABASE_URL не задана.",
+        "РџРµСЂРµРјРµРЅРЅР°СЏ DATABASE_URL РЅРµ Р·Р°РґР°РЅР°.",
         "/admin/settings",
       ),
     );
@@ -178,9 +177,9 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "database_url",
         "DATABASE_URL configured",
-        "База данных настроена",
+        "Р‘Р°Р·Р° РґР°РЅРЅС‹С… РЅР°СЃС‚СЂРѕРµРЅР°",
         "required",
-        "Подключение к БД не удалось (проверьте строку и доступность сервера).",
+        "РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє Р‘Р” РЅРµ СѓРґР°Р»РѕСЃСЊ (РїСЂРѕРІРµСЂСЊС‚Рµ СЃС‚СЂРѕРєСѓ Рё РґРѕСЃС‚СѓРїРЅРѕСЃС‚СЊ СЃРµСЂРІРµСЂР°).",
         "/admin/settings",
       ),
     );
@@ -189,7 +188,7 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "database_url",
         "DATABASE_URL configured",
-        "База данных настроена",
+        "Р‘Р°Р·Р° РґР°РЅРЅС‹С… РЅР°СЃС‚СЂРѕРµРЅР°",
         "ok",
       ),
     );
@@ -200,15 +199,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "auth_secret",
           "AUTH_SECRET configured",
-          "Auth secret настроен",
+          "Auth secret РЅР°СЃС‚СЂРѕРµРЅ",
           "ok",
         )
       : item(
           "auth_secret",
           "AUTH_SECRET configured",
-          "Auth secret настроен",
+          "Auth secret РЅР°СЃС‚СЂРѕРµРЅ",
           "required",
-          "Задайте AUTH_SECRET или NEXTAUTH_SECRET.",
+          "Р—Р°РґР°Р№С‚Рµ AUTH_SECRET РёР»Рё NEXTAUTH_SECRET.",
           "/admin/settings",
         ),
   );
@@ -221,15 +220,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "super_admin",
           "SUPER_ADMIN exists",
-          "Super admin создан",
+          "Super admin СЃРѕР·РґР°РЅ",
           "ok",
         )
       : item(
           "super_admin",
           "SUPER_ADMIN exists",
-          "Super admin создан",
+          "Super admin СЃРѕР·РґР°РЅ",
           "required",
-          "Нет активного пользователя с ролью SUPER_ADMIN.",
+          "РќРµС‚ Р°РєС‚РёРІРЅРѕРіРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ СЃ СЂРѕР»СЊСЋ SUPER_ADMIN.",
           "/admin/users",
         ),
   );
@@ -239,15 +238,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "kie_api_key",
           "KIE_API_KEY configured",
-          "Kie API key настроен",
+          "Kie API key РЅР°СЃС‚СЂРѕРµРЅ",
           "ok",
         )
       : item(
           "kie_api_key",
           "KIE_API_KEY configured",
-          "Kie API key настроен",
+          "Kie API key РЅР°СЃС‚СЂРѕРµРЅ",
           "required",
-          "Задайте KIE_API_KEY.",
+          "Р—Р°РґР°Р№С‚Рµ KIE_API_KEY.",
           "/admin/providers",
         ),
   );
@@ -257,15 +256,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "kie_base_url",
           "KIE_BASE_URL configured",
-          "Kie base URL настроен",
+          "Kie base URL РЅР°СЃС‚СЂРѕРµРЅ",
           "ok",
         )
       : item(
           "kie_base_url",
           "KIE_BASE_URL configured",
-          "Kie base URL настроен",
+          "Kie base URL РЅР°СЃС‚СЂРѕРµРЅ",
           "required",
-          "Задайте KIE_BASE_URL.",
+          "Р—Р°РґР°Р№С‚Рµ KIE_BASE_URL.",
           "/admin/providers",
         ),
   );
@@ -275,9 +274,9 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "mock_kie_prod",
         "MOCK_KIE disabled in production",
-        "MOCK_KIE выключен в production",
+        "MOCK_KIE РІС‹РєР»СЋС‡РµРЅ РІ production",
         "required",
-        "В production MOCK_KIE должен быть false.",
+        "Р’ production MOCK_KIE РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ false.",
         "/admin/providers",
       ),
     );
@@ -286,7 +285,7 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "mock_kie_prod",
         "MOCK_KIE disabled in production",
-        "MOCK_KIE выключен в production",
+        "MOCK_KIE РІС‹РєР»СЋС‡РµРЅ РІ production",
         "ok",
       ),
     );
@@ -299,9 +298,9 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "s3_storage",
         "S3 storage configured",
-        "S3 хранилище настроено",
+        "S3 С…СЂР°РЅРёР»РёС‰Рµ РЅР°СЃС‚СЂРѕРµРЅРѕ",
         "required",
-        "UPLOAD_STORAGE=local недопустим в production.",
+        "UPLOAD_STORAGE=local РЅРµРґРѕРїСѓСЃС‚РёРј РІ production.",
         "/admin/storage",
       ),
     );
@@ -318,15 +317,15 @@ export async function buildLaunchChecklist(): Promise<{
         ? item(
             "s3_storage",
             "S3 storage configured",
-            "S3 хранилище настроено",
+            "S3 С…СЂР°РЅРёР»РёС‰Рµ РЅР°СЃС‚СЂРѕРµРЅРѕ",
             "ok",
           )
         : item(
             "s3_storage",
             "S3 storage configured",
-            "S3 хранилище настроено",
+            "S3 С…СЂР°РЅРёР»РёС‰Рµ РЅР°СЃС‚СЂРѕРµРЅРѕ",
             "required",
-            "Задайте S3_ENDPOINT, S3_REGION, S3_BUCKET, ключи и регион.",
+            "Р—Р°РґР°Р№С‚Рµ S3_ENDPOINT, S3_REGION, S3_BUCKET, РєР»СЋС‡Рё Рё СЂРµРіРёРѕРЅ.",
             "/admin/storage",
           ),
     );
@@ -335,10 +334,10 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "s3_storage",
         "S3 storage configured",
-        "S3 хранилище настроено",
+        "S3 С…СЂР°РЅРёР»РёС‰Рµ РЅР°СЃС‚СЂРѕРµРЅРѕ",
         isProd ? "warning" : "ok",
         isProd
-          ? "Используется локальное хранилище — для production нужен S3."
+          ? "РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ Р»РѕРєР°Р»СЊРЅРѕРµ С…СЂР°РЅРёР»РёС‰Рµ вЂ” РґР»СЏ production РЅСѓР¶РµРЅ S3."
           : null,
         isProd ? "/admin/storage" : null,
       ),
@@ -351,15 +350,15 @@ export async function buildLaunchChecklist(): Promise<{
         ? item(
             "s3_public_url",
             "S3_PUBLIC_URL configured",
-            "Публичный URL хранилища настроен",
+            "РџСѓР±Р»РёС‡РЅС‹Р№ URL С…СЂР°РЅРёР»РёС‰Р° РЅР°СЃС‚СЂРѕРµРЅ",
             "ok",
           )
         : item(
             "s3_public_url",
             "S3_PUBLIC_URL configured",
-            "Публичный URL хранилища настроен",
+            "РџСѓР±Р»РёС‡РЅС‹Р№ URL С…СЂР°РЅРёР»РёС‰Р° РЅР°СЃС‚СЂРѕРµРЅ",
             "required",
-            "Без S3_PUBLIC_URL провайдер может не получить URL загрузок.",
+            "Р‘РµР· S3_PUBLIC_URL РїСЂРѕРІР°Р№РґРµСЂ РјРѕР¶РµС‚ РЅРµ РїРѕР»СѓС‡РёС‚СЊ URL Р·Р°РіСЂСѓР·РѕРє.",
             "/admin/storage",
           ),
     );
@@ -368,11 +367,11 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "s3_public_url",
         "S3_PUBLIC_URL configured",
-        "Публичный URL хранилища настроен",
+        "РџСѓР±Р»РёС‡РЅС‹Р№ URL С…СЂР°РЅРёР»РёС‰Р° РЅР°СЃС‚СЂРѕРµРЅ",
         isProd ? "warning" : "ok",
         isProd
-          ? "Для production задайте object storage и S3_PUBLIC_URL."
-          : "При локальном хранилище S3_PUBLIC_URL не используется.",
+          ? "Р”Р»СЏ production Р·Р°РґР°Р№С‚Рµ object storage Рё S3_PUBLIC_URL."
+          : "РџСЂРё Р»РѕРєР°Р»СЊРЅРѕРј С…СЂР°РЅРёР»РёС‰Рµ S3_PUBLIC_URL РЅРµ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ.",
         isProd ? "/admin/storage" : null,
       ),
     );
@@ -384,9 +383,9 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "redis",
         "Redis configured",
-        "Redis настроен",
+        "Redis РЅР°СЃС‚СЂРѕРµРЅ",
         "warning",
-        "При QUEUE_MODE=inline Redis не обязателен для очереди.",
+        "РџСЂРё QUEUE_MODE=inline Redis РЅРµ РѕР±СЏР·Р°С‚РµР»РµРЅ РґР»СЏ РѕС‡РµСЂРµРґРё.",
         "/admin/settings",
       ),
     );
@@ -395,7 +394,7 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "redis",
         "Redis configured",
-        "Redis настроен",
+        "Redis РЅР°СЃС‚СЂРѕРµРЅ",
         "ok",
       ),
     );
@@ -404,9 +403,9 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "redis",
         "Redis configured",
-        "Redis настроен",
+        "Redis РЅР°СЃС‚СЂРѕРµРЅ",
         "required",
-        "Задайте REDIS_URL для BullMQ.",
+        "Р—Р°РґР°Р№С‚Рµ REDIS_URL РґР»СЏ BullMQ.",
         "/admin/settings",
       ),
     );
@@ -415,9 +414,9 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "redis",
         "Redis configured",
-        "Redis настроен",
+        "Redis РЅР°СЃС‚СЂРѕРµРЅ",
         "required",
-        "REDIS_URL задан, но соединение не удалось.",
+        "REDIS_URL Р·Р°РґР°РЅ, РЅРѕ СЃРѕРµРґРёРЅРµРЅРёРµ РЅРµ СѓРґР°Р»РѕСЃСЊ.",
         "/admin/settings",
       ),
     );
@@ -428,9 +427,9 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "queue_mode",
         "Queue mode production-ready",
-        "Очередь готова к production",
+        "РћС‡РµСЂРµРґСЊ РіРѕС‚РѕРІР° Рє production",
         "required",
-        "В production используйте QUEUE_MODE=redis (или не задавайте inline).",
+        "Р’ production РёСЃРїРѕР»СЊР·СѓР№С‚Рµ QUEUE_MODE=redis (РёР»Рё РЅРµ Р·Р°РґР°РІР°Р№С‚Рµ inline).",
         "/admin/settings",
       ),
     );
@@ -439,9 +438,9 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "queue_mode",
         "Queue mode production-ready",
-        "Очередь готова к production",
+        "РћС‡РµСЂРµРґСЊ РіРѕС‚РѕРІР° Рє production",
         "required",
-        "Режим redis требует рабочий REDIS_URL.",
+        "Р РµР¶РёРј redis С‚СЂРµР±СѓРµС‚ СЂР°Р±РѕС‡РёР№ REDIS_URL.",
         "/admin/settings",
       ),
     );
@@ -450,7 +449,7 @@ export async function buildLaunchChecklist(): Promise<{
       item(
         "queue_mode",
         "Queue mode production-ready",
-        "Очередь готова к production",
+        "РћС‡РµСЂРµРґСЊ РіРѕС‚РѕРІР° Рє production",
         "ok",
       ),
     );
@@ -461,7 +460,7 @@ export async function buildLaunchChecklist(): Promise<{
     item(
       "worker",
       "Worker status checked",
-      "Worker проверен",
+      "Worker РїСЂРѕРІРµСЂРµРЅ",
       workerCheck.severity,
       workerCheck.detail,
       workerCheck.fixHref,
@@ -476,15 +475,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "image_model",
           "Active IMAGE model exists",
-          "Есть активная IMAGE модель",
+          "Р•СЃС‚СЊ Р°РєС‚РёРІРЅР°СЏ IMAGE РјРѕРґРµР»СЊ",
           "ok",
         )
       : item(
           "image_model",
           "Active IMAGE model exists",
-          "Есть активная IMAGE модель",
+          "Р•СЃС‚СЊ Р°РєС‚РёРІРЅР°СЏ IMAGE РјРѕРґРµР»СЊ",
           "required",
-          "Создайте и активируйте хотя бы одну модель IMAGE.",
+          "РЎРѕР·РґР°Р№С‚Рµ Рё Р°РєС‚РёРІРёСЂСѓР№С‚Рµ С…РѕС‚СЏ Р±С‹ РѕРґРЅСѓ РјРѕРґРµР»СЊ IMAGE.",
           "/admin/models",
         ),
   );
@@ -497,15 +496,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "video_model",
           "Active VIDEO model exists",
-          "Есть активная VIDEO модель",
+          "Р•СЃС‚СЊ Р°РєС‚РёРІРЅР°СЏ VIDEO РјРѕРґРµР»СЊ",
           "ok",
         )
       : item(
           "video_model",
           "Active VIDEO model exists",
-          "Есть активная VIDEO модель",
+          "Р•СЃС‚СЊ Р°РєС‚РёРІРЅР°СЏ VIDEO РјРѕРґРµР»СЊ",
           "required",
-          "Создайте и активируйте хотя бы одну модель VIDEO.",
+          "РЎРѕР·РґР°Р№С‚Рµ Рё Р°РєС‚РёРІРёСЂСѓР№С‚Рµ С…РѕС‚СЏ Р±С‹ РѕРґРЅСѓ РјРѕРґРµР»СЊ VIDEO.",
           "/admin/models",
         ),
   );
@@ -523,15 +522,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "seedance",
           "Seedance 2.0 active",
-          "Seedance 2.0 активна",
+          "Seedance 2.0 Р°РєС‚РёРІРЅР°",
           "ok",
         )
       : item(
           "seedance",
           "Seedance 2.0 active",
-          "Seedance 2.0 активна",
+          "Seedance 2.0 Р°РєС‚РёРІРЅР°",
           "required",
-          "Нужна активная модель с apiModelId bytedance/seedance-2 или bytedance/seedance-2-fast.",
+          "РќСѓР¶РЅР° Р°РєС‚РёРІРЅР°СЏ РјРѕРґРµР»СЊ СЃ apiModelId bytedance/seedance-2 РёР»Рё bytedance/seedance-2-fast.",
           "/admin/models",
         ),
   );
@@ -551,15 +550,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "pricing_schemas",
           "Pricing schemas valid",
-          "Схемы цен валидны",
+          "РЎС…РµРјС‹ С†РµРЅ РІР°Р»РёРґРЅС‹",
           "ok",
         )
       : item(
           "pricing_schemas",
           "Pricing schemas valid",
-          "Схемы цен валидны",
+          "РЎС…РµРјС‹ С†РµРЅ РІР°Р»РёРґРЅС‹",
           "required",
-          pricingErrors.slice(0, 5).join(" · "),
+          pricingErrors.slice(0, 5).join(" В· "),
           "/admin/models",
         ),
   );
@@ -591,15 +590,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "product_card_models",
           "Product Card models configured",
-          "Модели Product Card настроены",
+          "РњРѕРґРµР»Рё Product Card РЅР°СЃС‚СЂРѕРµРЅС‹",
           "ok",
         )
       : item(
           "product_card_models",
           "Product Card models configured",
-          "Модели Product Card настроены",
+          "РњРѕРґРµР»Рё Product Card РЅР°СЃС‚СЂРѕРµРЅС‹",
           "required",
-          `Не хватает ролей: ${missingPcRoles.join(", ")}.`,
+          `РќРµ С…РІР°С‚Р°РµС‚ СЂРѕР»РµР№: ${missingPcRoles.join(", ")}.`,
           "/admin/product-card?tab=models",
         ),
   );
@@ -621,15 +620,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "product_card_pricing",
           "Product Card pricing configured",
-          "Product Card pricing настроен",
+          "Product Card pricing РЅР°СЃС‚СЂРѕРµРЅ",
           "ok",
         )
       : item(
           "product_card_pricing",
           "Product Card pricing configured",
-          "Product Card pricing настроен",
+          "Product Card pricing РЅР°СЃС‚СЂРѕРµРЅ",
           "required",
-          `Нужен pricingScope=PRODUCT_CARD/type=product_card_matrix: ${productCardPricingErrors.join(", ")}.`,
+          `РќСѓР¶РµРЅ pricingScope=PRODUCT_CARD/type=product_card_matrix: ${productCardPricingErrors.join(", ")}.`,
           "/admin/product-card?tab=pricing",
         ),
   );
@@ -654,15 +653,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "product_card_presets",
           "Product Card presets configured",
-          "Product Card presets настроены",
+          "Product Card presets РЅР°СЃС‚СЂРѕРµРЅС‹",
           "ok",
         )
       : item(
           "product_card_presets",
           "Product Card presets configured",
-          "Product Card presets настроены",
+          "Product Card presets РЅР°СЃС‚СЂРѕРµРЅС‹",
           "warning",
-          "Проверьте presets размеров и видео для Product Card.",
+          "РџСЂРѕРІРµСЂСЊС‚Рµ presets СЂР°Р·РјРµСЂРѕРІ Рё РІРёРґРµРѕ РґР»СЏ Product Card.",
           "/admin/product-card?tab=settings",
         ),
   );
@@ -675,15 +674,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "token_packages",
           "Token packages active",
-          "Есть активные пакеты токенов",
+          "Р•СЃС‚СЊ Р°РєС‚РёРІРЅС‹Рµ РїР°РєРµС‚С‹ С‚РѕРєРµРЅРѕРІ",
           "ok",
         )
       : item(
           "token_packages",
           "Token packages active",
-          "Есть активные пакеты токенов",
+          "Р•СЃС‚СЊ Р°РєС‚РёРІРЅС‹Рµ РїР°РєРµС‚С‹ С‚РѕРєРµРЅРѕРІ",
           "required",
-          "Создайте хотя бы один активный пакет токенов.",
+          "РЎРѕР·РґР°Р№С‚Рµ С…РѕС‚СЏ Р±С‹ РѕРґРёРЅ Р°РєС‚РёРІРЅС‹Р№ РїР°РєРµС‚ С‚РѕРєРµРЅРѕРІ.",
           "/admin/token-packages",
         ),
   );
@@ -699,15 +698,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "legal_pages",
           "Legal pages published",
-          "Юридические страницы опубликованы",
+          "Р®СЂРёРґРёС‡РµСЃРєРёРµ СЃС‚СЂР°РЅРёС†С‹ РѕРїСѓР±Р»РёРєРѕРІР°РЅС‹",
           "ok",
         )
       : item(
           "legal_pages",
           "Legal pages published",
-          "Юридические страницы опубликованы",
+          "Р®СЂРёРґРёС‡РµСЃРєРёРµ СЃС‚СЂР°РЅРёС†С‹ РѕРїСѓР±Р»РёРєРѕРІР°РЅС‹",
           "required",
-          `Не опубликованы: ${missingLegal.join(", ")}.`,
+          `РќРµ РѕРїСѓР±Р»РёРєРѕРІР°РЅС‹: ${missingLegal.join(", ")}.`,
           "/admin/legal",
         ),
   );
@@ -732,15 +731,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "robots",
           "robots.txt available",
-          "robots.txt доступен",
+          "robots.txt РґРѕСЃС‚СѓРїРµРЅ",
           "ok",
         )
       : item(
           "robots",
           "robots.txt available",
-          "robots.txt доступен",
+          "robots.txt РґРѕСЃС‚СѓРїРµРЅ",
           "required",
-          "Не удалось сгенерировать robots.txt (проверьте SEO‑настройки).",
+          "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ robots.txt (РїСЂРѕРІРµСЂСЊС‚Рµ SEOвЂ‘РЅР°СЃС‚СЂРѕР№РєРё).",
           "/admin/seo",
         ),
   );
@@ -750,15 +749,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "sitemap",
           "sitemap.xml available",
-          "sitemap.xml доступен",
+          "sitemap.xml РґРѕСЃС‚СѓРїРµРЅ",
           "ok",
         )
       : item(
           "sitemap",
           "sitemap.xml available",
-          "sitemap.xml доступен",
+          "sitemap.xml РґРѕСЃС‚СѓРїРµРЅ",
           "required",
-          "Не удалось сгенерировать sitemap (проверьте SEO‑настройки и страницы).",
+          "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ sitemap (РїСЂРѕРІРµСЂСЊС‚Рµ SEOвЂ‘РЅР°СЃС‚СЂРѕР№РєРё Рё СЃС‚СЂР°РЅРёС†С‹).",
           "/admin/seo",
         ),
   );
@@ -772,38 +771,38 @@ export async function buildLaunchChecklist(): Promise<{
   let emailPwdDetail: string | null = null;
   if (!emailStatus.emailEnabled) {
     emailPwdSeverity = "required";
-    emailPwdDetail = "Включите EMAIL_ENABLED.";
+    emailPwdDetail = "Р’РєР»СЋС‡РёС‚Рµ EMAIL_ENABLED.";
   } else if (
     emailStatus.emailProvider === "none" ||
     emailStatus.emailProvider === ""
   ) {
     emailPwdSeverity = "required";
-    emailPwdDetail = "Задайте EMAIL_PROVIDER (smtp, resend или sendgrid).";
+    emailPwdDetail = "Р—Р°РґР°Р№С‚Рµ EMAIL_PROVIDER (smtp, resend РёР»Рё sendgrid).";
   } else if (emailStatus.emailProvider === "smtp" && !emailStatus.smtpConfigured) {
     emailPwdSeverity = "required";
-    emailPwdDetail = "Для SMTP задайте SMTP_HOST, SMTP_USER, SMTP_PASSWORD.";
+    emailPwdDetail = "Р”Р»СЏ SMTP Р·Р°РґР°Р№С‚Рµ SMTP_HOST, SMTP_USER, SMTP_PASSWORD.";
   } else if (
     emailStatus.emailProvider === "resend" &&
     !emailStatus.resendApiConfigured
   ) {
     emailPwdSeverity = "required";
-    emailPwdDetail = "Задайте RESEND_API_KEY.";
+    emailPwdDetail = "Р—Р°РґР°Р№С‚Рµ RESEND_API_KEY.";
   } else if (
     emailStatus.emailProvider === "sendgrid" &&
     !emailStatus.sendgridApiConfigured
   ) {
     emailPwdSeverity = "required";
-    emailPwdDetail = "Задайте SENDGRID_API_KEY.";
+    emailPwdDetail = "Р—Р°РґР°Р№С‚Рµ SENDGRID_API_KEY.";
   } else if (!pwdTpl?.isActive) {
     emailPwdSeverity = "warning";
     emailPwdDetail =
-      "Шаблон PASSWORD_RESET отсутствует или отключён — проверьте таблицу email_templates.";
+      "РЁР°Р±Р»РѕРЅ PASSWORD_RESET РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РёР»Рё РѕС‚РєР»СЋС‡С‘РЅ вЂ” РїСЂРѕРІРµСЂСЊС‚Рµ С‚Р°Р±Р»РёС†Сѓ email_templates.";
   }
   items.push(
     item(
       "email_password_reset",
       "Email password reset configured",
-      "Email для восстановления пароля настроен",
+      "Email РґР»СЏ РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ РїР°СЂРѕР»СЏ РЅР°СЃС‚СЂРѕРµРЅ",
       emailPwdSeverity,
       emailPwdDetail,
       "/admin/notifications",
@@ -815,15 +814,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "upload",
           "Upload endpoint works",
-          "Upload endpoint работает",
+          "Upload endpoint СЂР°Р±РѕС‚Р°РµС‚",
           "ok",
         )
       : item(
           "upload",
           "Upload endpoint works",
-          "Upload endpoint работает",
+          "Upload endpoint СЂР°Р±РѕС‚Р°РµС‚",
           "required",
-          "Хранилище не сконфигурировано для загрузок.",
+          "РҐСЂР°РЅРёР»РёС‰Рµ РЅРµ СЃРєРѕРЅС„РёРіСѓСЂРёСЂРѕРІР°РЅРѕ РґР»СЏ Р·Р°РіСЂСѓР·РѕРє.",
           "/admin/storage",
         ),
   );
@@ -834,15 +833,15 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "moderation",
           "Moderation enabled",
-          "Модерация включена",
+          "РњРѕРґРµСЂР°С†РёСЏ РІРєР»СЋС‡РµРЅР°",
           "ok",
         )
       : item(
           "moderation",
           "Moderation enabled",
-          "Модерация включена",
+          "РњРѕРґРµСЂР°С†РёСЏ РІРєР»СЋС‡РµРЅР°",
           "warning",
-          "MODERATION_ENABLED выключен.",
+          "MODERATION_ENABLED РІС‹РєР»СЋС‡РµРЅ.",
           "/admin/settings",
         ),
   );
@@ -854,10 +853,10 @@ export async function buildLaunchChecklist(): Promise<{
     item(
       "rate_limits",
       "Rate limits configured",
-      "Rate limits настроены",
+      "Rate limits РЅР°СЃС‚СЂРѕРµРЅС‹",
       rlSeverity,
       rlSeverity === "warning"
-        ? "Без Redis ограничения только в памяти процесса — для нескольких инстансов нужен REDIS_URL."
+        ? "Р‘РµР· Redis РѕРіСЂР°РЅРёС‡РµРЅРёСЏ С‚РѕР»СЊРєРѕ РІ РїР°РјСЏС‚Рё РїСЂРѕС†РµСЃСЃР° вЂ” РґР»СЏ РЅРµСЃРєРѕР»СЊРєРёС… РёРЅСЃС‚Р°РЅСЃРѕРІ РЅСѓР¶РµРЅ REDIS_URL."
         : null,
       rlSeverity === "warning" ? "/admin/settings" : null,
     ),
@@ -869,17 +868,17 @@ export async function buildLaunchChecklist(): Promise<{
       ? item(
           "health",
           "Healthcheck OK",
-          "/api/health работает",
+          "/api/health СЂР°Р±РѕС‚Р°РµС‚",
           "ok",
         )
       : item(
           "health",
           "Healthcheck OK",
-          "/api/health работает",
+          "/api/health СЂР°Р±РѕС‚Р°РµС‚",
           health.status === "error" ? "required" : "warning",
           health.status === "error"
-            ? "База данных недоступна."
-            : "Деградация (ожидается Redis для режима очереди redis).",
+            ? "Р‘Р°Р·Р° РґР°РЅРЅС‹С… РЅРµРґРѕСЃС‚СѓРїРЅР°."
+            : "Р”РµРіСЂР°РґР°С†РёСЏ (РѕР¶РёРґР°РµС‚СЃСЏ Redis РґР»СЏ СЂРµР¶РёРјР° РѕС‡РµСЂРµРґРё redis).",
           "/admin/settings",
         ),
   );

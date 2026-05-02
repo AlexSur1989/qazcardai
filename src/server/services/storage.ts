@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -35,14 +34,14 @@ let s3Client: S3Client | null = null;
 function requireEnv(name: string): string {
   const v = process.env[name]?.trim();
   if (!v) {
-    throw new StorageError("NOT_CONFIGURED", `Отсутствует ${name}`);
+    throw new StorageError("NOT_CONFIGURED", `РћС‚СЃСѓС‚СЃС‚РІСѓРµС‚ ${name}`);
   }
   return v;
 }
 
 /**
- * `true` — файлы в `public/uploads` (в development по умолчанию, без S3).
- * См. `src/lib/upload-storage-mode.ts`; для MinIO в dev: `UPLOAD_STORAGE=s3`.
+ * `true` вЂ” С„Р°Р№Р»С‹ РІ `public/uploads` (РІ development РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ, Р±РµР· S3).
+ * РЎРј. `src/lib/upload-storage-mode.ts`; РґР»СЏ MinIO РІ dev: `UPLOAD_STORAGE=s3`.
  */
 export { isLocalUploadStorageEffective as isLocalUploadStorageMode };
 
@@ -50,14 +49,14 @@ function assertLocalStorageAllowedInThisEnv(): void {
   if (process.env.NODE_ENV === "production") {
     throw new StorageError(
       "NOT_ALLOWED",
-      "UPLOAD_STORAGE=local запрещён в production. Настройте S3-совместимое хранилище.",
+      "UPLOAD_STORAGE=local Р·Р°РїСЂРµС‰С‘РЅ РІ production. РќР°СЃС‚СЂРѕР№С‚Рµ S3-СЃРѕРІРјРµСЃС‚РёРјРѕРµ С…СЂР°РЅРёР»РёС‰Рµ.",
     );
   }
 }
 
 /**
- * S3: все обязательные переменные заданы.
- * Локально: см. `isLocalUploadStorageEffective` (в dev по умолчанию).
+ * S3: РІСЃРµ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ РїРµСЂРµРјРµРЅРЅС‹Рµ Р·Р°РґР°РЅС‹.
+ * Р›РѕРєР°Р»СЊРЅРѕ: СЃРј. `isLocalUploadStorageEffective` (РІ dev РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ).
  */
 export function isStorageConfigured(): boolean {
   if (isLocalUploadStorageEffective()) {
@@ -133,7 +132,7 @@ const REQUIRED = [
 ] as const;
 
 function describeS3Error(e: unknown): string {
-  if (e == null) return "неизвестная ошибка";
+  if (e == null) return "РЅРµРёР·РІРµСЃС‚РЅР°СЏ РѕС€РёР±РєР°";
   if (typeof e === "object" && e !== null) {
     const x = e as {
       name?: string;
@@ -143,7 +142,7 @@ function describeS3Error(e: unknown): string {
     };
     const name = (x.name ?? x.Code) || "";
     const message = (x.message ?? "").trim();
-    if (name && message) return `${name} — ${message}`.slice(0, 500);
+    if (name && message) return `${name} вЂ” ${message}`.slice(0, 500);
     if (message) return message.slice(0, 500);
     if (name) return name;
   }
@@ -163,12 +162,12 @@ function hintForTlsMessage(detail: string): string {
     return detail;
   }
   if (process.env.S3_TLS_INSECURE?.trim() === "1") {
-    return `${detail} (S3_TLS_INSECURE уже включён — проверьте endpoint/порт и доверие к CA.)`;
+    return `${detail} (S3_TLS_INSECURE СѓР¶Рµ РІРєР»СЋС‡С‘РЅ вЂ” РїСЂРѕРІРµСЂСЊС‚Рµ endpoint/РїРѕСЂС‚ Рё РґРѕРІРµСЂРёРµ Рє CA.)`;
   }
   if (process.env.NODE_ENV === "development") {
-    return `${detail} — варианты: S3_TLS_INSECURE=1 (MinIO/self-signed, только dev) или уберите UPLOAD_STORAGE=s3, чтобы по умолчанию использовать файлы в public/uploads (без S3).`;
+    return `${detail} вЂ” РІР°СЂРёР°РЅС‚С‹: S3_TLS_INSECURE=1 (MinIO/self-signed, С‚РѕР»СЊРєРѕ dev) РёР»Рё СѓР±РµСЂРёС‚Рµ UPLOAD_STORAGE=s3, С‡С‚РѕР±С‹ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ С„Р°Р№Р»С‹ РІ public/uploads (Р±РµР· S3).`;
   }
-  return `${detail} — для MinIO/self-signed: S3_TLS_INSECURE=1 (только разработка).`;
+  return `${detail} вЂ” РґР»СЏ MinIO/self-signed: S3_TLS_INSECURE=1 (С‚РѕР»СЊРєРѕ СЂР°Р·СЂР°Р±РѕС‚РєР°).`;
 }
 
 function bucket(): string {
@@ -188,7 +187,7 @@ export function publicObjectUrl(key: string): string {
 function assertSafeLocalKey(key: string): void {
   const k = key.replace(/\\/g, "/").replace(/^\/+/, "");
   if (!k.startsWith("uploads/") || k.includes("..") || k.includes("\0")) {
-    throw new StorageError("UPLOAD", "Некорректный storage key");
+    throw new StorageError("UPLOAD", "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ storage key");
   }
 }
 
@@ -198,7 +197,7 @@ function localDiskPathFromKey(key: string): string {
 }
 
 /**
- * Публичный path для URL в БД: `/uploads/...` (только local storage).
+ * РџСѓР±Р»РёС‡РЅС‹Р№ path РґР»СЏ URL РІ Р‘Р”: `/uploads/...` (С‚РѕР»СЊРєРѕ local storage).
  */
 function localPublicPath(key: string): string {
   assertSafeLocalKey(key);
@@ -212,7 +211,7 @@ function localPublicPath(key: string): string {
 }
 
 /**
- * Загрузка: S3 или `public/uploads/...` при `UPLOAD_STORAGE=local` (только dev).
+ * Р—Р°РіСЂСѓР·РєР°: S3 РёР»Рё `public/uploads/...` РїСЂРё `UPLOAD_STORAGE=local` (С‚РѕР»СЊРєРѕ dev).
  */
 export async function uploadFile(
   buffer: Buffer,
@@ -236,7 +235,7 @@ export async function uploadFile(
     client = getClient();
   } catch (e) {
     if (e instanceof StorageError) throw e;
-    throw new StorageError("UNKNOWN", "S3: не удалось инициализировать клиент", {
+    throw new StorageError("UNKNOWN", "S3: РЅРµ СѓРґР°Р»РѕСЃСЊ РёРЅРёС†РёР°Р»РёР·РёСЂРѕРІР°С‚СЊ РєР»РёРµРЅС‚", {
       cause: e,
     });
   }
@@ -282,14 +281,14 @@ export async function uploadFromUrl(
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch (e) {
-    throw new StorageError("DOWNLOAD", "Не удалось скачать URL провайдера", {
+    throw new StorageError("DOWNLOAD", "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ URL РїСЂРѕРІР°Р№РґРµСЂР°", {
       cause: e,
     });
   }
   if (!res.ok) {
     throw new StorageError(
       "DOWNLOAD",
-      `HTTP ${res.status} при скачивании результата`,
+      `HTTP ${res.status} РїСЂРё СЃРєР°С‡РёРІР°РЅРёРё СЂРµР·СѓР»СЊС‚Р°С‚Р°`,
     );
   }
   const contentType =
@@ -304,7 +303,7 @@ export async function uploadFromUrl(
 }
 
 /**
- * S3: presigned GET. Local: абсолютный URL (файл отдаётся Next как static из /public).
+ * S3: presigned GET. Local: Р°Р±СЃРѕР»СЋС‚РЅС‹Р№ URL (С„Р°Р№Р» РѕС‚РґР°С‘С‚СЃСЏ Next РєР°Рє static РёР· /public).
  */
 export async function getSignedUrl(
   key: string,
@@ -336,7 +335,7 @@ export async function deleteFile(key: string): Promise<void> {
     } catch (e) {
       const err = e as { code?: string };
       if (err?.code === "ENOENT") return;
-      throw new StorageError("DELETE", "Локальное хранилище: не удалось удалить файл", {
+      throw new StorageError("DELETE", "Р›РѕРєР°Р»СЊРЅРѕРµ С…СЂР°РЅРёР»РёС‰Рµ: РЅРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ С„Р°Р№Р»", {
         cause: e,
       });
     }
@@ -356,7 +355,7 @@ export async function deleteFile(key: string): Promise<void> {
 }
 
 /**
- * Безопасная проверка чтения бакета (ListObjects, max 1) — для монитора, без Put/Delete.
+ * Р‘РµР·РѕРїР°СЃРЅР°СЏ РїСЂРѕРІРµСЂРєР° С‡С‚РµРЅРёСЏ Р±Р°РєРµС‚Р° (ListObjects, max 1) вЂ” РґР»СЏ РјРѕРЅРёС‚РѕСЂР°, Р±РµР· Put/Delete.
  */
 export async function probeS3BucketListAccess(): Promise<{
   ok: boolean;

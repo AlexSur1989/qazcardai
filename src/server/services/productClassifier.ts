@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import type { AiModel } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isMockKie } from "@/lib/kie-mock";
@@ -27,13 +26,13 @@ export type ClassifyProductResult = {
   reason: string;
   provider: string;
   model: string;
-  /** true → soft/fallback: UI позволяет ручной выбор */
+  /** true в†’ soft/fallback: UI РїРѕР·РІРѕР»СЏРµС‚ СЂСѓС‡РЅРѕР№ РІС‹Р±РѕСЂ */
   classifierFailed?: boolean;
 };
 
 const PARSE_FAIL_REASON = "Could not parse classifier response.";
 
-/** Валидный ID из списка или `other`. */
+/** Р’Р°Р»РёРґРЅС‹Р№ ID РёР· СЃРїРёСЃРєР° РёР»Рё `other`. */
 export function parseStrictProductCategoryId(raw: unknown): ProductCategoryId {
   if (typeof raw !== "string") return "other";
   const t = raw.trim();
@@ -73,7 +72,7 @@ function parseFailure(
 }
 
 /**
- * JSON из ответа (сырой текст или в ```json).
+ * JSON РёР· РѕС‚РІРµС‚Р° (СЃС‹СЂРѕР№ С‚РµРєСЃС‚ РёР»Рё РІ ```json).
  */
 function extractJsonString(raw: string): string {
   const t = raw.trim();
@@ -87,7 +86,7 @@ function extractJsonString(raw: string): string {
 
 type Validated = { category: ProductCategoryId; confidence: number; reason: string };
 
-/** null → невалидный корень (не object), тот же сценарий, что и JSON parse fail. */
+/** null в†’ РЅРµРІР°Р»РёРґРЅС‹Р№ РєРѕСЂРµРЅСЊ (РЅРµ object), С‚РѕС‚ Р¶Рµ СЃС†РµРЅР°СЂРёР№, С‡С‚Рѕ Рё JSON parse fail. */
 function validateClassifierJson(parsed: unknown): Validated | null {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return null;
@@ -276,7 +275,7 @@ function normalizeLegacyProvider(raw: string | undefined | null): string {
   return (raw ?? "").trim().toLowerCase();
 }
 
-/** Пустое значение или явные алиасы → вызов Kie OpenAI-compatible chat. */
+/** РџСѓСЃС‚РѕРµ Р·РЅР°С‡РµРЅРёРµ РёР»Рё СЏРІРЅС‹Рµ Р°Р»РёР°СЃС‹ в†’ РІС‹Р·РѕРІ Kie OpenAI-compatible chat. */
 function shouldUseKieClassifier(legacyProvider: string): boolean {
   return (
     legacyProvider === "" ||
@@ -292,7 +291,7 @@ function mockExplicit(): ClassifyProductResult {
     category: "other",
     confidence: 0.5,
     reason:
-      "Включён тестовый классификатор (PRODUCT_CLASSIFIER_PROVIDER=mock). Выберите категорию вручную при необходимости.",
+      "Р’РєР»СЋС‡С‘РЅ С‚РµСЃС‚РѕРІС‹Р№ РєР»Р°СЃСЃРёС„РёРєР°С‚РѕСЂ (PRODUCT_CLASSIFIER_PROVIDER=mock). Р’С‹Р±РµСЂРёС‚Рµ РєР°С‚РµРіРѕСЂРёСЋ РІСЂСѓС‡РЅСѓСЋ РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё.",
     provider: "mock",
     model: "mock",
   };
@@ -303,7 +302,7 @@ function mockClassifierModelMissing(): ClassifyProductResult {
     category: "other",
     confidence: 0,
     reason:
-      "Модель классификатора карточки товара не настроена. Обратитесь к администратору.",
+      "РњРѕРґРµР»СЊ РєР»Р°СЃСЃРёС„РёРєР°С‚РѕСЂР° РєР°СЂС‚РѕС‡РєРё С‚РѕРІР°СЂР° РЅРµ РЅР°СЃС‚СЂРѕРµРЅР°. РћР±СЂР°С‚РёС‚РµСЃСЊ Рє Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ.",
     provider: "mock",
     model: "mock",
     classifierFailed: true,
@@ -315,7 +314,7 @@ function mockMissingKieKey(): ClassifyProductResult {
     category: "other",
     confidence: 0,
     reason:
-      "Не задан KIE_API_KEY — классификация через Kie.ai недоступна. Укажите ключ в окружении или включите тестовый режим (PRODUCT_CLASSIFIER_PROVIDER=mock).",
+      "РќРµ Р·Р°РґР°РЅ KIE_API_KEY вЂ” РєР»Р°СЃСЃРёС„РёРєР°С†РёСЏ С‡РµСЂРµР· Kie.ai РЅРµРґРѕСЃС‚СѓРїРЅР°. РЈРєР°Р¶РёС‚Рµ РєР»СЋС‡ РІ РѕРєСЂСѓР¶РµРЅРёРё РёР»Рё РІРєР»СЋС‡РёС‚Рµ С‚РµСЃС‚РѕРІС‹Р№ СЂРµР¶РёРј (PRODUCT_CLASSIFIER_PROVIDER=mock).",
     provider: "mock",
     model: "mock",
     classifierFailed: true,
@@ -333,7 +332,7 @@ async function readLegacyClassifierEnv(): Promise<{ provider: string; model: str
       select: { value: true },
     }),
   ]);
-  /** Env имеет приоритет над AppSetting: в админке мог остаться mock, в .env — kie_gemini. */
+  /** Env РёРјРµРµС‚ РїСЂРёРѕСЂРёС‚РµС‚ РЅР°Рґ AppSetting: РІ Р°РґРјРёРЅРєРµ РјРѕРі РѕСЃС‚Р°С‚СЊСЃСЏ mock, РІ .env вЂ” kie_gemini. */
   const envP = (process.env.PRODUCT_CLASSIFIER_PROVIDER ?? "").trim();
   const envM = (process.env.PRODUCT_CLASSIFIER_MODEL ?? "").trim();
   const dbP =
@@ -405,15 +404,15 @@ function kieClassifierHttpError(body: unknown, status: number): string {
     if (err && typeof err === "object" && !Array.isArray(err)) {
       const m = (err as Record<string, unknown>).message;
       if (typeof m === "string" && m.trim()) {
-        return `Ошибка Kie.ai (${status}): ${m.trim().slice(0, 400)}`;
+        return `РћС€РёР±РєР° Kie.ai (${status}): ${m.trim().slice(0, 400)}`;
       }
     }
     const msg = o.message ?? o.msg;
     if (typeof msg === "string" && msg.trim()) {
-      return `Ошибка Kie.ai (${status}): ${msg.trim().slice(0, 400)}`;
+      return `РћС€РёР±РєР° Kie.ai (${status}): ${msg.trim().slice(0, 400)}`;
     }
   }
-  return `Запрос к классификатору Kie.ai завершился с кодом ${status}. Выберите категорию вручную.`;
+  return `Р—Р°РїСЂРѕСЃ Рє РєР»Р°СЃСЃРёС„РёРєР°С‚РѕСЂСѓ Kie.ai Р·Р°РІРµСЂС€РёР»СЃСЏ СЃ РєРѕРґРѕРј ${status}. Р’С‹Р±РµСЂРёС‚Рµ РєР°С‚РµРіРѕСЂРёСЋ РІСЂСѓС‡РЅСѓСЋ.`;
 }
 
 async function classifyProductImageKie(
@@ -432,7 +431,7 @@ async function classifyProductImageKie(
     const v = validateClassifierJson({
       category: "other",
       confidence: 0.85,
-      reason: "MOCK_KIE: ответ эмулирован без запроса к Kie.ai.",
+      reason: "MOCK_KIE: РѕС‚РІРµС‚ СЌРјСѓР»РёСЂРѕРІР°РЅ Р±РµР· Р·Р°РїСЂРѕСЃР° Рє Kie.ai.",
     });
     if (!v) return parseFailure("kie_ai", displayModel, true);
     return { ...v, provider: "kie_ai", model: displayModel };
@@ -443,7 +442,7 @@ async function classifyProductImageKie(
     return mockMissingKieKey();
   }
 
-  /** Kie.ai качает `image_url` снаружи — localhost/приватные URL дают 403. Вшиваем base64, как у OpenAI. */
+  /** Kie.ai РєР°С‡Р°РµС‚ `image_url` СЃРЅР°СЂСѓР¶Рё вЂ” localhost/РїСЂРёРІР°С‚РЅС‹Рµ URL РґР°СЋС‚ 403. Р’С€РёРІР°РµРј base64, РєР°Рє Сѓ OpenAI. */
   let vision: { mime: string; base64: string };
   try {
     vision = await readImageForVision(imageUrl);
@@ -452,7 +451,7 @@ async function classifyProductImageKie(
       category: "other",
       confidence: 0,
       reason:
-        "Не удалось прочитать фото для классификации (проверьте, что файл доступен с сервера приложения).",
+        "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ С„РѕС‚Рѕ РґР»СЏ РєР»Р°СЃСЃРёС„РёРєР°С†РёРё (РїСЂРѕРІРµСЂСЊС‚Рµ, С‡С‚Рѕ С„Р°Р№Р» РґРѕСЃС‚СѓРїРµРЅ СЃ СЃРµСЂРІРµСЂР° РїСЂРёР»РѕР¶РµРЅРёСЏ).",
       provider: "kie_ai",
       model: displayModel,
       classifierFailed: true,
@@ -537,7 +536,7 @@ async function classifyProductImageKie(
       return {
         category: "other",
         confidence: 0,
-        reason: "Пустой ответ классификатора Kie.ai.",
+        reason: "РџСѓСЃС‚РѕР№ РѕС‚РІРµС‚ РєР»Р°СЃСЃРёС„РёРєР°С‚РѕСЂР° Kie.ai.",
         provider: "kie_ai",
         model: displayModel,
         classifierFailed: true,
@@ -553,7 +552,7 @@ async function classifyProductImageKie(
     return out;
   } catch (e) {
     const msg =
-      e instanceof Error ? e.message : "Сетевая ошибка при обращении к Kie.ai.";
+      e instanceof Error ? e.message : "РЎРµС‚РµРІР°СЏ РѕС€РёР±РєР° РїСЂРё РѕР±СЂР°С‰РµРЅРёРё Рє Kie.ai.";
     await createApiLog({
       provider: "KIE_AI",
       endpoint: endpointForLog,
@@ -566,7 +565,7 @@ async function classifyProductImageKie(
       category: "other",
       confidence: 0,
       reason:
-        "Не удалось связаться с классификатором Kie.ai. Повторите попытку или выберите категорию вручную.",
+        "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРІСЏР·Р°С‚СЊСЃСЏ СЃ РєР»Р°СЃСЃРёС„РёРєР°С‚РѕСЂРѕРј Kie.ai. РџРѕРІС‚РѕСЂРёС‚Рµ РїРѕРїС‹С‚РєСѓ РёР»Рё РІС‹Р±РµСЂРёС‚Рµ РєР°С‚РµРіРѕСЂРёСЋ РІСЂСѓС‡РЅСѓСЋ.",
       provider: "kie_ai",
       model: displayModel,
       classifierFailed: true,
@@ -575,7 +574,7 @@ async function classifyProductImageKie(
 }
 
 /**
- * Классификация по URL изображения (только бэкенд; ключи и base64 в логи не пишем).
+ * РљР»Р°СЃСЃРёС„РёРєР°С†РёСЏ РїРѕ URL РёР·РѕР±СЂР°Р¶РµРЅРёСЏ (С‚РѕР»СЊРєРѕ Р±СЌРєРµРЅРґ; РєР»СЋС‡Рё Рё base64 РІ Р»РѕРіРё РЅРµ РїРёС€РµРј).
  */
 export async function classifyProductImage(
   imageUrl: string,
@@ -641,7 +640,7 @@ export async function classifyProductImage(
         category: "other",
         confidence: 0,
         reason:
-          "Активная модель классификатора в каталоге не относится к Kie.ai — проверьте настройки.",
+          "РђРєС‚РёРІРЅР°СЏ РјРѕРґРµР»СЊ РєР»Р°СЃСЃРёС„РёРєР°С‚РѕСЂР° РІ РєР°С‚Р°Р»РѕРіРµ РЅРµ РѕС‚РЅРѕСЃРёС‚СЃСЏ Рє Kie.ai вЂ” РїСЂРѕРІРµСЂСЊС‚Рµ РЅР°СЃС‚СЂРѕР№РєРё.",
         provider: "unknown",
         model: aiModel.slug,
         classifierFailed: true,

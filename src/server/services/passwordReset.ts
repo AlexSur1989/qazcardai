@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import { createHash, randomBytes } from "crypto";
 
 import { writeAdminAuditLog } from "@/lib/admin-audit";
@@ -10,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { sendTemplateEmail } from "@/server/services/emailService";
 
 const RESET_MESSAGE =
-  "Если аккаунт с таким email существует, мы отправили ссылку для восстановления пароля.";
+  "Р•СЃР»Рё Р°РєРєР°СѓРЅС‚ СЃ С‚Р°РєРёРј email СЃСѓС‰РµСЃС‚РІСѓРµС‚, РјС‹ РѕС‚РїСЂР°РІРёР»Рё СЃСЃС‹Р»РєСѓ РґР»СЏ РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ РїР°СЂРѕР»СЏ.";
 
 const EXPIRES_MIN = 30;
 
@@ -28,14 +27,14 @@ function buildResetUrl(rawToken: string, publicBaseUrl?: string | null): string 
 }
 
 /**
- * Создаёт токен и отправляет письмо. Не раскрывает существование email в ответе.
- * В dev при NODE_ENV !== production возвращает devResetUrl (только при найденном user).
+ * РЎРѕР·РґР°С‘С‚ С‚РѕРєРµРЅ Рё РѕС‚РїСЂР°РІР»СЏРµС‚ РїРёСЃСЊРјРѕ. РќРµ СЂР°СЃРєСЂС‹РІР°РµС‚ СЃСѓС‰РµСЃС‚РІРѕРІР°РЅРёРµ email РІ РѕС‚РІРµС‚Рµ.
+ * Р’ dev РїСЂРё NODE_ENV !== production РІРѕР·РІСЂР°С‰Р°РµС‚ devResetUrl (С‚РѕР»СЊРєРѕ РїСЂРё РЅР°Р№РґРµРЅРЅРѕРј user).
  */
 export async function requestPasswordReset(input: {
   email: string;
   ipAddress: string | null;
   userAgent: string | null;
-  /** Origin запроса к API (например http://localhost:3099) — чтобы ссылка в письме совпадала с портом dev-сервера */
+  /** Origin Р·Р°РїСЂРѕСЃР° Рє API (РЅР°РїСЂРёРјРµСЂ http://localhost:3099) вЂ” С‡С‚РѕР±С‹ СЃСЃС‹Р»РєР° РІ РїРёСЃСЊРјРµ СЃРѕРІРїР°РґР°Р»Р° СЃ РїРѕСЂС‚РѕРј dev-СЃРµСЂРІРµСЂР° */
   publicBaseUrl?: string | null;
 }): Promise<{
   publicMessage: string;
@@ -115,7 +114,7 @@ export type ResetPasswordResult =
     };
 
 /**
- * Сброс пароля по сырому токену из ссылки. Токен не логируем.
+ * РЎР±СЂРѕСЃ РїР°СЂРѕР»СЏ РїРѕ СЃС‹СЂРѕРјСѓ С‚РѕРєРµРЅСѓ РёР· СЃСЃС‹Р»РєРё. РўРѕРєРµРЅ РЅРµ Р»РѕРіРёСЂСѓРµРј.
  */
 export async function resetPassword(input: {
   token: string;
@@ -126,14 +125,14 @@ export async function resetPassword(input: {
     return {
       ok: false,
       code: "password_mismatch",
-      message: "Пароли не совпадают.",
+      message: "РџР°СЂРѕР»Рё РЅРµ СЃРѕРІРїР°РґР°СЋС‚.",
     };
   }
   if (input.newPassword.length < 8) {
     return {
       ok: false,
       code: "password_short",
-      message: "Пароль должен быть не короче 8 символов.",
+      message: "РџР°СЂРѕР»СЊ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РєРѕСЂРѕС‡Рµ 8 СЃРёРјРІРѕР»РѕРІ.",
     };
   }
 
@@ -142,7 +141,7 @@ export async function resetPassword(input: {
     return {
       ok: false,
       code: "invalid_token",
-      message: "Ссылка восстановления недействительна или истекла.",
+      message: "РЎСЃС‹Р»РєР° РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ РЅРµРґРµР№СЃС‚РІРёС‚РµР»СЊРЅР° РёР»Рё РёСЃС‚РµРєР»Р°.",
     };
   }
 
@@ -156,7 +155,7 @@ export async function resetPassword(input: {
     return {
       ok: false,
       code: "invalid_token",
-      message: "Ссылка восстановления недействительна или истекла.",
+      message: "РЎСЃС‹Р»РєР° РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ РЅРµРґРµР№СЃС‚РІРёС‚РµР»СЊРЅР° РёР»Рё РёСЃС‚РµРєР»Р°.",
     };
   }
 
@@ -192,7 +191,7 @@ export async function resetPassword(input: {
 
   return {
     ok: true,
-    message: "Пароль успешно изменен. Теперь вы можете войти.",
+    message: "РџР°СЂРѕР»СЊ СѓСЃРїРµС€РЅРѕ РёР·РјРµРЅРµРЅ. РўРµРїРµСЂСЊ РІС‹ РјРѕР¶РµС‚Рµ РІРѕР№С‚Рё.",
   };
 }
 

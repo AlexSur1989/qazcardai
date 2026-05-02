@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import type { UserTokenPackageStatus } from "@/generated/prisma/enums";
 import { Prisma, type TokenPackage } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -13,7 +12,7 @@ const COMPLETED: UserTokenPackageStatus = "COMPLETED";
 type Tx = Prisma.TransactionClient;
 
 /**
- * Idempotent: при том же paymentId запись не дублируется (для повторов webhook).
+ * Idempotent: РїСЂРё С‚РѕРј Р¶Рµ paymentId Р·Р°РїРёСЃСЊ РЅРµ РґСѓР±Р»РёСЂСѓРµС‚СЃСЏ (РґР»СЏ РїРѕРІС‚РѕСЂРѕРІ webhook).
  */
 export async function createUserTokenPackageInTransaction(
   tx: Tx,
@@ -51,7 +50,7 @@ export async function createUserTokenPackageInTransaction(
 }
 
 /**
- * Начисление токенов + CreditTransaction + UserTokenPackage (после подтверждённого платежа).
+ * РќР°С‡РёСЃР»РµРЅРёРµ С‚РѕРєРµРЅРѕРІ + CreditTransaction + UserTokenPackage (РїРѕСЃР»Рµ РїРѕРґС‚РІРµСЂР¶РґС‘РЅРЅРѕРіРѕ РїР»Р°С‚РµР¶Р°).
  */
 export async function purchaseTokenPackageInTransaction(
   tx: Tx,
@@ -105,7 +104,7 @@ export async function getUserTokenPackageHistory(userId: string, take = 100) {
 }
 
 /**
- * Ручное начисление: баланс, PURCHASE, UserTokenPackage, AdminAuditLog в одной транзакции.
+ * Р СѓС‡РЅРѕРµ РЅР°С‡РёСЃР»РµРЅРёРµ: Р±Р°Р»Р°РЅСЃ, PURCHASE, UserTokenPackage, AdminAuditLog РІ РѕРґРЅРѕР№ С‚СЂР°РЅР·Р°РєС†РёРё.
  */
 export async function grantTokenPackageToUser(args: {
   userId: string;

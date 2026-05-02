@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import { getAppName } from "@/lib/app-name";
 import { getAppBaseUrl } from "@/lib/app-base-url";
 import { getAppSetting } from "@/server/services/appSettings";
@@ -14,7 +13,7 @@ import {
 import { prisma } from "@/lib/prisma";
 
 /**
- * Best-effort; не бросать наружу.
+ * Best-effort; РЅРµ Р±СЂРѕСЃР°С‚СЊ РЅР°СЂСѓР¶Сѓ.
  */
 export async function trySendWelcomeEmailForNewUser(input: { userId: string }) {
   try {
@@ -143,7 +142,7 @@ export async function trySendGenerationFailedEmail(generationId: string) {
 }
 
 /**
- * Вызвать после списания резерва, если баланс под порогом.
+ * Р’С‹Р·РІР°С‚СЊ РїРѕСЃР»Рµ СЃРїРёСЃР°РЅРёСЏ СЂРµР·РµСЂРІР°, РµСЃР»Рё Р±Р°Р»Р°РЅСЃ РїРѕРґ РїРѕСЂРѕРіРѕРј.
  */
 export async function trySendLowBalanceEmail(userId: string) {
   try {

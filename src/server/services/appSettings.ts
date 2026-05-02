@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import type { Prisma } from "@/generated/prisma/client";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
 import {
@@ -142,7 +141,7 @@ export async function getAllAppSettingsForAdminResponse(): Promise<{
 }
 
 /**
- * Создать в БД только отсутствующие записи реестра (без перезаписи).
+ * РЎРѕР·РґР°С‚СЊ РІ Р‘Р” С‚РѕР»СЊРєРѕ РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‰РёРµ Р·Р°РїРёСЃРё СЂРµРµСЃС‚СЂР° (Р±РµР· РїРµСЂРµР·Р°РїРёСЃРё).
  */
 export async function ensureDefaultAppSettings(
   adminUserId: string,
@@ -238,7 +237,7 @@ export async function getMaintenanceFlags(): Promise<{
     message:
       typeof message === "string" && message.trim()
         ? message
-        : "Сервис временно недоступен. Мы скоро вернемся.",
+        : "РЎРµСЂРІРёСЃ РІСЂРµРјРµРЅРЅРѕ РЅРµРґРѕСЃС‚СѓРїРµРЅ. РњС‹ СЃРєРѕСЂРѕ РІРµСЂРЅРµРјСЃСЏ.",
     allowAdmin: allowAdmin !== false,
   };
 }

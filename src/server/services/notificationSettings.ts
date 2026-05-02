@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import { getRegistryEntry } from "@/config/app-settings-registry";
 import { validateAppSettingValueForType } from "@/lib/app-setting-value";
 import { getAppSettingsByGroup, setAppSettingFromRegistry } from "@/server/services/appSettings";
@@ -31,7 +30,7 @@ function normalizeProvider(v: unknown): string {
 }
 
 /**
- * Снимок настроек уведомлений + env (без секретов) для admin API.
+ * РЎРЅРёРјРѕРє РЅР°СЃС‚СЂРѕРµРє СѓРІРµРґРѕРјР»РµРЅРёР№ + env (Р±РµР· СЃРµРєСЂРµС‚РѕРІ) РґР»СЏ admin API.
  */
 export async function getNotificationAdminState() {
   const group = await getAppSettingsByGroup("notifications");

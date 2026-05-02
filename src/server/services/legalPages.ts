@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 import { writeAdminAuditLog } from "@/lib/admin-audit";
 import {
   isLegalPageSlug,
@@ -217,7 +216,7 @@ export type EnsureDefaultsResult = {
 };
 
 /**
- * Создаёт отсутствующие страницы с черновиком. Не перезаписывает существующие записи.
+ * РЎРѕР·РґР°С‘С‚ РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‰РёРµ СЃС‚СЂР°РЅРёС†С‹ СЃ С‡РµСЂРЅРѕРІРёРєРѕРј. РќРµ РїРµСЂРµР·Р°РїРёСЃС‹РІР°РµС‚ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёРµ Р·Р°РїРёСЃРё.
  */
 export async function ensureDefaultLegalPages(): Promise<EnsureDefaultsResult> {
   const createdSlugs: string[] = [];

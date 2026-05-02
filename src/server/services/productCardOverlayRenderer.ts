@@ -1,5 +1,4 @@
-import "server-only";
-
+﻿
 export type ProductCardOverlayInput = {
   template: string;
   cardSize: string;
@@ -34,11 +33,11 @@ export function buildMarketplaceCardOverlaySpec(input: ProductCardOverlayInput) 
 
 export function renderMarketplaceCardOverlaySvg(input: ProductCardOverlayInput): string {
   const spec = buildMarketplaceCardOverlaySpec(input);
-  const title = escapeXml(spec.text.title || "Название товара");
+  const title = escapeXml(spec.text.title || "РќР°Р·РІР°РЅРёРµ С‚РѕРІР°СЂР°");
   const extraText = escapeXml(spec.text.extraText);
   const benefits = spec.text.benefits.map(escapeXml);
   const benefitRows = benefits
-    .map((benefit, idx) => `<text x="70" y="${760 + idx * 42}" font-size="28" fill="#12323a">• ${benefit}</text>`)
+    .map((benefit, idx) => `<text x="70" y="${760 + idx * 42}" font-size="28" fill="#12323a">вЂў ${benefit}</text>`)
     .join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
   <defs>
