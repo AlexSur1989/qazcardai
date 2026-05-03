@@ -1,4 +1,4 @@
-﻿
+
 import type { Prisma } from "@/generated/prisma/client";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
 import { prisma } from "@/lib/prisma";
@@ -91,78 +91,78 @@ const DEFAULTS: Record<
   { name: string; subject: string; bodyText: string; bodyHtml?: string }
 > = {
   WELCOME_USER: {
-    name: "РџСЂРёРІРµС‚СЃС‚РІРёРµ / Welcome",
-    subject: "Р”РѕР±СЂРѕ РїРѕР¶Р°Р»РѕРІР°С‚СЊ РІ QazCard AI",
+    name: "Приветствие / Welcome",
+    subject: "Добро пожаловать в QazCard AI",
     bodyText:
-      "Р—РґСЂР°РІСЃС‚РІСѓР№С‚Рµ, {{userName}}!\n\n" +
-      "РЎРїР°СЃРёР±Рѕ Р·Р° СЂРµРіРёСЃС‚СЂР°С†РёСЋ РІ {{appName}}. Р’Р°С€ email: {{userEmail}}.\n\n" +
-      "РџРµСЂРµР№РґРёС‚Рµ РІ РєР°Р±РёРЅРµС‚: {{dashboardUrl}}\n\n" +
-      "вЂ” РљРѕРјР°РЅРґР° {{appName}}",
+      "Здравствуйте, {{userName}}!\n\n" +
+      "Спасибо за регистрацию в {{appName}}. Ваш email: {{userEmail}}.\n\n" +
+      "Перейдите в кабинет: {{dashboardUrl}}\n\n" +
+      "— Команда {{appName}}",
   },
   PAYMENT_SUCCESS: {
-    name: "РЈСЃРїРµС€РЅР°СЏ РѕРїР»Р°С‚Р° / Payment success",
-    subject: "РџР°РєРµС‚ С‚РѕРєРµРЅРѕРІ СѓСЃРїРµС€РЅРѕ Р°РєС‚РёРІРёСЂРѕРІР°РЅ",
+    name: "Успешная оплата / Payment success",
+    subject: "Пакет токенов успешно активирован",
     bodyText:
-      "{{userName}}, РїР°РєРµС‚ В«{{packageName}}В» Р°РєС‚РёРІРёСЂРѕРІР°РЅ.\n" +
-      "РќР°С‡РёСЃР»РµРЅРѕ С‚РѕРєРµРЅРѕРІ: {{credits}}. РЎСѓРјРјР°: {{amount}} {{currency}}.\n" +
-      "РўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ: {{balanceCredits}}.\n\n" +
-      "РСЃС‚РѕСЂРёСЏ: {{billingUrl}}\n\n" +
-      "вЂ” {{appName}}",
+      "{{userName}}, пакет «{{packageName}}» активирован.\n" +
+      "Начислено токенов: {{credits}}. Сумма: {{amount}} {{currency}}.\n" +
+      "Текущий баланс: {{balanceCredits}}.\n\n" +
+      "История: {{billingUrl}}\n\n" +
+      "— {{appName}}",
   },
   GENERATION_COMPLETED: {
-    name: "Р“РµРЅРµСЂР°С†РёСЏ РіРѕС‚РѕРІР° / Generation completed",
-    subject: "Р“РµРЅРµСЂР°С†РёСЏ Р·Р°РІРµСЂС€РµРЅР°",
+    name: "Генерация готова / Generation completed",
+    subject: "Генерация завершена",
     bodyText:
-      "Р—РґСЂР°РІСЃС‚РІСѓР№С‚Рµ, {{userName}}!\n\n" +
-      "Р“РµРЅРµСЂР°С†РёСЏ ({{generationType}}) РЅР° РјРѕРґРµР»Рё В«{{modelName}}В» Р·Р°РІРµСЂС€РµРЅР°.\n" +
+      "Здравствуйте, {{userName}}!\n\n" +
+      "Генерация ({{generationType}}) на модели «{{modelName}}» завершена.\n" +
       "ID: {{generationId}}\n" +
-      "Р‘Р°Р»Р°РЅСЃ: {{balanceCredits}} С‚РѕРєРµРЅРѕРІ.\n\n" +
-      "РћС‚РєСЂС‹С‚СЊ: {{dashboardUrl}}\n",
+      "Баланс: {{balanceCredits}} токенов.\n\n" +
+      "Открыть: {{dashboardUrl}}\n",
   },
   GENERATION_FAILED: {
-    name: "РћС€РёР±РєР° РіРµРЅРµСЂР°С†РёРё / Generation failed",
-    subject: "Р“РµРЅРµСЂР°С†РёСЏ Р·Р°РІРµСЂС€РёР»Р°СЃСЊ СЃ РѕС€РёР±РєРѕР№",
+    name: "Ошибка генерации / Generation failed",
+    subject: "Генерация завершилась с ошибкой",
     bodyText:
-      "{{userName}}, Рє СЃРѕР¶Р°Р»РµРЅРёСЋ, РіРµРЅРµСЂР°С†РёСЏ ({{generationType}}) РЅРµ СѓРґР°Р»Р°СЃСЊ.\n" +
+      "{{userName}}, к сожалению, генерация ({{generationType}}) не удалась.\n" +
       "ID: {{generationId}}\n" +
-      "РњРѕРґРµР»СЊ: {{modelName}}\n" +
-      "РЎРѕРѕР±С‰РµРЅРёРµ: {{errorMessage}}\n\n" +
-      "РљР°Р±РёРЅРµС‚: {{dashboardUrl}}\n",
+      "Модель: {{modelName}}\n" +
+      "Сообщение: {{errorMessage}}\n\n" +
+      "Кабинет: {{dashboardUrl}}\n",
   },
   LOW_BALANCE: {
-    name: "РќРёР·РєРёР№ Р±Р°Р»Р°РЅСЃ / Low balance",
-    subject: "РЈ РІР°СЃ Р·Р°РєР°РЅС‡РёРІР°СЋС‚СЃСЏ С‚РѕРєРµРЅС‹",
+    name: "Низкий баланс / Low balance",
+    subject: "У вас заканчиваются токены",
     bodyText:
-      "{{userName}}, Р±Р°Р»Р°РЅСЃ: {{balanceCredits}} С‚РѕРєРµРЅРѕРІ вЂ” СЂРµРєРѕРјРµРЅРґСѓРµРј РїРѕРїРѕР»РЅРёС‚СЊ.\n" +
-      "РљР°Р±РёРЅРµС‚: {{dashboardUrl}} В· РћРїР»Р°С‚Р°: {{billingUrl}}\n",
+      "{{userName}}, баланс: {{balanceCredits}} токенов — рекомендуем пополнить.\n" +
+      "Кабинет: {{dashboardUrl}} · Оплата: {{billingUrl}}\n",
   },
   ADMIN_PROVIDER_ERROR: {
-    name: "РђРґРјРёРЅ: РѕС€РёР±РєР° РїСЂРѕРІР°Р№РґРµСЂР° / Admin provider error",
-    subject: "РћС€РёР±РєР° РїСЂРѕРІР°Р№РґРµСЂР° Kie.ai",
+    name: "Админ: ошибка провайдера / Admin provider error",
+    subject: "Ошибка провайдера Kie.ai",
     bodyText:
-      "РџСЂРѕРІРµСЂРєР° РїСЂРѕРІР°Р№РґРµСЂР° Р·Р°РІРµСЂС€РёР»Р°СЃСЊ СЃ РѕС€РёР±РєРѕР№.\n" +
+      "Проверка провайдера завершилась с ошибкой.\n" +
       "{{errorMessage}}\n" +
-      "Р’СЂРµРјСЏ: {{createdAt}} В· {{appName}}",
+      "Время: {{createdAt}} · {{appName}}",
   },
   ADMIN_WORKER_ERROR: {
-    name: "РђРґРјРёРЅ: РѕС€РёР±РєР° worker / Admin worker error",
-    subject: "РћС€РёР±РєР° worker/РѕС‡РµСЂРµРґРё РіРµРЅРµСЂР°С†РёР№",
+    name: "Админ: ошибка worker / Admin worker error",
+    subject: "Ошибка worker/очереди генераций",
     bodyText:
-      "РћС‡РµСЂРµРґСЊ РіРµРЅРµСЂР°С†РёР№: job РёСЃС‡РµСЂРїР°Р» СЂРµС‚СЂР°Рё.\n" +
+      "Очередь генераций: job исчерпал ретраи.\n" +
       "Generation ID: {{generationId}}\n" +
       "{{errorMessage}}\n" +
-      "Р’СЂРµРјСЏ: {{createdAt}}",
+      "Время: {{createdAt}}",
   },
   PASSWORD_RESET: {
-    name: "Password reset / Р’РѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёРµ РїР°СЂРѕР»СЏ",
-    subject: "Р’РѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёРµ РїР°СЂРѕР»СЏ QazCard AI",
+    name: "Password reset / Восстановление пароля",
+    subject: "Восстановление пароля QazCard AI",
     bodyText:
-      "Р—РґСЂР°РІСЃС‚РІСѓР№С‚Рµ!\n\n" +
-      "РњС‹ РїРѕР»СѓС‡РёР»Рё Р·Р°РїСЂРѕСЃ РЅР° РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёРµ РїР°СЂРѕР»СЏ РґР»СЏ Р°РєРєР°СѓРЅС‚Р° QazCard AI.\n\n" +
-      "РџРµСЂРµР№РґРёС‚Рµ РїРѕ СЃСЃС‹Р»РєРµ, С‡С‚РѕР±С‹ Р·Р°РґР°С‚СЊ РЅРѕРІС‹Р№ РїР°СЂРѕР»СЊ:\n" +
+      "Здравствуйте!\n\n" +
+      "Мы получили запрос на восстановление пароля для аккаунта QazCard AI.\n\n" +
+      "Перейдите по ссылке, чтобы задать новый пароль:\n" +
       "{{resetUrl}}\n\n" +
-      "РЎСЃС‹Р»РєР° РґРµР№СЃС‚РІСѓРµС‚ {{expiresInMinutes}} РјРёРЅСѓС‚.\n\n" +
-      "Р•СЃР»Рё РІС‹ РЅРµ Р·Р°РїСЂР°С€РёРІР°Р»Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёРµ РїР°СЂРѕР»СЏ, РїСЂРѕСЃС‚Рѕ РїСЂРѕРёРіРЅРѕСЂРёСЂСѓР№С‚Рµ СЌС‚Рѕ РїРёСЃСЊРјРѕ.\n",
+      "Ссылка действует {{expiresInMinutes}} минут.\n\n" +
+      "Если вы не запрашивали восстановление пароля, просто проигнорируйте это письмо.\n",
   },
 };
 
@@ -179,7 +179,7 @@ export function isEmailTemplateKey(k: string): k is EmailTemplateKey {
 const VAR_RE = /\{\{(\w+)\}\}/g;
 
 /**
- * РџРѕРґСЃС‚Р°РІР»СЏРµС‚ `{{name}}` РёР· СЃР»РѕРІР°СЂСЏ; РЅРµРёР·РІРµСЃС‚РЅС‹Рµ вЂ” РїСѓСЃС‚Р°СЏ СЃС‚СЂРѕРєР°. Р‘РµР· eval.
+ * Подставляет `{{name}}` РёР· словаря; неизвестные — пустая строка. Без eval.
  */
 export function renderEmailTemplateString(
   template: string,
@@ -203,7 +203,7 @@ export type RenderEmailTemplateResult = {
 };
 
 /**
- * Р’РѕР·РІСЂР°С‰Р°РµС‚ РѕС‚СЂРµРЅРґРµСЂРµРЅРЅС‹Рµ РїРѕР»СЏ; РµСЃР»Рё bodyHtml РїСѓСЃС‚, РґСѓР±Р»РёСЂСѓРµС‚ text c СЌРєСЂР°РЅРёСЂРѕРІР°РЅРёРµРј.
+ * Возвращает отрендеренные поля; если bodyHtml пуст, дублирует text c экранированием.
  */
 export async function renderEmailTemplate(args: {
   key: EmailTemplateKey;

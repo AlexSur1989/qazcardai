@@ -1,5 +1,5 @@
-﻿
-/** Р­РјСѓР»СЏС†РёСЏ РїСЂРѕРІР°Р№РґРµСЂР° Kie Р±РµР· СЃРµС‚РµРІС‹С… РІС‹Р·РѕРІРѕРІ (MOCK_KIE=true). */
+
+/** Эмуляция провайдера Kie без сетевых вызовов (MOCK_KIE=true). */
 export function isMockKie(): boolean {
   return process.env.MOCK_KIE?.trim().toLowerCase() === "true";
 }
@@ -8,7 +8,7 @@ export function isMockProviderTaskId(id: string | null | undefined): boolean {
   return Boolean(id?.startsWith("mock_task_"));
 }
 
-/** Р’ mock-СЂРµР¶РёРјРµ Р·Р°СЃС‚Р°РІРёС‚СЊ РІСЃРµ mock-Р·Р°РїСЂРѕСЃС‹ Рє РїСЂРѕРІР°Р№РґРµСЂСѓ В«РїР°РґР°С‚СЊВ» (MOCK_KIE_FAIL=true). */
+/** В mock-режиме заставить все mock-запросы к провайдеру «падать» (MOCK_KIE_FAIL=true). */
 export function isMockKieFail(): boolean {
   return process.env.MOCK_KIE_FAIL?.trim().toLowerCase() === "true";
 }
@@ -22,7 +22,7 @@ const DEFAULT_MOCK_IMAGE =
 const DEFAULT_MOCK_VIDEO =
   "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4";
 
-/** РџСѓР±Р»РёС‡РЅС‹Рµ URL РґР»СЏ completeWithOutput (СЃРєР°С‡РёРІР°РЅРёРµ РІ S3 РїСЂРё РЅР°СЃС‚СЂРѕРµРЅРЅРѕРј storage). */
+/** Публичные URL для completeWithOutput (скачивание в S3 при настроенном storage). */
 export function getMockOutputUrls(type: "IMAGE" | "VIDEO"): string[] {
   if (type === "IMAGE") {
     const u = process.env.MOCK_KIE_IMAGE_URL?.trim();

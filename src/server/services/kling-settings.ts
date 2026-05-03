@@ -1,4 +1,4 @@
-﻿
+
 export const KLING_30_API_MODEL_ID = "kling-3.0";
 
 export function isKling30Model(
@@ -9,7 +9,7 @@ export function isKling30Model(
 
 /**
  * Kling 3.0: mode, duration, aspectRatio, sound, multiShots.
- * Multi-shot (MVP) вЂ” Р·Р°РїСЂРµС‰С‘РЅ РґРѕ РѕС‚РґРµР»СЊРЅРѕРіРѕ UI.
+ * Multi-shot (MVP) — запрещён РґРѕ отдельного UI.
  */
 export function validateKling30Settings(
   settings: Record<string, unknown>,
@@ -20,14 +20,14 @@ export function validateKling30Settings(
       ? modeRaw.trim()
       : String(modeRaw ?? "").trim();
   if (!modeStr) {
-    return { ok: false, message: "РЈРєР°Р¶РёС‚Рµ СЂРµР¶РёРј (mode): std, pro РёР»Рё 4K." };
+    return { ok: false, message: "Укажите режим (mode): std, pro или 4K." };
   }
   const lower = modeStr.toLowerCase();
   const is4k = lower === "4k" || modeStr === "4K";
   const isStd = lower === "std" || lower === "standard";
   const isPro = lower === "pro" || modeStr === "pro";
   if (!is4k && !isStd && !isPro) {
-    return { ok: false, message: "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ mode: РґРѕРїСѓСЃС‚РёРјС‹ std, pro, 4K." };
+    return { ok: false, message: "Некорректный mode: допустимы std, pro, 4K." };
   }
 
   let durationStr = String(settings.duration ?? "").trim();
@@ -38,7 +38,7 @@ export function validateKling30Settings(
     } else {
       return {
         ok: false,
-        message: "РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РґР»РёС‚РµР»СЊРЅРѕСЃС‚СЊ: РґРѕРїСѓСЃС‚РёРјС‹ 5, 10 РёР»Рё 15 СЃРµРєСѓРЅРґ.",
+        message: "Некорректная длительность: допустимы 5, 10 или 15 секунд.",
       };
     }
   }
@@ -48,17 +48,17 @@ export function validateKling30Settings(
     return {
       ok: false,
       message:
-        "РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ aspectRatio: РґРѕРїСѓСЃС‚РёРјС‹ 16:9, 9:16, 1:1.",
+        "Некорректное aspectRatio: допустимы 16:9, 9:16, 1:1.",
     };
   }
 
   if (settings.sound != null && typeof settings.sound !== "boolean") {
-    return { ok: false, message: "РџРѕР»Рµ sound РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ true РёР»Рё false." };
+    return { ok: false, message: "Поле sound должно быть true или false." };
   }
   if (settings.multiShots != null && typeof settings.multiShots !== "boolean") {
     return {
       ok: false,
-      message: "РџРѕР»Рµ multiShots РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ true РёР»Рё false.",
+      message: "Поле multiShots должно быть true или false.",
     };
   }
   if (settings.multiShots === true) {

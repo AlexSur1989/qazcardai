@@ -1,4 +1,4 @@
-﻿
+
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
@@ -7,12 +7,12 @@ const PREVIEW = 300;
 function preview(s: string): string {
   const t = (s ?? "").trim();
   if (t.length <= PREVIEW) return t;
-  return `${t.slice(0, PREVIEW)}вЂ¦`;
+  return `${t.slice(0, PREVIEW)}…`;
 }
 
 /**
- * РЎРѕС…СЂР°РЅСЏРµС‚ Р·Р°РїРёСЃСЊ РІ ModerationLog. РќРµ РїРёС€РµС‚ file/base64 РІ preview.
- * Р‘РµР· userId+modelId Р»РѕРі РїСЂРѕРїСѓСЃРєР°РµС‚СЃСЏ (РЅР°РїСЂРёРјРµСЂ С‚РµСЃС‚ РІ Р°РґРјРёРЅРєРµ).
+ * Сохраняет запись в ModerationLog. Не пишет file/base64 в preview.
+ * Без userId+modelId лог пропускается (например тест в админке).
  */
 export async function persistBlockedModerationEvent(p: {
   userId?: string | null;

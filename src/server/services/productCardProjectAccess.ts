@@ -1,4 +1,4 @@
-﻿
+
 import { prisma } from "@/lib/prisma";
 import { getFirstOutputUrlFromJson } from "@/lib/product-card-output";
 
@@ -48,8 +48,8 @@ export async function getCompletedGenerationImageUrlForUser(
 }
 
 /**
- * URL РІС‹С…РѕРґР° concept-РіРµРЅРµСЂР°С†РёРё РґР»СЏ В«РљР°СЂС‚РѕС‡РєР° С‚РѕРІР°СЂР°В»:
- * РІР»Р°РґРµР»РµС†, РїСЂРѕРµРєС‚, РІРєР»Р°РґРєР° concept_photo; РіРѕС‚РѕРІС‹Р№ output.
+ * URL выхода concept-генерации для «Карточка товара»:
+ * владелец, проект, вкладка concept_photo; готовый output.
  */
 export async function getConceptGenerationImageUrlForMarketplace(
   userId: string,
@@ -63,24 +63,24 @@ export async function getConceptGenerationImageUrlForMarketplace(
     select: { id: true, status: true, outputFiles: true, metadata: true },
   });
   if (!g) {
-    return { ok: false, message: "Р“РµРЅРµСЂР°С†РёСЏ РЅРµ РЅР°Р№РґРµРЅР°" };
+    return { ok: false, message: "Генерация не найдена" };
   }
   const meta = metadataRecord(g.metadata);
   if (meta.flow !== "product_card" || meta.projectId !== projectId) {
-    return { ok: false, message: "Р“РµРЅРµСЂР°С†РёСЏ РЅРµ РѕС‚РЅРѕСЃРёС‚СЃСЏ Рє СЌС‚РѕРјСѓ РїСЂРѕРµРєС‚Сѓ" };
+    return { ok: false, message: "Генерация не относится к этому проекту" };
   }
   if (meta.tab !== "concept_photo") {
-    return { ok: false, message: "РњРѕР¶РЅРѕ РІС‹Р±СЂР°С‚СЊ С‚РѕР»СЊРєРѕ С„РѕС‚Рѕ РёР· РІРєР»Р°РґРєРё В«Р¤РѕС‚Рѕ СЃ РєРѕРЅС†РµРїС†РёСЏРјРёВ»" };
+    return { ok: false, message: "Можно выбрать только фото из вкладки «Фото с концепциями»" };
   }
   const url = getFirstOutputUrlFromJson(g.outputFiles);
   if (!url) {
-    return { ok: false, message: "Р РµР·СѓР»СЊС‚Р°С‚ РµС‰С‘ РѕР±СЂР°Р±Р°С‚С‹РІР°РµС‚СЃСЏ РёР»Рё РЅРµРґРѕСЃС‚СѓРїРµРЅ" };
+    return { ok: false, message: "Результат ещё обрабатывается или недоступен" };
   }
   return { ok: true, url, status: g.status };
 }
 
 /**
- * URL РІС‹С…РѕРґР° РіРµРЅРµСЂР°С†РёРё В«РљР°СЂС‚РѕС‡РєР° С‚РѕРІР°СЂР°В» (РІРєР»Р°РґРєР° marketplace) РґР»СЏ image-to-video.
+ * URL выхода генерации «Карточка товара» (вкладка marketplace) для image-to-video.
  */
 export async function getMarketplaceCardTabGenerationImageUrl(
   userId: string,
@@ -94,18 +94,18 @@ export async function getMarketplaceCardTabGenerationImageUrl(
     select: { id: true, status: true, outputFiles: true, metadata: true },
   });
   if (!g) {
-    return { ok: false, message: "Р“РµРЅРµСЂР°С†РёСЏ РЅРµ РЅР°Р№РґРµРЅР°" };
+    return { ok: false, message: "Генерация не найдена" };
   }
   const meta = metadataRecord(g.metadata);
   if (meta.flow !== "product_card" || meta.projectId !== projectId) {
-    return { ok: false, message: "Р“РµРЅРµСЂР°С†РёСЏ РЅРµ РѕС‚РЅРѕСЃРёС‚СЃСЏ Рє СЌС‚РѕРјСѓ РїСЂРѕРµРєС‚Сѓ" };
+    return { ok: false, message: "Генерация не относится к этому проекту" };
   }
   if (meta.tab !== "marketplace_card") {
-    return { ok: false, message: "РњРѕР¶РЅРѕ РІС‹Р±СЂР°С‚СЊ С‚РѕР»СЊРєРѕ РёР· РІРєР»Р°РґРєРё В«РљР°СЂС‚РѕС‡РєР° С‚РѕРІР°СЂР°В»" };
+    return { ok: false, message: "Можно выбрать только из вкладки «Карточка товара»" };
   }
   const url = getFirstOutputUrlFromJson(g.outputFiles);
   if (!url) {
-    return { ok: false, message: "Р РµР·СѓР»СЊС‚Р°С‚ РµС‰С‘ РѕР±СЂР°Р±Р°С‚С‹РІР°РµС‚СЃСЏ РёР»Рё РЅРµРґРѕСЃС‚СѓРїРµРЅ" };
+    return { ok: false, message: "Результат ещё обрабатывается или недоступен" };
   }
   return { ok: true, url, status: g.status };
 }

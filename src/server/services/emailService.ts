@@ -1,4 +1,4 @@
-﻿
+
 import nodemailer from "nodemailer";
 
 import { prisma } from "@/lib/prisma";
@@ -47,7 +47,7 @@ export function getSendgridEnvConfigured(): boolean {
 }
 
 /**
- * РЎС‚Р°С‚СѓСЃС‹ env Р±РµР· СЃРµРєСЂРµС‚РѕРІ.
+ * Статусы env без секретов.
  */
 export async function getEmailProviderEnvStatus() {
   const [providerRaw, enabledRaw] = await Promise.all([
@@ -224,7 +224,7 @@ async function sendViaSendgrid(args: {
 }
 
 /**
- * value РїСЂРёРІРѕРґРёС‚ Рє РїРѕРґСЃС‚Р°РЅРѕРІРєРµ; timestamp вЂ” РґСЂСѓР¶РµР»СЋР±РЅР°СЏ СЃС‚СЂРѕРєР°.
+ * value РїСЂРёРІРѕРґРёС' Рє подстановке; timestamp — дружелюбная строка.
  */
 function normVars(
   v: Record<string, string | number | undefined | null | Date>,
@@ -303,7 +303,7 @@ export async function markAdminAlertSent(kind: "provider" | "worker") {
 }
 
 /**
- * Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅС‹Рµ URL РґР»СЏ РїРёСЃРµРј.
+ * Вспомогательные URL для писем.
  */
 export function getEmailFlowUrls() {
   const base = getAppBaseUrl();

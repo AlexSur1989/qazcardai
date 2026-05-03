@@ -1,4 +1,4 @@
-﻿
+
 import type { AiModel } from "@/generated/prisma/client";
 import {
   isRecord,
@@ -70,8 +70,8 @@ function toNum(v: unknown, fallback: number): number {
 }
 
 /**
- * Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ matrix / videoInputMatrix РёР· providerCost, durations, usdToKzt,
- * internalTokenValueKzt, markupPercent. manualOverrides РЅРµ С‚СЂРѕРіР°РµС‚.
+ * Восстанавливает matrix / videoInputMatrix из providerCost, durations, usdToKzt,
+ * internalTokenValueKzt, markupPercent. manualOverrides не трогает.
  */
 export function recalculatePricingSchema(
   pricingSchema: Record<string, unknown>,
@@ -153,7 +153,7 @@ export type PricingPreviewResult = {
 };
 
 /**
- * РЎРІРѕРґРєР° СЃС‚СЂРѕРє РґР»СЏ Р°РґРјРёРЅРєРё (Р±РµР· РѕР±СЂР°С‰РµРЅРёСЏ Рє Kie).
+ * Сводка строк для админки (без обращения к Kie).
  */
 export function buildPricingPreview(
   pricingSchema: Record<string, unknown>,
@@ -338,7 +338,7 @@ function hasSeedanceVideoInput(settings: Record<string, unknown>): boolean {
 }
 
 /**
- * Seedance 2.0: matrix / videoInputMatrix + addOns. manualOverrides РёРјРµРµС‚ РїСЂРёРѕСЂРёС‚РµС‚.
+ * Seedance 2.0: matrix / videoInputMatrix + addOns. manualOverrides имеет приоритет.
  */
 function seedanceStyleCredits(
   raw: Record<string, unknown>,
@@ -401,7 +401,7 @@ function applySeedanceAddOns(
 }
 
 /**
- * Р‘РµР· videoInputMatrix: resolution Г— duration + manual matrix.
+ * Без videoInputMatrix: resolution × duration + manual matrix.
  */
 function resolutionDurationMatrixCredits(
   raw: Record<string, unknown>,
@@ -457,7 +457,7 @@ function effectiveMotionControlResolution(
 }
 
 /**
- * Kling Motion Control: `pricingSchema.type === "per_second"`, РґР»РёС‚РµР»СЊРЅРѕСЃС‚СЊ вЂ” Р·Р°РіСЂСѓР¶РµРЅРЅРѕРµ РІРёРґРµРѕ.
+ * Kling Motion Control: `pricingSchema.type === "per_second"`, длительность — загруженное видео.
  */
 export function perSecondMotionControlCreditsFromSchema(
   raw: Record<string, unknown>,
@@ -592,7 +592,7 @@ export function buildPerSecondMotionControlPreview(
 }
 
 /**
- * РЎРїРёСЃР°РЅРёРµ РєСЂРµРґРёС‚РѕРІ: РµРґРёРЅР°СЏ Р»РѕРіРёРєР° РґР»СЏ estimate, СЃР°Р±РјРёС‚Р° Рё Р°РґРјРёРЅ-РїСЂРµРІСЊСЋ.
+ * Списание кредитов: единая логика для estimate, сабмита и админ-превью.
  */
 export function getFinalCreditsFromPricingSchema(
   model: Pick<AiModel, "costCredits" | "pricingSchema">,

@@ -1,4 +1,4 @@
-﻿
+
 import IORedis from "ioredis";
 
 import { getClientIpFromRequest } from "@/lib/client-ip";
@@ -14,7 +14,7 @@ export type RateLimitDenied = {
 
 export type RateLimitResult = { allowed: true } | RateLimitDenied;
 
-const RU_MSG = "РЎР»РёС€РєРѕРј РјРЅРѕРіРѕ Р·Р°РїСЂРѕСЃРѕРІ. РџРѕРґРѕР¶РґРёС‚Рµ Рё РїРѕРІС‚РѕСЂРёС‚Рµ РїРѕРїС‹С‚РєСѓ.";
+const RU_MSG = "Слишком много запросов. Подождите и повторите попытку.";
 
 let memBuckets = new Map<string, { count: number; resetAt: number }>();
 let memOps = 0;
@@ -40,7 +40,7 @@ function wallMinute(): number {
 }
 
 /**
- * РЎРєРѕР»СЊР·СЏС‰РµРµ РѕРєРЅРѕ ~1 РјРёРЅ (РїРѕ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂСѓ) вЂ” Redis: С„РёРєСЃ. РјРёРЅСѓС‚Р°; РїР°РјСЏС‚СЊ: РѕС‚ РїРµСЂРІРѕРіРѕ Р·Р°РїСЂРѕСЃР°.
+ * Скользящее РѕРєРЅРѕ ~1 РјРёРЅ (РїРѕ идентификатору) — Redis: фикс. минута; память: РѕС' первого запроса.
  */
 export async function checkRateLimit(
   kind: "login" | "register" | "generation" | "upload" | "admin" | "classify" | "forgot_password" | "reset_password",
@@ -95,8 +95,8 @@ export function rateLimitToResponse(d: RateLimitDenied): NextResponse {
 }
 
 /**
- * РўРµР»Рѕ РѕС‚РІРµС‚Р° РґР»СЏ Auth.js /api/auth/callback/credentials: РєР»РёРµРЅС‚СЃРєРёР№ `signIn(..., { redirect: false })`
- * С‡РёС‚Р°РµС‚ JSON СЃ РїРѕР»РµРј `url` (РёРЅР°С‡Рµ РїР°РґР°РµС‚ `new URL(data.url)` РІ next-auth/react).
+ * Тело ответа для Auth.js /api/auth/callback/credentials: клиентский `signIn(..., { redirect: false })`
+ * читает JSON с полем `url` (иначе падает `new URL(data.url)` в next-auth/react).
  */
 export function loginRateLimitToNextAuthJsonResponse(
   req: Request,
@@ -137,7 +137,7 @@ export async function enforceRegistrationRateLimit(
 }
 
 /**
- * РЎР±СЂРѕСЃ РїР°СЂРѕР»СЏ: Р»РёРјРёС‚ РїРѕ IP Рё РїРѕ email (РЅРѕСЂРјР°Р»РёР·РѕРІР°РЅРЅРѕРјСѓ), С‡С‚РѕР±С‹ СЃРЅРёР·РёС‚СЊ Р·Р»РѕСѓРїРѕС‚СЂРµР±Р»РµРЅРёСЏ.
+ * Сброс пароля: лимит по IP и по email (нормализованному), чтобы снизить злоупотребления.
  */
 export async function enforceForgotPasswordRateLimit(
   req: Request,
@@ -181,7 +181,7 @@ export async function enforceUploadRateLimit(
   return rateLimitToResponse(res);
 }
 
-/** РљР»Р°СЃСЃРёС„РёРєР°С†РёСЏ РєР°СЂС‚РѕС‡РєРё С‚РѕРІР°СЂР°: ~15/РјРёРЅ РЅР° РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ (РЅРµР·Р°РІРёСЃРёРјРѕ РѕС‚ generation). */
+/** Классификация карточки товара: ~15/мин на пользователя (независимо от generation). */
 export async function enforceProductClassifyRateLimit(
   userId: string,
 ): Promise<NextResponse | null> {
@@ -191,7 +191,7 @@ export async function enforceProductClassifyRateLimit(
 }
 
 /**
- * РђРґРјРёРЅСЃРєРёРµ server actions: Р»РёРјРёС‚ РЅР° userId, С‡С‚РѕР±С‹ СЃРЅРёР·РёС‚СЊ СЂРёСЃРє СЃР»СѓС‡Р°Р№РЅС‹С… РјР°СЃСЃРѕРІС‹С… РІС‹Р·РѕРІРѕРІ.
+ * Админские server actions: лимит на userId, чтобы снизить риск случайных массовых вызовов.
  */
 export async function getAdminRateLimitError(adminUserId: string): Promise<string | null> {
   const settings = await getRateUploadSettings();

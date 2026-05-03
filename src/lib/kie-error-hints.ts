@@ -1,7 +1,7 @@
-﻿
+
 /**
- * РўРµРєСЃС‚ РїСЂРѕ В«Credits insufficientвЂ¦В» РІ РѕС‚РІРµС‚Рµ Kie вЂ” СЌС‚Рѕ Р±Р°Р»Р°РЅСЃ РЅР° СЃС‚РѕСЂРѕРЅРµ Kie.ai,
- * РЅРµ РІРЅСѓС‚СЂРёРёРіСЂРѕРІС‹Рµ С‚РѕРєРµРЅС‹ РїСЂРёР»РѕР¶РµРЅРёСЏ.
+ * Текст РїСЂРѕ В«Credits insufficient…» РІ ответе Kie — это баланс РЅР° стороне Kie.ai,
+ * не внутриигровые токены приложения.
  */
 export function isLikelyKieAccountInsufficientMessage(msg: string | null | undefined): boolean {
   if (!msg) return false;
@@ -65,7 +65,7 @@ function isLikelyKiePayloadError(msg: string): boolean {
 }
 
 /**
- * РЎРѕРѕР±С‰РµРЅРёРµ РґР»СЏ Р‘Р”/РёСЃС‚РѕСЂРёРё/UI: Р±РµР·РѕРїР°СЃРЅРѕРµ РїРѕСЏСЃРЅРµРЅРёРµ РїРѕ С‚РёРїРёС‡РЅС‹Рј РѕС‚РІРµС‚Р°Рј Kie.
+ * Сообщение для БД/истории/UI: безопасное пояснение по типичным ответам Kie.
  */
 export function explainKieErrorForUser(
   providerMessage: string | null | undefined,
@@ -74,36 +74,36 @@ export function explainKieErrorForUser(
   const raw = (providerMessage ?? "").trim() || fallback;
   if (isLikelyKieAccountInsufficientMessage(raw)) {
     return [
-      "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ credits РЅР° СЃС‚РѕСЂРѕРЅРµ Kie.ai (СЌС‚Рѕ РЅРµ Р±Р°Р»Р°РЅСЃ С‚РѕРєРµРЅРѕРІ РІ РїСЂРёР»РѕР¶РµРЅРёРё).",
-      "РџРѕРїРѕР»РЅРёС‚Рµ Р±Р°Р»Р°РЅСЃ Kie РёР»Рё РїСЂРѕРІРµСЂСЊС‚Рµ API-РєР»СЋС‡.",
-      `Р”РµС‚Р°Р»Рё: ${raw}`,
+      "Недостаточно credits на стороне Kie.ai (это не баланс токенов в приложении).",
+      "Пополните баланс Kie или проверьте API-ключ.",
+      `Детали: ${raw}`,
     ]
       .join(" ")
       .slice(0, 8000);
   }
   if (isLikelyKieImageUrlError(raw)) {
     return [
-      "Kie РЅРµ РјРѕР¶РµС‚ РѕС‚РєСЂС‹С‚СЊ РёР»Рё СЃРєР°С‡Р°С‚СЊ РёСЃС…РѕРґРЅРѕРµ РёР·РѕР±СЂР°Р¶РµРЅРёРµ РїРѕ РїРµСЂРµРґР°РЅРЅРѕРјСѓ URL.",
-      "РќСѓР¶РµРЅ РїСѓР±Р»РёС‡РЅС‹Р№ https-Р°РґСЂРµСЃ (S3/R2/CDN). Р›РѕРєР°Р»СЊРЅС‹Р№ СЃРµСЂРІРµСЂ Kie РёР· РёРЅС‚РµСЂРЅРµС‚Р° РЅРµ РґРѕСЃС‚Р°РЅРµС‚.",
-      `Р”РµС‚Р°Р»Рё: ${raw}`,
+      "Kie не может открыть или скачать исходное изображение по переданному URL.",
+      "Нужен публичный https-адрес (S3/R2/CDN). Локальный сервер Kie из интернета не достанет.",
+      `Детали: ${raw}`,
     ]
       .join(" ")
       .slice(0, 8000);
   }
   if (isLikelyKieAuthError(raw)) {
-    return `Kie API key invalid РёР»Рё Р·Р°РїСЂРѕСЃ РЅРµ Р°РІС‚РѕСЂРёР·РѕРІР°РЅ. РџСЂРѕРІРµСЂСЊС‚Рµ KIE_API_KEY. Р”РµС‚Р°Р»Рё: ${raw}`.slice(
+    return `Kie API key invalid или запрос не авторизован. Проверьте KIE_API_KEY. Детали: ${raw}`.slice(
       0,
       8000,
     );
   }
   if (isLikelyKieModelError(raw)) {
-    return `РќРµРІРµСЂРЅС‹Р№ apiModelId РёР»Рё РјРѕРґРµР»СЊ РЅРµРґРѕСЃС‚СѓРїРЅР° Сѓ Kie. РџСЂРѕРІРµСЂСЊС‚Рµ РєР°СЂС‚РѕС‡РєСѓ РјРѕРґРµР»Рё РІ Р°РґРјРёРЅРєРµ. Р”РµС‚Р°Р»Рё: ${raw}`.slice(
+    return `Неверный apiModelId или модель недоступна у Kie. Проверьте карточку модели в админке. Детали: ${raw}`.slice(
       0,
       8000,
     );
   }
   if (isLikelyKiePayloadError(raw) && !isLikelyKieImageUrlError(raw)) {
-    return `РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ payload РґР»СЏ РјРѕРґРµР»Рё Kie. РџСЂРѕРІРµСЂСЊС‚Рµ payloadMapping Рё РїРѕР»СЏ input РІ Р°РґРјРёРЅРєРµ. Р”РµС‚Р°Р»Рё: ${raw}`.slice(
+    return `Некорректный payload для модели Kie. Проверьте payloadMapping и поля input в админке. Детали: ${raw}`.slice(
       0,
       8000,
     );

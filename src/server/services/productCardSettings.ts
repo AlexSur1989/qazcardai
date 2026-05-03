@@ -1,8 +1,8 @@
-﻿
+
 import { getAppSetting } from "@/server/services/appSettings";
 
 export const PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE =
-  "РњРѕРґРµР»СЊ РєР°СЂС‚РѕС‡РєРё С‚РѕРІР°СЂР° РЅРµ РЅР°СЃС‚СЂРѕРµРЅР°. РћР±СЂР°С‚РёС‚РµСЃСЊ Рє Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ.";
+  "Модель карточки товара не настроена. Обратитесь к администратору.";
 
 export type ProductCardModelType =
   | "PRODUCT_CLASSIFIER"

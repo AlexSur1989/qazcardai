@@ -1,4 +1,4 @@
-﻿
+
 import { isRecord } from "@/lib/model-pricing-shared";
 import { prisma } from "@/lib/prisma";
 
@@ -15,7 +15,7 @@ function singleHttpUrlList(
   label: string,
 ): { ok: true; url: string } | { ok: false; message: string } {
   if (!Array.isArray(value) || value.length === 0) {
-    return { ok: false, message: `РЈРєР°Р¶РёС‚Рµ ${label} (РѕРґРёРЅ URL).` };
+    return { ok: false, message: `Укажите ${label} (один URL).` };
   }
   const urls = value
     .filter((x): x is string => typeof x === "string" && x.trim() !== "")
@@ -23,13 +23,13 @@ function singleHttpUrlList(
   if (urls.length !== 1) {
     return {
       ok: false,
-      message: `РќСѓР¶РµРЅ СЂРѕРІРЅРѕ РѕРґРёРЅ URL РІ ${label}.`,
+      message: `Нужен ровно один URL в ${label}.`,
     };
   }
   if (!/^https?:\/\//i.test(urls[0])) {
     return {
       ok: false,
-      message: `${label}: СѓРєР°Р¶РёС‚Рµ РїСѓР±Р»РёС‡РЅС‹Р№ http(s) URL.`,
+      message: `${label}: укажите публичный http(s) URL.`,
     };
   }
   return { ok: true, url: urls[0] };
@@ -40,7 +40,7 @@ function resolutionOk(mode: string): boolean {
 }
 
 /**
- * Estimate / РїСЂРµРІСЊСЋ: Р±РµР· РѕР±СЏР·Р°С‚РµР»СЊРЅС‹С… URL; РїСЂРѕРІРµСЂСЏРµРј resolution/mode Рё РїРѕР»СЏ СЃС†РµРЅР°СЂРёСЏ.
+ * Estimate / превью: без обязательных URL; проверяем resolution/mode и поля сценария.
  */
 export function validateKlingMotionControlSettingsForEstimate(
   settings: Record<string, unknown>,
@@ -52,13 +52,13 @@ export function validateKlingMotionControlSettingsForEstimate(
         ? settings.mode.trim()
         : "720p";
   if (!resolutionOk(mode)) {
-    return { ok: false, message: "РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ СЂР°Р·СЂРµС€РµРЅРёРµ: РґРѕРїСѓСЃС‚РёРјС‹ 720p Рё 1080p." };
+    return { ok: false, message: "Некорректное разрешение: допустимы 720p и 1080p." };
   }
   const co = String(settings.characterOrientation ?? "image").trim();
   if (co !== "image") {
     return {
       ok: false,
-      message: "РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РѕСЂРёРµРЅС‚Р°С†РёСЏ: РґРѕРїСѓСЃС‚РёРјРѕ С‚РѕР»СЊРєРѕ image.",
+      message: "Некорректная ориентация: допустимо только image.",
     };
   }
   const bg = String(settings.backgroundSource ?? "input_video").trim();
@@ -66,14 +66,14 @@ export function validateKlingMotionControlSettingsForEstimate(
     return {
       ok: false,
       message:
-        "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ backgroundSource: РґРѕРїСѓСЃС‚РёРјС‹ input_video Рё input_image.",
+        "Некорректный backgroundSource: допустимы input_video и input_image.",
     };
   }
   return { ok: true };
 }
 
 /**
- * РџРѕР»РЅР°СЏ РїСЂРѕРІРµСЂРєР° РїРµСЂРµРґ СЃРѕР·РґР°РЅРёРµРј Generation.
+ * Полная проверка перед созданием Generation.
  */
 export function validateKlingMotionControlSettings(
   settings: Record<string, unknown>,
@@ -97,7 +97,7 @@ export function validateKlingMotionControlSettings(
 }
 
 /**
- * URL РґРѕР»Р¶РЅС‹ СЃРѕРѕС‚РІРµС‚СЃС‚РІРѕРІР°С‚СЊ Р·Р°РїРёСЃСЏРј UploadedFile С‚РµРєСѓС‰РµРіРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ (Р·Р°РіСЂСѓР·РєР° РІ S3).
+ * URL должны соответствовать записям UploadedFile текущего пользователя (загрузка в S3).
  */
 export async function assertKlingMotionUrlsOwnedByUser(
   userId: string,
@@ -105,12 +105,12 @@ export async function assertKlingMotionUrlsOwnedByUser(
   videoUrls: string[],
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   if (inputUrls.length !== 1 || videoUrls.length !== 1) {
-    return { ok: false, message: "РќСѓР¶РµРЅ СЂРѕРІРЅРѕ РѕРґРёРЅ reference image Рё РѕРґРЅРѕ motion video." };
+    return { ok: false, message: "Нужен ровно один reference image и одно motion video." };
   }
   const a = inputUrls[0].trim();
   const b = videoUrls[0].trim();
   if (!a || !b) {
-    return { ok: false, message: "РќСѓР¶РµРЅ СЂРѕРІРЅРѕ РѕРґРёРЅ reference image Рё РѕРґРЅРѕ motion video." };
+    return { ok: false, message: "Нужен ровно один reference image и одно motion video." };
   }
   const rows = await prisma.uploadedFile.findMany({
     where: { userId, url: { in: [a, b] } },
@@ -123,14 +123,14 @@ export async function assertKlingMotionUrlsOwnedByUser(
     return {
       ok: false,
       message:
-        "Reference image: Р·Р°РіСЂСѓР·РёС‚Рµ РёР·РѕР±СЂР°Р¶РµРЅРёРµ РєРЅРѕРїРєРѕР№ В«Reference imageВ» (РёР»Рё СѓРєР°Р¶РёС‚Рµ URL СЃРІРѕРµРіРѕ СЂР°РЅРµРµ Р·Р°РіСЂСѓР¶РµРЅРЅРѕРіРѕ С„Р°Р№Р»Р°).",
+        "Reference image: загрузите изображение кнопкой «Reference image» (или укажите URL своего ранее загруженного файла).",
     };
   }
   if (!set.has(b)) {
     return {
       ok: false,
       message:
-        "Motion video: Р·Р°РіСЂСѓР·РёС‚Рµ РІРёРґРµРѕ РєРЅРѕРїРєРѕР№ В«Motion videoВ» (РёР»Рё СѓРєР°Р¶РёС‚Рµ URL СЃРІРѕРµРіРѕ СЂР°РЅРµРµ Р·Р°РіСЂСѓР¶РµРЅРЅРѕРіРѕ С„Р°Р№Р»Р°).",
+        "Motion video: загрузите видео кнопкой «Motion video» (или укажите URL своего ранее загруженного файла).",
     };
   }
   return { ok: true };
@@ -158,8 +158,8 @@ function durationFromMetadata(meta: unknown): number | null {
 }
 
 /**
- * Р”Р»РёС‚РµР»СЊРЅРѕСЃС‚СЊ РґР»СЏ С‚Р°СЂРёС„РёРєР°С†РёРё: РїСЂРµРґРїРѕС‡РёС‚Р°РµРј UploadedFile.metadata.durationSeconds,
- * РёРЅР°С‡Рµ settings.videoDurationSeconds.
+ * Длительность для тарификации: предпочитаем UploadedFile.metadata.durationSeconds,
+ * иначе settings.videoDurationSeconds.
  */
 export async function resolveKlingMotionVideoDurationSeconds(
   userId: string,
@@ -199,7 +199,7 @@ export async function resolveKlingMotionVideoDurationSeconds(
       select: { url: true, metadata: true },
     });
     if (!row) {
-      return { ok: false, message: "Р¤Р°Р№Р» motion video РЅРµ РЅР°Р№РґРµРЅ." };
+      return { ok: false, message: "Файл motion video не найден." };
     }
     fileUrl = row.url?.trim() ?? null;
     fromMeta = durationFromMetadata(row.metadata);
@@ -217,7 +217,7 @@ export async function resolveKlingMotionVideoDurationSeconds(
     if (videoUrls[0].trim() !== fileUrl) {
       return {
         ok: false,
-        message: "motionVideoFileId РЅРµ СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓРµС‚ URL Р·Р°РіСЂСѓР¶РµРЅРЅРѕРіРѕ РІРёРґРµРѕ.",
+        message: "motionVideoFileId не соответствует URL загруженного видео.",
       };
     }
   }
@@ -233,7 +233,7 @@ export async function resolveKlingMotionVideoDurationSeconds(
     return {
       ok: false,
       message:
-        "РќРµ СѓРґР°Р»РѕСЃСЊ РѕРїСЂРµРґРµР»РёС‚СЊ РґР»РёС‚РµР»СЊРЅРѕСЃС‚СЊ РІРёРґРµРѕ. Р—Р°РіСЂСѓР·РёС‚Рµ РІРёРґРµРѕ Р·Р°РЅРѕРІРѕ.",
+        "Не удалось определить длительность видео. Загрузите видео заново.",
     };
   }
 
@@ -246,7 +246,7 @@ export async function resolveKlingMotionVideoDurationSeconds(
 }
 
 /**
- * РќРѕСЂРјР°Р»РёР·Р°С†РёСЏ РїРѕР»РµР№ РґР»СЏ Kie: РІ input.mode СѓС…РѕРґРёС‚ СЂР°Р·СЂРµС€РµРЅРёРµ (720p / 1080p).
+ * Нормализация полей для Kie: в input.mode уходит разрешение (720p / 1080p).
  */
 export function normalizeKlingMotionControlSettingsForPricing(
   settings: Record<string, unknown>,

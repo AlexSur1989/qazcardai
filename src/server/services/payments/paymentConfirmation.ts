@@ -1,4 +1,4 @@
-﻿
+
 import { Prisma } from "@/generated/prisma/client";
 import type { PaymentStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
@@ -37,8 +37,8 @@ export type ConfirmPaymentAndGrantCreditsResult =
   | { ok: false; error: string };
 
 /**
- * РРґРµРјРїРѕС‚РµРЅС‚РЅРѕРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ РїР»Р°С‚РµР¶Р° Рё РЅР°С‡РёСЃР»РµРЅРёРµ РєСЂРµРґРёС‚РѕРІ (С‚РѕР»СЊРєРѕ РїРѕСЃР»Рµ webhook / mock-confirm).
- * Р”РІРѕР№РЅРѕРµ РЅР°С‡РёСЃР»РµРЅРёРµ РёСЃРєР»СЋС‡РµРЅРѕ: СЃС‚Р°С‚СѓСЃ COMPLETED Рё updateMany РїРѕ PENDING.
+ * Идемпотентное подтверждение платежа и начисление кредитов (только после webhook / mock-confirm).
+ * Двойное начисление исключено: статус COMPLETED и updateMany по PENDING.
  */
 export async function confirmPaymentAndGrantCredits(
   input: ConfirmPaymentAndGrantCreditsInput,
@@ -173,7 +173,7 @@ export async function confirmPaymentAndGrantCredits(
   }
 
   if (txResult.kind === "granted") {
-    const pkgName = finalRow.tokenPackage?.name ?? "РўРѕРєРµРЅС‹";
+    const pkgName = finalRow.tokenPackage?.name ?? "Токены";
     void trySendPaymentSuccessEmail({
       userId: finalRow.userId,
       packageName: pkgName,
@@ -187,7 +187,7 @@ export async function confirmPaymentAndGrantCredits(
 }
 
 /**
- * РћР±РЅРѕРІР»РµРЅРёРµ СЃС‚Р°С‚СѓСЃР° Р±РµР· РЅР°С‡РёСЃР»РµРЅРёСЏ (failed / cancelled).
+ * Обновление статуса без начисления (failed / cancelled).
  */
 export async function setKaspiPaymentTerminalStatus(
   paymentId: string,

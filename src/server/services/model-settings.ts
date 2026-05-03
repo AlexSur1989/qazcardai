@@ -1,4 +1,4 @@
-﻿
+
 function isRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === "object" && x !== null && !Array.isArray(x);
 }
@@ -24,7 +24,7 @@ function asFields(settingsSchema: unknown): SchemaField[] {
 }
 
 /**
- * Р’Р°Р»РёРґР°С†РёСЏ Рё РЅРѕСЂРјР°Р»РёР·Р°С†РёСЏ РЅР°СЃС‚СЂРѕРµРє РіРµРЅРµСЂР°С†РёРё РїРѕ settingsSchema РјРѕРґРµР»Рё.
+ * Валидация и нормализация настроек генерации по settingsSchema модели.
  */
 export function validateAndNormalizeModelSettings(
   settingsSchema: unknown,
@@ -32,7 +32,7 @@ export function validateAndNormalizeModelSettings(
 ): { ok: true; settings: Record<string, unknown> } | { ok: false; message: string } {
   const fields = asFields(settingsSchema);
   if (fields.length === 0) {
-    return { ok: false, message: "РЈ РјРѕРґРµР»Рё РЅРµ Р·Р°РґР°РЅ settingsSchema" };
+    return { ok: false, message: "У модели не задан settingsSchema" };
   }
 
   const out: Record<string, unknown> = { ...raw };
@@ -66,7 +66,7 @@ export function validateAndNormalizeModelSettings(
       } else {
         return {
           ok: false,
-          message: `РџРѕР»Рµ В«${f.label ?? f.name}В»: РѕР¶РёРґР°РµС‚СЃСЏ СЃС‚СЂРѕРєР° (URL)`,
+          message: `Поле «${f.label ?? f.name}»: ожидается строка (URL)`,
         };
       }
     }
@@ -89,7 +89,7 @@ export function validateAndNormalizeModelSettings(
       } else if (!Array.isArray(v)) {
         return {
           ok: false,
-          message: `РџРѕР»Рµ В«${f.label ?? f.name}В»: РѕР¶РёРґР°РµС‚СЃСЏ СЃРїРёСЃРѕРє URL`,
+          message: `Поле «${f.label ?? f.name}»: ожидается список URL`,
         };
       } else {
         out[f.name] = v.filter((x): x is string => typeof x === "string");
@@ -108,7 +108,7 @@ export function validateAndNormalizeModelSettings(
         if (match === undefined) {
           return {
             ok: false,
-            message: `РќРµРґРѕРїСѓСЃС‚РёРјРѕРµ Р·РЅР°С‡РµРЅРёРµ РїРѕР»СЏ В«${f.label ?? f.name}В»`,
+            message: `Недопустимое значение поля «${f.label ?? f.name}»`,
           };
         }
         out[f.name] = match;
@@ -120,13 +120,13 @@ export function validateAndNormalizeModelSettings(
       if (val === undefined || val === null || val === "") {
         return {
           ok: false,
-          message: `Р—Р°РїРѕР»РЅРёС‚Рµ РїРѕР»Рµ В«${f.label ?? f.name}В»`,
+          message: `Заполните поле «${f.label ?? f.name}»`,
         };
       }
       if (isUrlList && Array.isArray(val) && val.length === 0 && f.required) {
         return {
           ok: false,
-          message: `Р—Р°РїРѕР»РЅРёС‚Рµ РїРѕР»Рµ В«${f.label ?? f.name}В»`,
+          message: `Заполните поле «${f.label ?? f.name}»`,
         };
       }
     }

@@ -1,4 +1,4 @@
-﻿
+
 import { Prisma } from "@/generated/prisma/client";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
 import { parseOutputFilesList } from "@/lib/generation-output-utils";
@@ -70,10 +70,10 @@ export function getStorageConfigStatus(): StorageConfigStatus {
     s3RegionConfigured,
     accessKeyConfigured: hasAccess,
     secretKeyConfigured: hasSecret,
-    endpoint: endpoint || "вЂ”",
-    bucket: bucket || "вЂ”",
-    publicUrl: publicUrl || "вЂ”",
-    region: region || "вЂ”",
+    endpoint: endpoint || "—",
+    bucket: bucket || "—",
+    publicUrl: publicUrl || "—",
+    region: region || "—",
   };
 }
 
@@ -202,21 +202,21 @@ export function buildStorageWarnings(
   const w: string[] = [];
   if (process.env.NODE_ENV === "production" && config.mode !== "s3") {
     w.push(
-      "Production РґРѕР»Р¶РµРЅ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ S3/R2. Р›РѕРєР°Р»СЊРЅРѕРµ С…СЂР°РЅРµРЅРёРµ РЅР° VPS РЅРµР±РµР·РѕРїР°СЃРЅРѕ.",
+      "Production должен использовать S3/R2. Локальное хранение на VPS небезопасно.",
     );
   }
   if (!isLocalUploadStorageEffective() && !envTrim("S3_PUBLIC_URL")) {
     w.push(
-      "Kie.ai РјРѕР¶РµС‚ РЅРµ РѕС‚РєСЂС‹С‚СЊ Р·Р°РіСЂСѓР¶РµРЅРЅС‹Рµ С„Р°Р№Р»С‹ Р±РµР· РїСѓР±Р»РёС‡РЅРѕРіРѕ URL (S3_PUBLIC_URL).",
+      "Kie.ai может не открыть загруженные файлы без публичного URL (S3_PUBLIC_URL).",
     );
   }
   if (stats.filesMissingStorageKeyCount > 0) {
     w.push(
-      "РќРµРєРѕС‚РѕСЂС‹Рµ С„Р°Р№Р»С‹ РЅРµ РёРјРµСЋС‚ storageKey вЂ” РїСЂРѕРІРµСЂСЊС‚Рµ РґР°РЅРЅС‹Рµ.",
+      "Некоторые файлы РЅРµ имеют storageKey — проверьте данные.",
     );
   }
   if (isUploadStorageLocalExplicitInProduction()) {
-    w.push("UPLOAD_STORAGE=local РІ production Р·Р°РїСЂРµС‰С‘РЅ (СЃРј. storage).");
+    w.push("UPLOAD_STORAGE=local в production запрещён (см. storage).");
   }
   return w;
 }
@@ -280,8 +280,8 @@ export async function checkPublicUrlAccess(
     if (!res.ok) {
       return { ok: false, error: `HTTP ${res.status}` };
     }
-    const ct = res.headers.get("content-type")?.split(";")[0]?.trim() ?? "вЂ”";
-    const cl = res.headers.get("content-length") ?? "вЂ”";
+    const ct = res.headers.get("content-type")?.split(";")[0]?.trim() ?? "—";
+    const cl = res.headers.get("content-length") ?? "—";
     return {
       ok: true,
       statusCode: res.status,

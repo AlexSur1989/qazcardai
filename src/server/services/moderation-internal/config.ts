@@ -1,4 +1,4 @@
-﻿
+
 import {
   DEFAULT_MODERATION_BANNED_SUBSTRINGS,
   MODERATION_APP_SETTING_KEY,
@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 
 export type LoadedModerationConfig = {
   enabled: boolean;
-  /** РЈР¶Рµ РЅРѕСЂРјР°Р»РёР·РѕРІР°РЅРЅС‹Рµ (lower) РїРѕРґСЃС‚СЂРѕРєРё (СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚СЊ) */
+  /** Уже нормализованные (lower) подстроки (совместимость) */
   bannedSubstrings: string[];
 };
 
@@ -60,7 +60,7 @@ function asNumber(v: unknown, fallback: number): number {
 }
 
 /**
- * РќР°СЃС‚СЂРѕР№РєРё РёР· СЂРµРµСЃС‚СЂР° + legacy `moderation_settings` (С‚РѕР»СЊРєРѕ СЃРїРёСЃРѕРє Рё enabled, РїРѕРєР° РЅРµС‚ РєР»СЋС‡Р° РІ Р‘Р”).
+ * Настройки из реестра + legacy `moderation_settings` (только список и enabled, пока нет ключа в БД).
  */
 export async function getFullModerationConfig(): Promise<FullModerationConfig> {
   const now = Date.now();

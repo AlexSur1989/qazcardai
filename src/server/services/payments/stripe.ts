@@ -1,4 +1,4 @@
-﻿
+
 import Stripe from "stripe";
 
 import { getAppBaseUrl } from "@/lib/payment-config";
@@ -28,7 +28,7 @@ export async function createStripeCheckoutSession(args: {
   packageId: string;
   name: string;
   description: string | null;
-  /** РЎСѓРјРјР° РІ С‚РµРЅРіРµ (KZT, zero-decimal РІ Stripe). */
+  /** Сумма в тенге (KZT, zero-decimal в Stripe). */
   priceKzt: number;
 }): Promise<{ url: string }> {
   const base = getAppBaseUrl();

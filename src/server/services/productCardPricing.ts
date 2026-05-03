@@ -1,4 +1,4 @@
-﻿
+
 import type { AiModel } from "@/generated/prisma/client";
 import {
   getProductCardSettings,
@@ -200,7 +200,7 @@ export async function calculateProductCardModelPrice(input: {
 
 export function assertProductCardPriceAllowed(price: ProductCardPriceBreakdown): void {
   if (price.warnings.includes("Negative margin is not allowed for Product Card pricing.")) {
-    throw new Error("Р¦РµРЅР° Product Card РЅРёР¶Рµ СЃРµР±РµСЃС‚РѕРёРјРѕСЃС‚Рё. РР·РјРµРЅРёС‚Рµ pricing РёР»Рё СЂР°Р·СЂРµС€РёС‚Рµ РѕС‚СЂРёС†Р°С‚РµР»СЊРЅСѓСЋ РјР°СЂР¶Сѓ.");
+    throw new Error("Цена Product Card ниже себестоимости. Измените pricing или разрешите отрицательную маржу.");
   }
 }
 

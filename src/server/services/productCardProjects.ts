@@ -1,4 +1,4 @@
-﻿
+
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PRODUCT_CATEGORY_IDS } from "@/config/product-card-categories";
@@ -26,7 +26,7 @@ export type ProductSourceImageInput = {
 function assertValidCategoryId(id: string | null | undefined): void {
   if (id == null || id === "") return;
   if (!CATEGORY_SET.has(id)) {
-    throw new Error("РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РєР°С‚РµРіРѕСЂРёСЏ С‚РѕРІР°СЂР°");
+    throw new Error("Некорректная категория товара");
   }
 }
 
@@ -119,7 +119,7 @@ export type UpdateProductCardProjectInput = {
 };
 
 /**
- * РЎРѕР·РґР°С‚СЊ РїСѓСЃС‚РѕР№ РїСЂРѕРµРєС‚ (Р±РµР· РёСЃС…РѕРґРЅРѕРіРѕ С„РѕС‚Рѕ; С„РѕС‚Рѕ вЂ” РѕС‚РґРµР»СЊРЅС‹Рј attach).
+ * Создать пустой проект (без РёСЃС…РѕРґРЅРѕРіРѕ фото; фото — отдельным attach).
  */
 export async function createProductCardProject(
   userId: string,
@@ -139,7 +139,7 @@ export async function getProductCardProject(userId: string, projectId: string) {
     where: { id: projectId, userId },
   });
   if (!p) {
-    const err = new Error("РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ");
+    const err = new Error("Проект не найден");
     (err as Error & { code?: string }).code = "NOT_FOUND";
     throw err;
   }
@@ -168,14 +168,14 @@ export async function updateProductCardProject(
 
 const IMAGE_FILE_TYPES = new Set(["image"]);
 
-/** РњРѕРґРµР»СЊ/СЃС‚СЂРѕРєР° id вЂ” РґР»СЏ СЃРёРіРЅР°С‚СѓСЂС‹ В«uploadedFileВ» РёР· СЃРїРµС†РёС„РёРєР°С†РёРё. */
+/** Модель/строка id — для сигнатуры В«uploadedFileВ» РёР· спецификации. */
 export type SourceUploadedFileInput =
   | string
   | { id: string; userId: string; fileType: string; url: string | null };
 
 /**
- * РџСЂРёРІСЏР·Р°С‚СЊ СЂР°РЅРµРµ Р·Р°РіСЂСѓР¶РµРЅРЅС‹Р№ С„Р°Р№Р» Рє РїСЂРѕРµРєС‚Сѓ: С‚РѕР»СЊРєРѕ СЃРІРѕР№ С„Р°Р№Р», С‚РѕР»СЊРєРѕ РёР·РѕР±СЂР°Р¶РµРЅРёРµ.
- * РњРѕР¶РЅРѕ РїРµСЂРµРґР°С‚СЊ `id` РёР»Рё РѕР±СЉРµРєС‚ СЃ id/userId (userId СЃРІРµСЂСЏРµС‚СЃСЏ).
+ * Привязать ранее загруженный файл к проекту: только свой файл, только изображение.
+ * Можно передать `id` или объект с id/userId (userId сверяется).
  */
 export async function attachSourceImageToProject(
   userId: string,
@@ -185,7 +185,7 @@ export async function attachSourceImageToProject(
   const fileId = typeof uploadedFile === "string" ? uploadedFile : uploadedFile.id;
   if (typeof uploadedFile === "object" && uploadedFile.userId !== userId) {
     throw errorWithCode(
-      "Р¤Р°Р№Р» РЅРµ РЅР°Р№РґРµРЅ РёР»Рё РїСЂРёРЅР°РґР»РµР¶РёС‚ РґСЂСѓРіРѕРјСѓ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ",
+      "Файл не найден или принадлежит другому пользователю",
       "FILE_FORBIDDEN",
     );
   }
@@ -203,31 +203,31 @@ export async function updateProductSourceImages(input: {
 }) {
   const { userId, projectId, images } = input;
   if (!Array.isArray(images) || images.length < 1 || images.length > MAX_SOURCE_IMAGES) {
-    throw errorWithCode("Р”РѕР±Р°РІСЊС‚Рµ РѕС‚ 1 РґРѕ 4 С„РѕС‚Рѕ С‚РѕРІР°СЂР°.", "INVALID_SOURCE_IMAGES");
+    throw errorWithCode("Добавьте от 1 до 4 фото товара.", "INVALID_SOURCE_IMAGES");
   }
 
   const sorted = [...images].sort((a, b) => a.order - b.order);
   if (sorted[0]?.role !== "main" || sorted[0]?.order !== 0) {
-    throw errorWithCode("РџРµСЂРІРѕРµ С„РѕС‚Рѕ РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ РіР»Р°РІРЅС‹Рј.", "MAIN_REQUIRED");
+    throw errorWithCode("Первое фото должно быть главным.", "MAIN_REQUIRED");
   }
 
   const seenOrders = new Set<number>();
   const seenRoles = new Set<string>();
   for (const img of sorted) {
     if (!isSourceImageRole(img.role)) {
-      throw errorWithCode("РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ СЂРѕР»СЊ С„РѕС‚Рѕ.", "INVALID_ROLE");
+      throw errorWithCode("Некорректная роль фото.", "INVALID_ROLE");
     }
     if (!Number.isInteger(img.order) || img.order < 0 || img.order >= MAX_SOURCE_IMAGES) {
-      throw errorWithCode("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РїРѕСЂСЏРґРѕРє С„РѕС‚Рѕ.", "INVALID_ORDER");
+      throw errorWithCode("Некорректный порядок фото.", "INVALID_ORDER");
     }
     if (seenOrders.has(img.order)) {
-      throw errorWithCode("РџРѕСЂСЏРґРѕРє С„РѕС‚Рѕ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ СѓРЅРёРєР°Р»СЊРЅС‹Рј.", "DUPLICATE_ORDER");
+      throw errorWithCode("Порядок фото должен быть уникальным.", "DUPLICATE_ORDER");
     }
     if (seenRoles.has(img.role)) {
-      throw errorWithCode("Р РѕР»Рё С„РѕС‚Рѕ РЅРµ РґРѕР»Р¶РЅС‹ РїРѕРІС‚РѕСЂСЏС‚СЊСЃСЏ.", "DUPLICATE_ROLE");
+      throw errorWithCode("Роли фото не должны повторяться.", "DUPLICATE_ROLE");
     }
     if (typeof img.fileId !== "string" || img.fileId.trim() === "") {
-      throw errorWithCode("РЈРєР°Р¶РёС‚Рµ fileId РґР»СЏ РєР°Р¶РґРѕРіРѕ С„РѕС‚Рѕ.", "INVALID_FILE_ID");
+      throw errorWithCode("Укажите fileId для каждого фото.", "INVALID_FILE_ID");
     }
     seenOrders.add(img.order);
     seenRoles.add(img.role);
@@ -250,7 +250,7 @@ export async function updateProductSourceImages(input: {
       );
     }
     if (!IMAGE_FILE_TYPES.has(file.fileType) && !file.mimeType.toLowerCase().startsWith("image/")) {
-      throw errorWithCode("РќСѓР¶РµРЅ С„Р°Р№Р»-РёР·РѕР±СЂР°Р¶РµРЅРёРµ", "NOT_IMAGE");
+      throw errorWithCode("Нужен файл-изображение", "NOT_IMAGE");
     }
     const publicUrl = file.url?.trim() ?? "";
     if (!publicUrl || !isValidStoredFileUrl(publicUrl)) {

@@ -1,4 +1,4 @@
-﻿
+
 function hasNonEmptyUrl(value: unknown): boolean {
   return typeof value === "string" && value.trim() !== "";
 }
@@ -16,9 +16,9 @@ const SCENARIOS = new Set([
 ]);
 
 /**
- * Р’Р·Р°РёРјРѕРёСЃРєР»СЋС‡Р°СЋС‰РёРµ СЃС†РµРЅР°СЂРёРё Seedance 2.0 (Kie bytedance/seedance-2 / seedance-2-fast).
+ * Взаимоисключающие сценарии Seedance 2.0 (Kie bytedance/seedance-2 / seedance-2-fast).
  * РЎРј. OpenAPI: https://docs.kie.ai/market/bytedance/seedance-2
- * (Text-to-Video, First&Last, Multimodal reference вЂ” РЅРµ СЃРјРµС€РёРІР°С‚СЊ).
+ * (Text-to-Video, First&Last, Multimodal reference — РЅРµ смешивать).
  */
 export function validateSeedanceScenario(
   settings: Record<string, unknown>,
@@ -27,7 +27,7 @@ export function validateSeedanceScenario(
   const scenario =
     typeof raw === "string" && raw.trim() !== "" ? raw.trim() : "text-to-video";
   if (!SCENARIOS.has(scenario)) {
-    return { ok: false, message: "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ СЃС†РµРЅР°СЂРёР№ РіРµРЅРµСЂР°С†РёРё (scenario)." };
+    return { ok: false, message: "Некорректный сценарий генерации (scenario)." };
   }
 
   const hasFirst = hasNonEmptyUrl(settings.firstFrameUrl);
@@ -42,7 +42,7 @@ export function validateSeedanceScenario(
       return {
         ok: false,
         message:
-          "Р”Р»СЏ СЃС†РµРЅР°СЂРёСЏ В«text-to-videoВ» РЅРµ СѓРєР°Р·С‹РІР°Р№С‚Рµ РєР°РґСЂС‹ Рё СЂРµС„РµСЂРµРЅСЃС‹ (URL).",
+          "Для сценария «text-to-video» не указывайте кадры и референсы (URL).",
       };
     }
   }
@@ -51,7 +51,7 @@ export function validateSeedanceScenario(
       return {
         ok: false,
         message:
-          "Р”Р»СЏ СЃС†РµРЅР°СЂРёСЏ В«first-frameВ» РЅРµР»СЊР·СЏ СѓРєР°Р·С‹РІР°С‚СЊ РїРѕСЃР»РµРґРЅРёР№ РєР°РґСЂ Рё СЂРµС„РµСЂРµРЅСЃС‹.",
+          "Для сценария «first-frame» нельзя указывать последний кадр и референсы.",
       };
     }
   }
@@ -59,7 +59,7 @@ export function validateSeedanceScenario(
     if (hasAnyRef) {
       return {
         ok: false,
-        message: "Р”Р»СЏ СЃС†РµРЅР°СЂРёСЏ В«first-last-frameВ» РЅРµР»СЊР·СЏ СѓРєР°Р·С‹РІР°С‚СЊ СЂРµС„РµСЂРµРЅСЃС‹.",
+        message: "Для сценария «first-last-frame» нельзя указывать референсы.",
       };
     }
   }
@@ -68,14 +68,14 @@ export function validateSeedanceScenario(
       return {
         ok: false,
         message:
-          "Р”Р»СЏ СЃС†РµРЅР°СЂРёСЏ В«reference-to-videoВ» РЅРµР»СЊР·СЏ СѓРєР°Р·С‹РІР°С‚СЊ URL РїРµСЂРІРѕРіРѕ/РїРѕСЃР»РµРґРЅРµРіРѕ РєР°РґСЂР°.",
+          "Для сценария «reference-to-video» нельзя указывать URL первого/последнего кадра.",
       };
     }
   }
   return { ok: true };
 }
 
-/** РџСѓР±Р»РёС‡РЅС‹Рµ http(s) URL РёР· РїРѕР»РµР№ Seedance (РґР»СЏ РїСЂРѕРІРµСЂРѕРє РЅР° СЌС‚Р°РїРµ API). */
+/** Публичные http(s) URL из полей Seedance (для проверок на этапе API). */
 export function collectSeedanceSettingsHttpUrls(
   settings: Record<string, unknown>,
 ): string[] {
@@ -104,7 +104,7 @@ export const SEEDANCE_API_MODEL_ID = "bytedance/seedance-2";
 
 export const SEEDANCE_FAST_API_MODEL_ID = "bytedance/seedance-2-fast";
 
-/** РЎС†РµРЅР°СЂРёРё first/last frame / reference вЂ” РѕР±С‰РёРµ РґР»СЏ Seedance 2.0 Рё 2.0 Fast. */
+/** Сценарии first/last frame / reference — общие для Seedance 2.0 Рё 2.0 Fast. */
 export function isSeedanceScenarioModel(
   apiModelId: string | null | undefined,
 ): boolean {

@@ -1,4 +1,4 @@
-﻿
+
 import type { ProductCardProject } from "@/generated/prisma/client";
 import {
   assertUserOwnsFileUrl,
@@ -21,25 +21,25 @@ export async function resolveProductStillImageUrl(
   if (sourceType === "original") {
     const u = normalizeProductSourceImages(project)[0]?.url ?? project.sourceImageUrl?.trim();
     if (!u) {
-      return { ok: false, message: "Р—Р°РіСЂСѓР·РёС‚Рµ РёСЃС…РѕРґРЅРѕРµ С„РѕС‚Рѕ С‚РѕРІР°СЂР°." };
+      return { ok: false, message: "Загрузите исходное фото товара." };
     }
     const own = await assertUserOwnsFileUrl(userId, u);
     if (!own) {
-      return { ok: false, message: "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РёСЃС…РѕРґРЅРѕРјСѓ РёР·РѕР±СЂР°Р¶РµРЅРёСЋ." };
+      return { ok: false, message: "Нет доступа к исходному изображению." };
     }
     return { ok: true, url: u };
   }
   if (!sourceGenerationId?.trim()) {
-    return { ok: false, message: "РЈРєР°Р¶РёС‚Рµ СЃРіРµРЅРµСЂРёСЂРѕРІР°РЅРЅРѕРµ РёР·РѕР±СЂР°Р¶РµРЅРёРµ." };
+    return { ok: false, message: "Укажите сгенерированное изображение." };
   }
   const url = await getCompletedGenerationImageUrlForUser(userId, sourceGenerationId.trim());
   if (!url) {
-    return { ok: false, message: "Р“РµРЅРµСЂР°С†РёСЏ РЅРµ РЅР°Р№РґРµРЅР° РёР»Рё РµС‰С‘ РЅРµ РіРѕС‚РѕРІР°." };
+    return { ok: false, message: "Генерация не найдена или ещё не готова." };
   }
   return { ok: true, url };
 }
 
-/** РСЃС‚РѕС‡РЅРёРє РјРёРЅРёР°С‚СЋСЂС‹ РґР»СЏ РІРєР»Р°РґРєРё В«РљР°СЂС‚РѕС‡РєР° С‚РѕРІР°СЂР°В» (MVP: original | concept). */
+/** Источник миниатюры для вкладки «Карточка товара» (MVP: original | concept). */
 export async function resolveMarketplaceCardSource(
   userId: string,
   project: ProductCardProject,
@@ -49,16 +49,16 @@ export async function resolveMarketplaceCardSource(
   if (sourceType === "original") {
     const u = normalizeProductSourceImages(project)[0]?.url ?? project.sourceImageUrl?.trim();
     if (!u) {
-      return { ok: false, message: "Р—Р°РіСЂСѓР·РёС‚Рµ РёСЃС…РѕРґРЅРѕРµ С„РѕС‚Рѕ" };
+      return { ok: false, message: "Загрузите исходное фото" };
     }
     if (!(await assertUserOwnsFileUrl(userId, u))) {
-      return { ok: false, message: "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РёСЃС…РѕРґРЅРѕРјСѓ С„РѕС‚Рѕ" };
+      return { ok: false, message: "Нет доступа к исходному фото" };
     }
     return { ok: true, url: u };
   }
   if (sourceType === "concept_generation") {
     if (!sourceGenerationId?.trim()) {
-      return { ok: false, message: "Р’С‹Р±РµСЂРёС‚Рµ СЃРіРµРЅРµСЂРёСЂРѕРІР°РЅРЅРѕРµ С„РѕС‚Рѕ" };
+      return { ok: false, message: "Выберите сгенерированное фото" };
     }
     const r = await getConceptGenerationImageUrlForMarketplace(
       userId,
@@ -70,7 +70,7 @@ export async function resolveMarketplaceCardSource(
     }
     return { ok: true, url: r.url };
   }
-  return { ok: false, message: "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёСЃС‚РѕС‡РЅРёРє" };
+  return { ok: false, message: "Некорректный источник" };
 }
 
 export type ProductVideoImageSourceType =
@@ -79,7 +79,7 @@ export type ProductVideoImageSourceType =
   | "marketplace_card_generation";
 
 /**
- * РљР°РґСЂ РґР»СЏ product-card video: РёСЃС…РѕРґРЅРёРє, concept IMAGE РёР»Рё marketplace_card IMAGE.
+ * Кадр для product-card video: исходник, concept IMAGE или marketplace_card IMAGE.
  */
 export async function resolveProductVideoImageSource(
   userId: string,
@@ -90,15 +90,15 @@ export async function resolveProductVideoImageSource(
   if (sourceType === "original") {
     const u = normalizeProductSourceImages(project)[0]?.url ?? project.sourceImageUrl?.trim();
     if (!u) {
-      return { ok: false, message: "Р—Р°РіСЂСѓР·РёС‚Рµ РёСЃС…РѕРґРЅРѕРµ С„РѕС‚Рѕ С‚РѕРІР°СЂР°" };
+      return { ok: false, message: "Загрузите исходное фото товара" };
     }
     if (!(await assertUserOwnsFileUrl(userId, u))) {
-      return { ok: false, message: "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РёСЃС…РѕРґРЅРѕРјСѓ С„РѕС‚Рѕ" };
+      return { ok: false, message: "Нет доступа к исходному фото" };
     }
     return { ok: true, url: u };
   }
   if (!sourceGenerationId?.trim()) {
-    return { ok: false, message: "РЈРєР°Р¶РёС‚Рµ СЃРіРµРЅРµСЂРёСЂРѕРІР°РЅРЅРѕРµ РёР·РѕР±СЂР°Р¶РµРЅРёРµ" };
+    return { ok: false, message: "Укажите сгенерированное изображение" };
   }
   if (sourceType === "concept_generation") {
     const r = await getConceptGenerationImageUrlForMarketplace(
@@ -122,5 +122,5 @@ export async function resolveProductVideoImageSource(
     }
     return { ok: true, url: r.url };
   }
-  return { ok: false, message: "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёСЃС‚РѕС‡РЅРёРє" };
+  return { ok: false, message: "Некорректный источник" };
 }

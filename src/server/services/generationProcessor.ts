@@ -1,4 +1,4 @@
-﻿
+
 import type { Job } from "bullmq";
 import { Prisma } from "@/generated/prisma/client";
 import type { AiModel, Generation } from "@/generated/prisma/client";
@@ -142,7 +142,7 @@ function shouldRetryProviderKie(
   return false;
 }
 
-/** Р”Р»СЏ Р°РґРјРёРЅ-С‚РµСЃС‚Р° Рё РґСЂСѓРіРёС… СЃС†РµРЅР°СЂРёРµРІ СЃ С‚РµРј Р¶Рµ С‚РµР»РѕРј, С‡С‚Рѕ Сѓ РѕС‡РµСЂРµРґРё. */
+/** Для админ-теста и других сценариев с тем же телом, что у очереди. */
 export function buildImageKieInput(
   gen: Generation,
   model: AiModel,
@@ -199,7 +199,7 @@ export function buildVideoKieInput(
     model.payloadMapping != null &&
     typeof model.payloadMapping === "object" &&
     !Array.isArray(model.payloadMapping);
-  /** Kling 3.0 Рё Wan 2.7 вЂ” С‡РµСЂРµР· POST .../jobs/createTask; РёРЅР°С‡Рµ Р±РµР· payloadMapping СѓС€Р»Рё Р±С‹ РЅР° legacy /video/generate. */
+  /** Kling 3.0 Рё Wan 2.7 — через POST .../jobs/createTask; иначе без payloadMapping ушли Р±С‹ РЅР° legacy /video/generate. */
   const useMarketCreateTask =
     modelId === "kling-3.0/motion-control" ||
     modelId.toLowerCase() === "kling-3.0" ||
@@ -251,7 +251,7 @@ export async function markFailed(
     return;
   }
   try {
-    await refundCredits(genId, "Р’РѕР·РІСЂР°С‚: РѕС€РёР±РєР° РїСЂРѕРІР°Р№РґРµСЂР° (worker)");
+    await refundCredits(genId, "Возврат: ошибка провайдера (worker)");
   } catch {
     // ignore
   }
@@ -266,7 +266,7 @@ export async function markFailed(
   void trySendGenerationFailedEmail(genId);
 }
 
-/** РџРѕСЃР»Рµ РёСЃС‡РµСЂРїР°РЅРёСЏ СЂРµС‚СЂР°РµРІ Bull вЂ” РµСЃР»Рё РіРµРЅРµСЂР°С†РёСЏ РµС‰С‘ РЅРµ РІ С„РёРЅР°Р»СЊРЅРѕРј СЃРѕСЃС‚РѕСЏРЅРёРё. */
+/** После исчерпания ретраев Bull — если генерация ещё РЅРµ РІ финальном состоянии. */
 export async function markGenerationExhausted(
   generationId: string,
   lastError: string,
@@ -276,7 +276,7 @@ export async function markGenerationExhausted(
   if (TERMINAL.has(g.status)) return;
   await markFailed(
     generationId,
-    `Job Bull РёСЃС‡РµСЂРїР°РЅ: ${lastError.slice(0, 4000)}`,
+    `Job Bull исчерпан: ${lastError.slice(0, 4000)}`,
   );
 }
 
@@ -288,16 +288,16 @@ function getInlineMaxWallMs(): number {
 }
 
 /**
- * РћРґРёРЅ РїСЂРѕС…РѕРґ РѕР±СЂР°Р±РѕС‚РєРё Р±РµР· РѕС‡РµСЂРµРґРё (QUEUE_MODE=inline). РўР° Р¶Рµ Р±РёР·РЅРµСЃ-Р»РѕРіРёРєР°, С‡С‚Рѕ Сѓ РІРѕСЂРєРµСЂР° (`processGenerationJob`).
- * РџСѓР±Р»РёС‡РЅРѕРµ РёРјСЏ РґР»СЏ API; СЂРµР°Р»РёР·Р°С†РёСЏ вЂ” `processVideoGenerationInline`.
+ * Один проход обработки без очереди (QUEUE_MODE=inline). Та же бизнес-логика, что у воркера (`processGenerationJob`).
+ * Публичное РёРјСЏ для API; реализация — `processVideoGenerationInline`.
  */
 export async function processGeneration(generationId: string): Promise<void> {
   return processVideoGenerationInline(generationId);
 }
 
 /**
- * Р›РѕРєР°Р»СЊРЅР°СЏ СЂР°Р·СЂР°Р±РѕС‚РєР° (QUEUE_MODE=inline): РїРѕР»РЅС‹Р№ С†РёРєР» Р±РµР· Bull/Redis.
- * HTTP-С‚Р°Р№РјР°СѓС‚С‹ Рє Kie вЂ” KIE_FETCH_TIMEOUT_MS; РІРµСЂС…РЅСЏСЏ РіСЂР°РЅРёС†Р° wall-clock вЂ” GENERATION_INLINE_MAX_MS (РµСЃР»Рё > 0).
+ * Локальная разработка (QUEUE_MODE=inline): полный цикл без Bull/Redis.
+ * HTTP-таймауты Рє Kie — KIE_FETCH_TIMEOUT_MS; верхняя граница wall-clock — GENERATION_INLINE_MAX_MS (если > 0).
  */
 export async function processVideoGenerationInline(generationId: string): Promise<void> {
   const maxMs = getInlineMaxWallMs();
@@ -324,7 +324,7 @@ export async function processVideoGenerationInline(generationId: string): Promis
     if (msg === INLINE_WALL_ERROR) {
       await markFailed(
         generationId,
-        "РџСЂРµРІС‹С€РµРЅРѕ РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ (GENERATION_INLINE_MAX_MS, inline-СЂРµР¶РёРј).",
+        "Превышено время ожидания (GENERATION_INLINE_MAX_MS, inline-режим).",
       );
       return;
     }
@@ -332,15 +332,15 @@ export async function processVideoGenerationInline(generationId: string): Promis
     if (g && !TERMINAL.has(g.status)) {
       await markFailed(
         generationId,
-        msg.slice(0, 4_000) || "РћС€РёР±РєР° РѕР±СЂР°Р±РѕС‚РєРё (inline)",
+        msg.slice(0, 4_000) || "Ошибка обработки (inline)",
       );
     }
   }
 }
 
 /**
- * РћРґРёРЅ job = РѕРґРЅР° РїРѕРїС‹С‚РєР° С†РµРїРѕС‡РєРё. Р РµС‚СЂР°Рё вЂ” СѓСЂРѕРІРµРЅСЊ Bull. РќРµ РґСѓР±Р»РёСЂСѓР№С‚Рµ CAPTURE/REFUND.
- * `job` РЅРµ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ; РѕРїС†РёРѕРЅР°Р»РµРЅ РґР»СЏ inline-СЂРµР¶РёРјР° Р±РµР· Bull.
+ * РћРґРёРЅ job = РѕРґРЅР° попытка цепочки. Ретраи — уровень Bull. РќРµ дублируйте CAPTURE/REFUND.
+ * `job` не используется; опционален для inline-режима без Bull.
  */
 export async function processGenerationJob(
   generationId: string,
@@ -401,7 +401,7 @@ export async function processGenerationJob(
       where: { id: gen.id },
       data: { status: "PROCESSING", providerTaskId: taskId },
     });
-    const mockNote = "MOCK_KIE: Р·Р°РїСЂРѕСЃ Рє Kie.ai РЅРµ РѕС‚РїСЂР°РІР»СЏР»СЃСЏ";
+    const mockNote = "MOCK_KIE: запрос к Kie.ai не отправлялся";
     if (model.type === "IMAGE") {
       const kieIn = buildImageKieInput(gen, model);
       const url = getKieGenerateRequestUrl(kieIn);
@@ -419,7 +419,7 @@ export async function processGenerationJob(
           mock: true,
           mockResponse: true,
           providerTaskId: taskId,
-          message: "MOCK_KIE: СЌРјСѓР»СЏС†РёСЏ СѓСЃРїРµС€РЅРѕРіРѕ СЃРѕР·РґР°РЅРёСЏ Р·Р°РґР°С‡Рё",
+          message: "MOCK_KIE: эмуляция успешного создания задачи",
         },
         statusCode: 200,
         errorMessage: null,
@@ -443,7 +443,7 @@ export async function processGenerationJob(
         mock: true,
         mockResponse: true,
         providerTaskId: taskId,
-        message: "MOCK_KIE: СЌРјСѓР»СЏС†РёСЏ СѓСЃРїРµС€РЅРѕРіРѕ СЃРѕР·РґР°РЅРёСЏ Р·Р°РґР°С‡Рё",
+        message: "MOCK_KIE: эмуляция успешного создания задачи",
       },
       statusCode: 200,
       errorMessage: null,
@@ -476,7 +476,7 @@ export async function processGenerationJob(
       requestPayload: reqLog,
       responsePayload: redactKieLogPayload(result.rawResponse),
       statusCode: result.httpStatus,
-      errorMessage: result.success ? null : result.errorMessage ?? "РћС€РёР±РєР° РїСЂРѕРІР°Р№РґРµСЂР°",
+      errorMessage: result.success ? null : result.errorMessage ?? "Ошибка провайдера",
     });
     if (!result.success) {
       if (shouldRetryProviderKie(result)) {
@@ -486,7 +486,7 @@ export async function processGenerationJob(
         gen.id,
         explainKieErrorForUser(
           result.errorMessage,
-          "РћС€РёР±РєР° Kie (image)",
+          "Ошибка Kie (image)",
         ),
       );
       return;
@@ -513,7 +513,7 @@ export async function processGenerationJob(
         );
       }
     } else {
-      await markFailed(gen.id, "Kie: РЅРµС‚ taskId Рё URL");
+      await markFailed(gen.id, "Kie: нет taskId и URL");
     }
     return;
   }
@@ -540,7 +540,7 @@ export async function processGenerationJob(
       requestPayload: reqLog,
       responsePayload: redactKieLogPayload(result.rawResponse),
       statusCode: result.httpStatus,
-      errorMessage: result.success ? null : result.errorMessage ?? "РћС€РёР±РєР° РїСЂРѕРІР°Р№РґРµСЂР°",
+      errorMessage: result.success ? null : result.errorMessage ?? "Ошибка провайдера",
     });
     if (!result.success) {
       if (shouldRetryProviderKie(result)) {
@@ -550,7 +550,7 @@ export async function processGenerationJob(
         gen.id,
         explainKieErrorForUser(
           result.errorMessage,
-          "РћС€РёР±РєР° Kie (video)",
+          "Ошибка Kie (video)",
         ),
       );
       return;
@@ -585,13 +585,13 @@ export async function processGenerationJob(
         );
       }
     } else {
-      await markFailed(gen.id, "Kie: РЅРµС‚ taskId Рё URL РІРёРґРµРѕ");
+      await markFailed(gen.id, "Kie: нет taskId и URL видео");
     }
   }
 }
 
 /**
- * РЎРѕС…СЂР°РЅРµРЅРёРµ СЂРµР·СѓР»СЊС‚Р°С‚Р° (S3 РїСЂРё РЅР°Р»РёС‡РёРё), COMPLETED, confirmCredits. РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ worker Рё webhook Kie.
+ * Сохранение результата (S3 при наличии), COMPLETED, confirmCredits. Используется worker и webhook Kie.
  */
 export async function completeWithOutput(
   gen: Generation,
@@ -694,16 +694,16 @@ export async function completeWithOutput(
     try {
       await confirmCredits(gen.id);
     } catch {
-      // РёРґРµРјРїРѕС‚РµРЅС‚РЅРѕСЃС‚СЊ
+      // идемпотентность
     }
     void trySendGenerationCompletedEmail(gen.id);
   } catch (e) {
     const msg =
       e instanceof StorageError
-        ? `РҐСЂР°РЅРёР»РёС‰Рµ: ${e.message}`
+        ? `Хранилище: ${e.message}`
         : e instanceof Error
           ? e.message
-          : "РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ СЂРµР·СѓР»СЊС‚Р°С‚Р°";
+          : "Ошибка сохранения результата";
     await markFailed(gen.id, msg.slice(0, 8000));
   }
 }
@@ -734,7 +734,7 @@ async function runPollToCompletion(
 ): Promise<void> {
   const taskId = gen.providerTaskId;
   if (!taskId) {
-    await markFailed(gen.id, "РќРµС‚ taskId РґР»СЏ polling");
+    await markFailed(gen.id, "Нет taskId для polling");
     return;
   }
   const startWall = maxWallMs > 0 ? Date.now() : 0;
@@ -750,11 +750,11 @@ async function runPollToCompletion(
         requestPayload: { taskId, maxWallMs, attempts: i },
         responsePayload: { stopped: true },
         statusCode: null,
-        errorMessage: "РџСЂРµРІС‹С€РµРЅ Р»РёРјРёС‚ РІСЂРµРјРµРЅРё polling (GENERATION_POLL_MAX_WALL_MS)",
+        errorMessage: "Превышен лимит времени polling (GENERATION_POLL_MAX_WALL_MS)",
       });
       await markFailed(
         gen.id,
-        "РўР°Р№Рј-Р°СѓС‚ РѕР¶РёРґР°РЅРёСЏ (РјР°РєСЃ. РґР»РёС‚РµР»СЊРЅРѕСЃС‚СЊ polling)",
+        "Тайм-аут ожидания (макс. длительность polling)",
       );
       return;
     }
@@ -778,13 +778,13 @@ async function runPollToCompletion(
           requestPayload: { taskId, attempt: i + 1 },
           responsePayload: redactKieLogPayload(poll.rawResponse),
           statusCode: poll.httpStatus,
-          errorMessage: poll.errorMessage ?? "РћС€РёР±РєР° РїСЂРѕРІР°Р№РґРµСЂР° (poll)",
+          errorMessage: poll.errorMessage ?? "Ошибка провайдера (poll)",
         });
         await markFailed(
           gen.id,
           explainKieErrorForUser(
             poll.errorMessage,
-            "РћС€РёР±РєР° РїСЂРѕРІР°Р№РґРµСЂР° (poll)",
+            "Ошибка провайдера (poll)",
           ),
         );
         return;
@@ -828,10 +828,10 @@ async function runPollToCompletion(
     requestPayload: { taskId, maxAttempts },
     responsePayload: redactKieLogPayload(lastRaw),
     statusCode: lastHttp,
-    errorMessage: lastErr ?? "Polling: СЂРµР·СѓР»СЊС‚Р°С‚ РЅРµ РіРѕС‚РѕРІ",
+    errorMessage: lastErr ?? "Polling: результат не готов",
   });
   await markFailed(
     gen.id,
-    "РўР°Р№Рј-Р°СѓС‚ РѕР¶РёРґР°РЅРёСЏ РіРѕС‚РѕРІРѕРіРѕ С„Р°Р№Р»Р° (polling)",
+    "Тайм-аут ожидания готового файла (polling)",
   );
 }

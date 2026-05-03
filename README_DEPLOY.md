@@ -103,7 +103,7 @@ docker compose run --rm --env-file .env -v "$(pwd)":/work -w /work node:20-alpin
 
 ## Настройка SSL (HTTPS)
 
-1. **Рекомендуемый** путь: [Let’s Encrypt](https://letsencrypt.org/) (Certbot) или аналог. Получите сертификат для `YOUR_DOMAIN`, укажите `ssl_certificate` / `ssl_certificate_key` в конфиге Nginx (см. комментарии в `nginx.conf.example`).
+1. **Рекомендуемый** путь: [Let's Encrypt](https://letsencrypt.org/) (Certbot) или аналог. Получите сертификат для `YOUR_DOMAIN`, укажите `ssl_certificate` / `ssl_certificate_key` в конфиге Nginx (см. комментарии в `nginx.conf.example`).
 
 2. **HTTP-01**: каталог `/.well-known/acme-challenge/` в примере ведёт на `root /var/www/certbot` — настройте пути и права по документации Certbot.
 

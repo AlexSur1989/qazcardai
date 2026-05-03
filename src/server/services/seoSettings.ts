@@ -1,4 +1,4 @@
-﻿
+
 import type { Prisma } from "@/generated/prisma/client";
 import { getRegistryEntry } from "@/config/app-settings-registry";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
@@ -97,15 +97,15 @@ function validateKeywords(
   v: unknown,
 ): { ok: true; value: string[] } | { ok: false; error: string } {
   if (!Array.isArray(v)) {
-    return { ok: false, error: "SEO_DEFAULT_KEYWORDS: РѕР¶РёРґР°РµС‚СЃСЏ РјР°СЃСЃРёРІ" };
+    return { ok: false, error: "SEO_DEFAULT_KEYWORDS: ожидается массив" };
   }
   if (v.length > 30) {
-    return { ok: false, error: "SEO_DEFAULT_KEYWORDS: РЅРµ Р±РѕР»РµРµ 30 СЌР»РµРјРµРЅС‚РѕРІ" };
+    return { ok: false, error: "SEO_DEFAULT_KEYWORDS: не более 30 элементов" };
   }
   const out: string[] = [];
   for (const x of v) {
     if (typeof x !== "string") {
-      return { ok: false, error: "SEO_DEFAULT_KEYWORDS: РІСЃРµ СЌР»РµРјРµРЅС‚С‹ вЂ” СЃС‚СЂРѕРєРё" };
+      return { ok: false, error: "SEO_DEFAULT_KEYWORDS: РІСЃРµ элементы — строки" };
     }
     out.push(x);
   }
@@ -120,22 +120,22 @@ function validateSeoValue(
   if (!def) return { ok: false, error: "unknown_key" };
   if (def.type === "string") {
     if (typeof value !== "string") {
-      return { ok: false, error: `${key}: РѕР¶РёРґР°РµС‚СЃСЏ СЃС‚СЂРѕРєР°` };
+      return { ok: false, error: `${key}: ожидается строка` };
     }
     if (key === "SEO_DEFAULT_TITLE" && value.length > 120) {
-      return { ok: false, error: "Title: РјР°РєСЃРёРјСѓРј 120 СЃРёРјРІРѕР»РѕРІ" };
+      return { ok: false, error: "Title: максимум 120 символов" };
     }
     if (key === "SEO_DEFAULT_DESCRIPTION" && value.length > 300) {
-      return { ok: false, error: "Description: РјР°РєСЃРёРјСѓРј 300 СЃРёРјРІРѕР»РѕРІ" };
+      return { ok: false, error: "Description: максимум 300 символов" };
     }
     if (URL_OPTIONAL_KEYS.has(key) && !isHttpOrEmpty(value)) {
-      return { ok: false, error: `${key}: РїСѓСЃС‚Рѕ РёР»Рё РІР°Р»РёРґРЅС‹Р№ http(s) URL` };
+      return { ok: false, error: `${key}: пусто или валидный http(s) URL` };
     }
     if (
       (key === "YANDEX_VERIFICATION" || key === "GOOGLE_SITE_VERIFICATION") &&
       value.length > 300
     ) {
-      return { ok: false, error: `${key}: РјР°РєСЃРёРјСѓРј 300 СЃРёРјРІРѕР»РѕРІ` };
+      return { ok: false, error: `${key}: максимум 300 символов` };
     }
     return { ok: true, value: value as unknown as Prisma.InputJsonValue };
   }
@@ -277,78 +277,78 @@ export async function getSeoChecklist(): Promise<SeoChecklistItem[]> {
   return [
     {
       id: "title",
-      label: "Title РЅР°СЃС‚СЂРѕРµРЅ / Title set",
+      label: "Title настроен / Title set",
       status: title ? "ok" : "warning",
     },
     {
       id: "description",
-      label: "Description РЅР°СЃС‚СЂРѕРµРЅ / Description set",
+      label: "Description настроен / Description set",
       status: desc ? "ok" : "warning",
     },
     {
       id: "canonical",
-      label: "Canonical URL РЅР°СЃС‚СЂРѕРµРЅ / Canonical set",
+      label: "Canonical URL настроен / Canonical set",
       status: isHttpOrEmpty(canonical) && Boolean(canonical) ? "ok" : "warning",
-      detail: canonical || "Р—Р°РґР°Р№С‚Рµ SEO_CANONICAL_URL",
+      detail: canonical || "Задайте SEO_CANONICAL_URL",
     },
     {
       id: "og",
-      label: "OG image Р·Р°РґР°РЅ / OG image set",
+      label: "OG image задан / OG image set",
       status: og && isHttpOrEmpty(og) ? "ok" : "warning",
     },
     {
       id: "robots",
-      label: "robots.txt РґРѕСЃС‚СѓРїРµРЅ / robots.txt available",
+      label: "robots.txt доступен / robots.txt available",
       status: "ok",
-      detail: "РњР°СЂС€СЂСѓС‚ /robots.txt",
+      detail: "Маршрут /robots.txt",
     },
     {
       id: "sitemap_url",
-      label: "Sitemap URL Р·Р°РґР°РЅ / Sitemap URL set",
+      label: "Sitemap URL задан / Sitemap URL set",
       status: sitemapU && isHttpOrEmpty(sitemapU) ? "ok" : "warning",
     },
     {
       id: "sitemap_app",
-      label: "sitemap.xml РґРѕСЃС‚СѓРїРµРЅ / sitemap.xml available",
+      label: "sitemap.xml доступен / sitemap.xml available",
       status: "ok",
-      detail: "РњР°СЂС€СЂСѓС‚ /sitemap.xml",
+      detail: "Маршрут /sitemap.xml",
     },
     {
       id: "legal",
-      label: "Legal pages РѕРїСѓР±Р»РёРєРѕРІР°РЅС‹ / Legal pages published",
+      label: "Legal pages опубликованы / Legal pages published",
       status: publishedLegal >= LEGAL_PAGE_SLUGS.length ? "ok" : "warning",
       detail: `${publishedLegal} / ${LEGAL_PAGE_SLUGS.length} PUBLISHED`,
     },
     {
       id: "landing_sitemap",
-      label: "Sitemap Р»РµРЅРґРёРЅРіР° (РѕС‚РґРµР»СЊРЅС‹Р№ РґРѕРјРµРЅ) / Landing sitemap",
+      label: "Sitemap лендинга (отдельный домен) / Landing sitemap",
       status: "info",
       detail:
         landing && landingHost && appHost && landingHost !== appHost
-          ? "РЎР°Р№С‚РјР°Рї РІРЅРµС€РЅРµРіРѕ Р»РµРЅРґРёРЅРіР° РЅР°СЃС‚СЂР°РёРІР°РµС‚СЃСЏ РѕС‚РґРµР»СЊРЅРѕ (qazcard-landing/ Рё С‚.Рґ.)."
-          : "Р•СЃР»Рё Р»РµРЅРґРёРЅРі РЅР° РґСЂСѓРіРѕРј РґРѕРјРµРЅРµ вЂ” sitemap/robots РґР»СЏ РЅРµРіРѕ РЅР°СЃС‚СЂР°РёРІР°СЋС‚СЃСЏ РѕС‚РґРµР»СЊРЅРѕ.",
+          ? "Сайтмап внешнего лендинга настраивается отдельно (qazcard-landing/ и т.д.)."
+          : "Если лендинг РЅР° РґСЂСѓРіРѕРј домене — sitemap/robots для него настраиваются отдельно.",
     },
     {
       id: "landing_cta",
-      label: "Р›РµРЅРґРёРЅРі: CTA РЅР° РїСЂРёР»РѕР¶РµРЅРёРµ / Landing CTA to app",
+      label: "Лендинг: CTA на приложение / Landing CTA to app",
       status: "info",
-      detail: "РЎСЃС‹Р»РєРё РЅР° РїСЂРёР»РѕР¶РµРЅРёРµ: /login, /register, /dashboard/create/product-card",
+      detail: "Ссылки на приложение: /login, /register, /dashboard/create/product-card",
     },
     {
       id: "login",
-      label: "/login СЂР°Р±РѕС‚Р°РµС‚ / /login works",
+      label: "/login работает / /login works",
       status: loginOk ? "ok" : "warning",
       detail: "/login — вход; /auth/login — редирект на /login с тем же ?next= / ?callbackUrl=",
     },
     {
       id: "register",
-      label: "/register СЂР°Р±РѕС‚Р°РµС‚ / /register works",
+      label: "/register работает / /register works",
       status: regOk ? "ok" : "warning",
       detail: "/register — регистрация; /auth/register — редирект на /register",
     },
     {
       id: "product_card",
-      label: "/dashboard/create/product-card РїРѕСЃР»Рµ РІС…РѕРґР° / product-card (auth)",
+      label: "/dashboard/create/product-card после входа / product-card (auth)",
       status: productOk ? "ok" : "warning",
       detail: "Нужна сессия; без входа — редирект на /login?next=…",
     },

@@ -1,4 +1,4 @@
-﻿
+
 import type { AiModel } from "@/generated/prisma/client";
 import {
   buildConceptPhotoPrompt,
@@ -82,7 +82,7 @@ export type GenerateConceptPhotoErr = {
 export type GenerateConceptPhotoResult = GenerateConceptPhotoOk | GenerateConceptPhotoErr;
 
 /**
- * Р“РµРЅРµСЂР°С†РёСЏ В«Р¤РѕС‚Рѕ СЃ РєРѕРЅС†РµРїС†РёСЏРјРёВ» С‡РµСЂРµР· РѕР±С‰РёР№ pipeline (queue + processGeneration).
+ * Генерация «Фото с концепциями» через общий pipeline (queue + processGeneration).
  */
 export async function generateConceptPhotoForProductCard(
   userId: string,
@@ -91,31 +91,31 @@ export async function generateConceptPhotoForProductCard(
 ): Promise<GenerateConceptPhotoResult> {
   const project = await getOwnedProjectOrNull(userId, projectId);
   if (!project) {
-    return { ok: false, error: "РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ", status: 404 };
+    return { ok: false, error: "Проект не найден", status: 404 };
   }
 
   const sourceImages = normalizeProductSourceImages(project);
   const sourceUrl = sourceImages[0]?.url ?? project.sourceImageUrl?.trim();
   if (!sourceUrl) {
-    return { ok: false, error: "Р—Р°РіСЂСѓР·РёС‚Рµ РёСЃС…РѕРґРЅРѕРµ С„РѕС‚Рѕ", status: 400 };
+    return { ok: false, error: "Загрузите исходное фото", status: 400 };
   }
   if (!(await assertUserOwnsFileUrl(userId, sourceUrl))) {
-    return { ok: false, error: "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє С„Р°Р№Р»Сѓ", status: 403 };
+    return { ok: false, error: "Нет доступа к файлу", status: 403 };
   }
   for (const img of sourceImages.slice(1)) {
     if (!(await assertUserOwnsFileUrl(userId, img.url))) {
-      return { ok: false, error: "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РѕРґРЅРѕРјСѓ РёР· РёСЃС…РѕРґРЅС‹С… С„РѕС‚Рѕ", status: 403 };
+      return { ok: false, error: "Нет доступа к одному из исходных фото", status: 403 };
     }
   }
   const sourceImageUrls = sourceImages.map((img) => img.url);
 
   if (!isValidProductCategoryId(input.categoryId)) {
-    return { ok: false, error: "РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РєР°С‚РµРіРѕСЂРёСЏ", status: 400 };
+    return { ok: false, error: "Некорректная категория", status: 400 };
   }
   if (!isConceptInCategory(input.categoryId, input.conceptId)) {
     return {
       ok: false,
-      error: "РљРѕРЅС†РµРїС†РёСЏ РЅРµ РѕС‚РЅРѕСЃРёС‚СЃСЏ Рє РІС‹Р±СЂР°РЅРЅРѕР№ РєР°С‚РµРіРѕСЂРёРё",
+      error: "Концепция не относится к выбранной категории",
       status: 400,
     };
   }
@@ -175,7 +175,7 @@ export async function generateConceptPhotoForProductCard(
   } catch (e) {
     return {
       ok: false,
-      error: e instanceof Error ? e.message : "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Рµ РЅР°СЃС‚СЂРѕР№РєРё РјРѕРґРµР»Рё",
+      error: e instanceof Error ? e.message : "Некорректные настройки модели",
       status: 400,
     };
   }
@@ -264,8 +264,8 @@ export type EstimateMarketplaceCardErr = { ok: false; error: string; status: num
 export type EstimateMarketplaceCardResult = EstimateMarketplaceCardOk | EstimateMarketplaceCardErr;
 
 /**
- * РћС†РµРЅРєР° С‚РѕРєРµРЅРѕРІ: С‚РѕС‚ Р¶Рµ Product Card pricing, С‡С‚Рѕ Рё РїСЂРё СЃРѕР·РґР°РЅРёРё Generation.
- * РџСЂРѕРІР°Р№РґРµСЂ РЅРµ РІС‹Р·С‹РІР°РµС‚СЃСЏ.
+ * Оценка токенов: тот же Product Card pricing, что и при создании Generation.
+ * Провайдер не вызывается.
  */
 export async function estimateMarketplaceCardCredits(
   userId: string,
@@ -280,10 +280,10 @@ export async function estimateMarketplaceCardCredits(
 ): Promise<EstimateMarketplaceCardResult> {
   const project = await getOwnedProjectOrNull(userId, projectId);
   if (!project) {
-    return { ok: false, error: "РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ", status: 404 };
+    return { ok: false, error: "Проект не найден", status: 404 };
   }
   if (!isValidMarketplaceCardStyle(input.style)) {
-    return { ok: false, error: "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ СЃС‚РёР»СЊ РєР°СЂС‚РѕС‡РєРё", status: 400 };
+    return { ok: false, error: "Некорректный стиль карточки", status: 400 };
   }
   const style = input.style as MarketplaceCardStyle;
   const src = await resolveMarketplaceCardSource(
@@ -352,13 +352,13 @@ function buildMarketplaceCardMergedModelSettings(
   } catch (e) {
     return {
       ok: false,
-      error: e instanceof Error ? e.message : "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Рµ РЅР°СЃС‚СЂРѕР№РєРё РјРѕРґРµР»Рё",
+      error: e instanceof Error ? e.message : "Некорректные настройки модели",
     };
   }
 }
 
 /**
- * РњР°СЂРєРµС‚РїР»РµР№СЃ-РєР°СЂС‚РѕС‡РєР°: hidden prompt С‚РѕР»СЊРєРѕ РЅР° СЃРµСЂРІРµСЂРµ; pipeline вЂ” РѕР±С‰РёР№ product-card image.
+ * Маркетплейс-карточка: hidden prompt только РЅР° сервере; pipeline — общий product-card image.
  *
  * TODO: Marketplace card v1 uses image generation prompt. For production-quality text, later implement overlay rendering with HTML/SVG/canvas to avoid AI text mistakes.
  */
@@ -375,18 +375,18 @@ export async function generateMarketplaceCardForProductCard(
     cardSize?: string;
     overlayTemplate?: string;
     userInstructions: string;
-    /** РќРµ РґРѕРІРµСЂСЏР№С‚Рµ С†РµРЅРµ СЃ С„СЂРѕРЅС‚Р°: РїСЂРё СЂР°СЃС…РѕР¶РґРµРЅРёРё СЃ РїРµСЂРµСЃС‡С‘С‚РѕРј вЂ” 409 PRICE_CHANGED */
+    /** РќРµ доверяйте цене СЃ фронта: РїСЂРё расхождении СЃ пересчётом — 409 PRICE_CHANGED */
     clientEstimateCredits?: number | null;
   },
 ): Promise<GenerateMarketplaceCardResult> {
   const { userId, projectId, clientEstimateCredits, ...input } = p;
   const project = await getOwnedProjectOrNull(userId, projectId);
   if (!project) {
-    return { ok: false, error: "РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ", status: 404 };
+    return { ok: false, error: "Проект не найден", status: 404 };
   }
 
   if (!isValidMarketplaceCardStyle(input.style)) {
-    return { ok: false, error: "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ СЃС‚РёР»СЊ РєР°СЂС‚РѕС‡РєРё", status: 400 };
+    return { ok: false, error: "Некорректный стиль карточки", status: 400 };
   }
   const style = input.style as MarketplaceCardStyle;
 
@@ -434,7 +434,7 @@ export async function generateMarketplaceCardForProductCard(
   ) {
     return {
       ok: false,
-      error: "РЎС‚РѕРёРјРѕСЃС‚СЊ РёР·РјРµРЅРёР»Р°СЃСЊ вЂ” РѕР±РЅРѕРІРёС‚Рµ РѕС†РµРЅРєСѓ Рё РїРѕРїСЂРѕР±СѓР№С‚Рµ СЃРЅРѕРІР°",
+      error: "Стоимость изменилась — обновите оценку Рё попробуйте СЃРЅРѕРІР°",
       status: 409,
       code: "PRICE_CHANGED",
     };
@@ -561,7 +561,7 @@ function buildProductCardVideoModelSettings(
   | { ok: true; settings: Record<string, unknown> }
   | { ok: false; error: string } {
   if (!modelHasSettingsSchema(model.settingsSchema)) {
-    return { ok: false, error: "РЈ РІРёРґРµРѕ-РјРѕРґРµР»Рё РЅРµС‚ СЃС…РµРјС‹ РЅР°СЃС‚СЂРѕРµРє" };
+    return { ok: false, error: "У видео-модели нет схемы настроек" };
   }
   const base = defaultsFromSchema(model.settingsSchema);
   const fieldNames = new Set(getSchemaFields(model.settingsSchema).map((f) => f.name));
@@ -627,10 +627,10 @@ export async function estimateProductVideoCredits(
 ): Promise<EstimateProductVideoResult> {
   const project = await getOwnedProjectOrNull(userId, projectId);
   if (!project) {
-    return { ok: false, error: "РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ", status: 404 };
+    return { ok: false, error: "Проект не найден", status: 404 };
   }
   if (!isValidProductVideoMotionStyle(input.motionStyle)) {
-    return { ok: false, error: "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ СЃС‚РёР»СЊ РґРІРёР¶РµРЅРёСЏ", status: 400 };
+    return { ok: false, error: "Некорректный стиль движения", status: 400 };
   }
   const src = await resolveProductVideoImageSource(
     userId,
@@ -700,10 +700,10 @@ export async function generateProductVideoForProductCard(p: {
   const { userId, projectId, clientEstimateCredits, ...input } = p;
   const project = await getOwnedProjectOrNull(userId, projectId);
   if (!project) {
-    return { ok: false, error: "РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ", status: 404 };
+    return { ok: false, error: "Проект не найден", status: 404 };
   }
   if (!isValidProductVideoMotionStyle(input.motionStyle)) {
-    return { ok: false, error: "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ СЃС‚РёР»СЊ РґРІРёР¶РµРЅРёСЏ", status: 400 };
+    return { ok: false, error: "Некорректный стиль движения", status: 400 };
   }
 
   const src = await resolveProductVideoImageSource(
@@ -749,7 +749,7 @@ export async function generateProductVideoForProductCard(p: {
   ) {
     return {
       ok: false,
-      error: "РЎС‚РѕРёРјРѕСЃС‚СЊ РёР·РјРµРЅРёР»Р°СЃСЊ вЂ” РѕР±РЅРѕРІРёС‚Рµ РѕС†РµРЅРєСѓ Рё РїРѕРїСЂРѕР±СѓР№С‚Рµ СЃРЅРѕРІР°",
+      error: "Стоимость изменилась — обновите оценку Рё попробуйте СЃРЅРѕРІР°",
       status: 409,
       code: "PRICE_CHANGED",
     };

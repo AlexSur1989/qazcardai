@@ -1,4 +1,4 @@
-﻿
+
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import { Prisma } from "@/generated/prisma/client";
@@ -25,9 +25,9 @@ const TERMINAL = new Set<string>([
 const KIE_WEBHOOK_PROVIDER = "KIE_AI";
 
 /**
- * РџСЂРѕРІРµСЂРєР°: Bearer / X-Webhook-Token; Р»РёР±Рѕ HMAC-SHA256 С‚РµР»Р° (hex) РІ X-Kie-Signature.
- * Р’ **production** Р±РµР· KIE_WEBHOOK_SECRET вЂ” РѕС‚РєР»РѕРЅСЏРµРј (РЅРµ РѕС‚РєСЂС‹РІР°С‚СЊ callback РІ РёРЅС‚РµСЂРЅРµС‚Рµ).
- * Р’ dev Р±РµР· СЃРµРєСЂРµС‚Р° вЂ” РїСЂРѕРїСѓСЃРє РґР»СЏ Р»РѕРєР°Р»СЊРЅРѕР№ РѕС‚Р»Р°РґРєРё.
+ * Проверка: Bearer / X-Webhook-Token; либо HMAC-SHA256 тела (hex) в X-Kie-Signature.
+ * Р' **production** без KIE_WEBHOOK_SECRET — отклоняем (РЅРµ открывать callback РІ интернете).
+ * Р' dev без секрета — РїСЂРѕРїСѓСЃРє для локальной отладки.
  */
 export function verifyKieWebhookAuth(
   request: Request,
@@ -111,7 +111,7 @@ export async function processKieIncomingWebhook(
   if (existing?.status === "PROCESSED") {
     return { status: 200 };
   }
-  // FAILED РёР»Рё RECEIVED (Р·Р°РІРёСЃС€РёР№) вЂ” РѕР±СЂР°Р±РѕС‚Р°С‚СЊ СЃРЅРѕРІР°
+  // FAILED или RECEIVED (зависший) — обработать СЃРЅРѕРІР°
 
   if (!existing) {
     try {
@@ -143,7 +143,7 @@ export async function processKieIncomingWebhook(
       requestPayload: { note: "no_taskId" },
       responsePayload: redactKieLogPayload(json),
       statusCode: 200,
-      errorMessage: "Kie webhook: РЅРµС‚ taskId",
+      errorMessage: "Kie webhook: нет taskId",
     });
     return { status: 200 };
   }
@@ -185,7 +185,7 @@ export async function processKieIncomingWebhook(
         gen.id,
         explainKieErrorForUser(
           `Kie webhook: ${norm.errorMessage}`,
-          "РћС€РёР±РєР° Kie (webhook)",
+          "Ошибка Kie (webhook)",
         ),
       );
     }
@@ -205,7 +205,7 @@ export async function processKieIncomingWebhook(
     return { status: 200 };
   } catch (e) {
     const message =
-      e instanceof Error ? e.message : "Kie webhook: РІРЅСѓС‚СЂРµРЅРЅСЏСЏ РѕС€РёР±РєР°";
+      e instanceof Error ? e.message : "Kie webhook: внутренняя ошибка";
     await finalizeKieWebhookRow(providerEventId, "FAILED", message.slice(0, 2000));
     return { status: 500 };
   }

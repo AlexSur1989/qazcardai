@@ -1,4 +1,4 @@
-﻿
+
 import { Prisma } from "@/generated/prisma/client";
 import type { AiModel } from "@/generated/prisma/client";
 import { getSchemaFields, defaultsFromSchema } from "@/lib/generation-form-settings-schema";
@@ -57,7 +57,7 @@ function redisAndKieReady(): boolean {
 }
 
 /**
- * Image product-card: inline + MOCK_KIE вЂ” Р±РµР· Redis/KIE; РёРЅР°С‡Рµ РєР°Рє РѕР±С‹С‡РЅР°СЏ РѕС‡РµСЂРµРґСЊ.
+ * Image product-card: inline + MOCK_KIE — без Redis/KIE; иначе как обычная очередь.
  */
 function canRunProductCardImage(): boolean {
   if (getQueueMode() === "inline") {
@@ -139,8 +139,8 @@ type QueueErr = { ok: false; error: string; status: number; reason?: string };
 export type QueueResult = QueueOk | QueueErr;
 
 /**
- * РЎР±РѕСЂ inputFiles + settings (image) РєР°Рє РІ /api/generations/image.
- * Р­РєСЃРїРѕСЂС‚РёСЂСѓРµС‚СЃСЏ РґР»СЏ product-card: estimate + merge marketplaceCard settings.
+ * Сбор inputFiles + settings (image) как в /api/generations/image.
+ * Экспортируется для product-card: estimate + merge marketplaceCard settings.
  */
 export function buildImageModelInput(
   model: { settingsSchema: unknown; supportsImageInput: boolean },
@@ -231,22 +231,22 @@ export async function queueProductCardImage(
   sourceImageUrl: string | string[],
   productMeta: ProductCardGenMeta,
   negativePrompt?: string | null,
-  /** РџР»РѕСЃРєРёРµ РїРѕР»СЏ РІ metadata (flow, projectId, tab, categoryId, вЂ¦) вЂ” Р±РµР· hidden prompt. */
+  /** Плоские поля РІ metadata (flow, projectId, tab, categoryId, …) — без hidden prompt. */
   metadataRoot?: Record<string, unknown>,
-  /** Р”Р»СЏ В«РљР°СЂС‚РѕС‡РєР° С‚РѕРІР°СЂР°В»: merge РІ `metadata.settings` + С‚РѕС‚ Р¶Рµ РѕР±СЉРµРєС‚ РґР»СЏ Product Card pricing. */
+  /** Для «Карточка товара»: merge в `metadata.settings` + тот же объект для Product Card pricing. */
   marketplaceCardSettings?: MarketplaceCardImageSettings | null,
   pricingBreakdown?: ProductCardPriceBreakdown | null,
 ): Promise<QueueResult> {
   if (!model || model.type !== "IMAGE") {
-    return { ok: false, error: "РњРѕРґРµР»СЊ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ РЅРµРґРѕСЃС‚СѓРїРЅР°", status: 500 };
+    return { ok: false, error: "Модель изображения недоступна", status: 500 };
   }
   if (!canRunProductCardImage()) {
     return {
       ok: false,
       error:
         getQueueMode() === "inline" && !isMockKie()
-          ? "Р“РµРЅРµСЂР°С†РёСЏ РЅРµРґРѕСЃС‚СѓРїРЅР°: РЅР°СЃС‚СЂРѕР№С‚Рµ KIE_API_KEY Рё KIE_BASE_URL"
-          : "Р“РµРЅРµСЂР°С†РёСЏ РЅРµРґРѕСЃС‚СѓРїРЅР°: РїСЂРѕРІРµСЂСЊС‚Рµ REDIS, KIE",
+          ? "Генерация недоступна: настройте KIE_API_KEY и KIE_BASE_URL"
+          : "Генерация недоступна: проверьте REDIS, KIE",
       status: 503,
     };
   }
@@ -264,13 +264,13 @@ export async function queueProductCardImage(
   } catch (e) {
     return {
       ok: false,
-      error: e instanceof Error ? e.message : "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Рµ РЅР°СЃС‚СЂРѕР№РєРё РјРѕРґРµР»Рё",
+      error: e instanceof Error ? e.message : "Некорректные настройки модели",
       status: 400,
     };
   }
 
   if (inputFilesCombined.length > 0 && !model.supportsImageInput) {
-    return { ok: false, error: "РњРѕРґРµР»СЊ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ РІС…РѕРґРЅРѕРµ РёР·РѕР±СЂР°Р¶РµРЅРёРµ", status: 400 };
+    return { ok: false, error: "Модель не поддерживает входное изображение", status: 400 };
   }
   const filesCheck = validateImageInputFiles(
     inputFilesCombined.length > 0 ? inputFilesCombined : undefined,
@@ -281,14 +281,14 @@ export async function queueProductCardImage(
   if (inputFilesCombined.length > 0 && model.supportsImageInput) {
     const hasData = inputFilesCombined.some((s) => s.trim().startsWith("data:"));
     if (hasData) {
-      return { ok: false, error: "РќСѓР¶РµРЅ РїСѓР±Р»РёС‡РЅС‹Р№ URL РёР·РѕР±СЂР°Р¶РµРЅРёСЏ", status: 400 };
+      return { ok: false, error: "Нужен публичный URL изображения", status: 400 };
     }
     if (!isMockKie() && model.provider === "KIE_AI") {
       if (kieReachableImageUrlsFromInputFiles(inputFilesCombined).length === 0) {
         return { ok: false, error: KIE_REQUIRES_PUBLIC_IMAGE_URLS_RU, status: 400 };
       }
     } else if (publicHttpUrlsOnly(inputFilesCombined).length === 0) {
-      return { ok: false, error: "РЈРєР°Р¶РёС‚Рµ РїСѓР±Р»РёС‡РЅС‹Р№ https URL", status: 400 };
+      return { ok: false, error: "Укажите публичный https URL", status: 400 };
     }
   }
 
@@ -335,7 +335,7 @@ export async function queueProductCardImage(
   try {
     assertProductCardPriceAllowed(price);
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "РћС€РёР±РєР° С†РµРЅС‹", status: 400 };
+    return { ok: false, error: e instanceof Error ? e.message : "Ошибка цены", status: 400 };
   }
   const costCreditsCalculated = price.credits;
   metadata.pricingScope = "PRODUCT_CARD";
@@ -345,10 +345,10 @@ export async function queueProductCardImage(
   try {
     balance = await getBalance(userId);
   } catch {
-    return { ok: false, error: "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ", status: 404 };
+    return { ok: false, error: "Пользователь не найден", status: 404 };
   }
   if (balance < costCreditsCalculated) {
-    return { ok: false, error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РєСЂРµРґРёС‚РѕРІ", status: 402 };
+    return { ok: false, error: "Недостаточно кредитов", status: 402 };
   }
 
   const gen = await prisma.generation.create({
@@ -368,15 +368,15 @@ export async function queueProductCardImage(
   });
 
   try {
-    await reserveCredits(userId, costCreditsCalculated, gen.id, "Р РµР·РµСЂРІ: РєР°СЂС‚РѕС‡РєР° С‚РѕРІР°СЂР° (С„РѕС‚Рѕ)");
+    await reserveCredits(userId, costCreditsCalculated, gen.id, "Резерв: карточка товара (фото)");
   } catch (e) {
     await prisma.generation.delete({ where: { id: gen.id } });
     if (e instanceof CreditServiceError && e.code === "INSUFFICIENT") {
-      return { ok: false, error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РєСЂРµРґРёС‚РѕРІ", status: 402 };
+      return { ok: false, error: "Недостаточно кредитов", status: 402 };
     }
     return {
       ok: false,
-      error: publicApiErrorMessage(e, "РћС€РёР±РєР° СЂРµР·РµСЂРІР° РєСЂРµРґРёС‚РѕРІ"),
+      error: publicApiErrorMessage(e, "Ошибка резерва кредитов"),
       status: 400,
     };
   }
@@ -396,25 +396,25 @@ export async function queueProductCardImage(
   const redisUp = await isRedisReachableForQueue();
   if (!redisUp) {
     try {
-      await refundCredits(gen.id, "Р’РѕР·РІСЂР°С‚: Redis РЅРµРґРѕСЃС‚СѓРїРµРЅ");
+      await refundCredits(gen.id, "Возврат: Redis недоступен");
     } catch {
       // ignore
     }
     await prisma.generation.delete({ where: { id: gen.id } }).catch(() => {});
-    return { ok: false, error: "РћС‡РµСЂРµРґСЊ РіРµРЅРµСЂР°С†РёРё РЅРµРґРѕСЃС‚СѓРїРЅР° (Redis).", status: 503 };
+    return { ok: false, error: "Очередь генерации недоступна (Redis).", status: 503 };
   }
   try {
     await enqueueGenerationJob(gen.id);
   } catch (e) {
     try {
-      await refundCredits(gen.id, "Р’РѕР·РІСЂР°С‚: РѕС‡РµСЂРµРґСЊ");
+      await refundCredits(gen.id, "Возврат: очередь");
     } catch {
       // ignore
     }
     await prisma.generation.delete({ where: { id: gen.id } }).catch(() => {});
     return {
       ok: false,
-      error: publicApiErrorMessage(e, "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕСЃС‚Р°РІРёС‚СЊ РІ РѕС‡РµСЂРµРґСЊ"),
+      error: publicApiErrorMessage(e, "Не удалось поставить в очередь"),
       status: 503,
     };
   }
@@ -434,20 +434,20 @@ export async function queueProductCardVideo(
   productMeta: ProductCardGenMeta,
   bodyInputFiles: string[],
   negativePromptMerged: string | null,
-  /** РџР»РѕСЃРєРёРµ РїРѕР»СЏ metadata (flow, projectId, tab, вЂ¦) вЂ” Р±РµР· hidden prompt. */
+  /** Плоские поля metadata (flow, projectId, tab, …) — без hidden prompt. */
   metadataRoot?: Record<string, unknown>,
   pricingBreakdown?: ProductCardPriceBreakdown | null,
 ): Promise<QueueResult> {
   if (model.type !== "VIDEO") {
-    return { ok: false, error: "Р’РёРґРµРѕ-РјРѕРґРµР»СЊ РЅРµРґРѕСЃС‚СѓРїРЅР°", status: 500 };
+    return { ok: false, error: "Видео-модель недоступна", status: 500 };
   }
   if (!canRunProductCardVideo()) {
     return {
       ok: false,
       error:
         getQueueMode() === "inline" && !isMockKie()
-          ? "Р“РµРЅРµСЂР°С†РёСЏ РЅРµРґРѕСЃС‚СѓРїРЅР°: РЅР°СЃС‚СЂРѕР№С‚Рµ KIE_API_KEY Рё KIE_BASE_URL"
-          : "Р“РµРЅРµСЂР°С†РёСЏ РЅРµРґРѕСЃС‚СѓРїРЅР°: РїСЂРѕРІРµСЂСЊС‚Рµ REDIS, KIE",
+          ? "Генерация недоступна: настройте KIE_API_KEY и KIE_BASE_URL"
+          : "Генерация недоступна: проверьте REDIS, KIE",
       status: 503,
     };
   }
@@ -510,14 +510,14 @@ export async function queueProductCardVideo(
   if (inputFilesCombined.length > 0) {
     const hasData = inputFilesCombined.some((s) => s.trim().startsWith("data:"));
     if (hasData) {
-      return { ok: false, error: "РќСѓР¶РµРЅ РїСѓР±Р»РёС‡РЅС‹Р№ URL", status: 400 };
+      return { ok: false, error: "Нужен публичный URL", status: 400 };
     }
     if (!isMockKie() && model.provider === "KIE_AI") {
       if (kieReachableImageUrlsFromInputFiles(inputFilesCombined).length === 0) {
         return { ok: false, error: KIE_REQUIRES_PUBLIC_IMAGE_URLS_RU, status: 400 };
       }
     } else if (publicHttpUrlsOnly(inputFilesCombined).length === 0) {
-      return { ok: false, error: "РџСѓР±Р»РёС‡РЅС‹Р№ http(s) URL", status: 400 };
+      return { ok: false, error: "Публичный http(s) URL", status: 400 };
     }
   }
   if (
@@ -525,7 +525,7 @@ export async function queueProductCardVideo(
     !model.supportsImageInput &&
     !model.supportsVideoInput
   ) {
-    return { ok: false, error: "РњРѕРґРµР»СЊ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ РІР»РѕР¶РµРЅРёСЏ", status: 400 };
+    return { ok: false, error: "Модель не поддерживает вложения", status: 400 };
   }
 
   const metadata: Record<string, unknown> = {};
@@ -559,7 +559,7 @@ export async function queueProductCardVideo(
   try {
     assertProductCardPriceAllowed(price);
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "РћС€РёР±РєР° С†РµРЅС‹", status: 400 };
+    return { ok: false, error: e instanceof Error ? e.message : "Ошибка цены", status: 400 };
   }
   const costCreditsCalculated = price.credits;
   metadata.pricingScope = "PRODUCT_CARD";
@@ -569,10 +569,10 @@ export async function queueProductCardVideo(
   try {
     balance = await getBalance(userId);
   } catch {
-    return { ok: false, error: "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ", status: 404 };
+    return { ok: false, error: "Пользователь не найден", status: 404 };
   }
   if (balance < costCreditsCalculated) {
-    return { ok: false, error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РєСЂРµРґРёС‚РѕРІ", status: 402 };
+    return { ok: false, error: "Недостаточно кредитов", status: 402 };
   }
 
   const gen = await prisma.generation.create({
@@ -592,15 +592,15 @@ export async function queueProductCardVideo(
   });
 
   try {
-    await reserveCredits(userId, costCreditsCalculated, gen.id, "Р РµР·РµСЂРІ: РєР°СЂС‚РѕС‡РєР° С‚РѕРІР°СЂР° (РІРёРґРµРѕ)");
+    await reserveCredits(userId, costCreditsCalculated, gen.id, "Резерв: карточка товара (видео)");
   } catch (e) {
     await prisma.generation.delete({ where: { id: gen.id } });
     if (e instanceof CreditServiceError && e.code === "INSUFFICIENT") {
-      return { ok: false, error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РєСЂРµРґРёС‚РѕРІ", status: 402 };
+      return { ok: false, error: "Недостаточно кредитов", status: 402 };
     }
     return {
       ok: false,
-      error: publicApiErrorMessage(e, "РћС€РёР±РєР° СЂРµР·РµСЂРІР° РєСЂРµРґРёС‚РѕРІ"),
+      error: publicApiErrorMessage(e, "Ошибка резерва кредитов"),
       status: 400,
     };
   }
@@ -619,25 +619,25 @@ export async function queueProductCardVideo(
   const redisUp = await isRedisReachableForQueue();
   if (!redisUp) {
     try {
-      await refundCredits(gen.id, "Р’РѕР·РІСЂР°С‚: Redis");
+      await refundCredits(gen.id, "Возврат: Redis");
     } catch {
       // ignore
     }
     await prisma.generation.delete({ where: { id: gen.id } }).catch(() => {});
-    return { ok: false, error: "РћС‡РµСЂРµРґСЊ РЅРµРґРѕСЃС‚СѓРїРЅР° (Redis).", status: 503 };
+    return { ok: false, error: "Очередь недоступна (Redis).", status: 503 };
   }
   try {
     await enqueueGenerationJob(gen.id);
   } catch (e) {
     try {
-      await refundCredits(gen.id, "Р’РѕР·РІСЂР°С‚: РѕС‡РµСЂРµРґСЊ");
+      await refundCredits(gen.id, "Возврат: очередь");
     } catch {
       // ignore
     }
     await prisma.generation.delete({ where: { id: gen.id } }).catch(() => {});
     return {
       ok: false,
-      error: publicApiErrorMessage(e, "РћС‡РµСЂРµРґСЊ"),
+      error: publicApiErrorMessage(e, "Очередь"),
       status: 503,
     };
   }

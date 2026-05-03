@@ -1,4 +1,4 @@
-﻿
+
 import { timingSafeEqual } from "node:crypto";
 
 import { prisma } from "@/lib/prisma";
@@ -67,8 +67,8 @@ export async function createKaspiPayment(
 }
 
 /**
- * РџСЂРѕРІРµСЂРєР° webhook. РџСЂРё Р·Р°РґР°РЅРЅРѕРј KASPI_WEBHOOK_SECRET РЅСѓР¶РµРЅ Р·Р°РіРѕР»РѕРІРѕРє X-Kaspi-Webhook-Secret (timing-safe).
- * Р‘РµР· СЃРµРєСЂРµС‚Р°: С‚РѕР»СЊРєРѕ mock + NODE_ENV !== production.
+ * Проверка webhook. При заданном KASPI_WEBHOOK_SECRET нужен заголовок X-Kaspi-Webhook-Secret (timing-safe).
+ * Без секрета: только mock + NODE_ENV !== production.
  */
 export async function verifyKaspiWebhook(request: Request): Promise<{ ok: boolean; error?: string }> {
   const secret = process.env.KASPI_WEBHOOK_SECRET?.trim() ?? "";
@@ -90,7 +90,7 @@ export async function verifyKaspiWebhook(request: Request): Promise<{ ok: boolea
   return { ok: true };
 }
 
-/** Р Р°Р·Р±РѕСЂ С‚РµР»Р° РїРѕСЃР»Рµ JSON.parse (СЃС‹СЂРѕР№ С‚РµРєСЃС‚ РѕР±СЂР°Р±Р°С‚С‹РІР°Р№С‚Рµ РІ route РѕРґРёРЅ СЂР°Р·). */
+/** Разбор тела после JSON.parse (сырой текст обрабатывайте в route один раз). */
 export function parseKaspiWebhook(payload: unknown): ParsedKaspiWebhook | null {
   if (!payload || typeof payload !== "object") return null;
   const o = payload as Record<string, unknown>;
@@ -169,7 +169,7 @@ export async function getKaspiPaymentStatus(providerPaymentId: string) {
   });
 }
 
-/** РўРµСЃС‚РѕРІРѕРµ РїРѕРґС‚РІСЂР°С‰РµРЅРёРµ РёР· РєРѕРґР° (РЅРµ РёР· HTTP): РіСЂСѓР·РёС‚ РїР»Р°С‚С‘Р¶ Рё РІС‹Р·С‹РІР°РµС‚ confirm СЃ СЃСѓРјРјРѕР№ РёР· Р‘Р”. */
+/** Тестовое подтвращение из кода (не из HTTP): грузит платёж и вызывает confirm с суммой из БД. */
 export async function confirmMockKaspiPayment(paymentId: string) {
   const pay = await prisma.payment.findUnique({ where: { id: paymentId } });
   if (!pay) {

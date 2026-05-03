@@ -1,4 +1,4 @@
-﻿
+
 import { redactKieLogPayload } from "@/server/services/provider/kie";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
 import { trySendAdminProviderErrorEmail } from "@/server/services/notificationsIntegration";
@@ -15,7 +15,7 @@ function readKieBaseUrlForMonitor(): string {
 }
 
 /**
- * РЎС‚Р°С‚РёС‡РЅР°СЏ РјР°СЃРєР° РєР»СЋС‡Р°. РћСЂРёРіРёРЅР°Р» РЅРµ РїРёС€РµС‚ РІ Р»РѕРі.
+ * Статичная маска ключа. Оригинал не пишет в лог.
  */
 export function maskApiKey(apiKey: string | null | undefined): string | null {
   if (apiKey == null) return null;
@@ -302,7 +302,7 @@ export type CheckKieConnectionResult =
     };
 
 /**
- * Р’РЅРµС€РЅРёР№ GET Рє РІ balance endpoint Kie. РљР»СЋС‡Рё РЅРµ Р»РѕРіРёСЂСѓСЋС‚СЃСЏ.
+ * Внешний GET к в balance endpoint Kie. Ключи не логируются.
  */
 export async function checkKieConnection(): Promise<CheckKieConnectionResult> {
   const key = readKieKeyTrimmed();

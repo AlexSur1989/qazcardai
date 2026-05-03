@@ -1,4 +1,4 @@
-﻿
+
 import { prisma } from "@/lib/prisma";
 
 type MetaKey = "conceptGenerationIds" | "marketplaceGenerationIds" | "videoGenerationIds";
@@ -31,7 +31,7 @@ export async function appendProjectGenerationId(
   });
 }
 
-/** РЎРѕС…СЂР°РЅСЏРµС‚ РїСЂРёРІСЏР·РєСѓ concept generation Рє РїСЂРѕРµРєС‚Сѓ (MVP, variant A). */
+/** Сохраняет привязку concept generation к проекту (MVP, variant A). */
 export async function appendConceptGenerationEntry(
   projectId: string,
   entry: Omit<ConceptGenerationRecord, "createdAt">,

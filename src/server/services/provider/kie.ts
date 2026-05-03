@@ -1,5 +1,5 @@
-﻿
-/** РўР°Р№РјР°СѓС‚ HTTP Рє Kie.ai (РіРµРЅРµСЂР°С†РёСЏ Рё polling). РџРµСЂРµРѕРїСЂРµРґРµР»РµРЅРёРµ: KIE_FETCH_TIMEOUT_MS. */
+
+/** Таймаут HTTP к Kie.ai (генерация и polling). Переопределение: KIE_FETCH_TIMEOUT_MS. */
 const DEFAULT_KIE_FETCH_TIMEOUT_MS = 120_000;
 
 function kieFetchTimeoutMs(): number {
@@ -69,18 +69,18 @@ export function resolveKieRequestUrl(
 }
 
 export type KieImageGenerateInput = {
-  /** ID РјРѕРґРµР»Рё РІ API РїСЂРѕРІР°Р№РґРµСЂР° (РёР· AiModel.apiModelId) */
+  /** ID модели в API провайдера (из AiModel.apiModelId) */
   apiModelId: string;
-  /** РџРµСЂРµРѕРїСЂРµРґРµР»РµРЅРёРµ URL РёР· РєР°СЂС‚РѕС‡РєРё РјРѕРґРµР»Рё (РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅС‹Р№ РїСѓС‚СЊ Рє KIE_BASE_URL РёР»Рё absolute URL) */
+  /** Переопределение URL из карточки модели (относительный путь к KIE_BASE_URL или absolute URL) */
   endpoint: string | null;
-  /** Kie Market createTask: РіРѕС‚РѕРІРѕРµ С‚РµР»Рѕ JSON (model, callBackUrl, input). */
+  /** Kie Market createTask: готовое тело JSON (model, callBackUrl, input). */
   marketCreateBody?: JsonRecord;
   prompt: string;
   negativePrompt?: string | null;
   aspectRatio?: string | null;
   resolution?: string | null;
   seed?: number | null;
-  /** РџСѓР±Р»РёС‡РЅС‹Рµ URL РёР·РѕР±СЂР°Р¶РµРЅРёР№ (СЂРµС„РµСЂРµРЅСЃ / edit). */
+  /** Публичные URL изображений (референс / edit). */
   inputFileUrls?: string[];
 };
 
@@ -94,7 +94,7 @@ export type NormalizedKieImageResult = {
   errorMessage?: string;
 };
 
-/** @deprecated use NormalizedKieImageResult вЂ” С‚Рѕ Р¶Рµ, РґР»СЏ РІРёРґРµРѕ РґРѕР±Р°РІР»РµРЅРѕ videoUrls */
+/** @deprecated use NormalizedKieImageResult — то Р¶Рµ, для видео добавлено videoUrls */
 export type NormalizedKieTaskResult = NormalizedKieImageResult;
 
 type JsonRecord = Record<string, unknown>;
@@ -103,15 +103,15 @@ function isRecord(x: unknown): x is JsonRecord {
   return typeof x === "object" && x !== null && !Array.isArray(x);
 }
 
-/** Trims `AiModel.apiModelId` / `endpoint`; РЅРµ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ name/slug. */
+/** Trims `AiModel.apiModelId` / `endpoint`; не использовать name/slug. */
 export function trimKieApiModelId(raw: string | null | undefined): string {
   if (raw == null) return "";
   return String(raw).trim();
 }
 
 /**
- * @throws вЂ” РµСЃР»Рё РІ Р°РґРјРёРЅРєРµ РїСѓСЃС‚РѕР№ apiModelId (РїРѕСЃР»Рµ trim).
- * Р РµР°Р»СЊРЅРѕРµ РїРѕР»Рµ `model` РІ JSON Рє Kie вЂ” С‚РѕР»СЊРєРѕ РѕС‚СЃСЋРґР°.
+ * @throws — если РІ админке пустой apiModelId (после trim).
+ * Реальное поле `model` РІ JSON Рє Kie — только отсюда.
  */
 export function assertKieModelIdSet(raw: string | null | undefined): string {
   const id = trimKieApiModelId(raw);
@@ -133,12 +133,12 @@ function isDevKieLogEnabled(): boolean {
   return process.env.NODE_ENV === "development";
 }
 
-/** POST jobs/createTask; СЃРєР»РµР№РєР°: KIE_BASE_URL + path (СЃРј. getKieJobsCreateTaskUrl). */
+/** POST jobs/createTask; склейка: KIE_BASE_URL + path (см. getKieJobsCreateTaskUrl). */
 const KIE_JOBS_CREATE_TASK_PATH = "/api/v1/jobs/createTask";
 
 /**
- * KIE_BASE_URL + endpoint, Р±РµР· СЃСЋСЂРїСЂРёР·РѕРІ (РґРІРѕР№РЅС‹Рµ СЃР»СЌС€Рё СѓР±РёСЂР°РµС‚ base/endpoint).
- * РќРµ Р»РѕРіРёСЂСѓР№С‚Рµ KIE_API_KEY / Authorization.
+ * KIE_BASE_URL + endpoint, без сюрпризов (двойные слэши убирает base/endpoint).
+ * Не логируйте KIE_API_KEY / Authorization.
  */
 export function getKieJobsCreateTaskUrl(endpoint: string | null | undefined): string {
   const base = getKieBaseUrl();
@@ -161,7 +161,7 @@ function kieRequestLog(
 }
 
 /**
- * РџР°СЂСЃРёС‚ РѕС‚РІРµС‚ Kie.ai: С„РѕСЂРјР°С‚ РјРѕР¶РµС‚ РѕС‚Р»РёС‡Р°С‚СЊСЃСЏ РїРѕ СЌРЅРґРїРѕРёРЅС‚Сѓ вЂ” СЂР°СЃС€РёСЂСЏР№С‚Рµ СЃРµР»РµРєС‚РѕСЂС‹ РїСЂРё РїРѕРґРєР»СЋС‡РµРЅРёРё РЅРѕРІС‹С… API.
+ * Парсит ответ Kie.ai: формат может отличаться РїРѕ эндпоинту — расширяйте селекторы РїСЂРё подключении новых API.
  */
 export function normalizeResponse(
   response: unknown,
@@ -175,13 +175,13 @@ export function normalizeResponse(
   if (httpStatus < 200 || httpStatus >= 300) {
     return {
       ...base,
-      errorMessage: "HTTP-РѕС€РёР±РєР° РѕС‚ РїСЂРѕРІР°Р№РґРµСЂР°",
+      errorMessage: "HTTP-ошибка от провайдера",
     };
   }
   if (!isRecord(response)) {
     return {
       ...base,
-      errorMessage: "РќРµРѕР¶РёРґР°РЅРЅС‹Р№ С„РѕСЂРјР°С‚ РѕС‚РІРµС‚Р° (РЅРµ РѕР±СЉРµРєС‚)",
+      errorMessage: "Неожиданный формат ответа (не объект)",
     };
   }
   if ("code" in response && response.code !== undefined) {
@@ -192,7 +192,7 @@ export function normalizeResponse(
           ? response.msg
           : typeof (response as { message?: unknown }).message === "string"
             ? String((response as { message: string }).message)
-            : "РћС€РёР±РєР° РІ С‚РµР»Рµ РѕС‚РІРµС‚Р° РїСЂРѕРІР°Р№РґРµСЂР°";
+            : "Ошибка в теле ответа провайдера";
       return { ...base, errorMessage: msg };
     }
   }
@@ -244,7 +244,7 @@ export function normalizeResponse(
   if (!success) {
     return {
       ...base,
-      errorMessage: "РџСЂРѕРІР°Р№РґРµСЂ РЅРµ РІРµСЂРЅСѓР» taskId Рё URL СЂРµР·СѓР»СЊС‚Р°С‚Р°",
+      errorMessage: "Провайдер не вернул taskId и URL результата",
     };
   }
   return {
@@ -301,7 +301,7 @@ function buildRequestBody(input: KieImageGenerateInput): JsonRecord {
 }
 
 /**
- * РЎРѕР·РЅР°С‚РµР»СЊРЅРѕ РЅРµ РїРёС€РµС‚ Authorization Рё РєР»СЋС‡Рё; РґР»СЏ Р»РѕРіРѕРІ ApiLog.
+ * Сознательно не пишет Authorization и ключи; для логов ApiLog.
  */
 export function redactKieLogPayload(payload: unknown): unknown {
   if (payload === null || payload === undefined) return payload;
@@ -329,7 +329,7 @@ export function redactKieLogPayload(payload: unknown): unknown {
     return out;
   }
   if (typeof payload === "string" && payload.length > 4000) {
-    return `${payload.slice(0, 4000)}вЂ¦(truncated)`;
+    return `${payload.slice(0, 4000)}…(truncated)`;
   }
   return payload;
 }
@@ -374,10 +374,10 @@ export async function generateImage(
       httpStatus: 0,
       rawResponse: { networkError: true, aborted },
       errorMessage: aborted
-        ? "РџСЂРµРІС‹С€РµРЅРѕ РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РѕС‚РІРµС‚Р° РїСЂРѕРІР°Р№РґРµСЂР°"
+        ? "Превышено время ожидания ответа провайдера"
         : e instanceof Error
           ? e.message
-          : "РЎРµС‚СЊ / fetch",
+          : "Сеть / fetch",
     };
   }
   let json: unknown;
@@ -395,7 +395,7 @@ export async function generateImage(
       success: false,
       httpStatus,
       rawResponse: { parseError: true, textSnippet: text.slice(0, 500) },
-      errorMessage: "РћС‚РІРµС‚ РїСЂРѕРІР°Р№РґРµСЂР° РЅРµ JSON",
+      errorMessage: "Ответ провайдера не JSON",
     };
   }
   if (isDevKieLogEnabled()) {
@@ -404,12 +404,12 @@ export async function generateImage(
   return normalizeResponse(json, httpStatus);
 }
 
-// --- Р’РёРґРµРѕ: С‚РѕС‚ Р¶Рµ РЅРѕСЂРјР°Р»РёР·Р°С‚РѕСЂ (taskId / videoUrls) ---
+// --- Видео: тот же нормализатор (taskId / videoUrls) ---
 
 export type KieVideoGenerateInput = {
   apiModelId: string;
   endpoint: string | null;
-  /** Kie Market createTask: РіРѕС‚РѕРІРѕРµ С‚РµР»Рѕ JSON (model, callBackUrl, input). */
+  /** Kie Market createTask: готовое тело JSON (model, callBackUrl, input). */
   marketCreateBody?: JsonRecord;
   prompt?: string;
   negativePrompt?: string | null;
@@ -462,8 +462,8 @@ function stripUndefinedDeep(value: unknown): unknown {
 }
 
 /**
- * Kling 3.0: С‚РѕР»СЊРєРѕ std | pro | 4K.
- * РќРµ РґРѕРїСѓСЃРєР°РµРј: standard, Standard, 4k, PRO, Рё С‚.Рї.
+ * Kling 3.0: только std | pro | 4K.
+ * Не допускаем: standard, Standard, 4k, PRO, и т.п.
  */
 function normalizeKieKlingMode(raw: unknown): "std" | "pro" | "4K" {
   if (raw == null) {
@@ -507,7 +507,7 @@ function stripKieWan27InputFields(input: JsonRecord): JsonRecord {
 }
 
 /**
- * Wan 2.7 Text-to-Video: Р±РµР· РїРѕР»РµР№ Kling (sound, aspect_ratio, mode, multi_shots, image_urls).
+ * Wan 2.7 Text-to-Video: без полей Kling (sound, aspect_ratio, mode, multi_shots, image_urls).
  */
 function buildWan27MarketCreateTaskPayload(
   prompt: string,
@@ -589,7 +589,7 @@ function stripKieSeedanceInput(input: JsonRecord): JsonRecord {
 }
 
 /**
- * Bytedance Seedance 2.0 / 2.0 Fast: РїРѕР»СЏ `input` РїРѕ Kie Market (createTask).
+ * Bytedance Seedance 2.0 / 2.0 Fast: поля `input` по Kie Market (createTask).
  * @see https://docs.kie.ai/market/bytedance/seedance-2
  */
 function buildSeedance2MarketCreateTaskPayload(
@@ -600,7 +600,7 @@ function buildSeedance2MarketCreateTaskPayload(
   const base = getAppUrlForKieCallback();
   const first = typeof settings.firstFrameUrl === "string" ? settings.firstFrameUrl.trim() : "";
   const last = typeof settings.lastFrameUrl === "string" ? settings.lastFrameUrl.trim() : "";
-  /** Р РµС„РµСЂРµРЅСЃС‹: РёР·РѕР±СЂР°Р¶РµРЅРёСЏ РґРѕ 9; РІ РєРѕРЅСЃРѕР»Рё Kie ref video С‡Р°СЃС‚Рѕ 1 С„Р°Р№Р»; audio РґРѕ 3. */
+  /** Референсы: изображения до 9; в консоли Kie ref video часто 1 файл; audio до 3. */
   const refImg = seedanceStringList(settings.referenceImageUrls).slice(0, 9);
   const refVid = seedanceStringList(settings.referenceVideoUrls).slice(0, 3);
   const refAud = seedanceStringList(settings.referenceAudioUrls).slice(0, 3);
@@ -651,7 +651,7 @@ function buildSeedance2MarketCreateTaskPayload(
 }
 
 /**
- * Kling 3.0 Motion Control: Р±РµР· РїРѕР»РµР№ РѕР±С‹С‡РЅРѕРіРѕ Kling (sound, image_urls, вЂ¦).
+ * Kling 3.0 Motion Control: без полей обычного Kling (sound, image_urls, …).
  */
 function buildKlingMotionControlMarketCreateTaskPayload(
   prompt: string,
@@ -693,8 +693,8 @@ function buildKlingMotionControlMarketCreateTaskPayload(
 
 /**
  * Kling 3.0: POST /api/v1/jobs/createTask.
- * `model` вЂ” СЃС‚СЂРѕРіРѕ РёР· `aiModel.apiModelId` (СѓР¶Рµ assert + trim), Р±РµР· name/slug/id/settings.model.
- * РўРµР»Рѕ РєР°Рє РІ РґРѕРє. Kie: С‚РѕР»СЊРєРѕ `model` + `input` (webhook вЂ” РѕС‚РґРµР»СЊРЅРѕ, РµСЃР»Рё РїРѕСЏРІРёС‚СЃСЏ РІ API).
+ * `model` — строго РёР· `aiModel.apiModelId` (СѓР¶Рµ assert + trim), без name/slug/id/settings.model.
+ * Тело как РІ РґРѕРє. Kie: только `model` + `input` (webhook — отдельно, если появится РІ API).
  */
 function buildKling30MarketCreateTaskPayload(
   prompt: string,
@@ -730,7 +730,7 @@ function buildKling30MarketCreateTaskPayload(
 }
 
 /**
- * РўРµР»Рѕ POST РґР»СЏ Kie Market /api/v1/jobs/createTask (Р±РµР· СЃРµРєСЂРµС‚РѕРІ РІ Р»РѕРіР°С… вЂ” РѕС‚РґРµР»СЊРЅРѕ redact).
+ * Тело POST для Kie Market /api/v1/jobs/createTask (без секретов РІ логах — отдельно redact).
  */
 export function buildKieMarketCreateTaskPayload(
   prompt: string,
@@ -751,7 +751,7 @@ export function buildKieMarketCreateTaskPayload(
       settings,
     );
   }
-  /** Kie РѕР¶РёРґР°РµС‚ СЂРѕРІРЅРѕ `kling-3.0` (РґРѕРє.); РёРЅРѕР№ СЂРµРіРёСЃС‚СЂ РІ Р°РґРјРёРЅРєРµ Р»РѕРјР°Р» Р±С‹ createTask. */
+  /** Kie ожидает ровно `kling-3.0` (док.); иной регистр в админке ломал бы createTask. */
   if (modelId.toLowerCase() === "kling-3.0") {
     return buildKling30MarketCreateTaskPayload(prompt, "kling-3.0", settings);
   }
@@ -897,10 +897,10 @@ export async function generateVideo(
       httpStatus: 0,
       rawResponse: { networkError: true, aborted },
       errorMessage: aborted
-        ? "РџСЂРµРІС‹С€РµРЅРѕ РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РѕС‚РІРµС‚Р° РїСЂРѕРІР°Р№РґРµСЂР°"
+        ? "Превышено время ожидания ответа провайдера"
         : e instanceof Error
           ? e.message
-          : "РЎРµС‚СЊ / fetch",
+          : "Сеть / fetch",
     };
   }
   let json: unknown;
@@ -918,7 +918,7 @@ export async function generateVideo(
       success: false,
       httpStatus,
       rawResponse: { parseError: true, textSnippet: text.slice(0, 500) },
-      errorMessage: "РћС‚РІРµС‚ РїСЂРѕРІР°Р№РґРµСЂР° РЅРµ JSON",
+      errorMessage: "Ответ провайдера не JSON",
     };
   }
   if (isDevKieLogEnabled()) {
@@ -992,7 +992,7 @@ function extractMediaFromRecordInfoData(data: JsonRecord): {
 }
 
 /**
- * РћС‚РІРµС‚ recordInfo / jobs: СЃС‚Р°С‚СѓСЃС‹ Р·Р°РґР°С‡Рё Рё РёР·РІР»РµС‡РµРЅРёРµ URL РёР· resultJson.
+ * Ответ recordInfo / jobs: статусы задачи и извлечение URL из resultJson.
  */
 export function normalizeKieRecordInfoResponse(
   response: unknown,
@@ -1006,10 +1006,10 @@ export function normalizeKieRecordInfoResponse(
   });
 
   if (httpStatus < 200 || httpStatus >= 300) {
-    return baseFail("HTTP-РѕС€РёР±РєР° РѕС‚ РїСЂРѕРІР°Р№РґРµСЂР°");
+    return baseFail("HTTP-ошибка от провайдера");
   }
   if (!isRecord(response)) {
-    return baseFail("РќРµРѕР¶РёРґР°РЅРЅС‹Р№ С„РѕСЂРјР°С‚ РѕС‚РІРµС‚Р° (РЅРµ РѕР±СЉРµРєС‚)");
+    return baseFail("Неожиданный формат ответа (не объект)");
   }
   if ("code" in response && response.code !== undefined) {
     const c = response.code;
@@ -1019,7 +1019,7 @@ export function normalizeKieRecordInfoResponse(
           ? response.msg
           : typeof (response as { message?: string }).message === "string"
             ? String((response as { message: string }).message)
-            : "РћС€РёР±РєР° РІ С‚РµР»Рµ РѕС‚РІРµС‚Р° РїСЂРѕРІР°Р№РґРµСЂР°";
+            : "Ошибка в теле ответа провайдера";
       return baseFail(msg);
     }
   }
@@ -1040,7 +1040,7 @@ export function normalizeKieRecordInfoResponse(
           ? data.message
           : typeof data.error === "string"
             ? data.error
-            : "Р—Р°РґР°С‡Р° РїСЂРѕРІР°Р№РґРµСЂР° Р·Р°РІРµСЂС€РёР»Р°СЃСЊ СЃ РѕС€РёР±РєРѕР№";
+            : "Задача провайдера завершилась с ошибкой";
     return baseFail(msg.slice(0, 2000));
   }
 
@@ -1104,8 +1104,8 @@ export function normalizeKieRecordInfoResponse(
 }
 
 /**
- * Polling-СЃС‚Р°С‚СѓСЃ РїРѕ taskId (СЌРЅРґРїРѕРёРЅС‚ record-info / Р°РЅР°Р»РѕРі). Р Р°СЃС€РёСЂСЏР№С‚Рµ normalize РїСЂРё РЅРѕРІС‹С… СЃС…РµРјР°С….
- * `defaultRecordInfoPath` вЂ” РїСѓС‚СЊ, РµСЃР»Рё `endpointOverride` null (РєР°СЂС‚РёРЅРєР° / РІРёРґРµРѕ).
+ * Polling-статус по taskId (эндпоинт record-info / аналог). Расширяйте normalize при новых схемах.
+ * `defaultRecordInfoPath` — путь, если `endpointOverride` null (картинка / видео).
  */
 export async function getTaskStatus(
   taskId: string,
@@ -1148,10 +1148,10 @@ export async function getTaskStatus(
       httpStatus: 0,
       rawResponse: { networkError: true, aborted },
       errorMessage: aborted
-        ? "РџСЂРµРІС‹С€РµРЅРѕ РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РѕС‚РІРµС‚Р° РїСЂРѕРІР°Р№РґРµСЂР°"
+        ? "Превышено время ожидания ответа провайдера"
         : e instanceof Error
           ? e.message
-          : "РЎРµС‚СЊ / fetch",
+          : "Сеть / fetch",
     };
   }
   let json: unknown;
@@ -1162,7 +1162,7 @@ export async function getTaskStatus(
       success: false,
       httpStatus,
       rawResponse: { parseError: true, textSnippet: text.slice(0, 500) },
-      errorMessage: "РћС‚РІРµС‚ РїСЂРѕРІР°Р№РґРµСЂР° РЅРµ JSON",
+      errorMessage: "Ответ провайдера не JSON",
     };
   }
   return normalizeKieRecordInfoResponse(json, httpStatus);
