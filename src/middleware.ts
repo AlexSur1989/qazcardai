@@ -13,6 +13,20 @@ function getMiddlewareJwtSecret(): string | null {
   return s?.trim() || null;
 }
 
+/**
+ * Имя cookie сессии Auth.js зависит от secure-режима (defaultCookies в @auth/core).
+ * Без secureCookie: true на HTTPS getToken ищет не тот cookie → token всегда null.
+ */
+function useSecureSessionCookie(req: NextRequest): boolean {
+  const forwardedProto = req.headers.get("x-forwarded-proto");
+  if (forwardedProto === "https") return true;
+  if (req.nextUrl.protocol === "https:") return true;
+  const authBase =
+    process.env.AUTH_URL?.trim() || process.env.NEXTAUTH_URL?.trim();
+  if (authBase?.startsWith("https:")) return true;
+  return false;
+}
+
 function isAdminRouteRole(role: unknown): role is UserRole {
   return role === "ADMIN" || role === "SUPER_ADMIN";
 }
@@ -31,6 +45,7 @@ export async function middleware(req: NextRequest) {
   const isAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
 
   const secret = getMiddlewareJwtSecret();
+  const secureCookie = useSecureSessionCookie(req);
 
   if (isAuthPage) {
     if (!secret) {
@@ -42,6 +57,7 @@ export async function middleware(req: NextRequest) {
     const token = await getToken({
       req,
       secret,
+      secureCookie,
     });
     if (token?.sub) {
       const role = token.role as UserRole | undefined;
@@ -69,6 +85,7 @@ export async function middleware(req: NextRequest) {
   const token = await getToken({
     req,
     secret,
+    secureCookie,
   });
 
   if (!token?.sub) {

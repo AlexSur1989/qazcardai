@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getSession, signIn } from "next-auth/react";
+import { getSession, signIn, useSession } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +27,13 @@ function LoginFormInner() {
   );
   const callbackUrl = safePathCallback(rawRedirect);
   const registered = searchParams.get("registered") === "1";
+
+  const { data: clientSession, status: clientStatus } = useSession();
+  useEffect(() => {
+    if (clientStatus !== "authenticated" || !clientSession?.user) return;
+    const target = postAuthLandingPath(rawRedirect, clientSession.user.role);
+    router.replace(target);
+  }, [clientStatus, clientSession?.user?.role, rawRedirect, router]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

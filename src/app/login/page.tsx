@@ -9,6 +9,8 @@ import {
 
 import { LoginForm } from "./login-form";
 
+export const dynamic = "force-dynamic";
+
 type Props = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
