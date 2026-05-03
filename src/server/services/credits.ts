@@ -58,7 +58,7 @@ export async function getBalance(userId: string): Promise<number> {
 
 /**
  * Начисление кредитов (amount &gt; 0).
- * type: PURCHASE, PROMO или РїРѕ смыслу; для внутреннего Р±РѕРЅСѓСЃР° — PROMO.
+ * type: PURCHASE, PROMO или по смыслу; для внутреннего бонуса — PROMO.
  */
 export async function addCredits(
   userId: string,
@@ -68,7 +68,7 @@ export async function addCredits(
   options?: { paymentId?: string; metadata?: unknown },
 ) {
   if (amount <= 0 || !Number.isInteger(amount)) {
-    throw new CreditServiceError("INVALID", "РЎСѓРјРјР° начисления — целое число > 0");
+    throw new CreditServiceError("INVALID", "Сумма начисления — целое число > 0");
   }
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.update({
@@ -95,7 +95,7 @@ export async function addCredits(
 
 /**
  * Резерв под генерацию: списывает amount с баланса, пишет RESERVE, связывает с generationId.
- * amount — положительное число (сколько кредитов зарезервировано), РІ БД пишем amount как отрицательное движение.
+ * amount — положительное число (сколько кредитов зарезервировано), в БД пишем amount как отрицательное движение.
  */
 export async function reserveCredits(
   userId: string,

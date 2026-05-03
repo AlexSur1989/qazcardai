@@ -112,7 +112,7 @@ async function checkWorkersCount(): Promise<{
       severity: process.env.NODE_ENV === "production" ? "warning" : "ok",
       detail:
         process.env.NODE_ENV === "production"
-          ? "QUEUE_MODE=inline РЅРµ предназначен для production — нужен redis Рё отдельный worker."
+          ? "QUEUE_MODE=inline не предназначен для production — нужен redis и отдельный worker."
           : null,
       fixHref: process.env.NODE_ENV === "production" ? "/admin/settings" : null,
     };
@@ -856,7 +856,7 @@ export async function buildLaunchChecklist(): Promise<{
       "Rate limits настроены",
       rlSeverity,
       rlSeverity === "warning"
-        ? "Без Redis ограничения только РІ памяти процесса — для нескольких инстансов нужен REDIS_URL."
+        ? "Без Redis ограничения только в памяти процесса — для нескольких инстансов нужен REDIS_URL."
         : null,
       rlSeverity === "warning" ? "/admin/settings" : null,
     ),

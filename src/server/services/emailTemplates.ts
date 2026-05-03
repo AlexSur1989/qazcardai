@@ -179,7 +179,7 @@ export function isEmailTemplateKey(k: string): k is EmailTemplateKey {
 const VAR_RE = /\{\{(\w+)\}\}/g;
 
 /**
- * Подставляет `{{name}}` РёР· словаря; неизвестные — пустая строка. Без eval.
+ * Подставляет `{{name}}` из словаря; неизвестные — пустая строка. Без eval.
  */
 export function renderEmailTemplateString(
   template: string,

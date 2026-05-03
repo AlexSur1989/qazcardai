@@ -26,8 +26,8 @@ const KIE_WEBHOOK_PROVIDER = "KIE_AI";
 
 /**
  * Проверка: Bearer / X-Webhook-Token; либо HMAC-SHA256 тела (hex) в X-Kie-Signature.
- * Р' **production** без KIE_WEBHOOK_SECRET — отклоняем (РЅРµ открывать callback РІ интернете).
- * Р' dev без секрета — РїСЂРѕРїСѓСЃРє для локальной отладки.
+ * В **production** без KIE_WEBHOOK_SECRET — отклоняем (не открывать callback в интернете).
+ * В dev без секрета — пропуск для локальной отладки.
  */
 export function verifyKieWebhookAuth(
   request: Request,
@@ -111,7 +111,7 @@ export async function processKieIncomingWebhook(
   if (existing?.status === "PROCESSED") {
     return { status: 200 };
   }
-  // FAILED или RECEIVED (зависший) — обработать СЃРЅРѕРІР°
+  // FAILED или RECEIVED (зависший) — обработать снова
 
   if (!existing) {
     try {

@@ -1,6 +1,6 @@
 
 /**
- * Текст РїСЂРѕ В«Credits insufficient…» РІ ответе Kie — это баланс РЅР° стороне Kie.ai,
+ * Текст про «Credits insufficient…» в ответе Kie — это баланс на стороне Kie.ai,
  * не внутриигровые токены приложения.
  */
 export function isLikelyKieAccountInsufficientMessage(msg: string | null | undefined): boolean {

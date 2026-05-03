@@ -34,7 +34,7 @@ export async function requestPasswordReset(input: {
   email: string;
   ipAddress: string | null;
   userAgent: string | null;
-  /** Origin запроса Рє API (например http://localhost:3099) — чтобы ссылка РІ РїРёСЃСЊРјРµ совпадала СЃ портом dev-сервера */
+  /** Origin запроса к API (например http://localhost:3099) — чтобы ссылка в письме совпадала с портом dev-сервера */
   publicBaseUrl?: string | null;
 }): Promise<{
   publicMessage: string;

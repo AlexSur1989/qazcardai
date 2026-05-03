@@ -16,7 +16,7 @@ type ProcessResult =
   | { status: 500 };
 
 /**
- * rawBody — тело запроса как строка, то Р¶Рµ, что ушло РІ constructEvent.
+ * rawBody — тело запроса как строка, то же, что ушло в constructEvent.
  */
 export async function processStripeWebhookRequest(args: {
   rawBody: string;

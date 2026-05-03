@@ -314,7 +314,7 @@ function mockMissingKieKey(): ClassifyProductResult {
     category: "other",
     confidence: 0,
     reason:
-      "РќРµ задан KIE_API_KEY — классификация через Kie.ai недоступна. Укажите ключ РІ окружении или включите тестовый режим (PRODUCT_CLASSIFIER_PROVIDER=mock).",
+      "Не задан KIE_API_KEY — классификация через Kie.ai недоступна. Укажите ключ в окружении или включите тестовый режим (PRODUCT_CLASSIFIER_PROVIDER=mock).",
     provider: "mock",
     model: "mock",
     classifierFailed: true,
@@ -332,7 +332,7 @@ async function readLegacyClassifierEnv(): Promise<{ provider: string; model: str
       select: { value: true },
     }),
   ]);
-  /** Env имеет приоритет над AppSetting: РІ админке РјРѕРі остаться mock, РІ .env — kie_gemini. */
+  /** Env имеет приоритет над AppSetting: в админке мог остаться mock, в .env — kie_gemini. */
   const envP = (process.env.PRODUCT_CLASSIFIER_PROVIDER ?? "").trim();
   const envM = (process.env.PRODUCT_CLASSIFIER_MODEL ?? "").trim();
   const dbP =
@@ -640,7 +640,7 @@ export async function classifyProductImage(
         category: "other",
         confidence: 0,
         reason:
-          "Активная модель классификатора РІ каталоге РЅРµ относится Рє Kie.ai — проверьте настройки.",
+          "Активная модель классификатора в каталоге не относится к Kie.ai — проверьте настройки.",
         provider: "unknown",
         model: aiModel.slug,
         classifierFailed: true,

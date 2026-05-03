@@ -231,7 +231,7 @@ export async function queueProductCardImage(
   sourceImageUrl: string | string[],
   productMeta: ProductCardGenMeta,
   negativePrompt?: string | null,
-  /** Плоские поля РІ metadata (flow, projectId, tab, categoryId, …) — без hidden prompt. */
+  /** Плоские поля в metadata (flow, projectId, tab, categoryId, …) — без hidden prompt. */
   metadataRoot?: Record<string, unknown>,
   /** Для «Карточка товара»: merge в `metadata.settings` + тот же объект для Product Card pricing. */
   marketplaceCardSettings?: MarketplaceCardImageSettings | null,

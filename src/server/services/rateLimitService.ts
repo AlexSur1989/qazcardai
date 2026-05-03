@@ -40,7 +40,7 @@ function wallMinute(): number {
 }
 
 /**
- * Скользящее РѕРєРЅРѕ ~1 РјРёРЅ (РїРѕ идентификатору) — Redis: фикс. минута; память: РѕС' первого запроса.
+ * Скользящее окно ~1 мин (по идентификатору) — Redis: фикс. минута; память: от первого запроса.
  */
 export async function checkRateLimit(
   kind: "login" | "register" | "generation" | "upload" | "admin" | "classify" | "forgot_password" | "reset_password",

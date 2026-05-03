@@ -119,7 +119,7 @@ export type UpdateProductCardProjectInput = {
 };
 
 /**
- * Создать пустой проект (без РёСЃС…РѕРґРЅРѕРіРѕ фото; фото — отдельным attach).
+ * Создать пустой проект (без исходного фото; фото — отдельным attach).
  */
 export async function createProductCardProject(
   userId: string,
@@ -168,7 +168,7 @@ export async function updateProductCardProject(
 
 const IMAGE_FILE_TYPES = new Set(["image"]);
 
-/** Модель/строка id — для сигнатуры В«uploadedFileВ» РёР· спецификации. */
+/** Модель/строка id — для сигнатуры «uploadedFile» из спецификации. */
 export type SourceUploadedFileInput =
   | string
   | { id: string; userId: string; fileType: string; url: string | null };

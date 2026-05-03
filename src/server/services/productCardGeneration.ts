@@ -358,7 +358,7 @@ function buildMarketplaceCardMergedModelSettings(
 }
 
 /**
- * Маркетплейс-карточка: hidden prompt только РЅР° сервере; pipeline — общий product-card image.
+ * Маркетплейс-карточка: hidden prompt только на сервере; pipeline — общий product-card image.
  *
  * TODO: Marketplace card v1 uses image generation prompt. For production-quality text, later implement overlay rendering with HTML/SVG/canvas to avoid AI text mistakes.
  */
@@ -375,7 +375,7 @@ export async function generateMarketplaceCardForProductCard(
     cardSize?: string;
     overlayTemplate?: string;
     userInstructions: string;
-    /** РќРµ доверяйте цене СЃ фронта: РїСЂРё расхождении СЃ пересчётом — 409 PRICE_CHANGED */
+    /** Не доверяйте цене с фронта: при расхождении с пересчётом — 409 PRICE_CHANGED */
     clientEstimateCredits?: number | null;
   },
 ): Promise<GenerateMarketplaceCardResult> {
@@ -434,7 +434,7 @@ export async function generateMarketplaceCardForProductCard(
   ) {
     return {
       ok: false,
-      error: "Стоимость изменилась — обновите оценку Рё попробуйте СЃРЅРѕРІР°",
+      error: "Стоимость изменилась — обновите оценку и попробуйте снова",
       status: 409,
       code: "PRICE_CHANGED",
     };
@@ -749,7 +749,7 @@ export async function generateProductVideoForProductCard(p: {
   ) {
     return {
       ok: false,
-      error: "Стоимость изменилась — обновите оценку Рё попробуйте СЃРЅРѕРІР°",
+      error: "Стоимость изменилась — обновите оценку и попробуйте снова",
       status: 409,
       code: "PRICE_CHANGED",
     };

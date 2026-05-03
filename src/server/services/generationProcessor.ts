@@ -199,7 +199,7 @@ export function buildVideoKieInput(
     model.payloadMapping != null &&
     typeof model.payloadMapping === "object" &&
     !Array.isArray(model.payloadMapping);
-  /** Kling 3.0 Рё Wan 2.7 — через POST .../jobs/createTask; иначе без payloadMapping ушли Р±С‹ РЅР° legacy /video/generate. */
+  /** Kling 3.0 и Wan 2.7 — через POST .../jobs/createTask; иначе без payloadMapping ушли бы на legacy /video/generate. */
   const useMarketCreateTask =
     modelId === "kling-3.0/motion-control" ||
     modelId.toLowerCase() === "kling-3.0" ||
@@ -266,7 +266,7 @@ export async function markFailed(
   void trySendGenerationFailedEmail(genId);
 }
 
-/** После исчерпания ретраев Bull — если генерация ещё РЅРµ РІ финальном состоянии. */
+/** После исчерпания ретраев Bull — если генерация ещё не в финальном состоянии. */
 export async function markGenerationExhausted(
   generationId: string,
   lastError: string,
@@ -289,7 +289,7 @@ function getInlineMaxWallMs(): number {
 
 /**
  * Один проход обработки без очереди (QUEUE_MODE=inline). Та же бизнес-логика, что у воркера (`processGenerationJob`).
- * Публичное РёРјСЏ для API; реализация — `processVideoGenerationInline`.
+ * Публичное имя для API; реализация — `processVideoGenerationInline`.
  */
 export async function processGeneration(generationId: string): Promise<void> {
   return processVideoGenerationInline(generationId);
@@ -297,7 +297,7 @@ export async function processGeneration(generationId: string): Promise<void> {
 
 /**
  * Локальная разработка (QUEUE_MODE=inline): полный цикл без Bull/Redis.
- * HTTP-таймауты Рє Kie — KIE_FETCH_TIMEOUT_MS; верхняя граница wall-clock — GENERATION_INLINE_MAX_MS (если > 0).
+ * HTTP-таймауты к Kie — KIE_FETCH_TIMEOUT_MS; верхняя граница wall-clock — GENERATION_INLINE_MAX_MS (если > 0).
  */
 export async function processVideoGenerationInline(generationId: string): Promise<void> {
   const maxMs = getInlineMaxWallMs();
@@ -339,7 +339,7 @@ export async function processVideoGenerationInline(generationId: string): Promis
 }
 
 /**
- * РћРґРёРЅ job = РѕРґРЅР° попытка цепочки. Ретраи — уровень Bull. РќРµ дублируйте CAPTURE/REFUND.
+ * Один job = одна попытка цепочки. Ретраи — уровень Bull. Не дублируйте CAPTURE/REFUND.
  * `job` не используется; опционален для inline-режима без Bull.
  */
 export async function processGenerationJob(

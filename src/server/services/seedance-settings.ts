@@ -17,8 +17,8 @@ const SCENARIOS = new Set([
 
 /**
  * Взаимоисключающие сценарии Seedance 2.0 (Kie bytedance/seedance-2 / seedance-2-fast).
- * РЎРј. OpenAPI: https://docs.kie.ai/market/bytedance/seedance-2
- * (Text-to-Video, First&Last, Multimodal reference — РЅРµ смешивать).
+ * См. OpenAPI: https://docs.kie.ai/market/bytedance/seedance-2
+ * (Text-to-Video, First&Last, Multimodal reference — не смешивать).
  */
 export function validateSeedanceScenario(
   settings: Record<string, unknown>,
@@ -104,7 +104,7 @@ export const SEEDANCE_API_MODEL_ID = "bytedance/seedance-2";
 
 export const SEEDANCE_FAST_API_MODEL_ID = "bytedance/seedance-2-fast";
 
-/** Сценарии first/last frame / reference — общие для Seedance 2.0 Рё 2.0 Fast. */
+/** Сценарии first/last frame / reference — общие для Seedance 2.0 и 2.0 Fast. */
 export function isSeedanceScenarioModel(
   apiModelId: string | null | undefined,
 ): boolean {

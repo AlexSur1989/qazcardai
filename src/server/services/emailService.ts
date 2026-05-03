@@ -224,7 +224,7 @@ async function sendViaSendgrid(args: {
 }
 
 /**
- * value РїСЂРёРІРѕРґРёС' Рє подстановке; timestamp — дружелюбная строка.
+ * value приводит к подстановке; timestamp — дружелюбная строка.
  */
 function normVars(
   v: Record<string, string | number | undefined | null | Date>,

@@ -212,7 +212,7 @@ export function buildStorageWarnings(
   }
   if (stats.filesMissingStorageKeyCount > 0) {
     w.push(
-      "Некоторые файлы РЅРµ имеют storageKey — проверьте данные.",
+      "Некоторые файлы не имеют storageKey — проверьте данные.",
     );
   }
   if (isUploadStorageLocalExplicitInProduction()) {

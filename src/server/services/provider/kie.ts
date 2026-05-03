@@ -94,7 +94,7 @@ export type NormalizedKieImageResult = {
   errorMessage?: string;
 };
 
-/** @deprecated use NormalizedKieImageResult — то Р¶Рµ, для видео добавлено videoUrls */
+/** @deprecated use NormalizedKieImageResult — то же, для видео добавлено videoUrls */
 export type NormalizedKieTaskResult = NormalizedKieImageResult;
 
 type JsonRecord = Record<string, unknown>;
@@ -110,8 +110,8 @@ export function trimKieApiModelId(raw: string | null | undefined): string {
 }
 
 /**
- * @throws — если РІ админке пустой apiModelId (после trim).
- * Реальное поле `model` РІ JSON Рє Kie — только отсюда.
+ * @throws — если в админке пустой apiModelId (после trim).
+ * Реальное поле `model` в JSON к Kie — только отсюда.
  */
 export function assertKieModelIdSet(raw: string | null | undefined): string {
   const id = trimKieApiModelId(raw);
@@ -161,7 +161,7 @@ function kieRequestLog(
 }
 
 /**
- * Парсит ответ Kie.ai: формат может отличаться РїРѕ эндпоинту — расширяйте селекторы РїСЂРё подключении новых API.
+ * Парсит ответ Kie.ai: формат может отличаться по эндпоинту — расширяйте селекторы при подключении новых API.
  */
 export function normalizeResponse(
   response: unknown,
@@ -693,8 +693,8 @@ function buildKlingMotionControlMarketCreateTaskPayload(
 
 /**
  * Kling 3.0: POST /api/v1/jobs/createTask.
- * `model` — строго РёР· `aiModel.apiModelId` (СѓР¶Рµ assert + trim), без name/slug/id/settings.model.
- * Тело как РІ РґРѕРє. Kie: только `model` + `input` (webhook — отдельно, если появится РІ API).
+ * `model` — строго из `aiModel.apiModelId` (уже assert + trim), без name/slug/id/settings.model.
+ * Тело как в док. Kie: только `model` + `input` (webhook — отдельно, если появится в API).
  */
 function buildKling30MarketCreateTaskPayload(
   prompt: string,
@@ -730,7 +730,7 @@ function buildKling30MarketCreateTaskPayload(
 }
 
 /**
- * Тело POST для Kie Market /api/v1/jobs/createTask (без секретов РІ логах — отдельно redact).
+ * Тело POST для Kie Market /api/v1/jobs/createTask (без секретов в логах — отдельно redact).
  */
 export function buildKieMarketCreateTaskPayload(
   prompt: string,
