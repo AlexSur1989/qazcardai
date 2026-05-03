@@ -38,7 +38,7 @@ export default async function CreateHubPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Video className="size-5" aria-hidden />
-                Видео
+                Создать видео
               </CardTitle>
               <CardDescription>Генерация видео по моделям из каталога</CardDescription>
             </CardHeader>
@@ -49,7 +49,7 @@ export default async function CreateHubPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <ImageIcon className="size-5" aria-hidden />
-                Изображение
+                Создать фото
               </CardTitle>
               <CardDescription>Текст в изображение</CardDescription>
             </CardHeader>
@@ -63,7 +63,7 @@ export default async function CreateHubPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Package className="size-5" aria-hidden />
-                Карточка товара
+                Создать карточку товара
               </CardTitle>
               <CardDescription>Карточка для маркетплейса</CardDescription>
             </CardHeader>

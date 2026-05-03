@@ -15,7 +15,7 @@ export default async function DashboardLayout({
   const user = current.user;
 
   return (
-    <div className="bg-background flex min-h-screen w-full flex-1 flex-col md:flex-row">
+    <div className="bg-background flex min-h-screen w-full min-w-0 flex-1 flex-col md:flex-row">
       <DashboardSidebar userEmail={user.email} />
       <div className="min-h-0 min-w-0 flex-1 bg-[#e8f5f9] px-4 py-6 md:px-6 md:py-8 lg:px-8">
         <div className="mx-auto w-full max-w-5xl">{children}</div>
