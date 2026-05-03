@@ -46,8 +46,8 @@ export async function middleware(req: NextRequest) {
     if (token?.sub) {
       const role = token.role as UserRole | undefined;
       const p = pickLoginRedirectParam(
-        nextUrl.searchParams.get("callbackUrl"),
         nextUrl.searchParams.get("next"),
+        nextUrl.searchParams.get("callbackUrl"),
       );
       const target = postAuthLandingPath(p, role);
       return NextResponse.redirect(new URL(target, nextUrl.origin));
@@ -72,8 +72,8 @@ export async function middleware(req: NextRequest) {
   });
 
   if (!token?.sub) {
-    const url = new URL("/auth/login", nextUrl.origin);
-    url.searchParams.set("callbackUrl", pathname);
+    const url = new URL("/login", nextUrl.origin);
+    url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
 

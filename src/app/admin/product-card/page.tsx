@@ -60,7 +60,7 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
   const session = await getFreshAdminSessionUser();
   if (!session.ok) {
     if (session.reason === "forbidden") redirect("/dashboard");
-    redirect("/auth/login?callbackUrl=/admin/product-card");
+    redirect("/login?next=/admin/product-card");
   }
 
   const params = await searchParams;

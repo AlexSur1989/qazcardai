@@ -18,7 +18,7 @@ export const metadata = {
 export default async function CreateHubPage() {
   const current = await getFreshSessionUser();
   if (!current.ok) {
-    redirect("/auth/login?callbackUrl=/dashboard/create");
+    redirect("/login?next=/dashboard/create");
   }
 
   return (

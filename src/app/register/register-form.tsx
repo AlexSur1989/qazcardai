@@ -44,7 +44,7 @@ export function RegisterForm() {
       });
 
       if (!signRes?.ok || signRes.error) {
-        router.push("/auth/login?registered=1");
+        router.push("/login?registered=1");
         router.refresh();
         setLoading(false);
         return;
@@ -66,7 +66,7 @@ export function RegisterForm() {
       <p className="mt-2 text-sm text-muted-foreground">
         Уже есть аккаунт?{" "}
         <Link
-          href="/auth/login"
+          href="/login"
           className="text-primary underline-offset-4 hover:underline"
         >
           Войти

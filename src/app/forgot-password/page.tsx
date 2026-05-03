@@ -72,7 +72,7 @@ export default function ForgotPasswordPage() {
             ) : null}
             <p>
               <Link
-                href="/auth/login"
+                href="/login"
                 className="text-sm text-primary underline-offset-4 hover:underline"
               >
                 Вернуться ко входу
@@ -110,7 +110,7 @@ export default function ForgotPasswordPage() {
         {!done ? (
           <p className="mt-6 text-center text-sm text-muted-foreground">
             <Link
-              href="/auth/login"
+              href="/login"
               className="text-primary underline-offset-4 hover:underline"
             >
               Вернуться ко входу

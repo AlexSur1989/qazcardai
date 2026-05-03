@@ -30,7 +30,7 @@ export const metadata = {
 export default async function DashboardPage() {
   const current = await getFreshSessionUser();
   if (!current.ok) {
-    redirect("/auth/login?callbackUrl=/dashboard");
+    redirect("/login?next=/dashboard");
   }
 
   const [data, lastPack] = await Promise.all([

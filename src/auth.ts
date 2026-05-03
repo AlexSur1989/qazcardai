@@ -7,7 +7,7 @@ import type { UserRole } from "@/generated/prisma/enums";
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   pages: {
-    signIn: "/auth/login",
+    signIn: "/login",
   },
   session: {
     strategy: "jwt",

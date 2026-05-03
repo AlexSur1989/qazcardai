@@ -93,7 +93,7 @@ docker compose run --rm --env-file .env -v "$(pwd)":/work -w /work node:20-alpin
   "apk add --no-cache libc6-compat openssl && npm ci && npx tsx scripts/seed-admin.ts"
 ```
 
-После этого вход: `https://YOUR_DOMAIN/auth/login`, панель админа: путь `/admin` (роли см. `PROJECT_SPEC.md`).
+После этого вход: `https://YOUR_DOMAIN/login`, панель админа: путь `/admin` (роли см. `PROJECT_SPEC.md`).
 
 ## Настройка Nginx
 

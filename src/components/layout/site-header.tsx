@@ -55,13 +55,13 @@ export function SiteHeader() {
           ) : (
             <>
               <Link
-                href="/auth/login"
+                href="/login"
                 className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
               >
                 Вход
               </Link>
               <Link
-                href="/auth/register"
+                href="/register"
                 className={cn(buttonVariants({ variant: "default", size: "sm" }))}
               >
                 Регистрация

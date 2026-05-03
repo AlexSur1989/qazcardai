@@ -37,7 +37,7 @@ function ResetPasswordForm() {
         </p>
         <p className="mt-2">
           <Link
-            href="/auth/login"
+            href="/login"
             className="text-sm text-muted-foreground underline-offset-4 hover:underline"
           >
             Вернуться ко входу
@@ -96,7 +96,7 @@ function ResetPasswordForm() {
         </p>
         <div className="mt-6">
           <Link
-            href="/auth/login"
+            href="/login"
             className={cn(buttonVariants(), "inline-flex w-full justify-center")}
           >
             Войти

@@ -1,28 +1,27 @@
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
 import {
   firstSearchParam,
+  normalizeNextPath,
   pickLoginRedirectParam,
-  postAuthLandingPath,
 } from "@/lib/auth";
-
-import { LoginForm } from "./login-form";
 
 type Props = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default async function LoginPage({ searchParams }: Props) {
-  const session = await auth();
-  if (session?.user) {
-    const sp = (await searchParams) ?? {};
-    const p = pickLoginRedirectParam(
-      firstSearchParam(sp, "callbackUrl"),
-      firstSearchParam(sp, "next"),
-    );
-    redirect(postAuthLandingPath(p, session.user.role));
+/** Совместимость: /auth/login → /login?next=… */
+export default async function LegacyAuthLoginPage({ searchParams }: Props) {
+  const sp = (await searchParams) ?? {};
+  const p = pickLoginRedirectParam(
+    firstSearchParam(sp, "next"),
+    firstSearchParam(sp, "callbackUrl"),
+  );
+  const target = normalizeNextPath(p);
+  const q = new URLSearchParams();
+  q.set("next", target);
+  if (firstSearchParam(sp, "registered") === "1") {
+    q.set("registered", "1");
   }
-
-  return <LoginForm />;
+  redirect(`/login?${q.toString()}`);
 }

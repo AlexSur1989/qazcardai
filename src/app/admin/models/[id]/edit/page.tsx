@@ -23,7 +23,7 @@ export default async function AdminEditModelPage({ params }: Props) {
     if (session.reason === "forbidden") {
       redirect("/dashboard");
     }
-    redirect("/auth/login?callbackUrl=/admin/models");
+    redirect("/login?next=/admin/models");
   }
   const m = await getAdminAiModelById(id);
   if (!m) {

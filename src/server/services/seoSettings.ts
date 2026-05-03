@@ -338,19 +338,19 @@ export async function getSeoChecklist(): Promise<SeoChecklistItem[]> {
       id: "login",
       label: "/login СЂР°Р±РѕС‚Р°РµС‚ / /login works",
       status: loginOk ? "ok" : "warning",
-      detail: "Р РµРґРёСЂРµРєС‚ /login в†’ /auth/login",
+      detail: "/login — вход; /auth/login — редирект на /login с тем же ?next= / ?callbackUrl=",
     },
     {
       id: "register",
       label: "/register СЂР°Р±РѕС‚Р°РµС‚ / /register works",
       status: regOk ? "ok" : "warning",
-      detail: "Р РµРґРёСЂРµРєС‚ /register в†’ /auth/register",
+      detail: "/register — регистрация; /auth/register — редирект на /register",
     },
     {
       id: "product_card",
       label: "/dashboard/create/product-card РїРѕСЃР»Рµ РІС…РѕРґР° / product-card (auth)",
       status: productOk ? "ok" : "warning",
-      detail: "РќСѓР¶РµРЅ cookie СЃРµСЃСЃРёРё; РѕР¶РёРґР°РµС‚СЃСЏ СЂРµРґРёСЂРµРєС‚ 302/307 РЅР° /auth/login Р±РµР· РІС…РѕРґР°",
+      detail: "Нужна сессия; без входа — редирект на /login?next=…",
     },
   ];
 }

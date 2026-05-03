@@ -23,7 +23,7 @@ export const metadata = {
 export default async function CreateImagePage() {
   const current = await getFreshSessionUser();
   if (!current.ok) {
-    redirect("/auth/login?callbackUrl=/dashboard/create/image");
+    redirect("/login?next=/dashboard/create/image");
   }
 
   const [models, balanceCredits] = await Promise.all([

@@ -20,7 +20,7 @@ export const metadata = {
 export default async function SettingsPage() {
   const current = await getFreshSessionUser();
   if (!current.ok) {
-    redirect("/auth/login?callbackUrl=/dashboard/settings");
+    redirect("/login?next=/dashboard/settings");
   }
 
   const profile = await getUserProfile(current.user.id);

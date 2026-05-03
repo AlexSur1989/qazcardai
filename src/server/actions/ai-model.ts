@@ -31,7 +31,7 @@ async function getAdminContext(): Promise<{ userId: string }> {
     if (current.reason === "forbidden") {
       redirect("/dashboard");
     }
-    redirect("/auth/login?callbackUrl=/admin/models");
+    redirect("/login?next=/admin/models");
   }
   return { userId: current.user.id };
 }

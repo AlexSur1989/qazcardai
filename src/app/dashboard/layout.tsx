@@ -10,7 +10,7 @@ export default async function DashboardLayout({
 }>) {
   const current = await getFreshSessionUser();
   if (!current.ok) {
-    redirect("/auth/login?callbackUrl=/dashboard");
+    redirect("/login?next=/dashboard");
   }
   const user = current.user;
 

@@ -43,7 +43,7 @@ type PageProps = {
 export default async function HistoryPage({ searchParams }: PageProps) {
   const current = await getFreshSessionUser();
   if (!current.ok) {
-    redirect("/auth/login?callbackUrl=/dashboard/history");
+    redirect("/login?next=/dashboard/history");
   }
 
   const sp = (await searchParams) ?? {};

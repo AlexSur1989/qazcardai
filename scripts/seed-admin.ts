@@ -57,7 +57,7 @@ async function main() {
     },
   });
   console.log("Готово. Войдите в кабинет с этими данными:\n");
-  console.log("  URL:      /auth/login");
+  console.log("  URL:      /login");
   console.log("  Email:   ", user.email);
   console.log("  Пароль:  ", PASSWORD);
   console.log("  Роль:    ", user.role);

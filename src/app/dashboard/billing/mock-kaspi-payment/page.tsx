@@ -24,7 +24,7 @@ type PageProps = {
 export default async function MockKaspiPaymentPage({ searchParams }: PageProps) {
   const current = await getFreshSessionUser();
   if (!current.ok) {
-    redirect("/auth/login?callbackUrl=/dashboard/billing");
+    redirect("/login?next=/dashboard/billing");
   }
   const sp = (await searchParams) ?? {};
   const paymentId = first(sp.paymentId).trim();

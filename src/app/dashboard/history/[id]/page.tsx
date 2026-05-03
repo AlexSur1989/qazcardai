@@ -21,7 +21,7 @@ export default async function HistoryDetailPage({ params }: Props) {
   const current = await getFreshSessionUser();
   if (!current.ok) {
     redirect(
-      `/auth/login?callbackUrl=${encodeURIComponent(`/dashboard/history/${id}`)}`,
+      `/login?next=${encodeURIComponent(`/dashboard/history/${id}`)}`,
     );
   }
 

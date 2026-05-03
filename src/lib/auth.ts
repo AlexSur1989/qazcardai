@@ -12,18 +12,26 @@ const AUTH_FLOW_PATHS = new Set([
   "/register",
 ]);
 
-/** callbackUrl (NextAuth) или next — первый непустой. */
+/** Приоритет: next, затем callbackUrl (совместимость с NextAuth). */
 export function pickLoginRedirectParam(
+  next: string | null | undefined,
   callbackUrl: string | null | undefined,
-  next: string | null | undefined
 ): string | null {
+  const n =
+    typeof next === "string" && next.trim() ? next.trim() : null;
   const c =
     typeof callbackUrl === "string" && callbackUrl.trim()
       ? callbackUrl.trim()
       : null;
-  const n =
-    typeof next === "string" && next.trim() ? next.trim() : null;
-  return c ?? n ?? null;
+  return n ?? c ?? null;
+}
+
+/** Безопасный относительный путь для ?next= при редиректе со старых URL. */
+export function normalizeNextPath(raw: string | null | undefined): string {
+  if (typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//")) {
+    return raw;
+  }
+  return "/dashboard";
 }
 
 export function firstSearchParam(

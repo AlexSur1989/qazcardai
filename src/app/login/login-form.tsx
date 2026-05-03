@@ -22,8 +22,8 @@ function LoginFormInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawRedirect = pickLoginRedirectParam(
-    searchParams.get("callbackUrl"),
     searchParams.get("next"),
+    searchParams.get("callbackUrl"),
   );
   const callbackUrl = safePathCallback(rawRedirect);
   const registered = searchParams.get("registered") === "1";
@@ -85,7 +85,7 @@ function LoginFormInner() {
         <span>
           Нет аккаунта?{" "}
           <Link
-            href="/auth/register"
+            href="/register"
             className="text-primary underline-offset-4 hover:underline"
           >
             Регистрация

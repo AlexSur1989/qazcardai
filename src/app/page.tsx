@@ -32,13 +32,13 @@ export default function HomePage() {
             сервере.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <Button nativeButton={false} render={<Link href="/auth/register" />} size="lg">
+            <Button nativeButton={false} render={<Link href="/register" />} size="lg">
               Создать аккаунт
             </Button>
             <Button
               variant="outline"
               nativeButton={false}
-              render={<Link href="/auth/login" />}
+              render={<Link href="/login" />}
               size="lg"
             >
               Войти

@@ -1,28 +1,26 @@
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
-import {
-  firstSearchParam,
-  pickLoginRedirectParam,
-  postAuthLandingPath,
-} from "@/lib/auth";
-
-import { RegisterForm } from "./register-form";
+import { firstSearchParam, pickLoginRedirectParam } from "@/lib/auth";
 
 type Props = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default async function RegisterPage({ searchParams }: Props) {
-  const session = await auth();
-  if (session?.user) {
-    const sp = (await searchParams) ?? {};
-    const p = pickLoginRedirectParam(
-      firstSearchParam(sp, "callbackUrl"),
-      firstSearchParam(sp, "next"),
-    );
-    redirect(postAuthLandingPath(p, session.user.role));
+/** Совместимость: /auth/register → /register?next=… */
+export default async function LegacyAuthRegisterPage({ searchParams }: Props) {
+  const sp = (await searchParams) ?? {};
+  const p = pickLoginRedirectParam(
+    firstSearchParam(sp, "next"),
+    firstSearchParam(sp, "callbackUrl"),
+  );
+  const q = new URLSearchParams();
+  if (
+    typeof p === "string" &&
+    p.startsWith("/") &&
+    !p.startsWith("//")
+  ) {
+    q.set("next", p);
   }
-
-  return <RegisterForm />;
+  const qs = q.toString();
+  redirect(qs ? `/register?${qs}` : "/register");
 }

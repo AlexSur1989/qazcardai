@@ -23,7 +23,7 @@ export const metadata = {
 export default async function CreateVideoPage() {
   const current = await getFreshSessionUser();
   if (!current.ok) {
-    redirect("/auth/login?callbackUrl=/dashboard/create/video");
+    redirect("/login?next=/dashboard/create/video");
   }
 
   const [models, balanceCredits] = await Promise.all([

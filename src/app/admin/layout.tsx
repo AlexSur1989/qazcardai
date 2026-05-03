@@ -14,7 +14,7 @@ export default async function AdminLayout({
     if (current.reason === "forbidden") {
       redirect("/dashboard");
     }
-    redirect("/auth/login?callbackUrl=/admin");
+    redirect("/login?next=/admin");
   }
   const user = current.user;
 

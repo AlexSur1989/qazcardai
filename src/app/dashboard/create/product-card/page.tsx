@@ -15,7 +15,7 @@ export const metadata = {
 export default async function ProductCardCreatePage() {
   const current = await getFreshSessionUser();
   if (!current.ok) {
-    redirect("/auth/login?callbackUrl=/dashboard/create/product-card");
+    redirect("/login?next=/dashboard/create/product-card");
   }
 
   const [balanceCredits, productCardSettings] = await Promise.all([

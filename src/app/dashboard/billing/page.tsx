@@ -50,7 +50,7 @@ type PageProps = {
 export default async function BillingPage({ searchParams }: PageProps) {
   const current = await getFreshSessionUser();
   if (!current.ok) {
-    redirect("/auth/login?callbackUrl=/dashboard/billing");
+    redirect("/login?next=/dashboard/billing");
   }
   const sp = (await searchParams) ?? {};
   const checkout = first(sp.checkout);
