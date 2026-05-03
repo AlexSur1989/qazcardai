@@ -128,6 +128,35 @@ function applyProductCardMetadata(
   target.productCard = product.productCard;
 }
 
+function isJsonObject(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x !== null && !Array.isArray(x);
+}
+
+/**
+ * Kie Market + payloadMapping без settingsSchema: KIE ждёт image_urls в input.
+ * Иначе в metadata.settings нет imageUrls → ошибка провайдера (image_urls is required).
+ */
+function mergeKiePayloadSettingsFromInputFiles(
+  metadata: Record<string, unknown>,
+  model: AiModel,
+  inputFiles: string[],
+): void {
+  if (inputFiles.length === 0 || !model.supportsImageInput) return;
+  const pm = model.payloadMapping;
+  if (!isJsonObject(pm)) return;
+  const mapped = new Set(Object.keys(pm));
+  const imageFields = ["imageUrls", "inputUrls", "referenceImageUrls"] as const;
+  if (!imageFields.some((k) => mapped.has(k))) return;
+  const base = isJsonObject(metadata.settings) ? { ...metadata.settings } : {};
+  for (const field of imageFields) {
+    if (!mapped.has(field)) continue;
+    const cur = base[field];
+    if (Array.isArray(cur) && cur.length > 0) continue;
+    base[field] = [...inputFiles];
+  }
+  metadata.settings = base;
+}
+
 type QueueOk = {
   ok: true;
   generationId: string;
@@ -300,6 +329,7 @@ export async function queueProductCardImage(
   } else if (marketplaceCardSettings) {
     metadata.settings = { ...marketplaceCardSettings };
   }
+  mergeKiePayloadSettingsFromInputFiles(metadata, model, inputFilesCombined);
   applyProductCardMetadata(metadata, productMeta);
   if (metadataRoot) {
     Object.assign(metadata, metadataRoot);
