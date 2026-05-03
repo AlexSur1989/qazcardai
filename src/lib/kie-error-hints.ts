@@ -16,6 +16,23 @@ export function isLikelyKieAccountInsufficientMessage(msg: string | null | undef
   );
 }
 
+export function isLikelyKieOverloadMessage(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes("нагрузк") ||
+    m.includes("overload") ||
+    m.includes("попробуйте позже") ||
+    m.includes("try again later") ||
+    m.includes("temporarily unavailable") ||
+    m.includes("service unavailable") ||
+    m.includes("too many requests") ||
+    m.includes("rate limit") ||
+    /\b502\b/.test(m) ||
+    /\b503\b/.test(m) ||
+    /\b429\b/.test(m)
+  );
+}
+
 function isLikelyKieImageUrlError(msg: string): boolean {
   const m = msg.toLowerCase();
   return (
@@ -107,6 +124,15 @@ export function explainKieErrorForUser(
       0,
       8000,
     );
+  }
+  if (isLikelyKieOverloadMessage(raw)) {
+    return [
+      "Провайдер Kie.ai или сеть до него временно перегружены (сервис может отвечать 502/503).",
+      "Подождите несколько минут и запустите генерацию снова.",
+      `Текст ответа: ${raw}`,
+    ]
+      .join(" ")
+      .slice(0, 8000);
   }
   return raw.slice(0, 8000);
 }

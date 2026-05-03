@@ -8,7 +8,10 @@ import {
   isMockKie,
   isMockProviderTaskId,
 } from "@/lib/kie-mock";
-import { explainKieErrorForUser } from "@/lib/kie-error-hints";
+import {
+  explainKieErrorForUser,
+  isLikelyKieOverloadMessage,
+} from "@/lib/kie-error-hints";
 import {
   kieReachableImageUrlsFromInputFiles,
   KIE_REQUIRES_PUBLIC_IMAGE_URLS_RU,
@@ -830,8 +833,14 @@ async function runPollToCompletion(
     statusCode: lastHttp,
     errorMessage: lastErr ?? "Polling: результат не готов",
   });
+  const overloadHttp = lastHttp === 502 || lastHttp === 503 || lastHttp === 429;
   await markFailed(
     gen.id,
-    "Тайм-аут ожидания готового файла (polling)",
+    overloadHttp || (lastErr && isLikelyKieOverloadMessage(lastErr))
+      ? explainKieErrorForUser(
+          lastErr,
+          "Результат не получен за время polling: провайдер долго отвечал ошибкой перегрузки или задача не успела завершиться. Повторите позже или увеличьте GENERATION_POLL_MAX_ATTEMPTS / интервал в .env.",
+        )
+      : "Тайм-аут ожидания готового файла (polling)",
   );
 }

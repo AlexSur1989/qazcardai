@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@/generated/prisma/client";
 import type { GenerationStatus, GenerationType } from "@/generated/prisma/enums";
+import { fixUtf8MojibakeDisplay } from "@/lib/fix-utf8-mojibake-display";
 import { prisma } from "@/lib/prisma";
 import { getFirstOutputPreviewUrl, parseOutputFilesList } from "@/lib/generation-output-utils";
 
@@ -149,7 +150,7 @@ export async function getUserGenerationDetail(
         inputFiles: g.inputFiles,
         outputFiles: g.outputFiles,
         metadata: g.metadata,
-        errorMessage: g.errorMessage,
+        errorMessage: fixUtf8MojibakeDisplay(g.errorMessage),
         costCredits: g.costCredits,
         createdAt: g.createdAt,
         completedAt: g.completedAt,
