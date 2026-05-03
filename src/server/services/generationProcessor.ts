@@ -608,6 +608,16 @@ export async function completeWithOutput(
   if (!latest || TERMINAL.has(latest.status)) {
     return;
   }
+  const requireS3Mirror =
+    process.env.NODE_ENV === "production" ||
+    process.env.GENERATION_OUTPUT_S3_REQUIRED?.trim() === "1";
+  if (requireS3Mirror && !isStorageConfigured()) {
+    await markFailed(
+      gen.id,
+      "Результаты Kie должны сохраняться в S3: UPLOAD_STORAGE=s3 и переменные S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_PUBLIC_URL, ключи доступа. Пока хранилище не настроено, завершение без зеркала отключено.",
+    );
+    return;
+  }
   const mediaKind = type === "IMAGE" ? "image" : "video";
   try {
     if (!isStorageConfigured()) {

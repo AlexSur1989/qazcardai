@@ -33,6 +33,7 @@ const S3_ENV_NAMES = [
   "S3_ACCESS_KEY_ID",
   "S3_SECRET_ACCESS_KEY",
   "S3_BUCKET",
+  "S3_PUBLIC_URL",
 ] as const;
 
 /** Проверяемые критичные ключи (без вывода значений). */
