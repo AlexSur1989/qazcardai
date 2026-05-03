@@ -68,13 +68,30 @@ export function isStorageConfigured(): boolean {
   return REQUIRED.every((n) => Boolean(process.env[n]?.trim()));
 }
 
-function inferForcePathStyle(): boolean {
+/** Полный URL S3 API (не имя бакета). Без схемы подставляется https://. */
+function parseS3EndpointUrl(raw: string): URL {
+  const trimmed = raw.trim();
+  const withScheme = trimmed.includes("://") ? trimmed : `https://${trimmed}`;
+  let url: URL;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    throw new StorageError(
+      "NOT_CONFIGURED",
+      "S3_ENDPOINT: укажите корректный URL API S3 (например https://object.pscloud.io для PS Cloud), а не только имя контейнера.",
+    );
+  }
+  if (!url.hostname) {
+    throw new StorageError("NOT_CONFIGURED", "S3_ENDPOINT: в URL отсутствует хост.");
+  }
+  return url;
+}
+
+function inferForcePathStyleForHost(hostname: string): boolean {
   const raw = process.env.S3_FORCE_PATH_STYLE?.trim().toLowerCase();
   if (raw === "true" || raw === "1") return true;
   if (raw === "false" || raw === "0") return false;
-  const ep = process.env.S3_ENDPOINT?.trim() ?? "";
-  if (!ep) return true;
-  if (/amazonaws\.com$/i.test(new URL(ep).hostname)) return false;
+  if (/amazonaws\.com$/i.test(hostname)) return false;
   return true;
 }
 
@@ -107,18 +124,28 @@ function getClient(): S3Client {
   if (s3Client) {
     return s3Client;
   }
-  const endpoint = requireEnv("S3_ENDPOINT");
+  const endpointRaw = requireEnv("S3_ENDPOINT");
+  const endpointUrl = parseS3EndpointUrl(endpointRaw);
+  const endpoint = endpointUrl.toString().replace(/\/$/, "");
   const region = requireEnv("S3_REGION");
   const accessKeyId = requireEnv("S3_ACCESS_KEY_ID");
   const secretAccessKey = requireEnv("S3_SECRET_ACCESS_KEY");
 
-  s3Client = new S3Client({
-    region,
-    endpoint,
-    credentials: { accessKeyId, secretAccessKey },
-    forcePathStyle: inferForcePathStyle(),
-    requestHandler: createS3RequestHandler(),
-  });
+  try {
+    s3Client = new S3Client({
+      region,
+      endpoint,
+      credentials: { accessKeyId, secretAccessKey },
+      forcePathStyle: inferForcePathStyleForHost(endpointUrl.hostname),
+      requestHandler: createS3RequestHandler(),
+    });
+  } catch (e) {
+    throw new StorageError(
+      "NOT_CONFIGURED",
+      `S3: не удалось инициализировать клиент: ${e instanceof Error ? e.message : String(e)}`,
+      { cause: e },
+    );
+  }
   return s3Client;
 }
 
