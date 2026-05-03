@@ -5,7 +5,8 @@ import "server-only";
  * (в UI ошибок — «РЎР°Р№С‚» вместо «Сайт»).
  */
 export function fixUtf8MojibakeDisplay(text: string | null | undefined): string | null {
-  if (text == null || text.length === 0) return text;
+  if (text == null) return null;
+  if (text.length === 0) return text;
 
   let recovered: string;
   try {
