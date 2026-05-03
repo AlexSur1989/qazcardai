@@ -12,23 +12,67 @@ const AUTH_FLOW_PATHS = new Set([
   "/register",
 ]);
 
+/** callbackUrl (NextAuth) или next — первый непустой. */
+export function pickLoginRedirectParam(
+  callbackUrl: string | null | undefined,
+  next: string | null | undefined
+): string | null {
+  const c =
+    typeof callbackUrl === "string" && callbackUrl.trim()
+      ? callbackUrl.trim()
+      : null;
+  const n =
+    typeof next === "string" && next.trim() ? next.trim() : null;
+  return c ?? n ?? null;
+}
+
+export function firstSearchParam(
+  sp: Record<string, string | string[] | undefined>,
+  key: string
+): string | null {
+  const v = sp[key];
+  if (typeof v === "string" && v) return v;
+  if (Array.isArray(v) && typeof v[0] === "string" && v[0]) return v[0];
+  return null;
+}
+
+export function buildPathQueryString(
+  sp: Record<string, string | string[] | undefined>
+): string {
+  const u = new URLSearchParams();
+  for (const [key, value] of Object.entries(sp)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) u.append(key, item);
+    } else {
+      u.set(key, value);
+    }
+  }
+  const s = u.toString();
+  return s ? `?${s}` : "";
+}
+
 /**
- * Куда отправить уже авторизованного пользователя с login/register.
- * Безопасный относительный путь из ?callbackUrl=… или дефолт: /admin (админы) / /dashboard.
+ * Куда отправить уже авторизованного пользователя с login/register или после signIn.
+ * Безопасный относительный путь из ?callbackUrl / ?next; без /admin для ролей без доступа.
  */
 export function postAuthLandingPath(
-  callbackUrlParam: string | null,
+  redirectParam: string | null,
   role: UserRole | undefined
 ): string {
   if (
-    typeof callbackUrlParam === "string" &&
-    callbackUrlParam.startsWith("/") &&
-    !callbackUrlParam.startsWith("//")
+    typeof redirectParam === "string" &&
+    redirectParam.startsWith("/") &&
+    !redirectParam.startsWith("//")
   ) {
     const pathOnly =
-      callbackUrlParam.split("?")[0]?.split("#")[0] ?? callbackUrlParam;
+      redirectParam.split("?")[0]?.split("#")[0] ?? redirectParam;
     if (!AUTH_FLOW_PATHS.has(pathOnly)) {
-      return callbackUrlParam;
+      const isAdminPath =
+        pathOnly === "/admin" || pathOnly.startsWith("/admin/");
+      if (!isAdminPath || (role && canAccessAdminPanel(role))) {
+        return redirectParam;
+      }
     }
   }
   if (role && canAccessAdminPanel(role)) return "/admin";
