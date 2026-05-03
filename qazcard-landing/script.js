@@ -5,7 +5,7 @@
  *   '' — относительные пути (лендинг на том же домене, что и приложение).
  *   'https://app.qazcard.ai' — если лендинг на отдельном домене (см. README).
  */
-const APP_ORIGIN = "";
+const APP_ORIGIN = "https://app.qazcardai.kz";
 
 const LINKS = {
   login: `${APP_ORIGIN}/login`,
