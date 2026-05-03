@@ -58,10 +58,17 @@ async function main() {
       slug: "seedream-4-0-product-concept",
       type: "IMAGE" as const,
       productCardModelType: "PRODUCT_CONCEPT_IMAGE",
-      apiModelId: "bytedance/seedream-4.0",
+      /** KIE Market: изображение товара + промпт → seedream-v4-edit */
+      apiModelId: "bytedance/seedream-v4-edit",
+      endpoint: "/api/v1/jobs/createTask",
+      statusEndpoint: "/api/v1/jobs/recordInfo",
       costCredits: 15,
       pricingSchema: productCardPricing(15, 0.03),
       supportsImageInput: true,
+      payloadMapping: {
+        prompt: "input.prompt",
+        imageUrls: "input.image_urls",
+      },
     },
     {
       name: "GPT Image 2 Product Card",

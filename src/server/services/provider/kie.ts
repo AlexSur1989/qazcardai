@@ -227,6 +227,19 @@ export function normalizeResponse(
       }
     } else if (typeof data.resultUrl === "string" && data.resultUrl) {
       videoUrls = [data.resultUrl];
+    } else if (
+      Array.isArray(data.resultUrls) &&
+      data.resultUrls.length > 0 &&
+      data.resultUrls.every((u) => typeof u === "string")
+    ) {
+      const imgs: string[] = [];
+      const vids: string[] = [];
+      for (const u of data.resultUrls) {
+        if (/\.(mp4|webm|mov)(\?|$)/i.test(u)) vids.push(u);
+        else imgs.push(u);
+      }
+      if (imgs.length > 0) imageUrls = imgs;
+      if (vids.length > 0) videoUrls = vids;
     }
   }
   if (!taskId && typeof response.taskId === "string") taskId = response.taskId;
@@ -956,7 +969,17 @@ function collectUrlsFromUnknown(target: { imageUrls: string[]; videoUrls: string
   pushUrl(target.videoUrls, x.result_url);
   const nested = x.result ?? x.output ?? x.data;
   if (nested) collectUrlsFromUnknown(target, nested);
-  for (const arrKey of ["urls", "videoUrls", "videos", "images", "imageUrls", "files"]) {
+  for (const arrKey of [
+    "urls",
+    "videoUrls",
+    "videos",
+    "images",
+    "imageUrls",
+    "files",
+    /** KIE Market recordInfo: resultJson / webhook */
+    "resultUrls",
+    "result_urls",
+  ]) {
     const arr = x[arrKey];
     if (Array.isArray(arr)) {
       for (const item of arr) {
