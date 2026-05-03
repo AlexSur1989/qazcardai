@@ -290,15 +290,9 @@ const FETCH_TIMEOUT_MS = Math.min(
   600_000,
 );
 
-export async function uploadFromUrl(
-  sourceUrl: string,
-  key: string,
-): Promise<{
-  key: string;
-  url: string;
-  size: number;
+export async function fetchUrlToBuffer(sourceUrl: string): Promise<{
+  buffer: Buffer;
   contentType: string;
-  sourceUrl: string;
 }> {
   let res: Response;
   try {
@@ -320,8 +314,22 @@ export async function uploadFromUrl(
   }
   const contentType =
     res.headers.get("content-type")?.split(";")[0]?.trim() || "application/octet-stream";
-  const buf = Buffer.from(await res.arrayBuffer());
-  const up = await uploadFile(buf, key, contentType);
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return { buffer, contentType };
+}
+
+export async function uploadFromUrl(
+  sourceUrl: string,
+  key: string,
+): Promise<{
+  key: string;
+  url: string;
+  size: number;
+  contentType: string;
+  sourceUrl: string;
+}> {
+  const { buffer, contentType } = await fetchUrlToBuffer(sourceUrl);
+  const up = await uploadFile(buffer, key, contentType);
   return {
     ...up,
     contentType,

@@ -43,7 +43,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:3000/api/health').then((r) => (r.status === 200 ? process.exit(0) : process.exit(1))).catch(() => process.exit(1)))",
+          "fetch('http://127.0.0.1:3000/api/health').then((r) => (r.status === 200 ? process.exit(0) : process.exit(1))).catch(() => process.exit(1))",
         ]
       interval: 15s
       timeout: 5s

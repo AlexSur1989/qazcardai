@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Воркер BullMQ: отдельный процесс, тот же кодовый база, что и API.
 FROM node:22-alpine AS base
-RUN apk add --no-cache libc6-compat openssl
+RUN apk add --no-cache libc6-compat openssl ttf-dejavu
 WORKDIR /app
 
 FROM base AS deps

@@ -41,9 +41,15 @@ import {
   type KieVideoGenerateInput,
 } from "@/server/services/provider/kie";
 import {
+  compositeProductCardMarketplaceOverlayOnImage,
+  shouldApplyProductCardMarketplaceOverlay,
+} from "@/server/services/marketplaceCardImageComposite";
+import {
   StorageError,
   deleteFile,
+  fetchUrlToBuffer,
   isStorageConfigured,
+  uploadFile,
   uploadFromUrl,
 } from "@/server/services/storage";
 
@@ -645,8 +651,36 @@ export async function completeWithOutput(
       try {
         for (let i = 0; i < providerUrls.length; i++) {
           const src = providerUrls[i];
-          const key = outputObjectKey(gen.userId, gen.id, i, src, mediaKind);
-          const up = await uploadFromUrl(src, key);
+          let key = outputObjectKey(gen.userId, gen.id, i, src, mediaKind);
+          const applyMarketplaceOverlay =
+            mediaKind === "image" &&
+            shouldApplyProductCardMarketplaceOverlay(gen, type, i);
+          let up: Awaited<ReturnType<typeof uploadFromUrl>>;
+          if (applyMarketplaceOverlay) {
+            const downloaded = await fetchUrlToBuffer(src);
+            const composed = await compositeProductCardMarketplaceOverlayOnImage(
+              downloaded.buffer,
+              gen,
+            );
+            if (composed.overlayApplied) {
+              key = `generations/${gen.userId}/${gen.id}/out-${i}.jpg`;
+              const fileUp = await uploadFile(composed.buffer, key, composed.contentType);
+              up = {
+                ...fileUp,
+                contentType: composed.contentType,
+                sourceUrl: src,
+              };
+            } else {
+              const fileUp = await uploadFile(downloaded.buffer, key, downloaded.contentType);
+              up = {
+                ...fileUp,
+                contentType: downloaded.contentType,
+                sourceUrl: src,
+              };
+            }
+          } else {
+            up = await uploadFromUrl(src, key);
+          }
           keysRolled.push(up.key);
           outputItems.push({
             url: up.url,
@@ -656,7 +690,10 @@ export async function completeWithOutput(
             size: up.size,
             contentType: up.contentType,
           });
-          const ext = guessExtFromUrl(src, mediaKind);
+          const ext =
+            applyMarketplaceOverlay && up.contentType.startsWith("image/jpeg")
+              ? "jpg"
+              : guessExtFromUrl(src, mediaKind);
           fileRows.push({
             fileName: `out-${i}.${ext}`.slice(0, 512),
             fileType: mediaKind.slice(0, 64),
