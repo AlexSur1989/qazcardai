@@ -133,28 +133,82 @@ function isJsonObject(x: unknown): x is Record<string, unknown> {
 }
 
 /**
- * Kie Market + payloadMapping без settingsSchema: KIE ждёт image_urls в input.
- * Иначе в metadata.settings нет imageUrls → ошибка провайдера (image_urls is required).
+ * Product-card: в metadata.settings должны попасть URL фото товара для Kie Market.
+ * — payloadMapping: imageUrls / inputUrls / referenceImageUrls, imageUrl / firstFrameUrl;
+ * — Seedance 2.x без payloadMapping: firstFrameUrl (см. buildSeedance2MarketCreateTaskPayload).
  */
-function mergeKiePayloadSettingsFromInputFiles(
+function mergeProductCardInputIntoKieSettings(
   metadata: Record<string, unknown>,
   model: AiModel,
   inputFiles: string[],
 ): void {
-  if (inputFiles.length === 0 || !model.supportsImageInput) return;
+  if (inputFiles.length === 0) return;
+
+  const apiId = (model.apiModelId ?? "").trim().toLowerCase();
+  const seedance2 =
+    apiId === "bytedance/seedance-2" || apiId === "bytedance/seedance-2-fast";
+
   const pm = model.payloadMapping;
-  if (!isJsonObject(pm)) return;
-  const mapped = new Set(Object.keys(pm));
-  const imageFields = ["imageUrls", "inputUrls", "referenceImageUrls"] as const;
-  if (!imageFields.some((k) => mapped.has(k))) return;
-  const base = isJsonObject(metadata.settings) ? { ...metadata.settings } : {};
-  for (const field of imageFields) {
-    if (!mapped.has(field)) continue;
-    const cur = base[field];
-    if (Array.isArray(cur) && cur.length > 0) continue;
-    base[field] = [...inputFiles];
+  const hasPm = isJsonObject(pm);
+  const mapped = hasPm ? new Set(Object.keys(pm as Record<string, unknown>)) : new Set<string>();
+
+  const needsPayloadArrays =
+    model.supportsImageInput &&
+    hasPm &&
+    (["imageUrls", "inputUrls", "referenceImageUrls"] as const).some((k) => mapped.has(k));
+
+  const needsPayloadSingles =
+    model.supportsImageInput &&
+    hasPm &&
+    (["imageUrl", "firstFrameUrl"] as const).some((k) => mapped.has(k));
+
+  const needsSeedanceFirstFrame =
+    model.supportsImageInput && seedance2 && !hasPm;
+
+  if (!needsPayloadArrays && !needsPayloadSingles && !needsSeedanceFirstFrame) {
+    return;
   }
-  metadata.settings = base;
+
+  const base = isJsonObject(metadata.settings) ? { ...metadata.settings } : {};
+  let changed = false;
+
+  if (needsPayloadArrays) {
+    for (const field of ["imageUrls", "inputUrls", "referenceImageUrls"] as const) {
+      if (!mapped.has(field)) continue;
+      const cur = base[field];
+      if (Array.isArray(cur) && cur.length > 0) continue;
+      base[field] = [...inputFiles];
+      changed = true;
+    }
+  }
+
+  if (needsPayloadSingles) {
+    const first = inputFiles[0]?.trim();
+    if (first) {
+      for (const key of ["imageUrl", "firstFrameUrl"] as const) {
+        if (!mapped.has(key)) continue;
+        const cur = base[key];
+        if (typeof cur === "string" && cur.trim()) continue;
+        base[key] = first;
+        changed = true;
+      }
+    }
+  }
+
+  if (needsSeedanceFirstFrame) {
+    const first = inputFiles[0]?.trim();
+    if (first) {
+      const curF = base.firstFrameUrl;
+      if (typeof curF !== "string" || !curF.trim()) {
+        base.firstFrameUrl = first;
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    metadata.settings = base;
+  }
 }
 
 type QueueOk = {
@@ -329,7 +383,7 @@ export async function queueProductCardImage(
   } else if (marketplaceCardSettings) {
     metadata.settings = { ...marketplaceCardSettings };
   }
-  mergeKiePayloadSettingsFromInputFiles(metadata, model, inputFilesCombined);
+  mergeProductCardInputIntoKieSettings(metadata, model, inputFilesCombined);
   applyProductCardMetadata(metadata, productMeta);
   if (metadataRoot) {
     Object.assign(metadata, metadataRoot);
@@ -562,6 +616,7 @@ export async function queueProductCardVideo(
   if (hasSchema) {
     metadata.settings = normalizedSettings;
   }
+  mergeProductCardInputIntoKieSettings(metadata, model, inputFilesCombined);
   applyProductCardMetadata(metadata, productMeta);
   if (metadataRoot) {
     Object.assign(metadata, metadataRoot);
