@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 FROM node:22-alpine AS base
-RUN apk add --no-cache libc6-compat ttf-dejavu
+RUN apk add --no-cache libc6-compat font-dejavu font-noto font-noto-extra
 WORKDIR /app
 
 FROM base AS deps
