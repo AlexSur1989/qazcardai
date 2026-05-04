@@ -233,7 +233,9 @@ export const MARKETPLACE_CARD_BASE_PROMPT = [
   "Preserve product identity, shape, packaging, color, and key details.",
   "Use a clean commercial layout suitable for e-commerce and marketplaces.",
   "Do not render readable text, letters, numbers, labels, price tags, or slogans inside the AI image.",
-  "Add visual emphasis, blank callout zones, icon placeholders, and benefit-block areas only as graphic layout space.",
+  "Do not render icons, badges, UI cards, text panels, bullet blocks, callout labels, or placeholder text.",
+  "The application will add all readable text, badges, panels, and callout graphics later as a server-rendered overlay.",
+  "Leave clean negative space for that overlay, but keep those zones visually plain and free of icon-like or text-like details.",
   "Make the composition readable, modern, and conversion-focused.",
   "Avoid clutter. Leave enough negative space for text elements.",
 ].join(" ");
