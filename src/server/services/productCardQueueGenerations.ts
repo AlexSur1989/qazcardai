@@ -305,6 +305,11 @@ export type MarketplaceCardImageSettings = {
   sourceImageUrls?: string[];
   generationMode: "marketplace_card";
   style: string;
+  cardSize?: string;
+  aspectRatio?: string;
+  resolution?: string;
+  outputWidth?: number;
+  outputHeight?: number;
 };
 
 export async function queueProductCardImage(

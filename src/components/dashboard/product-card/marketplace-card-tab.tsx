@@ -74,6 +74,12 @@ export function MarketplaceCardTab({
     costCredits: number;
     outputUrl: string | null;
   } | null>(null);
+  const [overlayPreview, setOverlayPreview] = useState<{
+    svg: string;
+    width: number;
+    height: number;
+    label: string;
+  } | null>(null);
 
   const canEstimate = useMemo(
     () =>
@@ -209,6 +215,51 @@ export function MarketplaceCardTab({
       }
     })();
   }, [sourceType, conceptRows, sourceGenerationId]);
+
+  useEffect(() => {
+    if (!projectId || !canUseBackend) {
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const res = await fetch(
+          `/api/product-card-projects/${projectId}/preview/marketplace-card`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              productTitle: title,
+              benefits,
+              extraText,
+              style,
+              cardSize,
+              overlayTemplate,
+            }),
+          },
+        );
+        const parsed = await readJsonSafe<{
+          svg?: string;
+          size?: { width?: number; height?: number; label?: string };
+        }>(res);
+        if (cancelled) return;
+        if (!parsed.ok || !res.ok || typeof parsed.data.svg !== "string") {
+          setOverlayPreview(null);
+          return;
+        }
+        setOverlayPreview({
+          svg: parsed.data.svg,
+          width: typeof parsed.data.size?.width === "number" ? parsed.data.size.width : 1000,
+          height: typeof parsed.data.size?.height === "number" ? parsed.data.size.height : 1000,
+          label: parsed.data.size?.label ?? "Preview",
+        });
+      })();
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [projectId, canUseBackend, title, benefits, extraText, style, cardSize, overlayTemplate]);
 
   const showEstimate = canEstimate;
   const creditsToShow = showEstimate ? estimateCredits : null;
@@ -528,6 +579,24 @@ export function MarketplaceCardTab({
             AI создаёт фон без текста; читаемые подписи добавляет QazCard AI поверх кадра.
           </p>
         </div>
+
+        {overlayPreview && (
+          <div className="space-y-2">
+            <Label className="text-[#0C2D38]">Превью текста и плашек</Label>
+            <div
+              className="max-w-md overflow-hidden rounded-2xl border border-[#B8DCE6] bg-gradient-to-br from-[#f7fbfc] to-[#e7f5f8]"
+              style={{ aspectRatio: `${overlayPreview.width} / ${overlayPreview.height}` }}
+            >
+              <div
+                className="h-full w-full"
+                dangerouslySetInnerHTML={{ __html: overlayPreview.svg }}
+              />
+            </div>
+            <p className="text-xs text-[#4a6e7a]">
+              {overlayPreview.label}: финальная генерация использует эту же сетку, шрифты и плашки.
+            </p>
+          </div>
+        )}
 
         {canUseBackend && (
           <div className="space-y-1 text-sm text-[#4a6e7a]">

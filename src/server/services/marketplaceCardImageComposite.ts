@@ -50,9 +50,32 @@ function buildOverlayInputFromMeta(meta: Record<string, unknown>): ProductCardOv
         : "bottom_panel";
   const cardSize = typeof meta.cardSize === "string" ? meta.cardSize : "square";
   const style = typeof meta.style === "string" ? meta.style : "";
+  const outputWidth =
+    typeof overlay.outputWidth === "number"
+      ? overlay.outputWidth
+      : typeof meta.outputWidth === "number"
+        ? meta.outputWidth
+        : undefined;
+  const outputHeight =
+    typeof overlay.outputHeight === "number"
+      ? overlay.outputHeight
+      : typeof meta.outputHeight === "number"
+        ? meta.outputHeight
+        : undefined;
+  const aspectRatio =
+    typeof overlay.aspectRatio === "string"
+      ? overlay.aspectRatio
+      : typeof meta.requestedAspectRatio === "string"
+        ? meta.requestedAspectRatio
+        : typeof meta.aspectRatio === "string"
+          ? meta.aspectRatio
+          : undefined;
   return {
     template,
     cardSize,
+    outputWidth,
+    outputHeight,
+    aspectRatio,
     productTitle,
     benefits,
     extraText,
@@ -90,17 +113,32 @@ export async function compositeProductCardMarketplaceOverlayOnImage(
   }
 
   try {
-    const base = sharp(imageBuffer);
-    const { width, height } = await base.metadata();
-    const w = width ?? 1024;
-    const h = height ?? 1024;
+    const source = sharp(imageBuffer);
+    const meta = await source.metadata();
+    const requestedW = input?.outputWidth;
+    const requestedH = input?.outputHeight;
+    const w =
+      typeof requestedW === "number" && Number.isFinite(requestedW) && requestedW > 0
+        ? Math.round(requestedW)
+        : (meta.width ?? 1024);
+    const h =
+      typeof requestedH === "number" && Number.isFinite(requestedH) && requestedH > 0
+        ? Math.round(requestedH)
+        : (meta.height ?? 1024);
+    const baseBuffer = await source
+      .resize(w, h, {
+        fit: "cover",
+        position: "centre",
+      })
+      .jpeg({ quality: 94, mozjpeg: true })
+      .toBuffer();
     const overlayRaster = await sharp(Buffer.from(svg, "utf-8"), { density: 220 })
       .resize(w, h, { fit: "fill" })
       .ensureAlpha()
       .png()
       .toBuffer();
 
-    const out = await base
+    const out = await sharp(baseBuffer)
       .composite([{ input: overlayRaster, blend: "over" }])
       .jpeg({ quality: 92, mozjpeg: true })
       .toBuffer();

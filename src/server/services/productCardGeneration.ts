@@ -51,7 +51,14 @@ import {
   calculateProductCardMarketplaceCardCredits,
   calculateProductCardVideoCredits,
 } from "@/server/services/productCardPricing";
-import { PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE } from "@/server/services/productCardSettings";
+import {
+  getProductCardSettings,
+  PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE,
+} from "@/server/services/productCardSettings";
+import {
+  resolveMarketplaceCardSize,
+  type MarketplaceCardResolvedSize,
+} from "@/server/services/marketplaceCardSizing";
 
 export function isValidProductCategoryId(id: string): id is ProductCategoryId {
   return (PRODUCT_CATEGORY_IDS as readonly string[]).includes(id);
@@ -286,6 +293,14 @@ export async function estimateMarketplaceCardCredits(
     return { ok: false, error: "Некорректный стиль карточки", status: 400 };
   }
   const style = input.style as MarketplaceCardStyle;
+  const productCardSettings = await getProductCardSettings();
+  const resolvedSize = resolveMarketplaceCardSize(
+    productCardSettings.marketplaceCardSizes,
+    input.cardSize,
+  );
+  if (!resolvedSize.ok) {
+    return { ok: false, error: resolvedSize.error, status: 400 };
+  }
   const src = await resolveMarketplaceCardSource(
     userId,
     project,
@@ -312,7 +327,7 @@ export async function estimateMarketplaceCardCredits(
     model,
     sourceImageUrls,
     style,
-    input.cardSize,
+    resolvedSize.size,
   );
   if (!merged.ok) {
     return { ok: false, error: merged.error, status: 400 };
@@ -325,7 +340,7 @@ function buildMarketplaceCardMergedModelSettings(
   model: AiModel,
   sourceImageUrl: string | string[],
   style: MarketplaceCardStyle,
-  cardSize?: string,
+  cardSize: MarketplaceCardResolvedSize,
 ):
   | { ok: true; merged: Record<string, unknown> }
   | { ok: false; error: string } {
@@ -346,7 +361,11 @@ function buildMarketplaceCardMergedModelSettings(
         sourceImageUrls,
         generationMode: "marketplace_card" as const,
         style,
-        cardSize: cardSize?.trim() || "square",
+        cardSize: cardSize.id,
+        aspectRatio: cardSize.kieAspectRatio,
+        resolution: cardSize.kieResolution,
+        outputWidth: cardSize.width,
+        outputHeight: cardSize.height,
       },
     };
   } catch (e) {
@@ -389,6 +408,14 @@ export async function generateMarketplaceCardForProductCard(
     return { ok: false, error: "Некорректный стиль карточки", status: 400 };
   }
   const style = input.style as MarketplaceCardStyle;
+  const productCardSettings = await getProductCardSettings();
+  const resolvedSize = resolveMarketplaceCardSize(
+    productCardSettings.marketplaceCardSizes,
+    input.cardSize,
+  );
+  if (!resolvedSize.ok) {
+    return { ok: false, error: resolvedSize.error, status: 400 };
+  }
 
   const src = await resolveMarketplaceCardSource(
     userId,
@@ -417,7 +444,7 @@ export async function generateMarketplaceCardForProductCard(
     model,
     sourceImageUrls,
     style,
-    input.cardSize,
+    resolvedSize.size,
   );
   if (!mergedPricing.ok) {
     return { ok: false, error: mergedPricing.error, status: 400 };
@@ -445,12 +472,16 @@ export async function generateMarketplaceCardForProductCard(
     .split(/\r?\n/)
     .map((item) => item.trim())
     .filter(Boolean);
+  const overlayTemplate = input.overlayTemplate?.trim() || "bottom_panel";
+  const cardSize = resolvedSize.size;
   const finalPrompt = buildMarketplaceCardPrompt({
     style,
     userInstructions: input.userInstructions,
     productTitle: input.productTitle,
     benefits: benefitsStr,
     extraText: input.extraText,
+    overlayTemplate,
+    cardAspectRatio: cardSize.aspectRatio,
   });
 
   const productMeta: ProductCardGenMeta = {
@@ -475,19 +506,31 @@ export async function generateMarketplaceCardForProductCard(
     pricingScope: "PRODUCT_CARD",
     productCardModelType: model.productCardModelType,
     priceBreakdown: marketplacePricing,
-    cardSize: input.cardSize ?? "square",
-    overlayTemplate: input.overlayTemplate ?? "bottom_panel",
+    cardSize: cardSize.id,
+    cardSizeLabel: cardSize.label,
+    outputWidth: cardSize.width,
+    outputHeight: cardSize.height,
+    aspectRatio: cardSize.kieAspectRatio,
+    requestedAspectRatio: cardSize.aspectRatio,
+    resolution: cardSize.kieResolution,
+    overlayTemplate,
     overlay: buildMarketplaceCardOverlaySpec({
-      template: input.overlayTemplate ?? "bottom_panel",
-      cardSize: input.cardSize ?? "square",
+      template: overlayTemplate,
+      cardSize: cardSize.id,
+      outputWidth: cardSize.width,
+      outputHeight: cardSize.height,
+      aspectRatio: cardSize.aspectRatio,
       productTitle: input.productTitle,
       benefits: benefitsList,
       extraText: input.extraText,
       style,
     }),
     overlayPreviewSvg: renderMarketplaceCardOverlaySvg({
-      template: input.overlayTemplate ?? "bottom_panel",
-      cardSize: input.cardSize ?? "square",
+      template: overlayTemplate,
+      cardSize: cardSize.id,
+      outputWidth: cardSize.width,
+      outputHeight: cardSize.height,
+      aspectRatio: cardSize.aspectRatio,
       productTitle: input.productTitle,
       benefits: benefitsList,
       extraText: input.extraText,
@@ -502,6 +545,11 @@ export async function generateMarketplaceCardForProductCard(
     sourceImageUrls,
     generationMode: "marketplace_card" as const,
     style: input.style,
+    cardSize: cardSize.id,
+    aspectRatio: cardSize.kieAspectRatio,
+    resolution: cardSize.kieResolution,
+    outputWidth: cardSize.width,
+    outputHeight: cardSize.height,
   };
 
   const result = await queueProductCardImage(

@@ -270,6 +270,8 @@ export type BuildMarketplaceCardPromptInput = {
   productTitle?: string;
   benefits?: string;
   extraText?: string;
+  overlayTemplate?: string;
+  cardAspectRatio?: string;
 };
 
 export function buildMarketplaceCardPrompt(
@@ -290,9 +292,21 @@ export function buildMarketplaceCardPrompt(
   if (typeof a === "object" && a !== null) {
     const st = normalizeMarketplaceStyle(a.style);
     const styleLine = MARKETPLACE_STYLE_PROMPTS[st];
+    const template = a.overlayTemplate?.trim() || "bottom_panel";
+    const ratioLine = a.cardAspectRatio?.trim()
+      ? `Target composition aspect ratio: ${a.cardAspectRatio.trim()}. Keep the reserved overlay zone clean at this aspect ratio.`
+      : "";
+    const templateLine =
+      template === "left_panel"
+        ? "Reserve the left side column for server-rendered text and badges; keep important product details out of that column."
+        : template === "badges_callouts"
+          ? "Reserve multiple clean callout zones around the product for server-rendered benefit badges; keep the product centered and unobstructed."
+          : "Reserve the lower card panel for server-rendered title, benefits, and secondary text; keep the product and important details above that panel.";
     const parts = [
       MARKETPLACE_CARD_BASE_PROMPT,
       styleLine,
+      ratioLine,
+      templateLine,
       a.productTitle?.trim() ? "Reserve a clear title area for server overlay text." : "",
       a.benefits?.trim() ? "Reserve clean benefit/callout zones for server overlay text." : "",
       a.extraText?.trim() ? "Reserve a small secondary text area for server overlay text." : "",
