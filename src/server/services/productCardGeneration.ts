@@ -568,10 +568,39 @@ export async function generateMarketplaceCardForProductCard(
     extraText: normalizedText.extraText,
     overlayTemplate,
     cardAspectRatio: cardSize.aspectRatio,
+    compositionInstruction: templatePreset.compositionInstruction,
   });
   const modCfg = await getFullModerationConfig();
   const promptCap = Math.max(256, Math.floor(modCfg.maxPromptLength) - 48);
   finalPrompt = clampMarketplacePrompt(finalPrompt, promptCap);
+
+  const marketplaceOverlayInput = {
+    template: overlayTemplate,
+    cardSize: cardSize.id,
+    outputWidth: cardSize.width,
+    outputHeight: cardSize.height,
+    aspectRatio: cardSize.aspectRatio,
+    productTitle: normalizedText.title,
+    subtitle: normalizedText.subtitle,
+    benefits: normalizedText.benefits,
+    extraText: normalizedText.extraText,
+    statsText: normalizedText.statsText,
+    sizeText: normalizedText.sizeText,
+    style,
+    templatePreset: templatePreset.id,
+    typographyPreset: typographyPreset.id,
+    overlayVersion: "v2" as const,
+    useIcons: input.useIcons !== false,
+    useArrows: input.useArrows !== false,
+    useShadows: input.useShadows !== false,
+    preserveProductLabel: input.preserveProductLabel === true,
+  };
+  const marketplaceOverlaySpec = buildMarketplaceCardOverlaySpec(marketplaceOverlayInput);
+  type OverlaySpecWithLayout = { layoutAnalysis?: unknown };
+  const layoutAnalysisPayload =
+    "layoutAnalysis" in marketplaceOverlaySpec
+      ? (marketplaceOverlaySpec as OverlaySpecWithLayout).layoutAnalysis
+      : undefined;
 
   const productMeta: ProductCardGenMeta = {
     flow: "product_card",
@@ -621,48 +650,9 @@ export async function generateMarketplaceCardForProductCard(
     variantGroupId: input.variantGroupId ?? null,
     variantIndex,
     variantCount,
-    overlay: buildMarketplaceCardOverlaySpec({
-      template: overlayTemplate,
-      cardSize: cardSize.id,
-      outputWidth: cardSize.width,
-      outputHeight: cardSize.height,
-      aspectRatio: cardSize.aspectRatio,
-      productTitle: normalizedText.title,
-      subtitle: normalizedText.subtitle,
-      benefits: normalizedText.benefits,
-      extraText: normalizedText.extraText,
-      statsText: normalizedText.statsText,
-      sizeText: normalizedText.sizeText,
-      style,
-      templatePreset: templatePreset.id,
-      typographyPreset: typographyPreset.id,
-      overlayVersion: "v2",
-      useIcons: input.useIcons !== false,
-      useArrows: input.useArrows !== false,
-      useShadows: input.useShadows !== false,
-      preserveProductLabel: input.preserveProductLabel === true,
-    }),
-    overlayPreviewSvg: renderMarketplaceCardOverlaySvg({
-      template: overlayTemplate,
-      cardSize: cardSize.id,
-      outputWidth: cardSize.width,
-      outputHeight: cardSize.height,
-      aspectRatio: cardSize.aspectRatio,
-      productTitle: normalizedText.title,
-      subtitle: normalizedText.subtitle,
-      benefits: normalizedText.benefits,
-      extraText: normalizedText.extraText,
-      statsText: normalizedText.statsText,
-      sizeText: normalizedText.sizeText,
-      style,
-      templatePreset: templatePreset.id,
-      typographyPreset: typographyPreset.id,
-      overlayVersion: "v2",
-      useIcons: input.useIcons !== false,
-      useArrows: input.useArrows !== false,
-      useShadows: input.useShadows !== false,
-      preserveProductLabel: input.preserveProductLabel === true,
-    }),
+    layoutAnalysis: layoutAnalysisPayload,
+    overlay: marketplaceOverlaySpec,
+    overlayPreviewSvg: renderMarketplaceCardOverlaySvg(marketplaceOverlayInput),
     productTitle: normalizedText.title,
     subtitle: normalizedText.subtitle,
     style,

@@ -31,6 +31,27 @@ const templates = getPublicProductCardTemplatePresets();
 const typographyPresets = getPublicProductCardTypographyPresets();
 const fallbackSizes = PRODUCT_CARD_CANVASES.filter((item) => item.id === "square" || item.id === "story");
 
+function coerceEstimateCredits(value: unknown): number | null {
+  const n =
+    typeof value === "bigint"
+      ? Number(value)
+      : typeof value === "number"
+        ? value
+        : typeof value === "string"
+          ? Number(value.trim())
+          : NaN;
+  return Number.isFinite(n) ? Math.round(n) : null;
+}
+
+function coerceBalanceCredits(value: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n) : 0;
+}
+
+function graphemeLen(s: string): number {
+  return [...s.trim()].length;
+}
+
 type ConceptGenMeta = {
   generationId: string;
 };
@@ -47,6 +68,7 @@ type Props = {
   projectId: string | null;
   balanceCredits: number;
   cardSizePresets: { id: string; label: string; aspectRatio: string }[];
+  canLayoutDebug?: boolean;
 };
 
 type GenerationMode = "marketplace_card" | "marketplace_card_variants";
@@ -69,7 +91,9 @@ export function MarketplaceCardTab({
   projectId,
   balanceCredits,
   cardSizePresets,
+  canLayoutDebug = false,
 }: Props) {
+  const balanceNum = coerceBalanceCredits(balanceCredits);
   const [sourceType, setSourceType] = useState<"original" | "concept_generation">("original");
   const [sourceGenerationId, setSourceGenerationId] = useState<string | null>(null);
   const [conceptRows, setConceptRows] = useState<ConceptGenMeta[]>([]);
@@ -89,7 +113,7 @@ export function MarketplaceCardTab({
   const [useIcons, setUseIcons] = useState(true);
   const [useArrows, setUseArrows] = useState(true);
   const [useShadows, setUseShadows] = useState(true);
-  const [preserveProductLabel, setPreserveProductLabel] = useState(false);
+  const [previewLayoutDebug, setPreviewLayoutDebug] = useState(false);
 
   const [estimating, setEstimating] = useState(false);
   const [estimateCredits, setEstimateCredits] = useState<number | null>(null);
@@ -231,8 +255,8 @@ export function MarketplaceCardTab({
         setEstimating(false);
         return;
       }
-      setEstimateCredits(typeof parsed.data.credits === "number" ? parsed.data.credits : null);
-      setPerVariantCredits(typeof parsed.data.perVariantCredits === "number" ? parsed.data.perVariantCredits : null);
+      setEstimateCredits(coerceEstimateCredits(parsed.data.credits));
+      setPerVariantCredits(coerceEstimateCredits(parsed.data.perVariantCredits));
       setEstimatedVariantCount(typeof parsed.data.variantCount === "number" ? parsed.data.variantCount : variantCount);
       setEstimating(false);
     })();
@@ -263,7 +287,8 @@ export function MarketplaceCardTab({
             useIcons,
             useArrows,
             useShadows,
-            preserveProductLabel,
+            preserveProductLabel: false,
+            layoutDebug: canLayoutDebug && previewLayoutDebug,
           }),
         });
         const parsed = await readJsonSafe<{ svg?: string; size?: { width?: number; height?: number; label?: string } }>(res);
@@ -284,12 +309,15 @@ export function MarketplaceCardTab({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [projectId, canUseBackend, title, subtitle, benefits, extraText, statsText, sizeText, currentStyle, cardSize, templatePreset, typographyPreset, useIcons, useArrows, useShadows, preserveProductLabel]);
+  }, [projectId, canUseBackend, title, subtitle, benefits, extraText, statsText, sizeText, currentStyle, cardSize, templatePreset, typographyPreset, useIcons, useArrows, useShadows, canLayoutDebug, previewLayoutDebug]);
 
   const showEstimate = canEstimate;
-  const creditsToShow = showEstimate ? estimateCredits : null;
-  const notEnough = creditsToShow != null && balanceCredits < creditsToShow;
-  const canSubmit = showEstimate && !estimating && creditsToShow != null && !estErr && !notEnough;
+  const creditsInt = showEstimate ? coerceEstimateCredits(estimateCredits) : null;
+  const notEnough = creditsInt != null && balanceNum < creditsInt;
+  const balanceAfter =
+    creditsInt != null ? Math.max(0, balanceNum - creditsInt) : null;
+  const canSubmit =
+    showEstimate && !estimating && creditsInt != null && !estErr && !notEnough;
 
   async function pollGeneration(item: ProductCardVariantGalleryItem): Promise<ProductCardVariantGalleryItem> {
     let status = item.status || "QUEUED";
@@ -331,7 +359,7 @@ export function MarketplaceCardTab({
         cardSize,
         templatePreset,
         typographyPreset,
-        preserveProductLabel,
+        preserveProductLabel: false,
         useIcons,
         useArrows,
         useShadows,
@@ -461,6 +489,11 @@ export function MarketplaceCardTab({
           <div className="space-y-2">
             <Label htmlFor="m-title" className="text-[#0C2D38]">Название товара</Label>
             <Input id="m-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="Стильные солнцезащитные очки" className="rounded-xl border-[#B8DCE6]" />
+            {graphemeLen(title) > 44 && (
+              <p className="text-xs text-amber-800/90" role="status">
+                Заголовок длинный — на карточке мы уменьшим кегль или перенесём текст максимум на две строки.
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="m-subtitle" className="text-[#0C2D38]">Подзаголовок</Label>
@@ -528,15 +561,33 @@ export function MarketplaceCardTab({
               </div>
             </div>
             <div className="grid gap-2 text-sm text-[#0C2D38]">
-              {[{ label: "Добавлять иконки", value: useIcons, set: setUseIcons }, { label: "Добавлять стрелки", value: useArrows, set: setUseArrows }, { label: "Добавлять тени", value: useShadows, set: setUseShadows }, { label: "Сохранить надписи и упаковку без изменений", value: preserveProductLabel, set: setPreserveProductLabel }].map((row) => (
+              {[{ label: "Добавлять иконки", value: useIcons, set: setUseIcons }, { label: "Добавлять стрелки", value: useArrows, set: setUseArrows }, { label: "Добавлять тени", value: useShadows, set: setUseShadows }].map((row) => (
                 <label key={row.label} className="flex items-start gap-2 rounded-xl border border-[#B8DCE6] bg-white p-2">
                   <input type="checkbox" checked={row.value} onChange={(e) => row.set(e.target.checked)} className="mt-1" />
-                  <span>
-                    {row.label}
-                    {row.label.startsWith("Сохранить") && <span className="block text-xs text-[#4a6e7a]">На этом этапе сохраняем настройку в metadata; полный cutout pipeline будет отдельным шагом.</span>}
-                  </span>
+                  <span>{row.label}</span>
                 </label>
               ))}
+              <div className="flex items-start gap-2 rounded-xl border border-dashed border-[#c9dbe1] bg-[#f9fcfd] p-2 opacity-90">
+                <input type="checkbox" disabled checked={false} readOnly className="mt-1" aria-hidden />
+                <span className="text-[#345b66]">
+                  <span className="font-medium text-[#0C2D38]">
+                    Сохранить надписи и упаковку без изменений{" "}
+                    <span className="rounded bg-[#eef6f9] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#006b82]">Скоро</span>
+                  </span>
+                  <span className="mt-1 block text-xs leading-snug">
+                    Скоро: оставим оригинальный слой товара с этикеткой поверх нового фона через cutout. Сейчас опция недоступна.
+                  </span>
+                </span>
+              </div>
+              {canLayoutDebug && (
+                <label className="flex items-start gap-2 rounded-xl border border-amber-200/80 bg-amber-50/40 p-2">
+                  <input type="checkbox" checked={previewLayoutDebug} onChange={(e) => setPreviewLayoutDebug(e.target.checked)} className="mt-1" />
+                  <span>
+                    <span className="font-medium">Отладка оверлея (админ)</span>
+                    <span className="mt-1 block text-xs text-[#6b5720]">Показать запретную зону и safe-zone в SVG-превью.</span>
+                  </span>
+                </label>
+              )}
             </div>
           </div>
         </div>
@@ -547,9 +598,16 @@ export function MarketplaceCardTab({
           <div className="space-y-1 text-sm text-[#4a6e7a]">
             {showEstimate && estimating && <p>Рассчитываем стоимость…</p>}
             {estErr && <p className="text-destructive" role="alert">{estErr}</p>}
-            {showEstimate && !estimating && creditsToShow != null && !estErr && (
+            {showEstimate && !estimating && creditsInt != null && !estErr && (
               <p>
-                Один вариант: <span className="font-medium tabular-nums text-[#0C2D38]">{perVariantCredits ?? creditsToShow}</span> ток. · Количество: <span className="font-medium tabular-nums text-[#0C2D38]">{estimatedVariantCount}</span> · Итого: <span className="font-medium tabular-nums text-[#0C2D38]">{creditsToShow}</span> ток. · Баланс: <span className="font-medium tabular-nums text-[#0C2D38]">{balanceCredits}</span> · После: <span className="font-medium tabular-nums text-[#0C2D38]">{Math.max(0, balanceCredits - creditsToShow)}</span>
+                Один вариант:{" "}
+                <span className="font-medium tabular-nums text-[#0C2D38]">
+                  {coerceEstimateCredits(perVariantCredits ?? undefined) ?? creditsInt}
+                </span>{" "}
+                ток. · Количество: <span className="font-medium tabular-nums text-[#0C2D38]">{estimatedVariantCount}</span> ·
+                Итого: <span className="font-medium tabular-nums text-[#0C2D38]">{creditsInt}</span> ток. · Баланс:{" "}
+                <span className="font-medium tabular-nums text-[#0C2D38]">{balanceNum}</span> · После:{" "}
+                <span className="font-medium tabular-nums text-[#0C2D38]">{balanceAfter ?? 0}</span>
               </p>
             )}
             {notEnough && (

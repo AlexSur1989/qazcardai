@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { CreateFormSkeleton } from "@/components/dashboard/create-form-skeleton";
 import { ProductCardPage } from "@/components/dashboard/product-card/product-card-page";
 import { PageHeader } from "@/components/layout/page-header";
+import { canAccessAdminPanel } from "@/lib/auth";
 import { getBalance } from "@/server/services/credits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
@@ -40,6 +41,7 @@ export default async function ProductCardCreatePage() {
           conceptImageSizes={productCardSettings.conceptImageSizes}
           marketplaceCardSizes={productCardSettings.marketplaceCardSizes}
           videoPresets={productCardSettings.videoPresets}
+          canMarketplaceLayoutDebug={canAccessAdminPanel(current.user.role)}
         />
       </Suspense>
     </div>

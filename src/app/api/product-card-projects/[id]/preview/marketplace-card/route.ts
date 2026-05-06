@@ -10,6 +10,7 @@ import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
+import { canAccessAdminPanel } from "@/lib/auth";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { resolveMarketplaceCardSize } from "@/server/services/marketplaceCardSizing";
 import {
@@ -45,6 +46,8 @@ const bodySchema = z.object({
   useIcons: z.boolean().optional().default(true),
   useArrows: z.boolean().optional().default(true),
   useShadows: z.boolean().optional().default(true),
+  /** Только для админской сессии: подсветить forbidden/safe zones */
+  layoutDebug: z.boolean().optional().default(false),
 });
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -112,6 +115,8 @@ export async function POST(req: Request, ctx: Ctx) {
     benefits.length > 0
       ? benefits
       : ["Удобная посадка", "Премиум качество", "Күннен қорғайды", "Жеңіл жақтау"];
+  const layoutDebug = parsed.data.layoutDebug === true && canAccessAdminPanel(current.user.role);
+
   const input = {
     template: parsed.data.overlayTemplate,
     cardSize: size.id,
@@ -128,10 +133,12 @@ export async function POST(req: Request, ctx: Ctx) {
     templatePreset: parsed.data.templatePreset,
     typographyPreset: parsed.data.typographyPreset,
     overlayVersion: "v2" as const,
-    preserveProductLabel: parsed.data.preserveProductLabel,
+    preserveProductLabel: false,
     useIcons: parsed.data.useIcons,
     useArrows: parsed.data.useArrows,
     useShadows: parsed.data.useShadows,
+    overlayRenderMode: "preview" as const,
+    layoutDebug,
   };
 
   return NextResponse.json({

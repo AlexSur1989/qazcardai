@@ -264,6 +264,8 @@ export type BuildMarketplaceCardPromptInput = {
   extraText?: string;
   overlayTemplate?: string;
   cardAspectRatio?: string;
+  /** English line from template preset (composition on canvas + negative space). */
+  compositionInstruction?: string;
 };
 
 export function buildMarketplaceCardPrompt(
@@ -286,22 +288,31 @@ export function buildMarketplaceCardPrompt(
     const styleLine = MARKETPLACE_STYLE_PROMPTS[st];
     const template = a.overlayTemplate?.trim() || "bottom_panel";
     const ratioLine = a.cardAspectRatio?.trim()
-      ? `Aspect ${a.cardAspectRatio.trim()}: keep overlay zones plain at this ratio.`
-      : "";
+      ? `Aspect ${a.cardAspectRatio.trim()}: keep overlay zones visually plain at this ratio. Leave clean negative space for title, subtitle, benefit tiles, corner callouts and bottom badges — all added later server-side.`
+      : "Leave ample clean negative space for title/subtitle bands, infographic benefit rectangles and footer badges — final typography is overlay-rendered, not baked into the bitmap.";
     const templateLine =
       template === "left_panel"
-        ? "Quiet left column for server text; keep product detail out of it."
+        ? "Quiet vertical column suited to stacked overlay panels; hero product occupies the complementary side."
         : template === "badges_callouts"
-          ? "Quiet zones around product for badges; product centered."
-          : "Quiet lower band for title/benefits; product above.";
+          ? "Quiet peripheral corners around the hero suited to small badge overlays; hero stays visually dominant."
+          : "Reserve tidy lower/third and side gutters for overlay rows; hero product fills the complementary field.";
+    const noTextHard =
+      "Absolutely NO readable bitmap text: no words, letters, numbers, captions, typography, watermark, invented logos, fake UI or random shelf labels.";
+    const comp = (a.compositionInstruction ?? "").trim();
+    const placementLine = comp ? `Template composition: ${comp}` : "";
+
     const parts = [
       MARKETPLACE_CARD_BASE_PROMPT,
+      noTextHard,
       styleLine,
       ratioLine,
       templateLine,
-      a.productTitle?.trim() ? "Reserve a clear title area for server overlay text." : "",
-      a.benefits?.trim() ? "Reserve clean benefit/callout zones for server overlay text." : "",
-      a.extraText?.trim() ? "Reserve a small secondary text area for server overlay text." : "",
+      placementLine,
+      a.productTitle?.trim()
+        ? "Reserve an empty rectangular title-safe band (still photo/illustration only)."
+        : "",
+      a.benefits?.trim() ? "Reserve empty zones sized for infographic benefit squares (still no pixels of text)." : "",
+      a.extraText?.trim() ? "Reserve a slim empty strip sized for tertiary badges/footer chips." : "",
       a.userInstructions?.trim() ? `Additional art direction: ${a.userInstructions.trim()}.` : "",
     ].filter(Boolean);
     return parts.join("\n\n");

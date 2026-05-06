@@ -1,11 +1,12 @@
 import {
-  getProductCardLayoutPreset,
   getProductCardTemplatePreset,
   getProductCardTypographyPreset,
   getProductCardLayoutKey,
   resolveProductCardCanvas,
 } from "@/config/product-card-overlay-presets";
 import type { ProductCardTemplatePresetId, ProductCardTypographyPresetId } from "@/config/product-card-overlay-presets";
+import { estimateTextWidth, fitTextToBox } from "@/lib/fit-text-to-box";
+import { buildObjectAwarePayload, type ObjectAwareLayoutPayload } from "@/server/services/productCardObjectAwareLayout";
 
 export type ProductCardOverlayInput = {
   template: string;
@@ -27,6 +28,10 @@ export type ProductCardOverlayInput = {
   useArrows?: boolean;
   useShadows?: boolean;
   preserveProductLabel?: boolean;
+  /** preview = схема зон; production = только итоговый оверлей */
+  overlayRenderMode?: "production" | "preview";
+  /** Только для админов: запретная зона и safe zones */
+  layoutDebug?: boolean;
 };
 
 type OverlayTemplate = "bottom_panel" | "left_panel" | "badges_callouts";
@@ -63,6 +68,8 @@ type TextBlock = {
   fontSize: number;
   lineHeight: number;
   maxLines: number;
+  /** Ограничить общую высоту блока (плашка / подзаголовок). */
+  maxBoxHeight?: number;
   anchor?: "start" | "middle";
   role: TextRole;
   letterSpacing?: string;
@@ -217,6 +224,21 @@ function typographyFor(style: string): TypographyProfile {
   return TYPOGRAPHY[style] ?? TYPOGRAPHY.clean_marketplace;
 }
 
+function layoutAnalysisForMetadata(
+  templatePresetId: string,
+  cardSizeId: string,
+  width: number,
+  height: number,
+): Pick<ObjectAwareLayoutPayload, "productBox" | "forbiddenZone" | "safeZones" | "layoutDecision"> {
+  const p = buildObjectAwarePayload(templatePresetId, cardSizeId, width, height);
+  return {
+    productBox: p.productBox,
+    forbiddenZone: p.forbiddenZone,
+    safeZones: p.safeZones,
+    layoutDecision: p.layoutDecision,
+  };
+}
+
 export function buildMarketplaceCardOverlaySpec(input: ProductCardOverlayInput) {
   const benefits = input.benefits.map((item) => item.trim()).filter(Boolean).slice(0, 6);
   const size = outputSize(input);
@@ -245,6 +267,7 @@ export function buildMarketplaceCardOverlaySpec(input: ProductCardOverlayInput) 
       useArrows: input.useArrows !== false,
       useShadows: input.useShadows !== false,
       preserveProductLabel: input.preserveProductLabel === true,
+      layoutAnalysis: layoutAnalysisForMetadata(templatePreset.id, canvas.id, width, height),
       text: {
         title: input.productTitle.trim(),
         subtitle: input.subtitle?.trim() ?? "",
@@ -306,53 +329,32 @@ function colorFor(profile: TypographyProfile, role: TextRole): string {
   return profile.bodyColor;
 }
 
-function estimateTextWidth(text: string, fontSize: number): number {
-  return [...text].reduce((sum, ch) => {
-    if (/\s/.test(ch)) return sum + fontSize * 0.32;
-    if (/[A-ZА-ЯЁ0-9]/.test(ch)) return sum + fontSize * 0.62;
-    return sum + fontSize * 0.54;
-  }, 0);
-}
-
-function wrapText(text: string, fontSize: number, maxWidth: number, maxLines: number): string[] {
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let current = "";
-
-  for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word;
-    if (estimateTextWidth(candidate, fontSize) <= maxWidth || !current) {
-      current = candidate;
-      continue;
-    }
-    lines.push(current);
-    current = word;
-    if (lines.length >= maxLines) break;
-  }
-  if (current && lines.length < maxLines) lines.push(current);
-
-  if (lines.length === maxLines && words.join(" ") !== lines.join(" ")) {
-    const last = lines[lines.length - 1] ?? "";
-    lines[lines.length - 1] = `${last.replace(/[.,;:!?-]+$/, "")}...`;
-  }
-  return lines;
-}
-
 function textEl(value: string, block: TextBlock, profile: TypographyProfile): string {
   if (!value.trim()) return "";
-  const lines = wrapText(value, block.fontSize, block.width, block.maxLines);
+  const lineHeightFactor = block.fontSize > 0 ? block.lineHeight / block.fontSize : 1.12;
+  const approxHeight = block.maxBoxHeight ?? block.lineHeight * block.maxLines * 1.08;
+  const fit = fitTextToBox(value, { width: block.width, height: approxHeight }, {
+    maxWidth: block.width,
+    maxLines: block.maxLines,
+    maxFontSize: block.fontSize,
+    minFontSize: Math.max(8, Math.round(block.fontSize * 0.38)),
+    lineHeightFactor,
+  });
+  const lines = fit.lines;
   if (lines.length === 0) return "";
+  const fontSize = fit.fontSize;
+  const lineHeight = fit.lineHeight;
   const anchor = block.anchor ?? "start";
   const textX = anchor === "middle" ? block.x + block.width / 2 : block.x;
   const makeTspans = (dyOffset = 0) => lines
     .map(
       (line, idx) =>
-        `<tspan x="${textX}" dy="${idx === 0 ? dyOffset : block.lineHeight}">${escapeXml(line)}</tspan>`,
+        `<tspan x="${textX}" dy="${idx === 0 ? dyOffset : lineHeight}">${escapeXml(line)}</tspan>`,
     )
     .join("");
   const tracking =
     block.letterSpacing ?? (block.role === "title" ? profile.titleTracking : profile.bodyTracking);
-  const attrs = `x="${textX}" y="${block.y}" text-anchor="${anchor}" font-size="${block.fontSize}" font-weight="${fontWeight(profile, block.role)}" font-family="${fontFamily(profile, block.role)}" letter-spacing="${tracking}"`;
+  const attrs = `x="${textX}" y="${block.y}" text-anchor="${anchor}" font-size="${fontSize}" font-weight="${fontWeight(profile, block.role)}" font-family="${fontFamily(profile, block.role)}" letter-spacing="${tracking}"`;
   const shadow =
     block.shadow || block.role === "title"
       ? `<text ${attrs} fill="${profile.titleShadow}" filter="url(#softTextShadow)">${makeTspans()}</text>`
@@ -412,6 +414,7 @@ function accentPill(
       fontSize,
       lineHeight: fontSize,
       maxLines: 1,
+      maxBoxHeight: Math.round(height * 0.78),
       anchor,
       role: "extra",
       letterSpacing: "1.2px",
@@ -458,7 +461,8 @@ function chip(
       width: width - Math.round(height * 1.08),
       fontSize,
       lineHeight: Math.round(fontSize * 1.12),
-      maxLines: 1,
+      maxLines: 2,
+      maxBoxHeight: Math.round(height * 0.62),
       role: "body",
     }, profile),
   ].join("\n  ");
@@ -747,6 +751,7 @@ function renderV2BenefitCard(
       fontSize,
       lineHeight: Math.round(fontSize * 1.18),
       maxLines: 2,
+      maxBoxHeight: Math.round(zone.height * 0.62),
       role: "body",
     }, profile),
   ].filter(Boolean).join("\n  ");
@@ -758,13 +763,72 @@ function arrowPath(from: { x: number; y: number }, to: { x: number; y: number },
   return `<path d="${d}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" opacity="0.68"/><circle cx="${to.x}" cy="${to.y}" r="5" fill="${color}" opacity="0.78"/>`;
 }
 
+type ProductCardLayoutRect = import("@/config/product-card-overlay-presets").RectZone;
+
+function dashedZoneRect(
+  z: ProductCardLayoutRect,
+  stroke: string,
+  opacity: number,
+  dash = "9 11",
+): string {
+  return `<rect x="${z.x}" y="${z.y}" width="${z.width}" height="${z.height}" rx="${Math.round(Math.min(z.width, z.height) * 0.04)}" fill="none" stroke="${stroke}" stroke-dasharray="${dash}" stroke-width="2" opacity="${opacity}"/>`;
+}
+
+function overlaySchematicLayer(
+  layout: import("@/config/product-card-overlay-presets").ProductCardLayoutPreset,
+  awareness: ObjectAwareLayoutPayload,
+  profile: TypographyProfile,
+  renderMode: "production" | "preview" | undefined,
+  layoutDebug: boolean | undefined,
+  minSide: number,
+): string {
+  if (renderMode !== "preview" && !layoutDebug) return "";
+  const layers: string[] = [];
+  const muted = profile.bodyColor;
+  if (renderMode === "preview") {
+    layers.push(dashedZoneRect(awareness.productBox, profile.markerFill, 0.42));
+    layers.push(dashedZoneRect(layout.title, muted, 0.32));
+    layers.push(dashedZoneRect(layout.subtitle, muted, 0.28));
+    for (const b of layout.benefits) {
+      layers.push(dashedZoneRect(b, profile.accentColor, 0.26));
+    }
+    for (const b of layout.badges) {
+      layers.push(dashedZoneRect(b, profile.accentColor, 0.24, "6 8"));
+    }
+    layers.push(dashedZoneRect(layout.footer, muted, 0.22, "4 7"));
+    const tag = Math.max(12, Math.round(minSide * 0.018));
+    layers.push(
+      `<text x="${awareness.productBox.x + 8}" y="${awareness.productBox.y + tag + 4}" font-size="${tag}" fill="${muted}" opacity="0.5" font-family="${profile.bodyFont}">Товар</text>`,
+    );
+    layers.push(
+      `<text x="${layout.title.x + 8}" y="${layout.title.y + tag + 4}" font-size="${tag}" fill="${muted}" opacity="0.5" font-family="${profile.bodyFont}">Заголовок</text>`,
+    );
+    layers.push(
+      `<text x="${layout.subtitle.x + 8}" y="${layout.subtitle.y + tag + 3}" font-size="${Math.max(11, tag - 2)}" fill="${muted}" opacity="0.45" font-family="${profile.bodyFont}">Подзаголовок</text>`,
+    );
+  }
+  if (layoutDebug) {
+    const f = awareness.forbiddenZone;
+    layers.push(
+      `<rect x="${f.x}" y="${f.y}" width="${f.width}" height="${f.height}" fill="rgba(239,68,68,0.12)" stroke="rgba(220,38,38,0.55)" stroke-width="2" stroke-dasharray="4 6" opacity="0.95"/>`,
+    );
+    for (const s of awareness.safeZones) {
+      layers.push(
+        `<rect x="${s.x}" y="${s.y}" width="${s.width}" height="${s.height}" fill="rgba(16,185,129,0.06)" stroke="rgba(5,150,105,0.45)" stroke-width="1.5" stroke-dasharray="6 8" opacity="0.9"/>`,
+      );
+    }
+  }
+  return layers.join("\n  ");
+}
+
 function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): string {
   const spec = buildMarketplaceCardOverlaySpec({ ...input, overlayVersion: "v2" });
   const templatePreset = getProductCardTemplatePreset(String(spec.templatePreset));
-  const layout = getProductCardLayoutPreset(String(spec.templatePreset), String(spec.cardSize));
   const profile = v2TypographyProfile(input);
   const width = Number(spec.outputWidth) || resolveProductCardCanvas(String(spec.cardSize)).width;
   const height = Number(spec.outputHeight) || resolveProductCardCanvas(String(spec.cardSize)).height;
+  const awareness = buildObjectAwarePayload(String(spec.templatePreset), String(spec.cardSize), width, height);
+  const layout = awareness.adjustedLayout;
   const text = spec.text as {
     title: string;
     subtitle?: string;
@@ -776,16 +840,37 @@ function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): stri
   const useIcons = spec.useIcons !== false;
   const useArrows = spec.useArrows !== false;
   const useShadows = spec.useShadows !== false;
+  const renderMode = input.overlayRenderMode ?? "production";
   const minSide = Math.min(width, height);
   const titleSize = Math.max(34, Math.round(minSide * layout.titleScale));
   const subtitleSize = Math.max(20, Math.round(minSide * layout.bodyScale * 0.95));
   const bodySize = Math.max(20, Math.round(minSide * layout.bodyScale));
   const smallSize = Math.max(16, Math.round(minSide * layout.smallScale));
-  const titlePanel = templatePreset.id === "clean_catalog" || templatePreset.id === "lifestyle_model" ? "" : roundRect(layout.title.x - 18, layout.title.y - 42, layout.title.width + 36, layout.title.height + 38, 32, profile.panelFill, profile.panelStroke, panelAttrs(useShadows));
+  const titlePanel =
+    templatePreset.id === "clean_catalog" || templatePreset.id === "lifestyle_model"
+      ? ""
+      : roundRect(
+          layout.title.x - 18,
+          layout.title.y - 42,
+          layout.title.width + 36,
+          layout.title.height + 38,
+          32,
+          profile.panelFill,
+          profile.panelStroke,
+          panelAttrs(useShadows),
+        );
   const benefitEls = layout.benefits.slice(0, 5).map((zone, idx) => {
     const label = text.benefits[idx];
     if (!label) return "";
-    return renderV2BenefitCard(label, zone, profile, bodySize, idx, useIcons && templatePreset.id !== "clean_catalog", useShadows);
+    return renderV2BenefitCard(
+      label,
+      zone,
+      profile,
+      bodySize,
+      idx,
+      useIcons && templatePreset.id !== "clean_catalog",
+      useShadows,
+    );
   });
   const badgeTexts = [text.extraText, text.statsText, text.sizeText].map((x) => (x ?? "").trim()).filter(Boolean);
   const badgeEls = layout.badges.map((zone, idx) => {
@@ -794,21 +879,23 @@ function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): stri
     return accentPill(value, zone.x, zone.y, zone.width, zone.height, profile, smallSize, "middle");
   });
   const arrowEls = useArrows ? layout.arrows.map((a) => arrowPath(a.from, a.to, profile.markerFill)) : [];
-  const safe = layout.productSafeArea;
-  const productGuide = `<rect x="${safe.x}" y="${safe.y}" width="${safe.width}" height="${safe.height}" rx="${Math.round(minSide * 0.03)}" fill="none" stroke="${profile.markerFill}" stroke-dasharray="10 12" stroke-width="2" opacity="0.14"/>`;
+  const schematic = overlaySchematicLayer(layout, awareness, profile, renderMode, input.layoutDebug, minSide);
   const footerText = [text.extraText, text.statsText, text.sizeText].filter(Boolean).join(" · ");
-  const footer = footerText ? textEl(footerText, {
-    x: layout.footer.x,
-    y: layout.footer.y + Math.round(layout.footer.height * 0.58),
-    width: layout.footer.width,
-    fontSize: smallSize,
-    lineHeight: Math.round(smallSize * 1.2),
-    maxLines: 1,
-    anchor: "middle",
-    role: "extra",
-  }, profile) : "";
+  const footer = footerText
+    ? textEl(footerText, {
+        x: layout.footer.x,
+        y: layout.footer.y + Math.round(layout.footer.height * 0.58),
+        width: layout.footer.width,
+        fontSize: smallSize,
+        lineHeight: Math.round(smallSize * 1.2),
+        maxLines: 2,
+        maxBoxHeight: Math.round(layout.footer.height * 0.82),
+        anchor: "middle",
+        role: "extra",
+      }, profile)
+    : "";
   const inner = [
-    productGuide,
+    schematic,
     titlePanel,
     textEl(text.title, {
       x: layout.title.x,
@@ -817,6 +904,7 @@ function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): stri
       fontSize: titleSize,
       lineHeight: Math.round(titleSize * 1.08),
       maxLines: 2,
+      maxBoxHeight: Math.round(layout.title.height * 0.92),
       role: "title",
       shadow: useShadows,
     }, profile),
@@ -827,6 +915,7 @@ function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): stri
       fontSize: subtitleSize,
       lineHeight: Math.round(subtitleSize * 1.28),
       maxLines: 2,
+      maxBoxHeight: Math.round(layout.subtitle.height * 0.9),
       role: "extra",
     }, profile),
     ...arrowEls,

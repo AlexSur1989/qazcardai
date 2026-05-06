@@ -44,6 +44,8 @@ type Props = {
   conceptImageSizes: SizePreset[];
   marketplaceCardSizes: SizePreset[];
   videoPresets: VideoPreset[];
+  /** Показать режим разметки оверлея (админ) */
+  canMarketplaceLayoutDebug?: boolean;
 };
 
 export function ProductCardPage({
@@ -51,6 +53,7 @@ export function ProductCardPage({
   conceptImageSizes,
   marketplaceCardSizes,
   videoPresets,
+  canMarketplaceLayoutDebug = false,
 }: Props) {
   const {
     initDone,
@@ -85,11 +88,13 @@ export function ProductCardPage({
     );
   }
 
+  const balanceDisplay = Number.isFinite(Number(balanceCredits)) ? Math.round(Number(balanceCredits)) : 0;
+
   return (
     <div className="space-y-10">
       <p className="text-muted-foreground text-sm">
         Баланс (токены):{" "}
-        <span className="text-foreground font-medium tabular-nums">{balanceCredits}</span>
+        <span className="text-foreground font-medium tabular-nums">{balanceDisplay}</span>
       </p>
 
       {loadError && (
@@ -186,7 +191,7 @@ export function ProductCardPage({
               hasImage={hasImage}
               canUseBackend={canUseBackend}
               projectId={projectId}
-              balanceCredits={balanceCredits}
+              balanceCredits={balanceDisplay}
               sizePresets={conceptImageSizes}
             />
           </TabsContent>
@@ -195,8 +200,9 @@ export function ProductCardPage({
               hasImage={hasImage}
               canUseBackend={canUseBackend}
               projectId={projectId}
-              balanceCredits={balanceCredits}
+              balanceCredits={balanceDisplay}
               cardSizePresets={marketplaceCardSizes}
+              canLayoutDebug={canMarketplaceLayoutDebug}
             />
           </TabsContent>
           <TabsContent value="video" className="mt-4">
@@ -204,7 +210,7 @@ export function ProductCardPage({
               hasImage={hasImage}
               canUseBackend={canUseBackend}
               projectId={projectId}
-              balanceCredits={balanceCredits}
+              balanceCredits={balanceDisplay}
               videoPresets={videoPresets}
             />
           </TabsContent>
