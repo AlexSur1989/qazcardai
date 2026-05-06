@@ -8,6 +8,8 @@ FROM base AS deps
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
+# postinstall вызывает patch-prisma-dev-zeptomatch.cjs до полного COPY .
+COPY scripts/patch-prisma-dev-zeptomatch.cjs ./scripts/patch-prisma-dev-zeptomatch.cjs
 RUN npm ci
 
 FROM base AS builder
