@@ -303,8 +303,11 @@ export function buildImageModelInput(
 export type MarketplaceCardImageSettings = {
   sourceImageUrl: string;
   sourceImageUrls?: string[];
-  generationMode: "marketplace_card";
+  generationMode: "marketplace_card" | "marketplace_card_variants";
   style: string;
+  templatePreset?: string;
+  templateLayoutKey?: string;
+  typographyPreset?: string;
   cardSize?: string;
   aspectRatio?: string;
   resolution?: string;

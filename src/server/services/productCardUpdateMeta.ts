@@ -61,6 +61,14 @@ export type MarketplaceCardGenerationRecord = {
   sourceType: "original" | "concept_generation";
   sourceGenerationId: string | null;
   style: string;
+  generationMode?: "marketplace_card" | "marketplace_card_variants";
+  templatePreset?: string;
+  templateLayoutKey?: string;
+  typographyPreset?: string;
+  cardSize?: string;
+  variantGroupId?: string;
+  variantIndex?: number;
+  variantCount?: number;
   createdAt: string;
 };
 

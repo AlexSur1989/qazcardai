@@ -21,6 +21,8 @@ const bodySchema = z.object({
     .refine((s) => styleSet.has(s as (typeof MARKETPLACE_CARD_STYLES)[number]["id"]), "Некорректный стиль"),
   cardSize: z.string().trim().min(1).max(64).optional(),
   overlayTemplate: z.string().trim().min(1).max(64).optional(),
+  generationMode: z.enum(["marketplace_card", "marketplace_card_variants"]).optional().default("marketplace_card"),
+  variantCount: z.number().int().min(1).max(6).optional().default(6),
 });
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -71,12 +73,15 @@ export async function POST(req: Request, ctx: Ctx) {
     style: parsed.data.style,
     cardSize: parsed.data.cardSize,
     overlayTemplate: parsed.data.overlayTemplate,
+    variantCount: parsed.data.generationMode === "marketplace_card_variants" ? parsed.data.variantCount || 6 : 1,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
   return NextResponse.json({
     credits: result.credits,
+    perVariantCredits: result.perVariantCredits,
+    variantCount: result.variantCount,
     modelName: result.modelName,
     priceBreakdown: result.priceBreakdown,
     model: {

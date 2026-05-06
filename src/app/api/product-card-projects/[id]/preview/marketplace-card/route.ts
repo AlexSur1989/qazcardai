@@ -3,6 +3,10 @@ import { z } from "zod";
 
 import { MARKETPLACE_CARD_STYLES } from "@/config/product-card-categories";
 import {
+  isProductCardTemplatePresetId,
+  isProductCardTypographyPresetId,
+} from "@/config/product-card-overlay-presets";
+import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
@@ -19,17 +23,28 @@ const styleSet = new Set(MARKETPLACE_CARD_STYLES.map((s) => s.id));
 
 const bodySchema = z.object({
   productTitle: z.string().max(120).optional().default(""),
+  subtitle: z.string().max(160).optional().default(""),
   benefits: z
     .union([z.array(z.string().max(80)).max(8), z.string().max(2000)])
     .optional()
     .default(""),
   extraText: z.string().max(200).optional().default(""),
+  statsText: z.string().max(120).optional().default(""),
+  sizeText: z.string().max(120).optional().default(""),
   style: z
     .string()
     .min(1)
     .refine((s) => styleSet.has(s as (typeof MARKETPLACE_CARD_STYLES)[number]["id"]), "Некорректный стиль"),
   cardSize: z.string().trim().min(1).max(64).optional().default("square"),
   overlayTemplate: z.string().trim().min(1).max(64).optional().default("bottom_panel"),
+  templatePreset: z.string().trim().min(1).max(64).optional().default("light_marketplace")
+    .refine((s) => isProductCardTemplatePresetId(s), "Некорректный шаблон карточки"),
+  typographyPreset: z.string().trim().min(1).max(64).optional().default("classic")
+    .refine((s) => isProductCardTypographyPresetId(s), "Некорректная типографика"),
+  preserveProductLabel: z.boolean().optional().default(false),
+  useIcons: z.boolean().optional().default(true),
+  useArrows: z.boolean().optional().default(true),
+  useShadows: z.boolean().optional().default(true),
 });
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -45,6 +60,11 @@ function normalizeBenefits(raw: string | string[] | undefined): string[] {
     .filter(Boolean)
     .slice(0, 8)
     .map((s) => s.slice(0, 80));
+}
+
+function previewText(value: string, fallback: string): string {
+  const trimmed = value.trim();
+  return trimmed || fallback;
 }
 
 export async function POST(req: Request, ctx: Ctx) {
@@ -87,16 +107,31 @@ export async function POST(req: Request, ctx: Ctx) {
   }
 
   const size = resolvedSize.size;
+  const benefits = normalizeBenefits(parsed.data.benefits);
+  const previewBenefits =
+    benefits.length > 0
+      ? benefits
+      : ["Удобная посадка", "Премиум качество", "Күннен қорғайды", "Жеңіл жақтау"];
   const input = {
     template: parsed.data.overlayTemplate,
     cardSize: size.id,
     outputWidth: size.width,
     outputHeight: size.height,
     aspectRatio: size.aspectRatio,
-    productTitle: parsed.data.productTitle.trim(),
-    benefits: normalizeBenefits(parsed.data.benefits),
-    extraText: parsed.data.extraText.trim(),
+    productTitle: previewText(parsed.data.productTitle, "Стильные солнцезащитные очки"),
+    subtitle: previewText(parsed.data.subtitle, "Классический черный цвет"),
+    benefits: previewBenefits,
+    extraText: previewText(parsed.data.extraText, "Хит продаж"),
+    statsText: previewText(parsed.data.statsText, "UV400"),
+    sizeText: previewText(parsed.data.sizeText, "Премиум сапа"),
     style: parsed.data.style,
+    templatePreset: parsed.data.templatePreset,
+    typographyPreset: parsed.data.typographyPreset,
+    overlayVersion: "v2" as const,
+    preserveProductLabel: parsed.data.preserveProductLabel,
+    useIcons: parsed.data.useIcons,
+    useArrows: parsed.data.useArrows,
+    useShadows: parsed.data.useShadows,
   };
 
   return NextResponse.json({

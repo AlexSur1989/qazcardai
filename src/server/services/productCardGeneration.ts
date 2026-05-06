@@ -1,4 +1,4 @@
-
+import { randomUUID } from "crypto";
 import type { AiModel } from "@/generated/prisma/client";
 import {
   buildConceptPhotoPrompt,
@@ -13,6 +13,13 @@ import {
   type MarketplaceCardStyle,
   type ProductCategoryId,
 } from "@/config/product-card-categories";
+import {
+  getProductCardLayoutKey,
+  getProductCardTemplatePreset,
+  getProductCardTypographyPreset,
+  variantTemplatePresetAt,
+  variantTypographyPresetAt,
+} from "@/config/product-card-overlay-presets";
 import { getSchemaFields, defaultsFromSchema } from "@/lib/generation-form-settings-schema";
 import {
   modelHasSettingsSchema,
@@ -41,6 +48,7 @@ import {
   buildMarketplaceCardOverlaySpec,
   renderMarketplaceCardOverlaySvg,
 } from "@/server/services/productCardOverlayRenderer";
+import { generateProductSellingPoints } from "@/server/services/productCardSellingPoints";
 import {
   appendConceptGenerationEntry,
   appendMarketplaceCardGeneration,
@@ -59,6 +67,13 @@ import {
   resolveMarketplaceCardSize,
   type MarketplaceCardResolvedSize,
 } from "@/server/services/marketplaceCardSizing";
+import { getFullModerationConfig } from "@/server/services/moderation";
+
+function clampMarketplacePrompt(prompt: string, maxLen: number): string {
+  if (prompt.length <= maxLen) return prompt;
+  const cut = prompt.slice(0, Math.max(0, maxLen - 1)).trimEnd();
+  return `${cut}…`;
+}
 
 export function isValidProductCategoryId(id: string): id is ProductCategoryId {
   return (PRODUCT_CATEGORY_IDS as readonly string[]).includes(id);
@@ -249,6 +264,24 @@ export type GenerateMarketplaceCardOk = {
   costCredits: number;
 };
 
+export type GenerateMarketplaceCardVariantsOk = {
+  ok: true;
+  generationIds: string[];
+  variants: Array<{
+    generationId: string;
+    status: string;
+    costCredits: number;
+    templatePreset: string;
+    templateLayoutKey: string;
+    typographyPreset: string;
+    variantIndex: number;
+  }>;
+  status: string;
+  costCredits: number;
+  variantGroupId: string;
+  variantCount: number;
+};
+
 export type GenerateMarketplaceCardErr = {
   ok: false;
   error: string;
@@ -258,10 +291,13 @@ export type GenerateMarketplaceCardErr = {
 };
 
 export type GenerateMarketplaceCardResult = GenerateMarketplaceCardOk | GenerateMarketplaceCardErr;
+export type GenerateMarketplaceCardVariantsResult = GenerateMarketplaceCardVariantsOk | GenerateMarketplaceCardErr;
 
 export type EstimateMarketplaceCardOk = {
   ok: true;
   credits: number;
+  perVariantCredits: number;
+  variantCount: number;
   modelName: string;
   priceBreakdown: Awaited<ReturnType<typeof calculateProductCardMarketplaceCardCredits>>;
 };
@@ -283,6 +319,7 @@ export async function estimateMarketplaceCardCredits(
     style: string;
     cardSize?: string;
     overlayTemplate?: string;
+    variantCount?: number;
   },
 ): Promise<EstimateMarketplaceCardResult> {
   const project = await getOwnedProjectOrNull(userId, projectId);
@@ -333,7 +370,15 @@ export async function estimateMarketplaceCardCredits(
     return { ok: false, error: merged.error, status: 400 };
   }
   const price = await calculateProductCardMarketplaceCardCredits(model, merged.merged);
-  return { ok: true, credits: price.credits, modelName: model.name, priceBreakdown: price };
+  const variantCount = Math.min(6, Math.max(1, Math.round(input.variantCount ?? 1)));
+  return {
+    ok: true,
+    credits: price.credits * variantCount,
+    perVariantCredits: price.credits,
+    variantCount,
+    modelName: model.name,
+    priceBreakdown: price,
+  };
 }
 
 function buildMarketplaceCardMergedModelSettings(
@@ -390,9 +435,22 @@ export async function generateMarketplaceCardForProductCard(
     productTitle: string;
     benefits: string | string[];
     extraText: string;
+    subtitle?: string;
+    statsText?: string;
+    sizeText?: string;
     style: string;
     cardSize?: string;
     overlayTemplate?: string;
+    templatePreset?: string;
+    typographyPreset?: string;
+    generationMode?: "marketplace_card" | "marketplace_card_variants";
+    variantGroupId?: string;
+    variantIndex?: number;
+    variantCount?: number;
+    preserveProductLabel?: boolean;
+    useIcons?: boolean;
+    useArrows?: boolean;
+    useShadows?: boolean;
     userInstructions: string;
     /** Не доверяйте цене с фронта: при расхождении с пересчётом — 409 PRICE_CHANGED */
     clientEstimateCredits?: number | null;
@@ -474,15 +532,46 @@ export async function generateMarketplaceCardForProductCard(
     .filter(Boolean);
   const overlayTemplate = input.overlayTemplate?.trim() || "bottom_panel";
   const cardSize = resolvedSize.size;
-  const finalPrompt = buildMarketplaceCardPrompt({
-    style,
-    userInstructions: input.userInstructions,
+  const templatePreset = getProductCardTemplatePreset(input.templatePreset);
+  const typographyPreset = getProductCardTypographyPreset(input.typographyPreset);
+  const templateLayoutKey = getProductCardLayoutKey(templatePreset.id, cardSize.id);
+  const normalizedText = generateProductSellingPoints({
     productTitle: input.productTitle,
-    benefits: benefitsStr,
-    extraText: input.extraText,
+    productCategory: project.selectedCategory,
+    userBenefits: benefitsList,
+    userExtraText: input.extraText,
+    userSubtitle: input.subtitle,
+    statsText: input.statsText,
+    sizeText: input.sizeText,
+    templatePreset: templatePreset.id,
+  });
+  const variantMode = input.generationMode ?? "marketplace_card";
+  const variantIndex = typeof input.variantIndex === "number" ? input.variantIndex : 0;
+  const variantCount = Math.min(6, Math.max(1, Math.round(input.variantCount ?? 1)));
+  /** Keep short — moderation counts prompt length only; long RU/template copy was hitting MAX_PROMPT_LENGTH. */
+  const userDirRaw = input.userInstructions.trim().slice(0, 380);
+  const visualInstructions = [
+    userDirRaw || undefined,
+    `Visual direction: ${templatePreset.aiStyle}.`,
+    `Product ~50–60% frame; visually plain margins for overlay only.`,
+    input.preserveProductLabel
+      ? "Keep original pack labels recognizable; never invent packaging text/logos."
+      : "Do not invent logos or pack text.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  let finalPrompt = buildMarketplaceCardPrompt({
+    style,
+    userInstructions: visualInstructions,
+    productTitle: normalizedText.title,
+    benefits: normalizedText.benefits.join("\n"),
+    extraText: normalizedText.extraText,
     overlayTemplate,
     cardAspectRatio: cardSize.aspectRatio,
   });
+  const modCfg = await getFullModerationConfig();
+  const promptCap = Math.max(256, Math.floor(modCfg.maxPromptLength) - 48);
+  finalPrompt = clampMarketplacePrompt(finalPrompt, promptCap);
 
   const productMeta: ProductCardGenMeta = {
     flow: "product_card",
@@ -514,16 +603,44 @@ export async function generateMarketplaceCardForProductCard(
     requestedAspectRatio: cardSize.aspectRatio,
     resolution: cardSize.kieResolution,
     overlayTemplate,
+    generationMode: variantMode,
+    templatePreset: templatePreset.id,
+    templatePresetLabel: templatePreset.label,
+    templateLayoutKey,
+    theme: templatePreset.theme,
+    layout: templateLayoutKey,
+    overlayVersion: "v2",
+    typographyPreset: typographyPreset.id,
+    typographyPresetLabel: typographyPreset.label,
+    normalizedText,
+    preserveProductLabel: input.preserveProductLabel === true,
+    compositionMode: input.preserveProductLabel ? "preserve_product_label_requested" : "ai_base_with_overlay",
+    useIcons: input.useIcons !== false,
+    useArrows: input.useArrows !== false,
+    useShadows: input.useShadows !== false,
+    variantGroupId: input.variantGroupId ?? null,
+    variantIndex,
+    variantCount,
     overlay: buildMarketplaceCardOverlaySpec({
       template: overlayTemplate,
       cardSize: cardSize.id,
       outputWidth: cardSize.width,
       outputHeight: cardSize.height,
       aspectRatio: cardSize.aspectRatio,
-      productTitle: input.productTitle,
-      benefits: benefitsList,
-      extraText: input.extraText,
+      productTitle: normalizedText.title,
+      subtitle: normalizedText.subtitle,
+      benefits: normalizedText.benefits,
+      extraText: normalizedText.extraText,
+      statsText: normalizedText.statsText,
+      sizeText: normalizedText.sizeText,
       style,
+      templatePreset: templatePreset.id,
+      typographyPreset: typographyPreset.id,
+      overlayVersion: "v2",
+      useIcons: input.useIcons !== false,
+      useArrows: input.useArrows !== false,
+      useShadows: input.useShadows !== false,
+      preserveProductLabel: input.preserveProductLabel === true,
     }),
     overlayPreviewSvg: renderMarketplaceCardOverlaySvg({
       template: overlayTemplate,
@@ -531,19 +648,33 @@ export async function generateMarketplaceCardForProductCard(
       outputWidth: cardSize.width,
       outputHeight: cardSize.height,
       aspectRatio: cardSize.aspectRatio,
-      productTitle: input.productTitle,
-      benefits: benefitsList,
-      extraText: input.extraText,
+      productTitle: normalizedText.title,
+      subtitle: normalizedText.subtitle,
+      benefits: normalizedText.benefits,
+      extraText: normalizedText.extraText,
+      statsText: normalizedText.statsText,
+      sizeText: normalizedText.sizeText,
       style,
+      templatePreset: templatePreset.id,
+      typographyPreset: typographyPreset.id,
+      overlayVersion: "v2",
+      useIcons: input.useIcons !== false,
+      useArrows: input.useArrows !== false,
+      useShadows: input.useShadows !== false,
+      preserveProductLabel: input.preserveProductLabel === true,
     }),
-    productTitle: input.productTitle,
+    productTitle: normalizedText.title,
+    subtitle: normalizedText.subtitle,
     style,
   };
 
   const marketplaceCardSettings = {
     sourceImageUrl: src.url,
     sourceImageUrls,
-    generationMode: "marketplace_card" as const,
+    generationMode: variantMode,
+    templatePreset: templatePreset.id,
+    templateLayoutKey,
+    typographyPreset: typographyPreset.id,
     style: input.style,
     cardSize: cardSize.id,
     aspectRatio: cardSize.kieAspectRatio,
@@ -580,6 +711,14 @@ export async function generateMarketplaceCardForProductCard(
     sourceType: input.sourceType,
     sourceGenerationId: input.sourceGenerationId?.trim() ?? null,
     style: input.style,
+    generationMode: variantMode,
+    templatePreset: templatePreset.id,
+    templateLayoutKey,
+    typographyPreset: typographyPreset.id,
+    cardSize: cardSize.id,
+    variantGroupId: input.variantGroupId,
+    variantIndex,
+    variantCount,
   });
 
   return {
@@ -587,6 +726,108 @@ export async function generateMarketplaceCardForProductCard(
     generationId: result.generationId,
     status: result.status,
     costCredits,
+  };
+}
+
+
+export async function generateMarketplaceCardVariantsForProductCard(
+  p: {
+    userId: string;
+    projectId: string;
+    sourceType: MarketplaceImageSource;
+    sourceGenerationId: string | null;
+    productTitle: string;
+    benefits: string | string[];
+    extraText: string;
+    subtitle?: string;
+    statsText?: string;
+    sizeText?: string;
+    style: string;
+    cardSize?: string;
+    userInstructions: string;
+    clientEstimateCredits?: number | null;
+    variantCount?: number;
+    typographyPreset?: string;
+    preserveProductLabel?: boolean;
+    useIcons?: boolean;
+    useArrows?: boolean;
+    useShadows?: boolean;
+  },
+): Promise<GenerateMarketplaceCardVariantsResult> {
+  const variantCount = Math.min(6, Math.max(4, Math.round(p.variantCount ?? 6)));
+  const estimate = await estimateMarketplaceCardCredits(p.userId, p.projectId, {
+    sourceType: p.sourceType,
+    sourceGenerationId: p.sourceGenerationId,
+    style: p.style,
+    cardSize: p.cardSize,
+    variantCount,
+  });
+  if (!estimate.ok) return estimate;
+  if (
+    p.clientEstimateCredits != null &&
+    Number.isFinite(p.clientEstimateCredits) &&
+    p.clientEstimateCredits !== estimate.credits
+  ) {
+    return {
+      ok: false,
+      error: "Стоимость изменилась — обновите оценку и попробуйте снова",
+      status: 409,
+      code: "PRICE_CHANGED",
+    };
+  }
+
+  const variantGroupId = randomUUID();
+  const variants: GenerateMarketplaceCardVariantsOk["variants"] = [];
+  for (let i = 0; i < variantCount; i++) {
+    const templatePreset = variantTemplatePresetAt(i);
+    const typographyPreset = p.typographyPreset?.trim() || variantTypographyPresetAt(i);
+    const single = await generateMarketplaceCardForProductCard({
+      ...p,
+      templatePreset,
+      typographyPreset,
+      generationMode: "marketplace_card_variants",
+      variantGroupId,
+      variantIndex: i,
+      variantCount,
+      clientEstimateCredits: null,
+    });
+    if (single.ok) {
+      variants.push({
+        generationId: single.generationId,
+        status: single.status,
+        costCredits: single.costCredits,
+        templatePreset,
+        templateLayoutKey: getProductCardLayoutKey(templatePreset, p.cardSize),
+        typographyPreset,
+        variantIndex: i,
+      });
+    } else {
+      // One failed variant should not prevent the rest from being queued.
+      variants.push({
+        generationId: `failed-${variantGroupId}-${i}`,
+        status: "FAILED",
+        costCredits: 0,
+        templatePreset,
+        templateLayoutKey: getProductCardLayoutKey(templatePreset, p.cardSize),
+        typographyPreset,
+        variantIndex: i,
+      });
+    }
+  }
+  const generationIds = variants
+    .map((v) => v.generationId)
+    .filter((id) => !id.startsWith("failed-"));
+  if (generationIds.length === 0) {
+    return { ok: false, error: "Не удалось создать варианты карточки", status: 500 };
+  }
+  return {
+    ok: true,
+    generationIds,
+    variants,
+    status: "QUEUED",
+    costCredits: variants.reduce((sum, v) => sum + v.costCredits, 0),
+    variantGroupId,
+    variantCount,
   };
 }
 

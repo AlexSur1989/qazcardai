@@ -1,3 +1,11 @@
+import {
+  getProductCardLayoutPreset,
+  getProductCardTemplatePreset,
+  getProductCardTypographyPreset,
+  getProductCardLayoutKey,
+  resolveProductCardCanvas,
+} from "@/config/product-card-overlay-presets";
+import type { ProductCardTemplatePresetId, ProductCardTypographyPresetId } from "@/config/product-card-overlay-presets";
 
 export type ProductCardOverlayInput = {
   template: string;
@@ -6,9 +14,19 @@ export type ProductCardOverlayInput = {
   outputHeight?: number;
   aspectRatio?: string;
   productTitle: string;
+  subtitle?: string;
   benefits: string[];
   extraText: string;
+  statsText?: string;
+  sizeText?: string;
   style: string;
+  templatePreset?: ProductCardTemplatePresetId | string;
+  typographyPreset?: ProductCardTypographyPresetId | string;
+  overlayVersion?: "v1" | "v2";
+  useIcons?: boolean;
+  useArrows?: boolean;
+  useShadows?: boolean;
+  preserveProductLabel?: boolean;
 };
 
 type OverlayTemplate = "bottom_panel" | "left_panel" | "badges_callouts";
@@ -202,6 +220,41 @@ function typographyFor(style: string): TypographyProfile {
 export function buildMarketplaceCardOverlaySpec(input: ProductCardOverlayInput) {
   const benefits = input.benefits.map((item) => item.trim()).filter(Boolean).slice(0, 6);
   const size = outputSize(input);
+  const useV2 = input.overlayVersion === "v2" || Boolean(input.templatePreset);
+  if (useV2) {
+    const canvas = resolveProductCardCanvas(input.cardSize || "square");
+    const width = input.outputWidth ?? canvas.width;
+    const height = input.outputHeight ?? canvas.height;
+    const templatePreset = getProductCardTemplatePreset(input.templatePreset);
+    const typography = getProductCardTypographyPreset(input.typographyPreset);
+    return {
+      renderer: "server_svg_overlay_v2",
+      overlayVersion: "v2",
+      template: normalizedTemplate(input.template || "bottom_panel"),
+      templatePreset: templatePreset.id,
+      templateLayoutKey: getProductCardLayoutKey(templatePreset.id, canvas.id),
+      cardSize: canvas.id,
+      outputWidth: width,
+      outputHeight: height,
+      aspectRatio: input.aspectRatio?.trim() || canvas.aspectRatio,
+      style: input.style,
+      typographyPreset: typography.id,
+      typographyProfileId: typography.id,
+      theme: templatePreset.theme,
+      useIcons: input.useIcons !== false,
+      useArrows: input.useArrows !== false,
+      useShadows: input.useShadows !== false,
+      preserveProductLabel: input.preserveProductLabel === true,
+      text: {
+        title: input.productTitle.trim(),
+        subtitle: input.subtitle?.trim() ?? "",
+        benefits,
+        extraText: input.extraText.trim(),
+        statsText: input.statsText?.trim() ?? "",
+        sizeText: input.sizeText?.trim() ?? "",
+      },
+    };
+  }
   const typography = typographyFor(input.style);
   return {
     renderer: "server_svg_overlay_v1",
@@ -583,8 +636,212 @@ function renderBadges(
   ].filter(Boolean).join("\n  ");
 }
 
+
+function v2TypographyProfile(input: ProductCardOverlayInput): TypographyProfile {
+  const template = getProductCardTemplatePreset(input.templatePreset);
+  const typography = getProductCardTypographyPreset(input.typographyPreset);
+  return {
+    id: typography.id,
+    titleFont: typography.titleFont,
+    bodyFont: typography.bodyFont,
+    extraFont: typography.bodyFont,
+    titleWeight: typography.titleWeight,
+    bodyWeight: typography.bodyWeight,
+    extraWeight: Math.max(500, typography.bodyWeight),
+    titleColor: template.textColor,
+    bodyColor: template.textColor,
+    extraColor: template.mutedTextColor,
+    panelFill: template.panelFill,
+    panelStroke: template.panelStroke,
+    accentFill: template.accentColor,
+    accentColor: template.accentColor,
+    chipFill: template.panelFill,
+    chipStroke: template.panelStroke,
+    markerFill: template.accentColor,
+    titleTracking: "-0.8px",
+    bodyTracking: "0px",
+    titleShadow: template.theme === "dark" ? "rgba(0,0,0,0.45)" : "rgba(255,255,255,0.75)",
+  };
+}
+
+function iconIdForBenefit(value: string): string {
+  const s = value.toLowerCase();
+  if (/зим|холод|қар|суық|тепл|warm/.test(s)) return "snowflake";
+  if (/солн|күн|uv|spf/.test(s)) return "sun";
+  if (/вода|ылғал|капл|moist|hydr/.test(s)) return "droplet";
+  if (/защит|қорға|safe|shield/.test(s)) return "shield";
+  if (/эко|натур|leaf|табиғи/.test(s)) return "leaf";
+  if (/белок|protein|протеин/.test(s)) return "protein";
+  if (/вес|weight|жеңіл|легк/.test(s)) return "weight";
+  if (/размер|size|өлшем/.test(s)) return "size";
+  if (/ткан|fabric|материал/.test(s)) return "fabric";
+  if (/кожа|skin|тері/.test(s)) return "skin";
+  if (/глаз|көз|очки|eye/.test(s)) return "eye";
+  if (/энерг|қуат|power/.test(s)) return "lightning";
+  if (/преми|сапа|quality|premium/.test(s)) return "star";
+  return "check";
+}
+
+function iconPath(id: string): string {
+  const paths: Record<string, string> = {
+    check: '<path d="M7 13l3 3 7-8"/>',
+    star: '<path d="M12 4l2.1 4.3 4.8.7-3.5 3.4.8 4.8-4.2-2.2-4.2 2.2.8-4.8L5.1 9l4.8-.7L12 4z"/>',
+    shield: '<path d="M12 4l6 2.6v4.6c0 3.8-2.4 7.1-6 8.5-3.6-1.4-6-4.7-6-8.5V6.6L12 4z"/>',
+    leaf: '<path d="M6 18c7 0 11-5 12-12-7 0-12 4-12 10v2z"/><path d="M6 18c3-4 6-7 10-9"/>',
+    droplet: '<path d="M12 4s5 6 5 9.5a5 5 0 0 1-10 0C7 10 12 4 12 4z"/>',
+    snowflake: '<path d="M12 4v16M5 8l14 8M19 8L5 16"/>',
+    sun: '<circle cx="12" cy="12" r="3.5"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/>',
+    protein: '<path d="M7 6h10l2 4-7 9-7-9 2-4z"/><path d="M8 10h8"/>',
+    weight: '<path d="M7 10h10l1.5 9h-13L7 10z"/><path d="M9 10a3 3 0 0 1 6 0"/>',
+    size: '<path d="M5 8V5h3M19 8V5h-3M5 16v3h3M19 16v3h-3M8 5l8 14"/>',
+    fabric: '<path d="M5 7c4-2 10-2 14 0v10c-4-2-10-2-14 0V7z"/><path d="M9 6v12M15 6v12"/>',
+    skin: '<path d="M7.5 17c0-3.5 2-6 4.5-6s4.5 2.5 4.5 6"/><circle cx="12" cy="7" r="3"/>',
+    eye: '<path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5z"/><circle cx="12" cy="12" r="2.5"/>',
+    lightning: '<path d="M13 3L5 14h6l-1 7 8-11h-6l1-7z"/>',
+  };
+  return paths[id] ?? paths.check!;
+}
+
+function iconCircle(
+  icon: string,
+  cx: number,
+  cy: number,
+  r: number,
+  profile: TypographyProfile,
+  invert = false,
+): string {
+  const fill = invert ? profile.markerFill : profile.accentFill;
+  const stroke = invert ? "#ffffff" : profile.markerFill;
+  return `<g>
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" opacity="0.94"/>
+    <g transform="translate(${cx - r * 0.58} ${cy - r * 0.58}) scale(${(r * 1.16) / 24})" fill="none" stroke="${stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${iconPath(icon)}</g>
+  </g>`;
+}
+
+function panelAttrs(useShadows: boolean): string {
+  return useShadows ? 'filter="url(#panelShadow)"' : "";
+}
+
+function renderV2BenefitCard(
+  label: string,
+  zone: { x: number; y: number; width: number; height: number },
+  profile: TypographyProfile,
+  fontSize: number,
+  index: number,
+  useIcons: boolean,
+  useShadows: boolean,
+): string {
+  const r = Math.max(18, Math.round(Math.min(zone.width, zone.height) * 0.22));
+  const iconR = Math.max(17, Math.round(zone.height * 0.22));
+  const iconX = zone.x + Math.round(zone.height * 0.38);
+  const iconY = zone.y + Math.round(zone.height / 2);
+  const textX = useIcons ? zone.x + Math.round(zone.height * 0.76) : zone.x + Math.round(zone.width * 0.08);
+  const textW = zone.x + zone.width - textX - Math.round(zone.width * 0.06);
+  return [
+    roundRect(zone.x, zone.y, zone.width, zone.height, r, profile.chipFill, profile.chipStroke, panelAttrs(useShadows)),
+    useIcons ? iconCircle(iconIdForBenefit(label), iconX, iconY, iconR, profile) : circle(iconX, iconY, Math.max(5, iconR * 0.25), profile.markerFill),
+    textEl(label, {
+      x: textX,
+      y: zone.y + Math.round(zone.height * 0.55),
+      width: textW,
+      fontSize,
+      lineHeight: Math.round(fontSize * 1.18),
+      maxLines: 2,
+      role: "body",
+    }, profile),
+  ].filter(Boolean).join("\n  ");
+}
+
+function arrowPath(from: { x: number; y: number }, to: { x: number; y: number }, color: string): string {
+  const midX = Math.round((from.x + to.x) / 2);
+  const d = `M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`;
+  return `<path d="${d}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" opacity="0.68"/><circle cx="${to.x}" cy="${to.y}" r="5" fill="${color}" opacity="0.78"/>`;
+}
+
+function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): string {
+  const spec = buildMarketplaceCardOverlaySpec({ ...input, overlayVersion: "v2" });
+  const templatePreset = getProductCardTemplatePreset(String(spec.templatePreset));
+  const layout = getProductCardLayoutPreset(String(spec.templatePreset), String(spec.cardSize));
+  const profile = v2TypographyProfile(input);
+  const width = Number(spec.outputWidth) || resolveProductCardCanvas(String(spec.cardSize)).width;
+  const height = Number(spec.outputHeight) || resolveProductCardCanvas(String(spec.cardSize)).height;
+  const text = spec.text as {
+    title: string;
+    subtitle?: string;
+    benefits: string[];
+    extraText: string;
+    statsText?: string;
+    sizeText?: string;
+  };
+  const useIcons = spec.useIcons !== false;
+  const useArrows = spec.useArrows !== false;
+  const useShadows = spec.useShadows !== false;
+  const minSide = Math.min(width, height);
+  const titleSize = Math.max(34, Math.round(minSide * layout.titleScale));
+  const subtitleSize = Math.max(20, Math.round(minSide * layout.bodyScale * 0.95));
+  const bodySize = Math.max(20, Math.round(minSide * layout.bodyScale));
+  const smallSize = Math.max(16, Math.round(minSide * layout.smallScale));
+  const titlePanel = templatePreset.id === "clean_catalog" || templatePreset.id === "lifestyle_model" ? "" : roundRect(layout.title.x - 18, layout.title.y - 42, layout.title.width + 36, layout.title.height + 38, 32, profile.panelFill, profile.panelStroke, panelAttrs(useShadows));
+  const benefitEls = layout.benefits.slice(0, 5).map((zone, idx) => {
+    const label = text.benefits[idx];
+    if (!label) return "";
+    return renderV2BenefitCard(label, zone, profile, bodySize, idx, useIcons && templatePreset.id !== "clean_catalog", useShadows);
+  });
+  const badgeTexts = [text.extraText, text.statsText, text.sizeText].map((x) => (x ?? "").trim()).filter(Boolean);
+  const badgeEls = layout.badges.map((zone, idx) => {
+    const value = badgeTexts[idx];
+    if (!value) return "";
+    return accentPill(value, zone.x, zone.y, zone.width, zone.height, profile, smallSize, "middle");
+  });
+  const arrowEls = useArrows ? layout.arrows.map((a) => arrowPath(a.from, a.to, profile.markerFill)) : [];
+  const safe = layout.productSafeArea;
+  const productGuide = `<rect x="${safe.x}" y="${safe.y}" width="${safe.width}" height="${safe.height}" rx="${Math.round(minSide * 0.03)}" fill="none" stroke="${profile.markerFill}" stroke-dasharray="10 12" stroke-width="2" opacity="0.14"/>`;
+  const footerText = [text.extraText, text.statsText, text.sizeText].filter(Boolean).join(" · ");
+  const footer = footerText ? textEl(footerText, {
+    x: layout.footer.x,
+    y: layout.footer.y + Math.round(layout.footer.height * 0.58),
+    width: layout.footer.width,
+    fontSize: smallSize,
+    lineHeight: Math.round(smallSize * 1.2),
+    maxLines: 1,
+    anchor: "middle",
+    role: "extra",
+  }, profile) : "";
+  const inner = [
+    productGuide,
+    titlePanel,
+    textEl(text.title, {
+      x: layout.title.x,
+      y: layout.title.y + Math.round(titleSize * 0.78),
+      width: layout.title.width,
+      fontSize: titleSize,
+      lineHeight: Math.round(titleSize * 1.08),
+      maxLines: 2,
+      role: "title",
+      shadow: useShadows,
+    }, profile),
+    textEl(text.subtitle ?? "", {
+      x: layout.subtitle.x,
+      y: layout.subtitle.y + Math.round(subtitleSize * 0.9),
+      width: layout.subtitle.width,
+      fontSize: subtitleSize,
+      lineHeight: Math.round(subtitleSize * 1.28),
+      maxLines: 2,
+      role: "extra",
+    }, profile),
+    ...arrowEls,
+    ...benefitEls,
+    ...badgeEls,
+    footer,
+  ].filter(Boolean).join("\n  ");
+  return svgWrap(width, height, inner);
+}
+
 export function renderMarketplaceCardOverlaySvg(input: ProductCardOverlayInput): string {
   const spec = buildMarketplaceCardOverlaySpec(input);
+  if (spec.renderer === "server_svg_overlay_v2") {
+    return renderMarketplaceCardOverlaySvgV2(input);
+  }
   const title = spec.text.title.trim();
   const extraText = spec.text.extraText.trim();
   const benefits = spec.text.benefits;

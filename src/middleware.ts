@@ -17,7 +17,7 @@ function getMiddlewareJwtSecret(): string | null {
  * Имя cookie сессии Auth.js зависит от secure-режима (defaultCookies в @auth/core).
  * Без secureCookie: true на HTTPS getToken ищет не тот cookie → token всегда null.
  */
-function useSecureSessionCookie(req: NextRequest): boolean {
+function shouldUseSecureSessionCookie(req: NextRequest): boolean {
   const forwardedProto = req.headers.get("x-forwarded-proto");
   if (forwardedProto === "https") return true;
   if (req.nextUrl.protocol === "https:") return true;
@@ -45,7 +45,7 @@ export async function middleware(req: NextRequest) {
   const isAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
 
   const secret = getMiddlewareJwtSecret();
-  const secureCookie = useSecureSessionCookie(req);
+  const secureCookie = shouldUseSecureSessionCookie(req);
 
   if (isAuthPage) {
     if (!secret) {

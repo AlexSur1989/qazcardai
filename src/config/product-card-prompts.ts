@@ -226,31 +226,21 @@ export function buildConceptPhotoPrompt(input: {
 // TODO (product v2): v1 = чисто image model + prompt (риск кривого текста на кадре). Для
 // production-quality текста/плашек — позже: overlay (HTML/SVG/canvas) поверх/вместо AI-текста.
 
-export const MARKETPLACE_CARD_BASE_PROMPT = [
-  "Create a marketplace-ready base image based on the uploaded product photos.",
-  "Use all uploaded product photos as references. Preserve exact product identity, shape, color, material, logo placement and important details.",
-  "Keep the product clear, large, and visually dominant.",
-  "Preserve product identity, shape, packaging, color, and key details.",
-  "Use a clean commercial layout suitable for e-commerce and marketplaces.",
-  "Do not render readable text, letters, numbers, labels, price tags, or slogans inside the AI image.",
-  "Do not render icons, badges, UI cards, text panels, bullet blocks, callout labels, or placeholder text.",
-  "The application will add all readable text, badges, panels, and callout graphics later as a server-rendered overlay.",
-  "Leave clean negative space for that overlay, but keep those zones visually plain and free of icon-like or text-like details.",
-  "Make the composition readable, modern, and conversion-focused.",
-  "Avoid clutter. Leave enough negative space for text elements.",
-].join(" ");
+/** Compact on purpose: must stay under moderation MAX_PROMPT_LENGTH alongside style + user lines. */
+export const MARKETPLACE_CARD_BASE_PROMPT =
+  "Create marketplace-ready base image from product references. Preserve product identity, shape, packaging, colors, materials, logos on pack. Dominant product, clean commercial composition. Absolutely no readable text/letters/numbers/typography, watermark, fake UI/logos/icons/badges/callouts/text panels — leave visually plain negative space only; overlay is server-rendered. Prefer modern conversion-focused clarity with spare negative space.";
 
 const MARKETPLACE_STYLE_PROMPTS: Record<MarketplaceCardStyle, string> = {
   clean_marketplace:
-    "Layout style: clean marketplace grid, balanced white space, soft shadows, high readability, subtle divider lines, retail clarity.",
+    "Clean marketplace grid: white space, soft shadows, retail clarity.",
   premium:
-    "Layout style: premium brand card, minimal chrome, deep matte tones or soft gold accents (visual only, no new logos), restrained palette, soft vignette, luxury spacing.",
+    "Premium card: minimal chrome, matte tones or restrained gold accents (no new logos), vignette.",
   bright_advertising:
-    "Layout style: bright high-energy retail ad, bold accent shapes, high contrast, strong focal hierarchy, fun but not chaotic.",
+    "Bright retail ad: bold accents, strong contrast hierarchy, energetic but tidy.",
   minimalist:
-    "Layout style: minimal Swiss-like grid, lots of air, single accent color, very few graphic elements, strict alignment.",
+    "Minimal Swiss-like grid: air, single accent color, strict alignment.",
   infographic:
-    "Layout style: infographic-friendly with clear zones for icons, short text blocks, and bullet callouts, structured columns, simple pictograms (visual, no need to render readable text if not requested).",
+    "Structured infographic-friendly layout: columns and quiet zones for pictograms — still no readable text.",
 };
 
 const LEGACY_MARKETPLACE_STYLE: Record<string, MarketplaceCardStyle> = {
@@ -296,14 +286,14 @@ export function buildMarketplaceCardPrompt(
     const styleLine = MARKETPLACE_STYLE_PROMPTS[st];
     const template = a.overlayTemplate?.trim() || "bottom_panel";
     const ratioLine = a.cardAspectRatio?.trim()
-      ? `Target composition aspect ratio: ${a.cardAspectRatio.trim()}. Keep the reserved overlay zone clean at this aspect ratio.`
+      ? `Aspect ${a.cardAspectRatio.trim()}: keep overlay zones plain at this ratio.`
       : "";
     const templateLine =
       template === "left_panel"
-        ? "Reserve the left side column for server-rendered text and badges; keep important product details out of that column."
+        ? "Quiet left column for server text; keep product detail out of it."
         : template === "badges_callouts"
-          ? "Reserve multiple clean callout zones around the product for server-rendered benefit badges; keep the product centered and unobstructed."
-          : "Reserve the lower card panel for server-rendered title, benefits, and secondary text; keep the product and important details above that panel.";
+          ? "Quiet zones around product for badges; product centered."
+          : "Quiet lower band for title/benefits; product above.";
     const parts = [
       MARKETPLACE_CARD_BASE_PROMPT,
       styleLine,

@@ -1,3 +1,4 @@
+import { PRODUCT_CARD_CANVASES } from "@/config/product-card-overlay-presets";
 import type { ProductCardSizePreset } from "@/server/services/productCardSettings";
 
 const KIE_SUPPORTED_ASPECT_RATIOS = ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"] as const;
@@ -46,19 +47,23 @@ function pickKieResolution(
   return aspectRatio === "1:1" && resolution === "4K" ? "2K" : resolution;
 }
 
-const FALLBACK_MARKETPLACE_CARD_SIZE: ProductCardSizePreset = {
-  id: "square",
-  label: "Квадрат 1000x1000",
-  width: 1000,
-  height: 1000,
-  aspectRatio: "1:1",
-};
+const FALLBACK_MARKETPLACE_CARD_SIZES: ProductCardSizePreset[] = PRODUCT_CARD_CANVASES
+  .filter((item) => item.id === "square" || item.id === "story")
+  .map((item) => ({
+    id: item.id,
+    label: item.label,
+    width: item.width,
+    height: item.height,
+    aspectRatio: item.aspectRatio,
+  }));
+
+const FALLBACK_MARKETPLACE_CARD_SIZE = FALLBACK_MARKETPLACE_CARD_SIZES[0]!;
 
 export function resolveMarketplaceCardSize(
   presets: ProductCardSizePreset[],
   cardSize?: string | null,
 ): { ok: true; size: MarketplaceCardResolvedSize } | { ok: false; error: string } {
-  const list = presets.length > 0 ? presets : [FALLBACK_MARKETPLACE_CARD_SIZE];
+  const list = presets.length > 0 ? presets : FALLBACK_MARKETPLACE_CARD_SIZES;
   const wanted = cardSize?.trim() || list[0]?.id || FALLBACK_MARKETPLACE_CARD_SIZE.id;
   const preset = list.find((item) => item.id === wanted);
   if (!preset) {

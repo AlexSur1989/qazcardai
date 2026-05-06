@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Download, ExternalLink, LayoutList, Loader2 } from "lucide-react";
+import { LayoutList, Loader2 } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -12,20 +11,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  getPublicMarketplaceCardStyles,
-  type MarketplaceCardStyle,
-} from "@/config/product-card-categories";
+  PRODUCT_CARD_CANVASES,
+  getPublicProductCardTemplatePresets,
+  getPublicProductCardTypographyPresets,
+  type ProductCardTemplatePresetId,
+  type ProductCardTypographyPresetId,
+} from "@/config/product-card-overlay-presets";
 import { readJsonSafe } from "@/lib/fetch-json-safe";
 import { getFirstOutputUrlFromJson } from "@/lib/product-card-output";
 import { cn } from "@/lib/utils";
 
-const styles = getPublicMarketplaceCardStyles();
+import { ProductCardTemplatePreview } from "./product-card-template-preview";
+import {
+  ProductCardVariantGallery,
+  type ProductCardVariantGalleryItem,
+} from "./product-card-variant-gallery";
+
+const templates = getPublicProductCardTemplatePresets();
+const typographyPresets = getPublicProductCardTypographyPresets();
+const fallbackSizes = PRODUCT_CARD_CANVASES.filter((item) => item.id === "square" || item.id === "story");
 
 type ConceptGenMeta = {
   generationId: string;
-  categoryId?: string;
-  conceptId?: string;
-  createdAt?: string;
 };
 
 type GenPreview = {
@@ -42,6 +49,20 @@ type Props = {
   cardSizePresets: { id: string; label: string; aspectRatio: string }[];
 };
 
+type GenerationMode = "marketplace_card" | "marketplace_card_variants";
+
+function styleForTemplate(template: string): string {
+  if (template === "dark_infographic" || template === "feature_grid") return "infographic";
+  if (template === "promo_poster") return "bright_advertising";
+  if (template === "lifestyle_model") return "premium";
+  if (template === "clean_catalog") return "minimalist";
+  return "clean_marketplace";
+}
+
+function terminal(status: string): boolean {
+  return ["COMPLETED", "FAILED", "REFUNDED", "CANCELLED", "BLOCKED"].includes(status);
+}
+
 export function MarketplaceCardTab({
   hasImage,
   canUseBackend,
@@ -49,37 +70,53 @@ export function MarketplaceCardTab({
   balanceCredits,
   cardSizePresets,
 }: Props) {
-  const router = useRouter();
   const [sourceType, setSourceType] = useState<"original" | "concept_generation">("original");
   const [sourceGenerationId, setSourceGenerationId] = useState<string | null>(null);
   const [conceptRows, setConceptRows] = useState<ConceptGenMeta[]>([]);
   const [genPreviews, setGenPreviews] = useState<Record<string, GenPreview | undefined>>({});
 
+  const [generationMode, setGenerationMode] = useState<GenerationMode>("marketplace_card");
   const [title, setTitle] = useState("");
+  const [subtitle, setSubtitle] = useState("");
   const [benefits, setBenefits] = useState("");
   const [extraText, setExtraText] = useState("");
+  const [statsText, setStatsText] = useState("");
+  const [sizeText, setSizeText] = useState("");
   const [userInstructions, setUserInstructions] = useState("");
-  const [style, setStyle] = useState<MarketplaceCardStyle>(styles[0]!.id);
+  const [templatePreset, setTemplatePreset] = useState<ProductCardTemplatePresetId>("light_marketplace");
+  const [typographyPreset, setTypographyPreset] = useState<ProductCardTypographyPresetId>("classic");
   const [cardSize, setCardSize] = useState(cardSizePresets[0]?.id ?? "square");
-  const [overlayTemplate, setOverlayTemplate] = useState("bottom_panel");
+  const [useIcons, setUseIcons] = useState(true);
+  const [useArrows, setUseArrows] = useState(true);
+  const [useShadows, setUseShadows] = useState(true);
+  const [preserveProductLabel, setPreserveProductLabel] = useState(false);
 
   const [estimating, setEstimating] = useState(false);
   const [estimateCredits, setEstimateCredits] = useState<number | null>(null);
+  const [perVariantCredits, setPerVariantCredits] = useState<number | null>(null);
+  const [estimatedVariantCount, setEstimatedVariantCount] = useState(1);
   const [estErr, setEstErr] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
-  const [result, setResult] = useState<{
-    generationId: string;
-    status: string;
-    costCredits: number;
-    outputUrl: string | null;
-  } | null>(null);
+  const [results, setResults] = useState<ProductCardVariantGalleryItem[]>([]);
   const [overlayPreview, setOverlayPreview] = useState<{
     svg: string;
     width: number;
     height: number;
     label: string;
   } | null>(null);
+
+  const sizeOptions = useMemo(() => {
+    const map = new Map<string, { id: string; label: string; aspectRatio: string }>();
+    for (const preset of cardSizePresets) map.set(preset.id, preset);
+    for (const preset of fallbackSizes) {
+      if (!map.has(preset.id)) map.set(preset.id, { id: preset.id, label: preset.label, aspectRatio: preset.aspectRatio });
+    }
+    return [...map.values()];
+  }, [cardSizePresets]);
+
+  const variantCount = generationMode === "marketplace_card_variants" ? 6 : 1;
+  const currentStyle = styleForTemplate(templatePreset);
 
   const canEstimate = useMemo(
     () =>
@@ -97,21 +134,15 @@ export function MarketplaceCardTab({
       return;
     }
     const res = await fetch(`/api/product-card-projects/${projectId}`);
-    const parsed = await readJsonSafe<{
-      project?: { metadata?: { conceptGenerations?: unknown } };
-    }>(res);
-    if (!parsed.ok || !res.ok) {
-      return;
-    }
+    const parsed = await readJsonSafe<{ project?: { metadata?: { conceptGenerations?: unknown } } }>(res);
+    if (!parsed.ok || !res.ok) return;
     const list = parsed.data.project?.metadata?.conceptGenerations;
     const rows: ConceptGenMeta[] = Array.isArray(list)
       ? list
           .map((x) => {
             if (x && typeof x === "object" && "generationId" in x) {
               const g = (x as { generationId: unknown }).generationId;
-              if (typeof g === "string" && g.trim()) {
-                return { generationId: g.trim() } as ConceptGenMeta;
-              }
+              if (typeof g === "string" && g.trim()) return { generationId: g.trim() };
             }
             return null;
           })
@@ -123,34 +154,32 @@ export function MarketplaceCardTab({
   useEffect(() => {
     if (!projectId || !canUseBackend) return;
     void (async () => {
+      await Promise.resolve();
       await loadProjectMeta();
     })();
   }, [projectId, canUseBackend, loadProjectMeta]);
 
   useEffect(() => {
     if (conceptRows.length === 0) {
-      void (async () => {
-        await Promise.resolve();
-        if (sourceType === "concept_generation") {
+      if (sourceType === "concept_generation") {
+        void (async () => {
+          await Promise.resolve();
           setSourceType("original");
           setSourceGenerationId(null);
-        }
-      })();
+        })();
+      }
       return;
     }
     void (async () => {
       const next: Record<string, GenPreview> = {};
-      for (const r of conceptRows) {
-        const res = await fetch(`/api/generations/${r.generationId}`);
-        const p = await readJsonSafe<{
-          status: string;
-          outputFiles: unknown;
-        }>(res);
-        if (p.ok && res.ok) {
-          next[r.generationId] = {
-            id: r.generationId,
-            status: p.data.status,
-            outputUrl: getFirstOutputUrlFromJson(p.data.outputFiles),
+      for (const row of conceptRows) {
+        const res = await fetch(`/api/generations/${row.generationId}`);
+        const parsed = await readJsonSafe<{ status: string; outputFiles: unknown }>(res);
+        if (parsed.ok && res.ok) {
+          next[row.generationId] = {
+            id: row.generationId,
+            status: parsed.data.status,
+            outputUrl: getFirstOutputUrlFromJson(parsed.data.outputFiles),
           };
         }
       }
@@ -159,89 +188,85 @@ export function MarketplaceCardTab({
   }, [conceptRows, sourceType]);
 
   useEffect(() => {
-    if (!canEstimate) {
-      return;
+    if (sourceType !== "concept_generation" || !conceptRows.length) return;
+    const firstId = conceptRows[0]?.generationId;
+    if (!firstId) return;
+    if (!sourceGenerationId || !conceptRows.some((r) => r.generationId === sourceGenerationId)) {
+      void (async () => {
+        await Promise.resolve();
+        setSourceGenerationId(firstId);
+      })();
     }
+  }, [sourceType, conceptRows, sourceGenerationId]);
+
+  useEffect(() => {
+    if (!canEstimate) return;
     let cancelled = false;
     void (async () => {
       setEstimating(true);
       setEstErr(null);
-      const res = await fetch(
-        `/api/product-card-projects/${projectId}/estimate/marketplace-card`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sourceType,
-            sourceGenerationId: sourceType === "original" ? null : sourceGenerationId,
-            style,
-            cardSize,
-            overlayTemplate,
-          }),
-        },
-      );
-      const parsed = await readJsonSafe<{ credits?: number; error?: string }>(res);
+      const res = await fetch(`/api/product-card-projects/${projectId}/estimate/marketplace-card`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceType,
+          sourceGenerationId: sourceType === "original" ? null : sourceGenerationId,
+          style: currentStyle,
+          cardSize,
+          generationMode,
+          variantCount,
+        }),
+      });
+      const parsed = await readJsonSafe<{
+        credits?: number;
+        perVariantCredits?: number;
+        variantCount?: number;
+        error?: string;
+      }>(res);
       if (cancelled) return;
-      if (!parsed.ok) {
-        setEstErr(parsed.message);
+      if (!parsed.ok || !res.ok) {
+        setEstErr(parsed.ok ? parsed.data.error ?? "Оценка недоступна" : parsed.message);
         setEstimateCredits(null);
+        setPerVariantCredits(null);
         setEstimating(false);
         return;
       }
-      if (!res.ok) {
-        setEstErr(parsed.data.error ?? "Оценка недоступна");
-        setEstimateCredits(null);
-        setEstimating(false);
-        return;
-      }
-      setEstimateCredits(
-        typeof parsed.data.credits === "number" ? parsed.data.credits : null,
-      );
+      setEstimateCredits(typeof parsed.data.credits === "number" ? parsed.data.credits : null);
+      setPerVariantCredits(typeof parsed.data.perVariantCredits === "number" ? parsed.data.perVariantCredits : null);
+      setEstimatedVariantCount(typeof parsed.data.variantCount === "number" ? parsed.data.variantCount : variantCount);
       setEstimating(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [canEstimate, projectId, sourceType, sourceGenerationId, style, cardSize, overlayTemplate]);
+  }, [canEstimate, projectId, sourceType, sourceGenerationId, currentStyle, cardSize, generationMode, variantCount]);
 
   useEffect(() => {
-    if (sourceType !== "concept_generation" || !conceptRows.length) return;
-    const firstId = conceptRows[0]?.generationId;
-    if (!firstId) return;
-    void (async () => {
-      await Promise.resolve();
-      if (!sourceGenerationId || !conceptRows.some((r) => r.generationId === sourceGenerationId)) {
-        setSourceGenerationId(firstId);
-      }
-    })();
-  }, [sourceType, conceptRows, sourceGenerationId]);
-
-  useEffect(() => {
-    if (!projectId || !canUseBackend) {
-      return;
-    }
+    if (!projectId || !canUseBackend) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void (async () => {
-        const res = await fetch(
-          `/api/product-card-projects/${projectId}/preview/marketplace-card`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              productTitle: title,
-              benefits,
-              extraText,
-              style,
-              cardSize,
-              overlayTemplate,
-            }),
-          },
-        );
-        const parsed = await readJsonSafe<{
-          svg?: string;
-          size?: { width?: number; height?: number; label?: string };
-        }>(res);
+        const res = await fetch(`/api/product-card-projects/${projectId}/preview/marketplace-card`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            productTitle: title,
+            subtitle,
+            benefits,
+            extraText,
+            statsText,
+            sizeText,
+            style: currentStyle,
+            cardSize,
+            templatePreset,
+            typographyPreset,
+            useIcons,
+            useArrows,
+            useShadows,
+            preserveProductLabel,
+          }),
+        });
+        const parsed = await readJsonSafe<{ svg?: string; size?: { width?: number; height?: number; label?: string } }>(res);
         if (cancelled) return;
         if (!parsed.ok || !res.ok || typeof parsed.data.svg !== "string") {
           setOverlayPreview(null);
@@ -259,50 +284,69 @@ export function MarketplaceCardTab({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [projectId, canUseBackend, title, benefits, extraText, style, cardSize, overlayTemplate]);
+  }, [projectId, canUseBackend, title, subtitle, benefits, extraText, statsText, sizeText, currentStyle, cardSize, templatePreset, typographyPreset, useIcons, useArrows, useShadows, preserveProductLabel]);
 
   const showEstimate = canEstimate;
   const creditsToShow = showEstimate ? estimateCredits : null;
-  const errToShow = showEstimate ? estErr : null;
   const notEnough = creditsToShow != null && balanceCredits < creditsToShow;
-  const canSubmit =
-    showEstimate && !estimating && creditsToShow != null && !errToShow && !notEnough;
+  const canSubmit = showEstimate && !estimating && creditsToShow != null && !estErr && !notEnough;
+
+  async function pollGeneration(item: ProductCardVariantGalleryItem): Promise<ProductCardVariantGalleryItem> {
+    let status = item.status || "QUEUED";
+    let outputUrl = item.outputUrl;
+    let errorMessage = item.errorMessage ?? null;
+    for (let i = 0; i < 36; i++) {
+      const res = await fetch(`/api/generations/${item.generationId}`);
+      const parsed = await readJsonSafe<{ status: string; outputFiles: unknown; errorMessage?: string | null }>(res);
+      if (parsed.ok && res.ok) {
+        status = parsed.data.status;
+        outputUrl = getFirstOutputUrlFromJson(parsed.data.outputFiles) ?? outputUrl;
+        errorMessage = parsed.data.errorMessage ?? errorMessage;
+      }
+      if (terminal(status) && (status !== "COMPLETED" || outputUrl)) break;
+      if (i < 35) await new Promise((r) => setTimeout(r, 1500));
+    }
+    return { ...item, status, outputUrl, errorMessage };
+  }
 
   const onSubmit = async () => {
     if (!projectId || !canUseBackend) return;
     setGenError(null);
-    setResult(null);
+    setResults([]);
     setGenerating(true);
-    const benefitsList = benefits
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
+    const benefitsList = benefits.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     try {
-      const body: Record<string, unknown> = {
+      const body = {
         sourceType,
-        sourceGenerationId:
-          sourceType === "original" ? null : sourceGenerationId,
+        sourceGenerationId: sourceType === "original" ? null : sourceGenerationId,
+        generationMode,
+        variantCount,
         productTitle: title.trim(),
+        subtitle: subtitle.trim(),
         benefits: benefitsList.length > 0 ? benefitsList : benefits.trim() || "",
         extraText: extraText.trim(),
-        style,
+        statsText: statsText.trim(),
+        sizeText: sizeText.trim(),
+        style: currentStyle,
         cardSize,
-        overlayTemplate,
+        templatePreset,
+        typographyPreset,
+        preserveProductLabel,
+        useIcons,
+        useArrows,
+        useShadows,
         userInstructions: userInstructions.trim(),
+        clientEstimateCredits: typeof estimateCredits === "number" ? estimateCredits : null,
       };
-      if (typeof estimateCredits === "number" && Number.isFinite(estimateCredits)) {
-        body.clientEstimateCredits = estimateCredits;
-      }
-      const res = await fetch(
-        `/api/product-card-projects/${projectId}/generate/marketplace-card`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-      );
+      const res = await fetch(`/api/product-card-projects/${projectId}/generate/marketplace-card`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       const parsed = await readJsonSafe<{
         generationId?: string;
+        generationIds?: string[];
+        variants?: ProductCardVariantGalleryItem[];
         status?: string;
         costCredits?: number;
         error?: string;
@@ -313,52 +357,34 @@ export function MarketplaceCardTab({
         setGenError(parsed.message);
         return;
       }
-      if (res.status === 402) {
-        setGenError(parsed.data.error ?? "Недостаточно кредитов");
-        return;
-      }
-      if (res.status === 409 && parsed.data.code === "PRICE_CHANGED") {
-        setGenError(
-          (parsed.data.error as string) ??
-            "Стоимость изменилась — дождитесь обновления оценки и попробуйте снова",
-        );
-        setEstimateCredits(null);
-        return;
-      }
       if (!res.ok) {
-        const d = parsed.data;
-        const detail =
-          typeof d.reason === "string" && d.reason.trim() !== "" ? ` — ${d.reason}` : "";
-        setGenError((d.error ?? "Ошибка") + detail);
+        const detail = typeof parsed.data.reason === "string" && parsed.data.reason.trim() ? ` — ${parsed.data.reason}` : "";
+        setGenError((parsed.data.error ?? "Ошибка") + detail);
+        if (res.status === 409 && parsed.data.code === "PRICE_CHANGED") setEstimateCredits(null);
         return;
       }
-      const d = parsed.data;
-      const genId = d.generationId;
-      if (!genId) {
+      const initialItems: ProductCardVariantGalleryItem[] = Array.isArray(parsed.data.variants)
+        ? parsed.data.variants.map((v) => ({ ...v, outputUrl: null }))
+        : parsed.data.generationId
+          ? [{
+              generationId: parsed.data.generationId,
+              status: parsed.data.status ?? "QUEUED",
+              costCredits: parsed.data.costCredits ?? 0,
+              outputUrl: null,
+              templatePreset,
+              typographyPreset,
+              variantIndex: 0,
+            }]
+          : [];
+      if (initialItems.length === 0) {
         setGenError("Нет generationId");
         return;
       }
-      let st = d.status ?? "QUEUED";
-      let outputUrl: string | null = null;
-      const terminal = new Set(["COMPLETED", "FAILED", "REFUNDED", "CANCELLED", "BLOCKED"]);
-      for (let i = 0; i < 24; i++) {
-        const gRes = await fetch(`/api/generations/${genId}`);
-        const p = await readJsonSafe<{ status: string; outputFiles: unknown }>(gRes);
-        if (p.ok && gRes.ok) {
-          st = p.data.status;
-          outputUrl = getFirstOutputUrlFromJson(p.data.outputFiles) ?? outputUrl;
-        }
-        if (terminal.has(st) && (st !== "COMPLETED" || outputUrl)) break;
-        if (i < 23) await new Promise((r) => setTimeout(r, 1500));
-      }
-      setResult({
-        generationId: genId,
-        status: st,
-        costCredits: typeof d.costCredits === "number" ? d.costCredits : 0,
-        outputUrl,
-      });
+      setResults(initialItems);
+      const polled = await Promise.all(initialItems.filter((item) => !item.generationId.startsWith("failed-")).map(pollGeneration));
+      const byId = new Map(polled.map((item) => [item.generationId, item]));
+      setResults(initialItems.map((item) => byId.get(item.generationId) ?? item));
       void loadProjectMeta();
-      router.refresh();
     } catch {
       setGenError("Сеть или сервер недоступен");
     } finally {
@@ -383,76 +409,36 @@ export function MarketplaceCardTab({
           Карточка товара
         </CardTitle>
         <CardDescription>
-          AI создаёт визуальную основу, а QazCard AI накладывает текст отдельно, чтобы подписи были чёткими.
+          AI создаёт визуальную основу без текста, а QazCard AI накладывает финальные подписи, плашки, иконки и стрелки отдельно.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5">
         {canUseBackend && (
           <div className="space-y-3">
             <Label className="text-[#0C2D38]">Источник изображения</Label>
             <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={sourceType === "original" ? "default" : "outline"}
-                className="rounded-xl"
-                onClick={() => {
-                  setSourceType("original");
-                  setSourceGenerationId(null);
-                }}
-              >
+              <Button type="button" size="sm" variant={sourceType === "original" ? "default" : "outline"} className="rounded-xl" onClick={() => { setSourceType("original"); setSourceGenerationId(null); }}>
                 Исходные фото
               </Button>
               {conceptRows.length > 0 && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={sourceType === "concept_generation" ? "default" : "outline"}
-                  className="rounded-xl"
-                  onClick={() => setSourceType("concept_generation")}
-                >
+                <Button type="button" size="sm" variant={sourceType === "concept_generation" ? "default" : "outline"} className="rounded-xl" onClick={() => setSourceType("concept_generation")}>
                   Сгенерированное фото
                 </Button>
               )}
             </div>
-            {conceptRows.length === 0 && (
-              <p className="text-xs text-[#4a6e7a]">
-                Сначала создайте AI-фото во вкладке «Фото с концепциями».
-              </p>
-            )}
+            {conceptRows.length === 0 && <p className="text-xs text-[#4a6e7a]">Сначала создайте AI-фото во вкладке «Фото с концепциями».</p>}
             {sourceType === "concept_generation" && conceptRows.length > 0 && (
               <div className="grid gap-2 sm:grid-cols-2">
-                {conceptRows.map((r) => {
-                  const pr = genPreviews[r.generationId];
+                {conceptRows.map((row) => {
+                  const preview = genPreviews[row.generationId];
                   return (
-                    <button
-                      key={r.generationId}
-                      type="button"
-                      onClick={() => setSourceGenerationId(r.generationId)}
-                      className={cn(
-                        "rounded-2xl border-2 p-2 text-left text-xs transition-colors",
-                        sourceGenerationId === r.generationId
-                          ? "border-[#00AFCA] bg-[#F4FBFD]"
-                          : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
-                      )}
-                    >
-                      <p className="break-all font-mono text-[#4a6e7a]">
-                        {r.generationId.slice(0, 12)}…
-                      </p>
-                      {pr && (
-                        <p className="mt-1 text-[#4a6e7a]">
-                          {pr.status}
-                          {pr.outputUrl ? "" : " · нет preview"}
-                        </p>
-                      )}
-                      {pr?.outputUrl && (
+                    <button key={row.generationId} type="button" onClick={() => setSourceGenerationId(row.generationId)} className={cn("rounded-2xl border-2 p-2 text-left text-xs transition-colors", sourceGenerationId === row.generationId ? "border-[#00AFCA] bg-[#F4FBFD]" : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45")}>
+                      <p className="break-all font-mono text-[#4a6e7a]">{row.generationId.slice(0, 12)}…</p>
+                      {preview && <p className="mt-1 text-[#4a6e7a]">{preview.status}{preview.outputUrl ? "" : " · нет preview"}</p>}
+                      {preview?.outputUrl && (
                         <div className="mt-2 max-h-24 overflow-hidden rounded-xl border border-[#B8DCE6] bg-white">
                           {/* eslint-disable-next-line @next/next/no-img-element -- remote URL */}
-                          <img
-                            src={pr.outputUrl}
-                            alt=""
-                            className="max-h-24 w-full object-contain"
-                          />
+                          <img src={preview.outputUrl} alt="" className="max-h-24 w-full object-contain" />
                         </div>
                       )}
                     </button>
@@ -464,193 +450,125 @@ export function MarketplaceCardTab({
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="m-title" className="text-[#0C2D38]">
-            Название товара
-          </Label>
-          <Input
-            id="m-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            maxLength={120}
-            placeholder="Протеиновый батончик с шоколадом"
-            className="rounded-xl border-[#B8DCE6]"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="m-benefits" className="text-[#0C2D38]">
-            Преимущества
-          </Label>
-          <Textarea
-            id="m-benefits"
-            value={benefits}
-            onChange={(e) => setBenefits(e.target.value)}
-            rows={4}
-            placeholder={"Без сахара\n20 г белка\nНатуральный состав\nПодходит для перекуса"}
-            className="rounded-xl border-[#B8DCE6]"
-          />
-          <p className="text-xs text-[#4a6e7a]">Каждая строка — отдельный пункт</p>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="m-extra" className="text-[#0C2D38]">
-            Дополнительный текст
-          </Label>
-          <Textarea
-            id="m-extra"
-            value={extraText}
-            onChange={(e) => setExtraText(e.target.value)}
-            maxLength={200}
-            rows={2}
-            placeholder="50 г, Хит продаж, Новинка"
-            className="rounded-xl border-[#B8DCE6]"
-          />
+          <Label className="text-[#0C2D38]">Тип генерации</Label>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant={generationMode === "marketplace_card" ? "default" : "outline"} className="rounded-xl" onClick={() => setGenerationMode("marketplace_card")}>Один вариант</Button>
+            <Button type="button" size="sm" variant={generationMode === "marketplace_card_variants" ? "default" : "outline"} className="rounded-xl" onClick={() => setGenerationMode("marketplace_card_variants")}>Витрина 6 вариантов</Button>
+          </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="m-what" className="text-[#0C2D38]">
-            Что добавить или изменить
-          </Label>
-          <Textarea
-            id="m-what"
-            value={userInstructions}
-            onChange={(e) => setUserInstructions(e.target.value)}
-            maxLength={1000}
-            rows={3}
-            placeholder="Плашки, акценты, стиль под маркетплейс, фон…"
-            className="rounded-xl border-[#B8DCE6]"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="m-style" className="text-[#0C2D38]">
-            Стиль карточки
-          </Label>
-          <select
-            id="m-style"
-            className="border-input bg-background w-full max-w-md rounded-xl border-[#B8DCE6] px-3 py-2 text-sm"
-            value={style}
-            onChange={(e) => setStyle(e.target.value as MarketplaceCardStyle)}
-          >
-            {styles.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {cardSizePresets.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label className="text-[#0C2D38]">Размер карточки</Label>
-            <div className="flex flex-wrap gap-2">
-              {cardSizePresets.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => setCardSize(preset.id)}
-                  className={cn(
-                    "rounded-full border px-3 py-1.5 text-xs transition",
-                    cardSize === preset.id
-                      ? "border-[#00AFCA] bg-[#e8f8fb] text-[#006b82]"
-                      : "border-border bg-background text-foreground",
-                  )}
-                >
-                  {preset.label}
+            <Label htmlFor="m-title" className="text-[#0C2D38]">Название товара</Label>
+            <Input id="m-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="Стильные солнцезащитные очки" className="rounded-xl border-[#B8DCE6]" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="m-subtitle" className="text-[#0C2D38]">Подзаголовок</Label>
+            <Input id="m-subtitle" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} maxLength={160} placeholder="Классический черный цвет" className="rounded-xl border-[#B8DCE6]" />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="m-benefits" className="text-[#0C2D38]">Преимущества</Label>
+          <Textarea id="m-benefits" value={benefits} onChange={(e) => setBenefits(e.target.value)} rows={4} placeholder={"Удобная посадка\nПремиум качество\nКүннен қорғайды\nЖеңіл жақтау"} className="rounded-xl border-[#B8DCE6]" />
+          <p className="text-xs text-[#4a6e7a]">Каждая строка — отдельный пункт. Лучше 3–5 коротких преимуществ.</p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="m-extra" className="text-[#0C2D38]">Дополнительный текст</Label>
+            <Input id="m-extra" value={extraText} onChange={(e) => setExtraText(e.target.value)} maxLength={200} placeholder="Хит продаж" className="rounded-xl border-[#B8DCE6]" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="m-stats" className="text-[#0C2D38]">Статистика / цифры</Label>
+            <Input id="m-stats" value={statsText} onChange={(e) => setStatsText(e.target.value)} maxLength={120} placeholder="UV400" className="rounded-xl border-[#B8DCE6]" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="m-size" className="text-[#0C2D38]">Объём / вес / размер</Label>
+            <Input id="m-size" value={sizeText} onChange={(e) => setSizeText(e.target.value)} maxLength={120} placeholder="Универсальный размер" className="rounded-xl border-[#B8DCE6]" />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="m-what" className="text-[#0C2D38]">Пожелания к визуалу</Label>
+          <Textarea id="m-what" value={userInstructions} onChange={(e) => setUserInstructions(e.target.value)} maxLength={1000} rows={3} placeholder="Фон, атмосфера, композиция, свет…" className="rounded-xl border-[#B8DCE6]" />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label className="text-[#0C2D38]">Стиль карточки / композиция</Label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {templates.map((template) => (
+                <button key={template.id} type="button" onClick={() => setTemplatePreset(template.id)} className={cn("rounded-2xl border p-3 text-left transition", templatePreset === template.id ? "border-[#00AFCA] bg-[#e8f8fb]" : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45")}>
+                  <p className="text-sm font-medium text-[#0C2D38]">{template.label}</p>
+                  <p className="mt-1 line-clamp-2 text-xs text-[#4a6e7a]">{template.description}</p>
                 </button>
               ))}
             </div>
           </div>
-        )}
-
-        <div className="space-y-2">
-          <Label htmlFor="m-overlay" className="text-[#0C2D38]">
-            Шаблон размещения текста
-          </Label>
-          <select
-            id="m-overlay"
-            className="border-input bg-background w-full max-w-md rounded-xl border-[#B8DCE6] px-3 py-2 text-sm"
-            value={overlayTemplate}
-            onChange={(e) => setOverlayTemplate(e.target.value)}
-          >
-            <option value="bottom_panel">Текст снизу</option>
-            <option value="left_panel">Текст слева</option>
-            <option value="badges_callouts">Плашки вокруг товара</option>
-          </select>
-          <p className="text-xs text-[#4a6e7a]">
-            AI создаёт фон без текста; читаемые подписи добавляет QazCard AI поверх кадра.
-          </p>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-[#0C2D38]">Типографика</Label>
+              <div className="flex flex-wrap gap-2">
+                {typographyPresets.map((preset) => (
+                  <button key={preset.id} type="button" onClick={() => setTypographyPreset(preset.id)} className={cn("rounded-full border px-3 py-1.5 text-xs transition", typographyPreset === preset.id ? "border-[#00AFCA] bg-[#e8f8fb] text-[#006b82]" : "border-border bg-background text-foreground")}>
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[#0C2D38]">Размер карточки</Label>
+              <div className="flex flex-wrap gap-2">
+                {sizeOptions.map((preset) => (
+                  <button key={preset.id} type="button" onClick={() => setCardSize(preset.id)} className={cn("rounded-full border px-3 py-1.5 text-xs transition", cardSize === preset.id ? "border-[#00AFCA] bg-[#e8f8fb] text-[#006b82]" : "border-border bg-background text-foreground")}>
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid gap-2 text-sm text-[#0C2D38]">
+              {[{ label: "Добавлять иконки", value: useIcons, set: setUseIcons }, { label: "Добавлять стрелки", value: useArrows, set: setUseArrows }, { label: "Добавлять тени", value: useShadows, set: setUseShadows }, { label: "Сохранить надписи и упаковку без изменений", value: preserveProductLabel, set: setPreserveProductLabel }].map((row) => (
+                <label key={row.label} className="flex items-start gap-2 rounded-xl border border-[#B8DCE6] bg-white p-2">
+                  <input type="checkbox" checked={row.value} onChange={(e) => row.set(e.target.checked)} className="mt-1" />
+                  <span>
+                    {row.label}
+                    {row.label.startsWith("Сохранить") && <span className="block text-xs text-[#4a6e7a]">На этом этапе сохраняем настройку в metadata; полный cutout pipeline будет отдельным шагом.</span>}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {overlayPreview && (
-          <div className="space-y-2">
-            <Label className="text-[#0C2D38]">Превью текста и плашек</Label>
-            <div
-              className="max-w-md overflow-hidden rounded-2xl border border-[#B8DCE6] bg-gradient-to-br from-[#f7fbfc] to-[#e7f5f8]"
-              style={{ aspectRatio: `${overlayPreview.width} / ${overlayPreview.height}` }}
-            >
-              <div
-                className="h-full w-full"
-                dangerouslySetInnerHTML={{ __html: overlayPreview.svg }}
-              />
-            </div>
-            <p className="text-xs text-[#4a6e7a]">
-              {overlayPreview.label}: финальная генерация использует эту же сетку, шрифты и плашки.
-            </p>
-          </div>
-        )}
+        <ProductCardTemplatePreview svg={overlayPreview?.svg ?? null} width={overlayPreview?.width ?? 1000} height={overlayPreview?.height ?? 1000} label={overlayPreview?.label ?? "Preview"} />
 
         {canUseBackend && (
           <div className="space-y-1 text-sm text-[#4a6e7a]">
             {showEstimate && estimating && <p>Рассчитываем стоимость…</p>}
-            {errToShow && (
-              <p className="text-destructive" role="alert">
-                {errToShow}
-              </p>
-            )}
-            {showEstimate && !estimating && creditsToShow != null && !errToShow && (
+            {estErr && <p className="text-destructive" role="alert">{estErr}</p>}
+            {showEstimate && !estimating && creditsToShow != null && !estErr && (
               <p>
-                Стоимость:{" "}
-                <span className="font-medium tabular-nums text-[#0C2D38]">{creditsToShow}</span>{" "}
-                ток. · баланс:{" "}
-                <span className="font-medium tabular-nums text-[#0C2D38]">{balanceCredits}</span>
-                {creditsToShow != null && (
-                  <span>
-                    {" "}
-                    · после:{" "}
-                    <span className="font-medium tabular-nums text-[#0C2D38]">
-                      {Math.max(0, balanceCredits - creditsToShow)}
-                    </span>
-                  </span>
-                )}
+                Один вариант: <span className="font-medium tabular-nums text-[#0C2D38]">{perVariantCredits ?? creditsToShow}</span> ток. · Количество: <span className="font-medium tabular-nums text-[#0C2D38]">{estimatedVariantCount}</span> · Итого: <span className="font-medium tabular-nums text-[#0C2D38]">{creditsToShow}</span> ток. · Баланс: <span className="font-medium tabular-nums text-[#0C2D38]">{balanceCredits}</span> · После: <span className="font-medium tabular-nums text-[#0C2D38]">{Math.max(0, balanceCredits - creditsToShow)}</span>
               </p>
             )}
             {notEnough && (
               <p>
-                Недостаточно токенов.{" "}
-                <Link href="/dashboard/billing" className="font-medium text-[#00AFCA] underline">
-                  Пополнить баланс
-                </Link>
+                Недостаточно токенов. <Link href="/dashboard/billing" className="font-medium text-[#00AFCA] underline">Пополнить баланс</Link>
               </p>
             )}
           </div>
         )}
 
-        <Button
-          type="button"
-          onClick={() => void onSubmit()}
-          disabled={!canSubmit || generating}
-        >
+        <Button type="button" onClick={() => void onSubmit()} disabled={!canSubmit || generating}>
           {generating ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Создаём карточку…
+              {generationMode === "marketplace_card_variants" ? "Создаём 6 вариантов…" : "Создаём карточку…"}
             </>
-          ) : (
-            "Создать карточку"
-          )}
+          ) : generationMode === "marketplace_card_variants" ? "Создать 6 вариантов карточки" : "Создать карточку"}
         </Button>
-        {!canUseBackend && (
-          <p className="text-xs text-[#4a6e7a]">Сначала привяжите фото к проекту.</p>
-        )}
+        {!canUseBackend && <p className="text-xs text-[#4a6e7a]">Сначала привяжите фото к проекту.</p>}
 
         {genError && (
           <Alert variant="destructive" className="rounded-2xl">
@@ -659,64 +577,18 @@ export function MarketplaceCardTab({
           </Alert>
         )}
 
-        {result && (
-          <div className="space-y-3 rounded-2xl border border-[#B8DCE6] bg-white/90 p-4 shadow-sm">
-            <p className="text-sm font-medium text-[#0C2D38]">
-              {result.status === "COMPLETED" && result.outputUrl ? "Карточка готова" : "Карточка создаётся"}
-            </p>
-            <p className="font-mono text-xs text-[#4a6e7a]">
-              {result.generationId} · {result.status}
-            </p>
-            {result.status === "COMPLETED" && result.outputUrl && (
-              <div className="space-y-2">
-                <div className="max-h-80 overflow-hidden rounded-xl border border-[#B8DCE6] bg-[#F4FBFD]">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- user generation URL */}
-                  <img src={result.outputUrl} alt="Карточка" className="max-h-80 w-full object-contain" />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <a
-                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
-                    href={`/api/generations/${result.generationId}/download`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    Скачать
-                  </a>
-                </div>
-                <p className="text-xs text-[#4a6e7a]">
-                  Для видео выберите эту карточку источником на вкладке «Видео».
-                </p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="rounded-xl border-[#B8DCE6]"
-                  onClick={() => {
-                    setResult(null);
-                    void loadProjectMeta();
-                  }}
-                >
-                  Сделать ещё вариант
-                </Button>
-              </div>
-            )}
-            {(result.status === "QUEUED" ||
-              result.status === "PROCESSING" ||
-              (result.status === "COMPLETED" && !result.outputUrl)) && (
-              <Link
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#B8DCE6] bg-white px-3 text-sm font-medium text-[#0C2D38]"
-                href={`/dashboard/history/${result.generationId}`}
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                Открыть в истории
-              </Link>
-            )}
-            {result.status === "FAILED" && (
-              <p className="text-sm text-destructive">Ошибка; токены обычно возвращаются.</p>
-            )}
-          </div>
-        )}
+        <ProductCardVariantGallery
+          items={results}
+          onEditText={() => {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          onCreateSimilar={(item) => {
+            if (item.templatePreset) setTemplatePreset(item.templatePreset as ProductCardTemplatePresetId);
+            if (item.typographyPreset) setTypographyPreset(item.typographyPreset as ProductCardTypographyPresetId);
+            setGenerationMode("marketplace_card");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
       </CardContent>
     </Card>
   );

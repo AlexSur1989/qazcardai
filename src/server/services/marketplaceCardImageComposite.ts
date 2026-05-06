@@ -17,10 +17,13 @@ function overlayHasRenderableText(meta: Record<string, unknown>): boolean {
   const overlay = meta.overlay as Record<string, unknown> | undefined;
   const text = overlay?.text as Record<string, unknown> | undefined;
   const title = typeof text?.title === "string" ? text.title.trim() : "";
+  const subtitle = typeof text?.subtitle === "string" ? text.subtitle.trim() : "";
   const extra = typeof text?.extraText === "string" ? text.extraText.trim() : "";
+  const stats = typeof text?.statsText === "string" ? text.statsText.trim() : "";
+  const size = typeof text?.sizeText === "string" ? text.sizeText.trim() : "";
   const benefits = Array.isArray(text?.benefits) ? text.benefits : [];
   const hasBenefits = benefits.some((b) => typeof b === "string" && b.trim());
-  return Boolean(title || extra || hasBenefits);
+  return Boolean(title || subtitle || extra || stats || size || hasBenefits);
 }
 
 export function shouldApplyProductCardMarketplaceOverlay(
@@ -28,7 +31,8 @@ export function shouldApplyProductCardMarketplaceOverlay(
   type: "IMAGE" | "VIDEO",
   outputIndex: number,
 ): boolean {
-  if (type !== "IMAGE" || outputIndex !== 0) return false;
+  void outputIndex;
+  if (type !== "IMAGE") return false;
   const m = asMeta(gen.metadata);
   if (m.flow !== "product_card" || m.tab !== "marketplace_card") return false;
   return overlayHasRenderableText(m);
@@ -36,10 +40,13 @@ export function shouldApplyProductCardMarketplaceOverlay(
 
 function buildOverlayInputFromMeta(meta: Record<string, unknown>): ProductCardOverlayInput | null {
   const overlay = meta.overlay as Record<string, unknown> | undefined;
-  if (!overlay || overlay.renderer !== "server_svg_overlay_v1") return null;
+  if (!overlay || (overlay.renderer !== "server_svg_overlay_v1" && overlay.renderer !== "server_svg_overlay_v2")) return null;
   const text = overlay.text as Record<string, unknown> | undefined;
   const productTitle = typeof text?.title === "string" ? text.title : "";
+  const subtitle = typeof text?.subtitle === "string" ? text.subtitle : "";
   const extraText = typeof text?.extraText === "string" ? text.extraText : "";
+  const statsText = typeof text?.statsText === "string" ? text.statsText : "";
+  const sizeText = typeof text?.sizeText === "string" ? text.sizeText : "";
   const rawBenefits = Array.isArray(text?.benefits) ? text.benefits : [];
   const benefits = rawBenefits.filter((b): b is string => typeof b === "string");
   const template =
@@ -50,6 +57,18 @@ function buildOverlayInputFromMeta(meta: Record<string, unknown>): ProductCardOv
         : "bottom_panel";
   const cardSize = typeof meta.cardSize === "string" ? meta.cardSize : "square";
   const style = typeof meta.style === "string" ? meta.style : "";
+  const templatePreset =
+    typeof meta.templatePreset === "string"
+      ? meta.templatePreset
+      : typeof overlay.templatePreset === "string"
+        ? overlay.templatePreset
+        : undefined;
+  const typographyPreset =
+    typeof meta.typographyPreset === "string"
+      ? meta.typographyPreset
+      : typeof overlay.typographyPreset === "string"
+        ? overlay.typographyPreset
+        : undefined;
   const outputWidth =
     typeof overlay.outputWidth === "number"
       ? overlay.outputWidth
@@ -77,9 +96,19 @@ function buildOverlayInputFromMeta(meta: Record<string, unknown>): ProductCardOv
     outputHeight,
     aspectRatio,
     productTitle,
+    subtitle,
     benefits,
     extraText,
+    statsText,
+    sizeText,
     style,
+    templatePreset,
+    typographyPreset,
+    overlayVersion: overlay.renderer === "server_svg_overlay_v2" ? "v2" : "v1",
+    useIcons: meta.useIcons !== false && overlay.useIcons !== false,
+    useArrows: meta.useArrows !== false && overlay.useArrows !== false,
+    useShadows: meta.useShadows !== false && overlay.useShadows !== false,
+    preserveProductLabel: meta.preserveProductLabel === true || overlay.preserveProductLabel === true,
   };
 }
 
