@@ -33,6 +33,34 @@ export function DynamicModelSettingsFields({
         const label = field.label ?? field.name;
         const val = dynSettings[field.name];
 
+        if (field.type === "hidden") {
+          return null;
+        }
+
+        if (field.type === "number") {
+          return (
+            <div key={field.name} className="space-y-2">
+              <Label htmlFor={id}>{label}</Label>
+              <Input
+                id={id}
+                type="number"
+                value={
+                  typeof val === "number" && Number.isFinite(val)
+                    ? String(val)
+                    : typeof val === "string"
+                      ? val
+                      : ""
+                }
+                onChange={(e) => {
+                  const t = e.target.value.trim();
+                  setDynField(field.name, t === "" ? undefined : Number(t));
+                }}
+                className="font-mono text-xs"
+              />
+            </div>
+          );
+        }
+
         if (field.type === "select" && Array.isArray(field.options)) {
           return (
             <div key={field.name} className="space-y-2">

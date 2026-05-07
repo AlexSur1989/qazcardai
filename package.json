@@ -20,6 +20,7 @@
     "seed:kling": "npx tsx scripts/seed-kling.ts",
     "seed:kling-motion-control": "npx tsx scripts/seed-kling-motion-control.ts",
     "seed:gpt-image-2-product-card": "npx tsx scripts/seed-gpt-image-2-product-card.ts",
+    "seed:general-kie-image-models": "npx tsx scripts/seed-general-kie-image-models.ts",
     "seed:product-card-models": "npx tsx scripts/seed-product-card-models.ts",
     "seed:wan": "npx tsx scripts/seed-wan.ts",
     "seed:seedance": "npx tsx scripts/seed-seedance.ts",

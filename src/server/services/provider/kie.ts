@@ -794,6 +794,8 @@ export function buildKieMarketCreateTaskPayload(
       ? settings.referenceImageUrls.filter((x): x is string => typeof x === "string")
       : [],
     multiShots: settings.multiShots === true,
+    seed: settings.seed,
+    nsfwChecker: settings.nsfwChecker === true,
   };
 
   const nested: JsonRecord = {};
@@ -813,6 +815,18 @@ export function buildKieMarketCreateTaskPayload(
     if (srcKey === "duration") val = String(val);
     if (srcKey === "sound") val = val === true;
     if (srcKey === "multiShots") val = val === true;
+    if (srcKey === "nsfwChecker") val = val === true;
+    if (srcKey === "seed") {
+      if (val === undefined || val === null || val === "") continue;
+      const s = Number(val);
+      if (!Number.isFinite(s)) continue;
+      val = Math.floor(s);
+    }
+    if (srcKey === "numberOfImages") {
+      const n = Number(val);
+      if (!Number.isFinite(n)) continue;
+      val = Math.min(6, Math.max(1, Math.floor(n)));
+    }
     setDeep(nested, pathStr.split(".").filter(Boolean), val);
   }
 
