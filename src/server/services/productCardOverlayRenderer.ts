@@ -734,20 +734,25 @@ function renderV2BenefitCard(
   index: number,
   useIcons: boolean,
   useShadows: boolean,
+  templateId: string,
 ): string {
   // Увеличиваем скругление и размер иконки для большей схожести с референсом
   const r = Math.max(24, Math.round(Math.min(zone.width, zone.height) * 0.28));
   const iconR = Math.max(20, Math.round(zone.height * 0.28));
-  const iconX = zone.x + Math.round(zone.height * 0.45);
+  
+  const isCleanTpl = templateId === "light_marketplace" || templateId === "dark_infographic";
+  const iconX = isCleanTpl ? zone.x + Math.round(zone.height * 0.25) : zone.x + Math.round(zone.height * 0.45);
   const iconY = zone.y + Math.round(zone.height / 2);
-  const textX = useIcons ? zone.x + Math.round(zone.height * 0.95) : zone.x + Math.round(zone.width * 0.08);
+  const textX = useIcons ? iconX + iconR + Math.round(zone.height * 0.25) : zone.x + Math.round(zone.width * 0.08);
   const textW = zone.x + zone.width - textX - Math.round(zone.width * 0.06);
   
   // Увеличиваем размер шрифта для плашек преимуществ
   const adjustedFontSize = Math.round(fontSize * 1.15);
 
+  const bg = isCleanTpl ? "" : roundRect(zone.x, zone.y, zone.width, zone.height, r, profile.chipFill, profile.chipStroke, panelAttrs(useShadows));
+
   return [
-    roundRect(zone.x, zone.y, zone.width, zone.height, r, profile.chipFill, profile.chipStroke, panelAttrs(useShadows)),
+    bg,
     useIcons ? iconCircle(iconIdForBenefit(label), iconX, iconY, iconR, profile) : circle(iconX, iconY, Math.max(5, iconR * 0.25), profile.markerFill),
     textEl(label, {
       x: textX,
@@ -758,6 +763,7 @@ function renderV2BenefitCard(
       maxLines: 2,
       maxBoxHeight: Math.round(zone.height * 0.62),
       role: "body",
+      shadow: isCleanTpl, // добавляем тень тексту, если нет плашки
     }, profile),
   ].filter(Boolean).join("\n  ");
 }
@@ -852,7 +858,7 @@ function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): stri
   const bodySize = Math.max(20, Math.round(minSide * layout.bodyScale));
   const smallSize = Math.max(16, Math.round(minSide * layout.smallScale));
   const titlePanel =
-    templatePreset.id === "clean_catalog" || templatePreset.id === "lifestyle_model"
+    templatePreset.id === "clean_catalog" || templatePreset.id === "lifestyle_model" || templatePreset.id === "light_marketplace" || templatePreset.id === "dark_infographic"
       ? ""
       : roundRect(
           layout.title.x - 18,
@@ -875,6 +881,7 @@ function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): stri
       idx,
       useIcons && templatePreset.id !== "clean_catalog",
       useShadows,
+      templatePreset.id,
     );
   });
   const badgeTexts = [text.extraText, text.statsText, text.sizeText].map((x) => (x ?? "").trim()).filter(Boolean);
