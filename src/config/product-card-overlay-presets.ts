@@ -247,16 +247,23 @@ export function getProductCardLayoutPreset(
     smallScale: story ? 0.019 : 0.021,
   } satisfies Omit<ProductCardLayoutPreset, "title" | "subtitle" | "productSafeArea" | "benefits" | "badges" | "callouts" | "arrows" | "footer">;
 
-  if (template.id === "dark_infographic") {
+  if (template.id === "dark_infographic" || template.id === "light_marketplace") {
     return {
       ...base,
-      title: story ? rect(70, 105, 660, 210) : rect(58, 68, 500, 145),
-      subtitle: story ? rect(70, 325, 570, 92) : rect(58, 220, 430, 70),
-      productSafeArea: story ? rect(410, 500, 590, 930) : rect(475, 230, 470, 555),
-      benefits: story ? [rect(70, 520, 430, 116), rect(70, 660, 430, 116), rect(70, 800, 430, 116), rect(70, 940, 430, 116)] : [rect(58, 352, 370, 88), rect(58, 460, 370, 88), rect(58, 568, 370, 88), rect(58, 676, 370, 88)],
+      // Заголовок: даем больше ширины и сдвигаем чуть ниже
+      title: story ? rect(70, 120, 760, 220) : rect(58, 75, 580, 150),
+      // Подзаголовок: сразу под заголовком
+      subtitle: story ? rect(70, 350, 680, 92) : rect(58, 235, 500, 70),
+      // Товар: сдвигаем правее, чтобы освободить левую часть
+      productSafeArea: story ? rect(410, 500, 590, 930) : rect(490, 230, 450, 555),
+      // Преимущества: делаем плашки шире и выше, как на референсе
+      benefits: story 
+        ? [rect(70, 520, 480, 130), rect(70, 670, 480, 130), rect(70, 820, 480, 130), rect(70, 970, 480, 130)] 
+        : [rect(58, 352, 410, 96), rect(58, 468, 410, 96), rect(58, 584, 410, 96), rect(58, 700, 410, 96)],
+      // Бейджи внизу
       badges: story ? [rect(70, 1548, 420, 76), rect(520, 1548, 420, 76)] : [rect(58, 858, 260, 58), rect(340, 858, 260, 58)],
       callouts: [],
-      arrows: story ? [{ from: pt(520, 600), to: pt(700, 700) }, { from: pt(520, 880), to: pt(730, 930) }] : [{ from: pt(420, 396), to: pt(610, 395) }, { from: pt(420, 612), to: pt(620, 580) }],
+      arrows: story ? [{ from: pt(560, 600), to: pt(700, 700) }, { from: pt(560, 880), to: pt(730, 930) }] : [{ from: pt(480, 400), to: pt(610, 395) }, { from: pt(480, 630), to: pt(620, 580) }],
       footer: story ? rect(70, 1660, 940, 130) : rect(58, 928, 884, 42),
     };
   }

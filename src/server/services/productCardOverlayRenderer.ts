@@ -735,12 +735,17 @@ function renderV2BenefitCard(
   useIcons: boolean,
   useShadows: boolean,
 ): string {
-  const r = Math.max(18, Math.round(Math.min(zone.width, zone.height) * 0.22));
-  const iconR = Math.max(17, Math.round(zone.height * 0.22));
-  const iconX = zone.x + Math.round(zone.height * 0.38);
+  // Увеличиваем скругление и размер иконки для большей схожести с референсом
+  const r = Math.max(24, Math.round(Math.min(zone.width, zone.height) * 0.28));
+  const iconR = Math.max(20, Math.round(zone.height * 0.28));
+  const iconX = zone.x + Math.round(zone.height * 0.45);
   const iconY = zone.y + Math.round(zone.height / 2);
-  const textX = useIcons ? zone.x + Math.round(zone.height * 0.76) : zone.x + Math.round(zone.width * 0.08);
+  const textX = useIcons ? zone.x + Math.round(zone.height * 0.95) : zone.x + Math.round(zone.width * 0.08);
   const textW = zone.x + zone.width - textX - Math.round(zone.width * 0.06);
+  
+  // Увеличиваем размер шрифта для плашек преимуществ
+  const adjustedFontSize = Math.round(fontSize * 1.15);
+
   return [
     roundRect(zone.x, zone.y, zone.width, zone.height, r, profile.chipFill, profile.chipStroke, panelAttrs(useShadows)),
     useIcons ? iconCircle(iconIdForBenefit(label), iconX, iconY, iconR, profile) : circle(iconX, iconY, Math.max(5, iconR * 0.25), profile.markerFill),
@@ -748,8 +753,8 @@ function renderV2BenefitCard(
       x: textX,
       y: zone.y + Math.round(zone.height * 0.55),
       width: textW,
-      fontSize,
-      lineHeight: Math.round(fontSize * 1.18),
+      fontSize: adjustedFontSize,
+      lineHeight: Math.round(adjustedFontSize * 1.18),
       maxLines: 2,
       maxBoxHeight: Math.round(zone.height * 0.62),
       role: "body",
