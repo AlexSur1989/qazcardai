@@ -271,69 +271,79 @@ export function getProductCardLayoutPreset(
   if (template.id === "feature_grid") {
     return {
       ...base,
-      title: story ? rect(90, 105, 900, 190) : rect(120, 58, 760, 120),
-      subtitle: story ? rect(120, 295, 840, 78) : rect(180, 178, 640, 48),
-      productSafeArea: story ? rect(255, 540, 570, 760) : rect(315, 270, 370, 390),
-      benefits: story ? [rect(70, 455, 410, 130), rect(600, 455, 410, 130), rect(70, 1280, 410, 130), rect(600, 1280, 410, 130)] : [rect(58, 270, 290, 105), rect(652, 270, 290, 105), rect(58, 635, 290, 105), rect(652, 635, 290, 105)],
-      badges: story ? [rect(220, 1490, 640, 78)] : [rect(340, 810, 320, 58)],
+      title: story ? rect(80, 100, 920, 200) : rect(80, 60, 840, 120),
+      subtitle: story ? rect(120, 320, 840, 80) : rect(150, 190, 700, 50),
+      productSafeArea: story ? rect(240, 550, 600, 700) : rect(360, 280, 280, 400),
+      benefits: story 
+        ? [rect(60, 450, 400, 140), rect(620, 450, 400, 140), rect(60, 1300, 400, 140), rect(620, 1300, 400, 140)] 
+        : [rect(50, 300, 280, 120), rect(670, 300, 280, 120), rect(50, 500, 280, 120), rect(670, 500, 280, 120)],
+      badges: story ? [rect(200, 1500, 680, 80)] : [rect(300, 750, 400, 60)],
       callouts: [],
       arrows: [],
-      footer: story ? rect(90, 1640, 900, 120) : rect(90, 885, 820, 68),
+      footer: story ? rect(80, 1700, 920, 100) : rect(80, 880, 840, 60),
     };
   }
 
   if (template.id === "clean_catalog") {
     return {
       ...base,
-      title: story ? rect(105, 115, 870, 160) : rect(105, 70, 790, 105),
-      subtitle: story ? rect(130, 285, 820, 70) : rect(150, 182, 700, 45),
-      productSafeArea: story ? rect(175, 430, 730, 880) : rect(230, 250, 540, 470),
-      benefits: story ? [rect(90, 1390, 420, 92), rect(570, 1390, 420, 92), rect(90, 1505, 420, 92), rect(570, 1505, 420, 92)] : [rect(90, 765, 390, 70), rect(520, 765, 390, 70), rect(90, 850, 390, 70), rect(520, 850, 390, 70)],
-      badges: story ? [rect(270, 1640, 540, 70)] : [rect(365, 928, 270, 46)],
+      title: story ? rect(80, 100, 920, 200) : rect(80, 60, 840, 120),
+      subtitle: story ? rect(100, 320, 880, 80) : rect(100, 190, 800, 50),
+      productSafeArea: story ? rect(140, 440, 800, 860) : rect(200, 260, 600, 440),
+      benefits: story 
+        ? [rect(80, 1360, 440, 100), rect(560, 1360, 440, 100), rect(80, 1480, 440, 100), rect(560, 1480, 440, 100)] 
+        : [rect(80, 730, 400, 80), rect(520, 730, 400, 80), rect(80, 830, 400, 80), rect(520, 830, 400, 80)],
+      badges: story ? [rect(240, 1620, 600, 80)] : [rect(300, 930, 400, 40)],
       callouts: [],
       arrows: [],
-      footer: story ? rect(110, 1740, 860, 80) : rect(110, 930, 780, 40),
+      footer: story ? rect(80, 1760, 920, 80) : rect(80, 970, 840, 30),
     };
   }
 
   if (template.id === "promo_poster") {
     return {
       ...base,
-      title: story ? rect(70, 100, 940, 245) : rect(58, 58, 710, 150),
-      subtitle: story ? rect(80, 360, 780, 78) : rect(62, 215, 520, 55),
-      productSafeArea: story ? rect(155, 445, 790, 980) : rect(350, 235, 590, 560),
-      benefits: story ? [rect(75, 1460, 440, 96), rect(565, 1460, 440, 96), rect(75, 1570, 440, 96), rect(565, 1570, 440, 96)] : [rect(58, 810, 275, 70), rect(360, 810, 275, 70), rect(662, 810, 275, 70)],
-      badges: story ? [rect(70, 1705, 360, 78), rect(460, 1705, 260, 78), rect(750, 1705, 260, 78)] : [rect(58, 900, 250, 52), rect(330, 900, 210, 52), rect(565, 900, 210, 52)],
+      title: story ? rect(70, 100, 940, 260) : rect(60, 60, 880, 160),
+      subtitle: story ? rect(70, 380, 940, 80) : rect(60, 230, 880, 60),
+      productSafeArea: story ? rect(150, 480, 860, 900) : rect(300, 310, 640, 460),
+      benefits: story 
+        ? [rect(70, 1420, 450, 100), rect(560, 1420, 450, 100), rect(70, 1540, 450, 100), rect(560, 1540, 450, 100)] 
+        : [rect(60, 790, 280, 80), rect(360, 790, 280, 80), rect(660, 790, 280, 80)],
+      badges: story ? [rect(70, 1680, 450, 80), rect(560, 1680, 450, 80)] : [rect(60, 890, 280, 50), rect(360, 890, 280, 50), rect(660, 890, 280, 50)],
       callouts: [],
       arrows: [],
-      footer: story ? rect(70, 1810, 940, 70) : rect(58, 938, 880, 40),
+      footer: story ? rect(70, 1800, 940, 80) : rect(60, 950, 880, 40),
     };
   }
 
   if (template.id === "lifestyle_model") {
     return {
       ...base,
-      title: story ? rect(72, 104, 760, 185) : rect(68, 72, 610, 116),
-      subtitle: story ? rect(72, 305, 650, 82) : rect(68, 198, 520, 55),
-      productSafeArea: story ? rect(210, 420, 800, 1060) : rect(315, 230, 625, 575),
-      benefits: story ? [rect(70, 1465, 460, 86), rect(550, 1465, 460, 86), rect(70, 1570, 460, 86)] : [rect(64, 792, 275, 66), rect(360, 792, 275, 66), rect(656, 792, 275, 66)],
-      badges: story ? [rect(72, 1690, 620, 72)] : [rect(68, 885, 450, 52)],
+      title: story ? rect(70, 100, 800, 200) : rect(60, 60, 640, 140),
+      subtitle: story ? rect(70, 320, 700, 80) : rect(60, 210, 540, 60),
+      productSafeArea: story ? rect(200, 420, 810, 980) : rect(300, 280, 640, 480),
+      benefits: story 
+        ? [rect(70, 1440, 450, 90), rect(560, 1440, 450, 90), rect(70, 1550, 450, 90)] 
+        : [rect(60, 780, 280, 70), rect(360, 780, 280, 70), rect(660, 780, 280, 70)],
+      badges: story ? [rect(70, 1680, 600, 80)] : [rect(60, 870, 400, 50)],
       callouts: [],
       arrows: [],
-      footer: story ? rect(72, 1785, 760, 78) : rect(68, 930, 640, 42),
+      footer: story ? rect(70, 1800, 940, 80) : rect(60, 940, 880, 40),
     };
   }
 
   return {
     ...base,
-    title: story ? rect(70, 105, 780, 185) : rect(58, 68, 620, 120),
-    subtitle: story ? rect(70, 300, 650, 76) : rect(58, 195, 510, 52),
-    productSafeArea: story ? rect(400, 430, 610, 930) : rect(470, 250, 470, 500),
-    benefits: story ? [rect(70, 505, 420, 105), rect(70, 635, 420, 105), rect(70, 765, 420, 105), rect(70, 895, 420, 105)] : [rect(58, 312, 360, 80), rect(58, 410, 360, 80), rect(58, 508, 360, 80), rect(58, 606, 360, 80)],
-    badges: story ? [rect(70, 1515, 440, 78), rect(540, 1515, 360, 78)] : [rect(58, 835, 280, 56), rect(360, 835, 250, 56)],
+    title: story ? rect(70, 100, 940, 200) : rect(60, 60, 880, 140),
+    subtitle: story ? rect(70, 320, 700, 80) : rect(60, 210, 500, 60),
+    productSafeArea: story ? rect(400, 420, 610, 980) : rect(460, 280, 480, 500),
+    benefits: story 
+      ? [rect(70, 450, 310, 120), rect(70, 590, 310, 120), rect(70, 730, 310, 120), rect(70, 870, 310, 120)] 
+      : [rect(60, 300, 380, 90), rect(60, 410, 380, 90), rect(60, 520, 380, 90), rect(60, 630, 380, 90)],
+    badges: story ? [rect(70, 1500, 450, 80), rect(540, 1500, 450, 80)] : [rect(60, 800, 300, 60), rect(380, 800, 300, 60)],
     callouts: [],
-    arrows: story ? [{ from: pt(505, 560), to: pt(690, 650) }, { from: pt(505, 820), to: pt(720, 870) }] : [{ from: pt(420, 350), to: pt(620, 390) }, { from: pt(420, 545), to: pt(635, 560) }],
-    footer: story ? rect(70, 1640, 940, 115) : rect(58, 910, 860, 58),
+    arrows: story ? [{ from: pt(400, 510), to: pt(600, 600) }, { from: pt(400, 790), to: pt(630, 840) }] : [{ from: pt(460, 345), to: pt(610, 370) }, { from: pt(460, 565), to: pt(620, 530) }],
+    footer: story ? rect(70, 1650, 940, 100) : rect(60, 900, 880, 60),
   };
 }
 
