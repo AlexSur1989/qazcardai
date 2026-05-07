@@ -64,7 +64,8 @@ const TERMINAL = new Set<string>([
 ]);
 
 function getPollConfig() {
-  const max = Number.parseInt(process.env.GENERATION_POLL_MAX_ATTEMPTS ?? "30", 10) || 30;
+  /** По умолчанию ~6м40с (199×2 c). Маркетплейс-карточки с референсами у Kie часто >4 мин — при таймауте задайте GENERATION_POLL_MAX_ATTEMPTS выше. */
+  const max = Number.parseInt(process.env.GENERATION_POLL_MAX_ATTEMPTS ?? "200", 10) || 200;
   const intervalMs =
     Number.parseInt(process.env.GENERATION_POLL_INTERVAL_MS ?? "2000", 10) || 2000;
   const maxWallMs = Number.parseInt(
@@ -888,6 +889,6 @@ async function runPollToCompletion(
           lastErr,
           "Результат не получен за время polling: провайдер долго отвечал ошибкой перегрузки или задача не успела завершиться. Повторите позже или увеличьте GENERATION_POLL_MAX_ATTEMPTS / интервал в .env.",
         )
-      : "Тайм-аут ожидания готового файла (polling)",
+      : "Тайм-аут ожидания готового файла (polling). Kie.ai иногда отдаёт картинку дольше нескольких минут. В `.env` увеличьте `GENERATION_POLL_MAX_ATTEMPTS` (например 280) и перезапустите воркер; при необходимости уменьшите `GENERATION_POLL_INTERVAL_MS` только если нет лимитов API. Убедитесь, что `GENERATION_POLL_MAX_WALL_MS` = 0 или достаточно велик.",
   );
 }
