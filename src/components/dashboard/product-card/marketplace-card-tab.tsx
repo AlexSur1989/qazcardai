@@ -8,6 +8,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  IMAGE_GENERATION_POLL_INTERVAL_MS,
+  IMAGE_GENERATION_POLL_MAX_ITERATIONS,
+} from "@/lib/generation-client-polling";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -323,7 +327,7 @@ export function MarketplaceCardTab({
     let status = item.status || "QUEUED";
     let outputUrl = item.outputUrl;
     let errorMessage = item.errorMessage ?? null;
-    for (let i = 0; i < 36; i++) {
+    for (let i = 0; i < IMAGE_GENERATION_POLL_MAX_ITERATIONS; i++) {
       const res = await fetch(`/api/generations/${item.generationId}`);
       const parsed = await readJsonSafe<{ status: string; outputFiles: unknown; errorMessage?: string | null }>(res);
       if (parsed.ok && res.ok) {
@@ -332,7 +336,9 @@ export function MarketplaceCardTab({
         errorMessage = parsed.data.errorMessage ?? errorMessage;
       }
       if (terminal(status) && (status !== "COMPLETED" || outputUrl)) break;
-      if (i < 35) await new Promise((r) => setTimeout(r, 1500));
+      if (i < IMAGE_GENERATION_POLL_MAX_ITERATIONS - 1) {
+        await new Promise((r) => setTimeout(r, IMAGE_GENERATION_POLL_INTERVAL_MS));
+      }
     }
     return { ...item, status, outputUrl, errorMessage };
   }

@@ -17,6 +17,10 @@ import {
   type ProductCategoryId,
 } from "@/config/product-card-categories";
 import { readJsonSafe } from "@/lib/fetch-json-safe";
+import {
+  IMAGE_GENERATION_POLL_INTERVAL_MS,
+  IMAGE_GENERATION_POLL_MAX_ITERATIONS,
+} from "@/lib/generation-client-polling";
 import { getFirstOutputUrlFromJson } from "@/lib/product-card-output";
 import { cn } from "@/lib/utils";
 
@@ -207,7 +211,7 @@ export function ConceptPhotoTab({
       let outputUrl: string | null = null;
       let errMsg: string | null = null;
       const terminal = new Set(["COMPLETED", "FAILED", "REFUNDED", "CANCELLED", "BLOCKED"]);
-      for (let i = 0; i < 24; i++) {
+      for (let i = 0; i < IMAGE_GENERATION_POLL_MAX_ITERATIONS; i++) {
         const g = await pollOnce(genId);
         if (g) {
           st = g.status;
@@ -217,7 +221,9 @@ export function ConceptPhotoTab({
           }
         }
         if (terminal.has(st) && (st !== "COMPLETED" || outputUrl)) break;
-        if (i < 23) await new Promise((r) => setTimeout(r, 1500));
+        if (i < IMAGE_GENERATION_POLL_MAX_ITERATIONS - 1) {
+          await new Promise((r) => setTimeout(r, IMAGE_GENERATION_POLL_INTERVAL_MS));
+        }
       }
       setResult({
         generationId: genId,

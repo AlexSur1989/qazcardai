@@ -16,6 +16,10 @@ import {
 } from "@/config/product-card-categories";
 import { readJsonSafe } from "@/lib/fetch-json-safe";
 import { getFirstOutputPreviewUrl } from "@/lib/generation-output-utils";
+import {
+  VIDEO_GENERATION_POLL_INTERVAL_MS,
+  VIDEO_GENERATION_POLL_MAX_ITERATIONS,
+} from "@/lib/generation-client-polling";
 import { cn } from "@/lib/utils";
 
 const motions = getPublicProductVideoMotionStyles();
@@ -328,7 +332,7 @@ export function ProductVideoTab({
       let st = d.status ?? "QUEUED";
       let outputUrl: string | null = null;
       const terminal = new Set(["COMPLETED", "FAILED", "REFUNDED", "CANCELLED", "BLOCKED"]);
-      for (let i = 0; i < 24; i++) {
+      for (let i = 0; i < VIDEO_GENERATION_POLL_MAX_ITERATIONS; i++) {
         const gRes = await fetch(`/api/generations/${genId}`);
         const p = await readJsonSafe<{ status: string; outputFiles: unknown }>(gRes);
         if (p.ok && gRes.ok) {
@@ -336,7 +340,9 @@ export function ProductVideoTab({
           outputUrl = getFirstOutputPreviewUrl(p.data.outputFiles) ?? outputUrl;
         }
         if (terminal.has(st) && (st !== "COMPLETED" || outputUrl)) break;
-        if (i < 23) await new Promise((r) => setTimeout(r, 1500));
+        if (i < VIDEO_GENERATION_POLL_MAX_ITERATIONS - 1) {
+          await new Promise((r) => setTimeout(r, VIDEO_GENERATION_POLL_INTERVAL_MS));
+        }
       }
       setResult({
         generationId: genId,
