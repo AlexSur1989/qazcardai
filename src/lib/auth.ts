@@ -34,6 +34,58 @@ export function normalizeNextPath(raw: string | null | undefined): string {
   return "/dashboard";
 }
 
+/**
+ * Устаревшие пути /dashboard/create/image|video без выбора модели в query —
+ * переводим пользователя в каталог AI-моделей.
+ */
+export function normalizeDeprecatedDashboardNext(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
+    return raw;
+  }
+  const qIdx = trimmed.indexOf("?");
+  const pathPart = qIdx === -1 ? trimmed : trimmed.slice(0, qIdx);
+  if (
+    pathPart !== "/dashboard/create/image" &&
+    pathPart !== "/dashboard/create/video"
+  ) {
+    return raw;
+  }
+  if (qIdx === -1) {
+    return "/dashboard/models";
+  }
+  const params = new URLSearchParams(trimmed.slice(qIdx + 1));
+  if (
+    params.has("model") ||
+    params.has("modelId") ||
+    params.has("prompt")
+  ) {
+    return raw;
+  }
+  return "/dashboard/models";
+}
+
+/** Редирект в middleware для уже авторизованных (см. normalizeDeprecatedDashboardNext). */
+export function maybeRedirectImageVideoToModelsCatalog(
+  pathname: string,
+  search: URLSearchParams,
+): string | null {
+  if (
+    pathname !== "/dashboard/create/image" &&
+    pathname !== "/dashboard/create/video"
+  ) {
+    return null;
+  }
+  if (
+    search.has("model") ||
+    search.has("modelId") ||
+    search.has("prompt")
+  ) {
+    return null;
+  }
+  return "/dashboard/models";
+}
+
 export function firstSearchParam(
   sp: Record<string, string | string[] | undefined>,
   key: string
@@ -68,18 +120,22 @@ export function postAuthLandingPath(
   redirectParam: string | null,
   role: UserRole | undefined
 ): string {
+  const normalizedRedirect =
+    typeof redirectParam === "string" && redirectParam.trim()
+      ? normalizeDeprecatedDashboardNext(redirectParam.trim())
+      : null;
   if (
-    typeof redirectParam === "string" &&
-    redirectParam.startsWith("/") &&
-    !redirectParam.startsWith("//")
+    typeof normalizedRedirect === "string" &&
+    normalizedRedirect.startsWith("/") &&
+    !normalizedRedirect.startsWith("//")
   ) {
     const pathOnly =
-      redirectParam.split("?")[0]?.split("#")[0] ?? redirectParam;
+      normalizedRedirect.split("?")[0]?.split("#")[0] ?? normalizedRedirect;
     if (!AUTH_FLOW_PATHS.has(pathOnly)) {
       const isAdminPath =
         pathOnly === "/admin" || pathOnly.startsWith("/admin/");
       if (!isAdminPath || (role && canAccessAdminPanel(role))) {
-        return redirectParam;
+        return normalizedRedirect;
       }
     }
   }

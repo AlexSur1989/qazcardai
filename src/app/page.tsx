@@ -44,6 +44,15 @@ export default function HomePage() {
               Войти
             </Button>
             <Button
+              variant="outline"
+              nativeButton={false}
+              render={<Link href="/register?next=/dashboard/models" />}
+              size="lg"
+            >
+              <Sparkles className="size-4" aria-hidden />
+              AI-модели
+            </Button>
+            <Button
               variant="secondary"
               nativeButton={false}
               render={<Link href="/dashboard" />}

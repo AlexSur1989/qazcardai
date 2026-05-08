@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { canonicalModelSlug } from "@/lib/model-slug-params";
 import {
   defaultsFromSchema,
   getSchemaFields,
@@ -52,8 +53,15 @@ export function CreateVideoForm({ models, balanceCredits }: Props) {
   const searchParams = useSearchParams();
   const [modelId, setModelId] = useState(() => {
     const mid = searchParams.get("modelId");
+    const canonical = canonicalModelSlug(searchParams.get("model"));
     if (mid && models.some((m) => m.id === mid)) {
       return mid;
+    }
+    if (canonical) {
+      const bySlug = models.find((m) => m.slug === canonical);
+      if (bySlug) {
+        return bySlug.id;
+      }
     }
     return models[0]?.id ?? "";
   });
@@ -89,8 +97,14 @@ export function CreateVideoForm({ models, balanceCredits }: Props) {
 
   const [dynSettings, setDynSettings] = useState<Record<string, unknown>>(() => {
     const mid = searchParams.get("modelId");
+    const canonical = canonicalModelSlug(searchParams.get("model"));
+    const bySlugMatch = canonical
+      ? models.find((m) => m.slug === canonical)
+      : undefined;
     const initialId =
-      mid && models.some((m) => m.id === mid) ? mid : models[0]?.id ?? "";
+      mid && models.some((m) => m.id === mid)
+        ? mid
+        : (bySlugMatch?.id ?? models[0]?.id ?? "");
     const m = models.find((x) => x.id === initialId);
     return defaultsFromSchema(m?.settingsSchema);
   });

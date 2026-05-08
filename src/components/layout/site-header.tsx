@@ -31,6 +31,12 @@ export function SiteHeader() {
                 {session.user.email}
               </span>
               <Link
+                href="/dashboard/models"
+                className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+              >
+                AI-модели
+              </Link>
+              <Link
                 href="/dashboard"
                 className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
               >

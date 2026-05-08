@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Image as ImageIcon, Package, Video } from "lucide-react";
+import { Package, Sparkles } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -26,46 +26,36 @@ export default async function CreateHubPage() {
       <PageHeader
         variant="qaz"
         title="Создать"
-        description="Выберите тип генерации."
+        description="Выберите сценарий: каталог AI-моделей или карточка товара для маркетплейса."
         breadcrumbs={[
           { label: "Кабинет", href: "/dashboard" },
           { label: "Создать" },
         ]}
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Link href="/dashboard/create/video" className="block rounded-lg focus-visible:ring-2">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Link href="/dashboard/models" className="block rounded-lg focus-visible:ring-2">
           <Card className="h-full transition-colors hover:border-primary/50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Video className="size-5" aria-hidden />
-                Создать видео
+                <Sparkles className="size-5" aria-hidden />
+                AI-модели
               </CardTitle>
-              <CardDescription>Генерация видео по моделям из каталога</CardDescription>
+              <CardDescription>
+                Каталог моделей фото и видео: фильтры по задачам и быстрый запуск генерации
+              </CardDescription>
             </CardHeader>
           </Card>
         </Link>
-        <Link href="/dashboard/create/image" className="block rounded-lg focus-visible:ring-2">
-          <Card className="h-full transition-colors hover:border-primary/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <ImageIcon className="size-5" aria-hidden />
-                Создать фото
-              </CardTitle>
-              <CardDescription>Текст в изображение</CardDescription>
-            </CardHeader>
-          </Card>
-        </Link>
-        <Link
-          href="/dashboard/create/product-card"
-          className="block rounded-lg focus-visible:ring-2 sm:col-span-2 lg:col-span-1"
-        >
+        <Link href="/dashboard/create/product-card" className="block rounded-lg focus-visible:ring-2">
           <Card className="h-full transition-colors hover:border-primary/50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Package className="size-5" aria-hidden />
-                Создать карточку товара
+                Карточка товара
               </CardTitle>
-              <CardDescription>Карточка для маркетплейса</CardDescription>
+              <CardDescription>
+                Загрузка фото, концепты, витринная карточка и видео в одном потоке
+              </CardDescription>
             </CardHeader>
           </Card>
         </Link>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertCircle, Image as ImageIcon, Package, Video } from "lucide-react";
+import { AlertCircle, Package, Sparkles } from "lucide-react";
 
 import { DashboardSectionEmpty } from "@/components/dashboard/dashboard-section-empty";
 import { PageHeader } from "@/components/layout/page-header";
@@ -75,8 +75,28 @@ export default async function DashboardPage() {
       <PageHeader
         variant="qaz"
         title={`Здравствуйте, ${name}`}
-        description="Сводка по балансу токенов и задачам. Быстрые действия — карточка товара, фото и видео."
+        description="Сводка по балансу токенов и задачам. Карточка товара и каталог AI-моделей."
       />
+
+      <Alert className="border-primary/40 bg-primary/6">
+        <Sparkles className="text-primary size-4" aria-hidden />
+        <AlertTitle>Каталог AI-моделей</AlertTitle>
+        <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <span>
+            Выбор моделей для фото и видео, фильтры по задачам и запуск генерации —
+            здесь же.
+          </span>
+          <Link
+            href="/dashboard/models"
+            className={cn(
+              buttonVariants({ size: "sm" }),
+              "shrink-0 self-start sm:self-center",
+            )}
+          >
+            Открыть каталог
+          </Link>
+        </AlertDescription>
+      </Alert>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
@@ -145,36 +165,26 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Link
+          href="/dashboard/models"
+          className={cn(
+            buttonVariants({ size: "lg" }),
+            "inline-flex w-full min-h-10 items-center justify-center gap-2 sm:w-auto",
+          )}
+        >
+          <Sparkles className="size-4 shrink-0" data-icon="inline-start" />
+          AI-модели
+        </Link>
         <Link
           href="/dashboard/create/product-card"
-          className={cn(
-            buttonVariants({ size: "lg" }),
-            "inline-flex w-full min-h-10 items-center justify-center gap-2 sm:w-auto",
-          )}
-        >
-          <Package className="size-4 shrink-0" data-icon="inline-start" />
-          Создать карточку товара
-        </Link>
-        <Link
-          href="/dashboard/create/image"
-          className={cn(
-            buttonVariants({ size: "lg" }),
-            "inline-flex w-full min-h-10 items-center justify-center gap-2 sm:w-auto",
-          )}
-        >
-          <ImageIcon className="size-4 shrink-0" data-icon="inline-start" />
-          Создать фото
-        </Link>
-        <Link
-          href="/dashboard/create/video"
           className={cn(
             buttonVariants({ size: "lg", variant: "secondary" }),
             "inline-flex w-full min-h-10 items-center justify-center gap-2 border sm:w-auto",
           )}
         >
-          <Video className="size-4 shrink-0" data-icon="inline-start" />
-          Создать видео
+          <Package className="size-4 shrink-0" data-icon="inline-start" />
+          Создать карточку товара
         </Link>
       </div>
 
@@ -191,7 +201,7 @@ export default async function DashboardPage() {
               <DashboardSectionEmpty
                 title="Нет активных задач"
                 description="Когда вы запустите генерацию, она появится здесь."
-                icon={<Video className="text-muted-foreground size-8 opacity-50" aria-hidden />}
+                icon={<Sparkles className="text-muted-foreground size-8 opacity-50" aria-hidden />}
               />
             ) : (
               <GenerationPreviewList
@@ -210,26 +220,23 @@ export default async function DashboardPage() {
             {recent.length === 0 ? (
               <DashboardSectionEmpty
                 title="Пока нет генераций"
-                description="Создайте изображение или видео — история появится здесь."
+                description="Откройте каталог AI-моделей — история появится здесь."
                 icon={
-                  <ImageIcon
+                  <Sparkles
                     className="text-muted-foreground size-8 opacity-50"
                     aria-hidden
                   />
                 }
                 action={
                   <div className="flex flex-wrap justify-center gap-2">
-                    <Link
-                      href="/dashboard/create/image"
-                      className={buttonVariants({ size: "sm" })}
-                    >
-                      Создать фото
+                    <Link href="/dashboard/models" className={buttonVariants({ size: "sm" })}>
+                      AI-модели
                     </Link>
                     <Link
-                      href="/dashboard/create/video"
+                      href="/dashboard/create/product-card"
                       className={buttonVariants({ size: "sm", variant: "outline" })}
                     >
-                      Создать видео
+                      Карточка товара
                     </Link>
                   </div>
                 }

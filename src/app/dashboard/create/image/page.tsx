@@ -53,6 +53,7 @@ export default async function CreateImagePage() {
         description="Выбор модели из каталога, постановка в очередь, воркер обращается к провайдеру. Статус обновляется на странице."
         breadcrumbs={[
           { label: "Кабинет", href: "/dashboard" },
+          { label: "AI-модели", href: "/dashboard/models" },
           { label: "Создать фото" },
         ]}
       />

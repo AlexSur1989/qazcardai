@@ -442,6 +442,10 @@ section:nth-child(even) {
   .grid-cta {
     grid-template-columns: repeat(3, 1fr);
   }
+
+  .grid-cta.grid-cta--dual {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .card--cta {

@@ -45,6 +45,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
+
+# На этапе runner не должно быть повторной сборки; если команда сборки всё же
+# вызывается (CI/override), процесс должен иметь право записи в /app (next-env.d.ts).
+RUN chown -R nextjs:nodejs /app
+
 USER nextjs
 
 EXPOSE 3000

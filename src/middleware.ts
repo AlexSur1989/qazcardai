@@ -6,6 +6,7 @@ import type { UserRole } from "@/generated/prisma/enums";
 import {
   pickLoginRedirectParam,
   postAuthLandingPath,
+  maybeRedirectImageVideoToModelsCatalog,
 } from "@/lib/auth";
 
 function getMiddlewareJwtSecret(): string | null {
@@ -90,7 +91,8 @@ export async function middleware(req: NextRequest) {
 
   if (!token?.sub) {
     const url = new URL("/login", nextUrl.origin);
-    url.searchParams.set("next", pathname);
+    const dest = `${pathname}${nextUrl.search}`;
+    url.searchParams.set("next", dest);
     return NextResponse.redirect(url);
   }
 
@@ -98,7 +100,30 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", nextUrl.origin));
   }
 
-  return NextResponse.next();
+  const toCatalog = maybeRedirectImageVideoToModelsCatalog(
+    pathname,
+    nextUrl.searchParams,
+  );
+  if (toCatalog != null) {
+    const redirectRes = NextResponse.redirect(
+      new URL(toCatalog, nextUrl.origin),
+    );
+    redirectRes.headers.set(
+      "Cache-Control",
+      "private, no-store, max-age=0, must-revalidate",
+    );
+    return redirectRes;
+  }
+
+  const response = NextResponse.next();
+  // Чтобы CDN/прокси не отдавали закэшированный HTML кабинета без новых пунктов меню.
+  if (isDashboard || isAdmin) {
+    response.headers.set(
+      "Cache-Control",
+      "private, no-store, max-age=0, must-revalidate",
+    );
+  }
+  return response;
 }
 
 export const config = {

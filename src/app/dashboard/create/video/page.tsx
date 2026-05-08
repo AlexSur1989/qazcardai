@@ -55,6 +55,7 @@ export default async function CreateVideoPage() {
         description="Постановка в очередь, статусы и результат отслеживайте в истории и на этой странице (опрос по id)."
         breadcrumbs={[
           { label: "Кабинет", href: "/dashboard" },
+          { label: "AI-модели", href: "/dashboard/models" },
           { label: "Создать видео" },
         ]}
       />

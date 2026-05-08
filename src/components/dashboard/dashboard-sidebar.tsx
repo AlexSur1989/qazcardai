@@ -1,7 +1,4 @@
-import Link from "next/link";
-
-import { buttonVariants } from "@/components/ui/button";
-import { DASHBOARD_NAV_ITEMS } from "@/lib/dashboard-nav";
+import { DashboardSidebarNav } from "@/components/dashboard/dashboard-sidebar-nav";
 import { getAppName } from "@/lib/app-name";
 import { cn } from "@/lib/utils";
 
@@ -10,7 +7,7 @@ type DashboardSidebarProps = {
 };
 
 /**
- * Серверный сайдбар: пункты всегда в DOM (в т.ч. мобильный без гамбургера / без client-hydration).
+ * Сайдбар: блок бренда/email на сервере, навигация в клиентском поддереве для подсветки текущего раздела.
  */
 export function DashboardSidebar({ userEmail }: DashboardSidebarProps) {
   return (
@@ -31,24 +28,7 @@ export function DashboardSidebar({ userEmail }: DashboardSidebarProps) {
       <p className="text-sidebar-foreground/80 hidden px-3 py-1 text-xs break-all md:block md:px-2">
         {userEmail}
       </p>
-      <nav
-        className="flex flex-col gap-0.5 p-2 pb-4"
-        aria-label="Разделы личного кабинета"
-      >
-        {DASHBOARD_NAV_ITEMS.map(({ href, label, icon: Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "sm" }),
-              "text-foreground hover:bg-primary/8 flex items-center justify-start gap-2",
-            )}
-          >
-            <Icon className="size-3.5 shrink-0" aria-hidden />
-            <span className="text-left">{label}</span>
-          </Link>
-        ))}
-      </nav>
+      <DashboardSidebarNav />
     </aside>
   );
 }
