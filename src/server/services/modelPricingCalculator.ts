@@ -669,6 +669,26 @@ export function getFinalCreditsFromPricingSchema(
     return pickFallbackCredits(raw, fallbackBase);
   }
 
+  if (strategy === "sora_storyboard_n_frames") {
+    const matrix = raw.matrix;
+    if (!isRecord(matrix)) {
+      return pickFallbackCredits(raw, fallbackBase);
+    }
+    const nf = String(settings.n_frames ?? "").trim();
+    let credits: unknown = matrix[nf];
+    if (isRecord(credits)) {
+      credits =
+        credits["1"] ??
+        credits.base ??
+        credits.credits ??
+        credits.default;
+    }
+    if (typeof credits === "number" && Number.isFinite(credits)) {
+      return Math.max(0, Math.floor(credits));
+    }
+    return pickFallbackCredits(raw, fallbackBase);
+  }
+
   if (strategy !== "") {
     return pickFallbackCredits(raw, fallbackBase);
   }

@@ -81,21 +81,24 @@ export function HistoryGenerationList({ items }: Props) {
                 </div>
               )}
             </div>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 space-y-1">
               <Link
                 href={`/dashboard/history/${g.id}`}
-                className="text-foreground hover:underline line-clamp-2 text-sm font-medium"
+                className="text-foreground hover:text-primary block text-sm font-medium"
               >
-                {g.prompt}
+                <span className="line-clamp-1">{g.model.name}</span>
               </Link>
+              <p className="text-muted-foreground line-clamp-2 text-xs leading-snug">
+                {g.prompt}
+              </p>
               <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-                <span className="truncate">{g.model.name}</span>
                 <span>
                   {g.createdAt.toLocaleString("ru-RU", {
                     dateStyle: "short",
                     timeStyle: "short",
                   })}
                 </span>
+                <span className="text-muted-foreground/80">·</span>
                 <span className="tabular-nums">{g.costCredits} кр.</span>
               </div>
               <div className="mt-1.5 flex flex-wrap gap-1.5">

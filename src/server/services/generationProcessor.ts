@@ -24,10 +24,18 @@ import {
   trySendGenerationCompletedEmail,
   trySendGenerationFailedEmail,
 } from "@/server/services/notificationsIntegration";
+import { mergeHailuo23SettingsWithInputFiles } from "@/server/services/hailuo-settings";
+import { mergeSoraStoryboardSettingsWithInputFiles } from "@/server/services/sora-storyboard-settings";
+import {
+  isVeo31FamilyApiModelId,
+  mergeVeo31GenerateImageUrls,
+} from "@/server/services/veo31-settings";
+import { isWanMarketModel } from "@/server/services/wan-settings";
 import {
   buildKieMarketCreateTaskPayload,
   buildKieRequestBodyForLog,
   buildKieVideoRequestBodyForLog,
+  buildVeo31VideoMarketBody,
   assertKieModelIdSet,
   generateImage,
   generateVideo,
@@ -165,7 +173,8 @@ export function buildImageKieInput(
     model.payloadMapping != null &&
     typeof model.payloadMapping === "object" &&
     !Array.isArray(model.payloadMapping);
-  if (hasPayloadMapping) {
+  const useGrokImagineMarket = modelId.toLowerCase().startsWith("grok-imagine/");
+  if (hasPayloadMapping || useGrokImagineMarket) {
     const settings = isSettingsRecord(meta.settings) ? meta.settings : {};
     const marketCreateBody = buildKieMarketCreateTaskPayload(
       gen.prompt,
@@ -213,17 +222,59 @@ export function buildVideoKieInput(
   const useMarketCreateTask =
     modelId === "kling-3.0/motion-control" ||
     modelId.toLowerCase() === "kling-3.0" ||
-    modelId.toLowerCase() === "wan/2-7-text-to-video" ||
+    modelId.toLowerCase() === "kling-3.0/video" ||
+    modelId.toLowerCase().startsWith("kling-2.6/") ||
+  /** Kie Market Wan 2.x (createTask). */
+    isWanMarketModel(modelId) ||
     modelId.toLowerCase() === "bytedance/seedance-2" ||
     modelId.toLowerCase() === "bytedance/seedance-2-fast" ||
+    modelId.toLowerCase() === "bytedance/seedance-1.5-pro" ||
+    modelId.toLowerCase().startsWith("happyhorse/") ||
+    modelId.toLowerCase().startsWith("grok-imagine/") ||
+    modelId.toLowerCase().startsWith("hailuo/2-3-image-to-video-") ||
+    modelId === "sora-2-pro-storyboard" ||
+    isVeo31FamilyApiModelId(modelId) ||
     hasPayloadMapping;
 
   if (useMarketCreateTask) {
-    const settings = isSettingsRecord(meta.settings) ? meta.settings : {};
+    const rawSettings = isSettingsRecord(meta.settings) ? meta.settings : {};
+    const inputUrls = publicHttpUrlsOnly(parseInputFilesList(gen.inputFiles));
+    let merged = mergeHailuo23SettingsWithInputFiles(
+      modelId,
+      rawSettings,
+      inputUrls,
+    );
+    merged = mergeSoraStoryboardSettingsWithInputFiles(
+      modelId,
+      merged,
+      inputUrls,
+    );
+    merged = mergeVeo31GenerateImageUrls(modelId, merged, inputUrls);
+
+    if (isVeo31FamilyApiModelId(modelId)) {
+      if (modelId === "veo/get-1080p-video") {
+        const tid = String(merged.sourceTaskId ?? "").trim();
+        return {
+          apiModelId: modelId,
+          endpoint: ep,
+          veoGet1080pTaskId: tid,
+          prompt: gen.prompt,
+        };
+      }
+      const veoBody = buildVeo31VideoMarketBody(modelId, gen.prompt, merged);
+      if (veoBody) {
+        return {
+          apiModelId: modelId,
+          endpoint: ep,
+          marketCreateBody: veoBody,
+        };
+      }
+    }
+
     const marketCreateBody = buildKieMarketCreateTaskPayload(
       gen.prompt,
       model,
-      settings,
+      merged,
     );
     return {
       apiModelId: modelId,

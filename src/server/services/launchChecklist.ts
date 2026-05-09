@@ -16,7 +16,7 @@ import { getEmailProviderEnvStatus } from "@/server/services/emailService";
 import { getAppSetting } from "@/server/services/appSettings";
 import { getRateUploadSettings } from "@/lib/rate-upload-settings";
 import { GENERATION_QUEUE_NAME } from "@/server/queues/generationQueue";
-import { SEEDANCE_API_MODEL_ID, SEEDANCE_FAST_API_MODEL_ID } from "@/server/services/seedance-settings";
+import { SEEDANCE_1_5_PRO_API_MODEL_ID, SEEDANCE_API_MODEL_ID, SEEDANCE_FAST_API_MODEL_ID } from "@/server/services/seedance-settings";
 import { generateRobotsTxt, generateSitemapXml } from "@/server/services/seoSettings";
 import type {
   LaunchChecklistItem,
@@ -513,7 +513,11 @@ export async function buildLaunchChecklist(): Promise<{
     where: {
       isActive: true,
       apiModelId: {
-        in: [SEEDANCE_API_MODEL_ID, SEEDANCE_FAST_API_MODEL_ID],
+        in: [
+          SEEDANCE_API_MODEL_ID,
+          SEEDANCE_FAST_API_MODEL_ID,
+          SEEDANCE_1_5_PRO_API_MODEL_ID,
+        ],
       },
     },
   });
@@ -530,7 +534,7 @@ export async function buildLaunchChecklist(): Promise<{
           "Seedance 2.0 active",
           "Seedance 2.0 активна",
           "required",
-          "Нужна активная модель с apiModelId bytedance/seedance-2 или bytedance/seedance-2-fast.",
+          "Нужна активная модель с apiModelId bytedance/seedance-2, bytedance/seedance-2-fast или bytedance/seedance-1.5-pro.",
           "/admin/models",
         ),
   );

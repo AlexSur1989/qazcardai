@@ -4,6 +4,11 @@ import { writeAdminAuditLog } from "@/lib/admin-audit";
 import {
   validateAppSettingValueForType,
 } from "@/lib/app-setting-value";
+import {
+  isMaintenanceAllowAdminEnv,
+  isMaintenanceModeEnv,
+} from "@/lib/maintenance-mode";
+
 import { prisma } from "@/lib/prisma";
 import {
   APP_SETTINGS_REGISTRY,
@@ -233,11 +238,11 @@ export async function getMaintenanceFlags(): Promise<{
     getAppSetting("ALLOW_ADMIN_DURING_MAINTENANCE"),
   ]);
   return {
-    maintenanceMode: mode === true,
+    maintenanceMode: isMaintenanceModeEnv() || mode === true,
     message:
       typeof message === "string" && message.trim()
         ? message
-        : "Сервис временно недоступен. Мы скоро вернемся.",
-    allowAdmin: allowAdmin !== false,
+        : "Ведутся технические работы. Скоро открытие — сервис временно недоступен.",
+    allowAdmin: allowAdmin !== false || isMaintenanceAllowAdminEnv(),
   };
 }

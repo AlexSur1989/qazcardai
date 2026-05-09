@@ -60,6 +60,7 @@ export function GenerationDetailView({
   adminBilingualLabels = false,
 }: Props) {
   const files = parseOutputFilesList(gen.outputFiles);
+  const showTech = adminBilingualLabels;
   const canDownload = (i: number) => {
     const f = files[i];
     return Boolean(f?.url?.trim() || f?.storageKey);
@@ -81,9 +82,11 @@ export function GenerationDetailView({
         <h1 className="text-foreground text-2xl font-semibold tracking-tight">
           {adminBilingualLabels ? adminTerm("generation") : "Генерация"}
         </h1>
-        <p className="text-muted-foreground mt-1 font-mono text-xs break-all">
-          {gen.id}
-        </p>
+        {showTech ? (
+          <p className="text-muted-foreground mt-1 font-mono text-xs break-all">
+            {gen.id}
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -127,8 +130,10 @@ export function GenerationDetailView({
             {adminBilingualLabels ? adminTerm("model") : "Модель"}
           </p>
           <p className="text-foreground text-sm">
-            {gen.model.name}{" "}
-            <span className="text-muted-foreground">({gen.model.slug})</span>
+            {gen.model.name}
+            {showTech ? (
+              <span className="text-muted-foreground"> ({gen.model.slug})</span>
+            ) : null}
           </p>
         </div>
         <div>
@@ -137,52 +142,56 @@ export function GenerationDetailView({
             {gen.prompt}
           </p>
         </div>
-        <div>
-          <p className="text-muted-foreground text-xs font-medium">Негативный промпт</p>
-          <p className="text-foreground mt-0.5 whitespace-pre-wrap text-sm">
-            {gen.negativePrompt?.trim() ? gen.negativePrompt : "—"}
-          </p>
-        </div>
-        {adminBilingualLabels ? (
+        {(showTech || gen.negativePrompt?.trim()) ? (
           <div>
-            <p className="text-muted-foreground text-xs font-medium">
-              {adminTerm("providerTaskId")}
-            </p>
-            <p className="text-foreground mt-0.5 font-mono text-sm break-all">
-              {gen.providerTaskId ?? "—"}
+            <p className="text-muted-foreground text-xs font-medium">Негативный промпт</p>
+            <p className="text-foreground mt-0.5 whitespace-pre-wrap text-sm">
+              {gen.negativePrompt?.trim() ? gen.negativePrompt : "—"}
             </p>
           </div>
         ) : null}
-        <div>
-          <p className="text-muted-foreground text-xs font-medium">
-            {adminBilingualLabels ? adminTerm("metadata") : "Метаданные"}
-          </p>
-          <pre className="bg-muted/50 text-foreground mt-1 max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs">
-            {gen.metadata == null
-              ? "—"
-              : JSON.stringify(gen.metadata, null, 2)}
-          </pre>
-        </div>
-        <div>
-          <p className="text-muted-foreground text-xs font-medium">
-            {adminBilingualLabels ? adminTerm("inputFiles") : "Входные файлы"}
-          </p>
-          <pre className="bg-muted/50 text-foreground mt-1 max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs">
-            {gen.inputFiles == null
-              ? "—"
-              : JSON.stringify(gen.inputFiles, null, 2)}
-          </pre>
-        </div>
-        <div>
-          <p className="text-muted-foreground text-xs font-medium">
-            {adminBilingualLabels ? adminTerm("outputFiles") : "Результаты"}
-          </p>
-          <pre className="bg-muted/50 text-foreground mt-1 max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs">
-            {gen.outputFiles == null
-              ? "—"
-              : JSON.stringify(gen.outputFiles, null, 2)}
-          </pre>
-        </div>
+        {showTech ? (
+          <>
+            <div>
+              <p className="text-muted-foreground text-xs font-medium">
+                {adminTerm("providerTaskId")}
+              </p>
+              <p className="text-foreground mt-0.5 font-mono text-sm break-all">
+                {gen.providerTaskId ?? "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs font-medium">
+                {adminTerm("metadata")}
+              </p>
+              <pre className="bg-muted/50 text-foreground mt-1 max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs">
+                {gen.metadata == null
+                  ? "—"
+                  : JSON.stringify(gen.metadata, null, 2)}
+              </pre>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs font-medium">
+                {adminTerm("inputFiles")}
+              </p>
+              <pre className="bg-muted/50 text-foreground mt-1 max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs">
+                {gen.inputFiles == null
+                  ? "—"
+                  : JSON.stringify(gen.inputFiles, null, 2)}
+              </pre>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs font-medium">
+                {adminTerm("outputFiles")}
+              </p>
+              <pre className="bg-muted/50 text-foreground mt-1 max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs">
+                {gen.outputFiles == null
+                  ? "—"
+                  : JSON.stringify(gen.outputFiles, null, 2)}
+              </pre>
+            </div>
+          </>
+        ) : null}
         {files.length > 0 && (
           <div>
             <p className="text-muted-foreground mb-2 text-xs font-medium">Скачать</p>

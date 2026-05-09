@@ -52,6 +52,11 @@ export function defaultsFromSchema(schema: unknown): Record<string, unknown> {
       field.type === "audio-upload-list"
     ) {
       d[field.name] = [];
+    } else if (field.type === "json") {
+      d[field.name] =
+        field.default !== undefined
+          ? field.default
+          : '[{"Scene":"","duration":3}]';
     }
   }
   return d;

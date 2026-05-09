@@ -148,13 +148,20 @@ export function getKieJobsCreateTaskUrl(endpoint: string | null | undefined): st
 
 function kieRequestLog(
   requestUrl: string,
-  log: { model?: unknown; input?: unknown },
+  log: {
+    model?: unknown;
+    input?: unknown;
+    method?: string;
+    taskId?: string;
+  },
 ): void {
   if (!isDevKieLogEnabled()) {
     return;
   }
   console.log("[KIE request]", {
     url: requestUrl,
+    method: log.method,
+    taskId: log.taskId,
     model: log.model,
     input: log.input,
   });
@@ -240,6 +247,22 @@ export function normalizeResponse(
       }
       if (imgs.length > 0) imageUrls = imgs;
       if (vids.length > 0) videoUrls = vids;
+    } else if (typeof data.resultUrls === "string" && data.resultUrls.trim()) {
+      try {
+        const p = JSON.parse(data.resultUrls) as unknown;
+        if (Array.isArray(p) && p.every((u) => typeof u === "string")) {
+          const imgs: string[] = [];
+          const vids: string[] = [];
+          for (const u of p) {
+            if (/\.(mp4|webm|mov)(\?|$)/i.test(u)) vids.push(u);
+            else imgs.push(u);
+          }
+          if (imgs.length > 0) imageUrls = imgs;
+          if (vids.length > 0) videoUrls = vids;
+        }
+      } catch {
+        // ignore
+      }
     }
   }
   if (!taskId && typeof response.taskId === "string") taskId = response.taskId;
@@ -424,6 +447,8 @@ export type KieVideoGenerateInput = {
   endpoint: string | null;
   /** Kie Market createTask: готовое тело JSON (model, callBackUrl, input). */
   marketCreateBody?: JsonRecord;
+  /** Veo get-1080p-video: GET с query taskId (без JSON-тела). */
+  veoGet1080pTaskId?: string;
   prompt?: string;
   negativePrompt?: string | null;
   aspectRatio?: string | null;
@@ -440,6 +465,105 @@ function getAppUrlForKieCallback(): string {
     throw new Error("APP_URL is not set");
   }
   return app.replace(/\/$/, "");
+}
+
+function veo31StringUrlList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+    .map((s) => s.trim());
+}
+
+function buildVeo31GenerateFlat(
+  settings: Record<string, unknown>,
+  prompt: string,
+): JsonRecord {
+  const base = getAppUrlForKieCallback();
+  const body: JsonRecord = {
+    prompt: prompt.trim(),
+    callBackUrl: `${base}/api/webhooks/kie`,
+  };
+  const m = String(settings.veoModel ?? "veo3_fast").trim();
+  body.model =
+    m === "veo3" || m === "veo3_fast" || m === "veo3_lite" ? m : "veo3_fast";
+  const ar = String(settings.aspect_ratio ?? "16:9").trim();
+  body.aspect_ratio = ["16:9", "9:16", "Auto"].includes(ar) ? ar : "16:9";
+  const resRaw = String(settings.resolution ?? "720p").trim().toLowerCase();
+  body.resolution =
+    resRaw === "4k" ? "4k" : resRaw === "1080p" ? "1080p" : "720p";
+  const gt = String(settings.generationType ?? "").trim();
+  if (
+    gt === "TEXT_2_VIDEO" ||
+    gt === "FIRST_AND_LAST_FRAMES_2_VIDEO" ||
+    gt === "REFERENCE_2_VIDEO"
+  ) {
+    body.generationType = gt;
+  }
+  const imgs = veo31StringUrlList(settings.imageUrls);
+  if (imgs.length > 0) body.imageUrls = imgs.slice(0, 3);
+  if (typeof settings.seeds === "number" && Number.isFinite(settings.seeds)) {
+    const s = Math.floor(settings.seeds);
+    if (s >= 10000 && s <= 99999) body.seeds = s;
+  }
+  if (settings.enableTranslation === false) body.enableTranslation = false;
+  if (
+    typeof settings.watermark === "string" &&
+    settings.watermark.trim() !== ""
+  ) {
+    body.watermark = settings.watermark.trim();
+  }
+  return stripUndefinedDeep(body) as JsonRecord;
+}
+
+function buildVeo31ExtendFlat(
+  settings: Record<string, unknown>,
+  prompt: string,
+): JsonRecord {
+  const base = getAppUrlForKieCallback();
+  const body: JsonRecord = {
+    taskId: String(settings.sourceTaskId ?? "").trim(),
+    prompt: prompt.trim(),
+    callBackUrl: `${base}/api/webhooks/kie`,
+  };
+  const md = String(settings.extendModel ?? "fast").trim().toLowerCase();
+  if (md === "fast" || md === "quality" || md === "lite") {
+    body.model = md;
+  }
+  if (typeof settings.seeds === "number" && Number.isFinite(settings.seeds)) {
+    const s = Math.floor(settings.seeds);
+    if (s >= 10000 && s <= 99999) body.seeds = s;
+  }
+  if (
+    typeof settings.watermark === "string" &&
+    settings.watermark.trim() !== ""
+  ) {
+    body.watermark = settings.watermark.trim();
+  }
+  return stripUndefinedDeep(body) as JsonRecord;
+}
+
+function buildVeo31Get4kFlat(settings: Record<string, unknown>): JsonRecord {
+  const base = getAppUrlForKieCallback();
+  const body: JsonRecord = {
+    taskId: String(settings.sourceTaskId ?? "").trim(),
+    callBackUrl: `${base}/api/webhooks/kie`,
+  };
+  const idx = Number(settings.videoIndex);
+  if (Number.isFinite(idx) && idx >= 0) body.index = Math.floor(idx);
+  return stripUndefinedDeep(body) as JsonRecord;
+}
+
+/** Плоское тело POST для `/api/v1/veo/*` (не jobs/createTask). */
+export function buildVeo31VideoMarketBody(
+  modelId: string,
+  prompt: string,
+  settings: Record<string, unknown>,
+): JsonRecord | null {
+  const id = modelId.trim();
+  if (id === "veo-3-1") return buildVeo31GenerateFlat(settings, prompt);
+  if (id === "veo/extend") return buildVeo31ExtendFlat(settings, prompt);
+  if (id === "veo/get-4k-video") return buildVeo31Get4kFlat(settings);
+  return null;
 }
 
 function setDeep(target: JsonRecord, path: string[], value: unknown): void {
@@ -499,14 +623,159 @@ function normalizeKieKlingMode(raw: unknown): "std" | "pro" | "4K" {
   return "std";
 }
 
-const WAN_27_TEXT_TO_VIDEO_API_ID = "wan/2-7-text-to-video";
+function isWanMarketFamilyModelId(modelId: string): boolean {
+  const t = modelId.toLowerCase();
+  return t.startsWith("wan/2-7-") || t.startsWith("wan/2-6-");
+}
+
 const BYTEDANCE_SEEDANCE_2_API_ID = "bytedance/seedance-2";
 const BYTEDANCE_SEEDANCE_2_FAST_API_ID = "bytedance/seedance-2-fast";
+const BYTEDANCE_SEEDANCE_1_5_PRO_API_ID = "bytedance/seedance-1.5-pro";
 const KLING_30_MOTION_CONTROL_API_ID = "kling-3.0/motion-control";
 
 function isBytedanceSeedance2FamilyModelId(modelId: string): boolean {
   const t = modelId.toLowerCase();
-  return t === BYTEDANCE_SEEDANCE_2_API_ID || t === BYTEDANCE_SEEDANCE_2_FAST_API_ID;
+  return (
+    t === BYTEDANCE_SEEDANCE_2_API_ID ||
+    t === BYTEDANCE_SEEDANCE_2_FAST_API_ID ||
+    t === BYTEDANCE_SEEDANCE_1_5_PRO_API_ID
+  );
+}
+
+/** Kie Market: happyhorse/text-to-video, …/image-to-video, …/reference-to-video, …/video-edit */
+function isHappyHorseFamilyModelId(modelId: string): boolean {
+  return modelId.toLowerCase().startsWith("happyhorse/");
+}
+
+const HAPPY_HORSE_SCENARIO_TO_MODEL: Record<string, string> = {
+  "text-to-video": "happyhorse/text-to-video",
+  "image-to-video": "happyhorse/image-to-video",
+  "reference-to-video": "happyhorse/reference-to-video",
+  "video-edit": "happyhorse/video-edit",
+};
+
+function happyHorseMarketModelId(settings: Record<string, unknown>): string {
+  const raw = settings.scenario;
+  const s =
+    typeof raw === "string" && raw.trim() !== "" ? raw.trim() : "text-to-video";
+  return HAPPY_HORSE_SCENARIO_TO_MODEL[s] ?? "happyhorse/text-to-video";
+}
+
+/**
+ * Happy Horse 1.0 — разные `model` в createTask по полю settings.scenario.
+ * @see https://docs.kie.ai/market/happyhorse/
+ */
+function buildHappyHorseMarketCreateTaskPayload(
+  prompt: string,
+  _modelId: string,
+  settings: Record<string, unknown>,
+): JsonRecord {
+  const base = getAppUrlForKieCallback();
+  const marketModel = happyHorseMarketModelId(settings);
+
+  const resolutionRaw =
+    typeof settings.resolution === "string" && settings.resolution.trim() !== ""
+      ? settings.resolution.trim().toLowerCase()
+      : "1080p";
+  const resolution = resolutionRaw === "720p" ? "720p" : "1080p";
+
+  const seedRaw = settings.seed;
+  let seed: number | undefined;
+  if (seedRaw != null && String(seedRaw).trim() !== "") {
+    const s = Number(seedRaw);
+    if (Number.isFinite(s)) seed = Math.floor(s);
+  }
+
+  const durationNum = Number(settings.duration);
+  const duration =
+    Number.isFinite(durationNum) && durationNum > 0
+      ? Math.min(15, Math.max(3, Math.floor(durationNum)))
+      : 5;
+
+  const input: JsonRecord = {};
+
+  if (marketModel === "happyhorse/text-to-video") {
+    const aspect =
+      typeof settings.aspectRatio === "string" &&
+      settings.aspectRatio.trim() !== ""
+        ? settings.aspectRatio.trim()
+        : "16:9";
+    input.prompt = prompt.trim();
+    input.resolution = resolution;
+    input.aspect_ratio = aspect;
+    input.duration = duration;
+    if (seed !== undefined) input.seed = seed;
+  } else if (marketModel === "happyhorse/image-to-video") {
+    const imageUrls = Array.isArray(settings.imageUrls)
+      ? settings.imageUrls
+          .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+          .map((s) => s.trim())
+          .slice(0, 1)
+      : [];
+    const p = prompt.trim();
+    if (p) input.prompt = p;
+    if (imageUrls.length > 0) {
+      input.image_urls = imageUrls;
+    }
+    input.resolution = resolution;
+    input.duration = duration;
+    if (seed !== undefined) input.seed = seed;
+  } else if (marketModel === "happyhorse/reference-to-video") {
+    const refs = Array.isArray(settings.referenceImageUrls)
+      ? settings.referenceImageUrls
+          .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+          .map((s) => s.trim())
+          .slice(0, 9)
+      : [];
+    const aspect =
+      typeof settings.aspectRatio === "string" &&
+      settings.aspectRatio.trim() !== ""
+        ? settings.aspectRatio.trim()
+        : "16:9";
+    input.prompt = prompt.trim();
+    if (refs.length > 0) {
+      input.reference_image = refs;
+    }
+    input.resolution = resolution;
+    input.aspect_ratio = aspect;
+    input.duration = duration;
+    if (seed !== undefined) input.seed = seed;
+  } else if (marketModel === "happyhorse/video-edit") {
+    const vu = Array.isArray(settings.videoUrls)
+      ? settings.videoUrls
+          .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+          .map((s) => s.trim())
+          .slice(0, 1)
+      : [];
+    const editRefs = Array.isArray(settings.editReferenceImageUrls)
+      ? settings.editReferenceImageUrls
+          .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+          .map((s) => s.trim())
+          .slice(0, 5)
+      : [];
+    input.prompt = prompt.trim();
+    if (vu[0]) {
+      input.video_url = vu[0];
+    }
+    if (editRefs.length > 0) {
+      input.reference_image = editRefs;
+    }
+    input.resolution = resolution;
+    const audio =
+      typeof settings.audioSetting === "string" &&
+      settings.audioSetting.trim() !== ""
+        ? settings.audioSetting.trim().toLowerCase()
+        : "auto";
+    input.audio_setting = audio === "origin" ? "origin" : "auto";
+    if (seed !== undefined) input.seed = seed;
+  }
+
+  const cleaned = stripKieSeedanceInput(input);
+  return stripUndefinedDeep({
+    model: marketModel,
+    callBackUrl: `${base}/api/webhooks/kie`,
+    input: cleaned,
+  }) as JsonRecord;
 }
 
 function stripKieWan27InputFields(input: JsonRecord): JsonRecord {
@@ -520,9 +789,28 @@ function stripKieWan27InputFields(input: JsonRecord): JsonRecord {
 }
 
 /**
- * Wan 2.7 Text-to-Video: без полей Kling (sound, aspect_ratio, mode, multi_shots, image_urls).
+ * Wan 2.7 (Kie Market): text / image / R2V / video edit — поля см. доки kie.ai.
  */
-function buildWan27MarketCreateTaskPayload(
+function nsfwCheckerFrom(settings: Record<string, unknown>): boolean | undefined {
+  const v = settings.nsfwChecker;
+  return typeof v === "boolean" ? v : undefined;
+}
+
+function wan27Resolution(raw: unknown, fallback = "1080p"): string {
+  const s =
+    typeof raw === "string" && raw.trim() !== ""
+      ? raw.trim().toLowerCase()
+      : fallback;
+  return s === "720p" ? "720p" : "1080p";
+}
+
+function appendWanSeed(input: JsonRecord, settings: Record<string, unknown>) {
+  if (settings.seed == null || String(settings.seed).trim() === "") return;
+  const s = Number(settings.seed);
+  if (Number.isFinite(s)) input.seed = Math.floor(s);
+}
+
+function buildWan27TextToVideoPayload(
   prompt: string,
   modelId: string,
   settings: Record<string, unknown>,
@@ -530,17 +818,19 @@ function buildWan27MarketCreateTaskPayload(
   const base = getAppUrlForKieCallback();
   const neg =
     typeof settings.negativePrompt === "string" ? settings.negativePrompt.trim() : "";
-  const audio = typeof settings.audioUrl === "string" ? settings.audioUrl.trim() : "";
-  const resolution =
-    typeof settings.resolution === "string" && settings.resolution.trim() !== ""
-      ? settings.resolution.trim()
-      : "1080p";
+  const audio =
+    typeof settings.audioUrl === "string" ? settings.audioUrl.trim() : "";
+  const resolution = wan27Resolution(settings.resolution);
   const ratio =
     typeof settings.ratio === "string" && settings.ratio.trim() !== ""
       ? settings.ratio.trim()
       : "16:9";
+
   const durationNum = Number(settings.duration);
-  const duration = Number.isFinite(durationNum) && durationNum > 0 ? Math.floor(durationNum) : 5;
+  let duration = Number.isFinite(durationNum) ? Math.floor(durationNum) : 5;
+  if (duration < 2) duration = 2;
+  if (duration > 15) duration = 15;
+
   const promptExtend = settings.promptExtend !== false;
   const watermark = settings.watermark === true;
 
@@ -552,18 +842,11 @@ function buildWan27MarketCreateTaskPayload(
     prompt_extend: promptExtend,
     watermark,
   };
-  if (neg) {
-    input.negative_prompt = neg;
-  }
-  if (audio) {
-    input.audio_url = audio;
-  }
-  if (settings.seed != null && String(settings.seed).trim() !== "") {
-    const s = Number(settings.seed);
-    if (Number.isFinite(s)) {
-      input.seed = Math.floor(s);
-    }
-  }
+  if (neg) input.negative_prompt = neg;
+  if (audio) input.audio_url = audio;
+  appendWanSeed(input, settings);
+  const chk = nsfwCheckerFrom(settings);
+  if (chk !== undefined) input.nsfw_checker = chk;
 
   const cleaned = stripKieWan27InputFields(input);
   return stripUndefinedDeep({
@@ -571,6 +854,241 @@ function buildWan27MarketCreateTaskPayload(
     callBackUrl: `${base}/api/webhooks/kie`,
     input: cleaned,
   }) as JsonRecord;
+}
+
+function buildWan27ImageToVideoPayload(
+  prompt: string,
+  modelId: string,
+  settings: Record<string, unknown>,
+): JsonRecord {
+  const base = getAppUrlForKieCallback();
+  const input: JsonRecord = { prompt: prompt.trim() };
+  const neg =
+    typeof settings.negativePrompt === "string"
+      ? settings.negativePrompt.trim()
+      : "";
+  if (neg) input.negative_prompt = neg;
+
+  const ff =
+    typeof settings.firstFrameUrl === "string"
+      ? settings.firstFrameUrl.trim()
+      : "";
+  const lf =
+    typeof settings.lastFrameUrl === "string"
+      ? settings.lastFrameUrl.trim()
+      : "";
+  const clip =
+    typeof settings.firstClipUrl === "string"
+      ? settings.firstClipUrl.trim()
+      : "";
+  if (ff) input.first_frame_url = ff;
+  if (lf) input.last_frame_url = lf;
+  if (clip) input.first_clip_url = clip;
+
+  const driving =
+    typeof settings.drivingAudioUrl === "string" &&
+    settings.drivingAudioUrl.trim() !== ""
+      ? settings.drivingAudioUrl.trim()
+      : typeof settings.audioUrl === "string"
+        ? settings.audioUrl.trim()
+        : "";
+  if (driving) input.driving_audio_url = driving;
+
+  input.resolution = wan27Resolution(settings.resolution);
+
+  const dDuration = Number(settings.duration);
+  let duration = Number.isFinite(dDuration) ? Math.floor(dDuration) : 5;
+  if (duration < 2) duration = 2;
+  if (duration > 15) duration = 15;
+  input.duration = duration;
+  input.prompt_extend = settings.promptExtend !== false;
+  input.watermark = settings.watermark === true;
+  appendWanSeed(input, settings);
+  const chk = nsfwCheckerFrom(settings);
+  if (chk !== undefined) input.nsfw_checker = chk;
+
+  const cleaned = stripKieWan27InputFields(input);
+  return stripUndefinedDeep({
+    model: modelId,
+    callBackUrl: `${base}/api/webhooks/kie`,
+    input: cleaned,
+  }) as JsonRecord;
+}
+
+function wan27Aspect(settings: Record<string, unknown>): string {
+  const a =
+    typeof settings.aspectRatio === "string" && settings.aspectRatio.trim() !== ""
+      ? settings.aspectRatio.trim()
+      : "16:9";
+  const allowed = new Set(["16:9", "9:16", "1:1", "4:3", "3:4"]);
+  return allowed.has(a) ? a : "16:9";
+}
+
+function buildWan27R2VPayload(
+  prompt: string,
+  modelId: string,
+  settings: Record<string, unknown>,
+): JsonRecord {
+  const base = getAppUrlForKieCallback();
+  const input: JsonRecord = { prompt: prompt.trim() };
+  const neg =
+    typeof settings.negativePrompt === "string"
+      ? settings.negativePrompt.trim()
+      : "";
+  if (neg) input.negative_prompt = neg;
+
+  const refImgs = Array.isArray(settings.referenceImageUrls)
+    ? settings.referenceImageUrls
+        .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+        .map((s) => s.trim())
+        .slice(0, 5)
+    : [];
+  const refVids = Array.isArray(settings.referenceVideoUrls)
+    ? settings.referenceVideoUrls
+        .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+        .map((s) => s.trim())
+        .slice(0, 5)
+    : [];
+  if (refImgs.length > 0) input.reference_image = refImgs;
+  if (refVids.length > 0) input.reference_video = refVids;
+
+  const fc =
+    typeof settings.firstFrame === "string" && settings.firstFrame.trim() !== ""
+      ? settings.firstFrame.trim()
+      : typeof settings.firstFrameUrl === "string" &&
+          settings.firstFrameUrl.trim() !== ""
+        ? settings.firstFrameUrl.trim()
+        : "";
+  if (fc) input.first_frame = fc;
+
+  const voice =
+    typeof settings.referenceVoiceUrl === "string"
+      ? settings.referenceVoiceUrl.trim()
+      : "";
+  if (voice) input.reference_voice = voice;
+
+  input.resolution = wan27Resolution(settings.resolution);
+  input.aspect_ratio = wan27Aspect(settings);
+
+  const dR2vDuration = Number(settings.duration);
+  let duration = Number.isFinite(dR2vDuration)
+    ? Math.floor(dR2vDuration)
+    : 5;
+  if (duration < 2) duration = 2;
+  if (duration > 10) duration = 10;
+  input.duration = duration;
+  input.prompt_extend = settings.promptExtend !== false;
+  input.watermark = settings.watermark === true;
+  appendWanSeed(input, settings);
+  const chk = nsfwCheckerFrom(settings);
+  if (chk !== undefined) input.nsfw_checker = chk;
+
+  const cleaned = stripKieWan27InputFields(input);
+  return stripUndefinedDeep({
+    model: modelId,
+    callBackUrl: `${base}/api/webhooks/kie`,
+    input: cleaned,
+  }) as JsonRecord;
+}
+
+function buildWan27VideoEditPayload(
+  prompt: string,
+  modelId: string,
+  settings: Record<string, unknown>,
+): JsonRecord {
+  const base = getAppUrlForKieCallback();
+  const videoUrl =
+    typeof settings.videoUrl === "string" ? settings.videoUrl.trim() : "";
+
+  const input: JsonRecord = {
+    video_url: videoUrl,
+  };
+  const p = prompt.trim();
+  if (p) input.prompt = p;
+  const neg =
+    typeof settings.negativePrompt === "string"
+      ? settings.negativePrompt.trim()
+      : "";
+  if (neg) input.negative_prompt = neg;
+
+  const refSingle =
+    typeof settings.referenceImageUrl === "string" &&
+    settings.referenceImageUrl.trim() !== ""
+      ? settings.referenceImageUrl.trim()
+      : "";
+  if (refSingle) input.reference_image = refSingle;
+
+  input.resolution = wan27Resolution(settings.resolution);
+
+  const arRaw =
+    typeof settings.aspectRatio === "string" ? settings.aspectRatio.trim() : "";
+  if (
+    ["16:9", "9:16", "1:1", "4:3", "3:4"].includes(arRaw)
+  ) {
+    input.aspect_ratio = arRaw;
+  }
+
+  const dEditDuration = Number(settings.duration);
+  if (Number.isFinite(dEditDuration)) {
+    let dur = Math.floor(dEditDuration);
+    if (dur !== 0) {
+      if (dur < 2) dur = 2;
+      if (dur > 10) dur = 10;
+    }
+    input.duration = dur;
+  } else {
+    input.duration = 0;
+  }
+
+  const au =
+    typeof settings.audioSetting === "string"
+      ? settings.audioSetting.trim().toLowerCase()
+      : "";
+  input.audio_setting = au === "origin" ? "origin" : "auto";
+
+  input.prompt_extend = settings.promptExtend !== false;
+  input.watermark = settings.watermark === true;
+  appendWanSeed(input, settings);
+  const chk = nsfwCheckerFrom(settings);
+  if (chk !== undefined) input.nsfw_checker = chk;
+
+  const cleaned = stripKieWan27InputFields(input);
+  return stripUndefinedDeep({
+    model: modelId,
+    callBackUrl: `${base}/api/webhooks/kie`,
+    input: cleaned,
+  }) as JsonRecord;
+}
+
+function buildWan27MarketCreateTaskPayload(
+  prompt: string,
+  modelId: string,
+  settings: Record<string, unknown>,
+): JsonRecord {
+  const id = modelId.toLowerCase();
+  /** Wan 2.6 — те же поля input, что у соответствующих режимов 2.7 (доки Kie). */
+  if (id === "wan/2-6-text-to-video") {
+    return buildWan27TextToVideoPayload(prompt, modelId, settings);
+  }
+  if (id === "wan/2-6-image-to-video") {
+    return buildWan27ImageToVideoPayload(prompt, modelId, settings);
+  }
+  if (id === "wan/2-6-video-to-video") {
+    return buildWan27VideoEditPayload(prompt, modelId, settings);
+  }
+  if (id === "wan/2-7-text-to-video") {
+    return buildWan27TextToVideoPayload(prompt, modelId, settings);
+  }
+  if (id === "wan/2-7-image-to-video") {
+    return buildWan27ImageToVideoPayload(prompt, modelId, settings);
+  }
+  if (id === "wan/2-7-r2v") {
+    return buildWan27R2VPayload(prompt, modelId, settings);
+  }
+  if (id === "wan/2-7-videoedit") {
+    return buildWan27VideoEditPayload(prompt, modelId, settings);
+  }
+  throw new Error(`Unsupported Kie Wan model id: ${modelId}`);
 }
 
 function seedanceStringList(value: unknown): string[] {
@@ -602,7 +1120,7 @@ function stripKieSeedanceInput(input: JsonRecord): JsonRecord {
 }
 
 /**
- * Bytedance Seedance 2.0 / 2.0 Fast: поля `input` по Kie Market (createTask).
+ * Bytedance Seedance 2.0 / 2.0 Fast / 1.5 Pro: поля `input` по Kie Market (createTask).
  * @see https://docs.kie.ai/market/bytedance/seedance-2
  */
 function buildSeedance2MarketCreateTaskPayload(
@@ -742,6 +1260,247 @@ function buildKling30MarketCreateTaskPayload(
   }) as JsonRecord;
 }
 
+function isGrokImagineFamilyModelId(modelId: string): boolean {
+  return modelId.toLowerCase().startsWith("grok-imagine/");
+}
+
+function grokImagineStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+    .map((s) => s.trim());
+}
+
+/**
+ * Grok Imagine (Kie Market createTask). Поля input — по аналогии с другими market-моделями;
+ * сверьте с актуальной докой Kie при отличиях.
+ */
+function buildGrokImagineMarketCreateTaskPayload(
+  prompt: string,
+  modelId: string,
+  settings: Record<string, unknown>,
+): JsonRecord {
+  const base = getAppUrlForKieCallback();
+  const id = modelId.toLowerCase();
+  const p = prompt.trim();
+
+  if (id === "grok-imagine/text-to-image") {
+    const ar =
+      typeof settings.aspectRatio === "string" && settings.aspectRatio.trim() !== ""
+        ? settings.aspectRatio.trim()
+        : "1:1";
+    const res =
+      typeof settings.resolution === "string" && settings.resolution.trim() !== ""
+        ? settings.resolution.trim()
+        : "1K";
+    const input = stripUndefinedDeep({
+      prompt: p,
+      aspect_ratio: ar,
+      resolution: res,
+    }) as JsonRecord;
+    return stripUndefinedDeep({
+      model: modelId,
+      callBackUrl: `${base}/api/webhooks/kie`,
+      input,
+    }) as JsonRecord;
+  }
+
+  if (id === "grok-imagine/image-to-image") {
+    const imgs = grokImagineStringList(settings.imageUrls).slice(0, 8);
+    const ar =
+      typeof settings.aspectRatio === "string" && settings.aspectRatio.trim() !== ""
+        ? settings.aspectRatio.trim()
+        : "1:1";
+    const res =
+      typeof settings.resolution === "string" && settings.resolution.trim() !== ""
+        ? settings.resolution.trim()
+        : "1K";
+    const input: JsonRecord = {
+      prompt: p,
+      aspect_ratio: ar,
+      resolution: res,
+    };
+    if (imgs.length > 0) input.image_urls = imgs;
+    return stripUndefinedDeep({
+      model: modelId,
+      callBackUrl: `${base}/api/webhooks/kie`,
+      input: stripUndefinedDeep(input) as JsonRecord,
+    }) as JsonRecord;
+  }
+
+  if (id === "grok-imagine/text-to-video") {
+    const d = Number(settings.duration);
+    const duration = Number.isFinite(d) ? Math.max(1, Math.min(15, Math.floor(d))) : 5;
+    const ar =
+      typeof settings.aspectRatio === "string" && settings.aspectRatio.trim() !== ""
+        ? settings.aspectRatio.trim()
+        : "16:9";
+    const resRaw =
+      typeof settings.resolution === "string" && settings.resolution.trim() !== ""
+        ? settings.resolution.trim().toLowerCase()
+        : "720p";
+    const resolution = resRaw === "1080p" ? "1080p" : "720p";
+    const input = stripUndefinedDeep({
+      prompt: p,
+      duration,
+      aspect_ratio: ar,
+      resolution,
+    }) as JsonRecord;
+    return stripUndefinedDeep({
+      model: modelId,
+      callBackUrl: `${base}/api/webhooks/kie`,
+      input,
+    }) as JsonRecord;
+  }
+
+  if (id === "grok-imagine/image-to-video") {
+    const imgs = grokImagineStringList(settings.imageUrls).slice(0, 4);
+    const d = Number(settings.duration);
+    const duration = Number.isFinite(d) ? Math.max(1, Math.min(15, Math.floor(d))) : 5;
+    const ar =
+      typeof settings.aspectRatio === "string" && settings.aspectRatio.trim() !== ""
+        ? settings.aspectRatio.trim()
+        : "16:9";
+    const resRaw =
+      typeof settings.resolution === "string" && settings.resolution.trim() !== ""
+        ? settings.resolution.trim().toLowerCase()
+        : "720p";
+    const resolution = resRaw === "1080p" ? "1080p" : "720p";
+    const input: JsonRecord = {
+      prompt: p,
+      duration,
+      aspect_ratio: ar,
+      resolution,
+    };
+    if (imgs.length > 0) input.image_urls = imgs;
+    return stripUndefinedDeep({
+      model: modelId,
+      callBackUrl: `${base}/api/webhooks/kie`,
+      input: stripUndefinedDeep(input) as JsonRecord,
+    }) as JsonRecord;
+  }
+
+  throw new Error(`Unsupported Kie Grok Imagine model id: ${modelId}`);
+}
+
+function isHailuo23ImageToVideoModelId(modelId: string): boolean {
+  const m = modelId.toLowerCase();
+  return (
+    m === "hailuo/2-3-image-to-video-standard" ||
+    m === "hailuo/2-3-image-to-video-pro"
+  );
+}
+
+function hailuo23StringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+    .map((s) => s.trim());
+}
+
+/**
+ * Hailuo 2.3 Standard/Pro Image→Video — см. docs.kie.ai market hailuo/2-3-image-to-video-*.
+ */
+function buildHailuo23ImageToVideoMarketCreateTaskPayload(
+  prompt: string,
+  modelId: string,
+  settings: Record<string, unknown>,
+): JsonRecord {
+  const base = getAppUrlForKieCallback();
+  const urls = hailuo23StringList(settings.imageUrls);
+  const imageUrl = urls[0] ?? "";
+
+  const durRaw = String(settings.duration ?? "6").trim();
+  const duration: "6" | "10" = durRaw === "10" ? "10" : "6";
+
+  const resRaw =
+    typeof settings.resolution === "string" ? settings.resolution.trim() : "";
+  const resUp = resRaw.toUpperCase();
+  const resolution: "768P" | "1080P" = resUp === "1080P" ? "1080P" : "768P";
+
+  const input: JsonRecord = {
+    prompt: prompt.trim(),
+    image_url: imageUrl,
+    duration,
+    resolution,
+  };
+  if (settings.nsfwChecker === true) {
+    input.nsfw_checker = true;
+  }
+
+  return stripUndefinedDeep({
+    model: modelId,
+    callBackUrl: `${base}/api/webhooks/kie`,
+    input: stripUndefinedDeep(input) as JsonRecord,
+  }) as JsonRecord;
+}
+
+function isSora2ProStoryboardModelId(modelId: string): boolean {
+  return modelId.trim() === "sora-2-pro-storyboard";
+}
+
+function parseSoraStoryboardShotsFromSettings(
+  shots: unknown,
+): { Scene: string; duration: number }[] {
+  if (!Array.isArray(shots)) return [];
+  const out: { Scene: string; duration: number }[] = [];
+  for (const raw of shots) {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) continue;
+    const o = raw as Record<string, unknown>;
+    const scene =
+      typeof o.Scene === "string"
+        ? o.Scene.trim()
+        : typeof o.scene === "string"
+          ? o.scene.trim()
+          : "";
+    const d = Number(o.duration);
+    if (!scene || !Number.isFinite(d)) continue;
+    let duration = d;
+    if (duration < 0.1) duration = 0.1;
+    if (duration > 15) duration = 15;
+    out.push({ Scene: scene, duration });
+  }
+  return out.slice(0, 10);
+}
+
+/**
+ * Sora 2 Pro Storyboard — docs.kie.ai market `sora-2-pro-storyboard`.
+ * Поле `Scene` в shots с заглавной буквы (требование API).
+ */
+function buildSora2ProStoryboardMarketCreateTaskPayload(
+  _prompt: string,
+  modelId: string,
+  settings: Record<string, unknown>,
+): JsonRecord {
+  const base = getAppUrlForKieCallback();
+  const shots = parseSoraStoryboardShotsFromSettings(settings.shots);
+  const nf = String(settings.n_frames ?? "15").trim();
+  const n_frames = nf === "10" || nf === "15" || nf === "25" ? nf : "15";
+  const arRaw = String(settings.aspect_ratio ?? "landscape")
+    .trim()
+    .toLowerCase();
+  const aspect_ratio = arRaw === "portrait" ? "portrait" : "landscape";
+  const umRaw = String(settings.upload_method ?? "s3").trim().toLowerCase();
+  const upload_method = umRaw === "oss" ? "oss" : "s3";
+
+  const input: JsonRecord = {
+    shots,
+    n_frames,
+    aspect_ratio,
+    upload_method,
+  };
+  const imgs = hailuo23StringList(settings.imageUrls).slice(0, 1);
+  if (imgs.length > 0) {
+    input.image_urls = imgs;
+  }
+
+  return stripUndefinedDeep({
+    model: modelId,
+    callBackUrl: `${base}/api/webhooks/kie`,
+    input: stripUndefinedDeep(input) as JsonRecord,
+  }) as JsonRecord;
+}
+
 /**
  * Тело POST для Kie Market /api/v1/jobs/createTask (без секретов в логах — отдельно redact).
  */
@@ -751,11 +1510,14 @@ export function buildKieMarketCreateTaskPayload(
   settings: Record<string, unknown>,
 ): JsonRecord {
   const modelId = assertKieModelIdSet(model.apiModelId);
-  if (modelId.toLowerCase() === WAN_27_TEXT_TO_VIDEO_API_ID) {
+  if (isWanMarketFamilyModelId(modelId)) {
     return buildWan27MarketCreateTaskPayload(prompt, modelId, settings);
   }
   if (isBytedanceSeedance2FamilyModelId(modelId)) {
     return buildSeedance2MarketCreateTaskPayload(prompt, modelId, settings);
+  }
+  if (isHappyHorseFamilyModelId(modelId)) {
+    return buildHappyHorseMarketCreateTaskPayload(prompt, modelId, settings);
   }
   if (modelId === KLING_30_MOTION_CONTROL_API_ID) {
     return buildKlingMotionControlMarketCreateTaskPayload(
@@ -764,9 +1526,33 @@ export function buildKieMarketCreateTaskPayload(
       settings,
     );
   }
-  /** Kie ожидает ровно `kling-3.0` (док.); иной регистр в админке ломал бы createTask. */
-  if (modelId.toLowerCase() === "kling-3.0") {
-    return buildKling30MarketCreateTaskPayload(prompt, "kling-3.0", settings);
+  /** Kie: Kling 2.6 / 3.0 / 3.0 video — одинаковые поля input (model из apiModelId). */
+  {
+    const m = modelId.toLowerCase();
+    if (
+      m === "kling-3.0" ||
+      m === "kling-3.0/video" ||
+      m.startsWith("kling-2.6/")
+    ) {
+      return buildKling30MarketCreateTaskPayload(prompt, modelId, settings);
+    }
+  }
+  if (isGrokImagineFamilyModelId(modelId)) {
+    return buildGrokImagineMarketCreateTaskPayload(prompt, modelId, settings);
+  }
+  if (isHailuo23ImageToVideoModelId(modelId)) {
+    return buildHailuo23ImageToVideoMarketCreateTaskPayload(
+      prompt,
+      modelId,
+      settings,
+    );
+  }
+  if (isSora2ProStoryboardModelId(modelId)) {
+    return buildSora2ProStoryboardMarketCreateTaskPayload(
+      prompt,
+      modelId,
+      settings,
+    );
   }
   if (!isRecord(model.payloadMapping)) {
     throw new Error("payloadMapping is missing for market createTask");
@@ -871,6 +1657,12 @@ function buildVideoRequestBody(input: KieVideoGenerateInput): JsonRecord {
 }
 
 export function buildKieVideoRequestBodyForLog(input: KieVideoGenerateInput): JsonRecord {
+  if (input.veoGet1080pTaskId?.trim()) {
+    return {
+      method: "GET",
+      taskId: input.veoGet1080pTaskId.trim(),
+    } as JsonRecord;
+  }
   if (input.marketCreateBody) {
     return input.marketCreateBody;
   }
@@ -878,6 +1670,14 @@ export function buildKieVideoRequestBodyForLog(input: KieVideoGenerateInput): Js
 }
 
 export function getKieVideoGenerateRequestUrl(input: KieVideoGenerateInput): string {
+  const tid = input.veoGet1080pTaskId?.trim();
+  if (tid) {
+    const baseUrl = getKieJobsCreateTaskUrl(
+      input.endpoint ?? "/api/v1/veo/get-1080p-video",
+    );
+    const sep = baseUrl.includes("?") ? "&" : "?";
+    return `${baseUrl}${sep}taskId=${encodeURIComponent(tid)}`;
+  }
   if (input.marketCreateBody) {
     return getKieJobsCreateTaskUrl(input.endpoint);
   }
@@ -892,6 +1692,54 @@ export async function generateVideo(
   input: KieVideoGenerateInput,
 ): Promise<NormalizedKieImageResult> {
   const key = getKieApiKey();
+
+  const get1080 = input.veoGet1080pTaskId?.trim();
+  if (get1080) {
+    const url = getKieVideoGenerateRequestUrl(input);
+    kieRequestLog(url, { method: "GET", taskId: get1080 });
+    let httpStatus = 0;
+    let text = "";
+    let res: Response;
+    try {
+      res = await fetchKie(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          Accept: "application/json",
+        },
+      });
+      httpStatus = res.status;
+      text = await res.text();
+    } catch (e) {
+      const aborted = e instanceof Error && e.name === "AbortError";
+      return {
+        success: false,
+        httpStatus: 0,
+        rawResponse: { networkError: true, aborted },
+        errorMessage: aborted
+          ? "Превышено время ожидания ответа провайдера"
+          : e instanceof Error
+            ? e.message
+            : "Сеть / fetch",
+      };
+    }
+    let json: unknown;
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      return {
+        success: false,
+        httpStatus,
+        rawResponse: { parseError: true, textSnippet: text.slice(0, 500) },
+        errorMessage: "Ответ провайдера не JSON",
+      };
+    }
+    if (isDevKieLogEnabled()) {
+      console.log("[KIE response]", { status: res.status, ok: res.ok, data: json });
+    }
+    return normalizeResponse(json, httpStatus);
+  }
+
   const isMarket = Boolean(input.marketCreateBody);
   const url = isMarket
     ? getKieJobsCreateTaskUrl(input.endpoint)
@@ -902,7 +1750,11 @@ export async function generateVideo(
       );
   const bodyRaw = (input.marketCreateBody ?? buildVideoRequestBody(input)) as JsonRecord;
   const body = stripUndefinedDeep(bodyRaw) as JsonRecord;
-  kieRequestLog(url, { model: body.model, input: body.input });
+  const logPayload =
+    body && typeof body === "object" && "input" in body
+      ? { model: body.model, input: body.input }
+      : { model: body.model, veoBody: body };
+  kieRequestLog(url, logPayload);
   let httpStatus = 0;
   let text = "";
   let res: Response;
@@ -1050,6 +1902,31 @@ export function normalizeKieRecordInfoResponse(
   }
   if ("code" in response && response.code !== undefined) {
     const c = response.code;
+    if (c === 422) {
+      const msg =
+        typeof response.msg === "string"
+          ? response.msg
+          : "";
+      if (
+        /processing|not ready|check back|shortly|1080p is processing|4k is processing/i.test(
+          msg,
+        )
+      ) {
+        const d = isRecord(response.data) ? response.data : {};
+        const taskId =
+          typeof d.taskId === "string"
+            ? d.taskId
+            : typeof d.task_id === "string"
+              ? d.task_id
+              : undefined;
+        return {
+          success: true,
+          httpStatus,
+          rawResponse: response,
+          taskId,
+        };
+      }
+    }
     if (c !== 200 && c !== 0) {
       const msg =
         typeof response.msg === "string"
@@ -1062,6 +1939,83 @@ export function normalizeKieRecordInfoResponse(
   }
 
   const data: JsonRecord = isRecord(response.data) ? response.data : response;
+
+  if (typeof data.successFlag === "number") {
+    const sf = data.successFlag;
+    const taskId =
+      typeof data.taskId === "string"
+        ? data.taskId
+        : typeof data.task_id === "string"
+          ? data.task_id
+          : undefined;
+    if (sf === 2 || sf === 3) {
+      const msg =
+        typeof response.msg === "string" && response.msg.trim() !== ""
+          ? response.msg
+          : "Генерация Veo завершилась с ошибкой";
+      return baseFail(msg.slice(0, 2000));
+    }
+    if (sf === 0) {
+      return {
+        success: true,
+        httpStatus,
+        rawResponse: response,
+        taskId,
+      };
+    }
+    if (sf === 1) {
+      const rawUrls = data.resultUrls;
+      let videoUrls: string[] | undefined;
+      let imageUrls: string[] | undefined;
+      if (typeof rawUrls === "string" && rawUrls.trim()) {
+        try {
+          const p = JSON.parse(rawUrls) as unknown;
+          if (Array.isArray(p) && p.every((u) => typeof u === "string")) {
+            const imgs: string[] = [];
+            const vids: string[] = [];
+            for (const u of p) {
+              if (/\.(mp4|webm|mov)(\?|$)/i.test(u)) vids.push(u);
+              else imgs.push(u);
+            }
+            if (imgs.length > 0) imageUrls = imgs;
+            if (vids.length > 0) videoUrls = vids;
+          }
+        } catch {
+          // ignore
+        }
+      } else if (
+        Array.isArray(rawUrls) &&
+        rawUrls.length > 0 &&
+        rawUrls.every((u) => typeof u === "string")
+      ) {
+        const imgs: string[] = [];
+        const vids: string[] = [];
+        for (const u of rawUrls) {
+          if (/\.(mp4|webm|mov)(\?|$)/i.test(u)) vids.push(u);
+          else imgs.push(u);
+        }
+        if (imgs.length > 0) imageUrls = imgs;
+        if (vids.length > 0) videoUrls = vids;
+      }
+      if (
+        (!videoUrls || videoUrls.length === 0) &&
+        (!imageUrls || imageUrls.length === 0)
+      ) {
+        const ex = extractMediaFromRecordInfoData(data);
+        videoUrls = ex.videoUrls;
+        imageUrls = ex.imageUrls;
+      }
+      return {
+        success: true,
+        httpStatus,
+        rawResponse: response,
+        taskId,
+        videoUrls,
+        imageUrls,
+      };
+    }
+  }
+
   const state =
     lowerState(data.state) ??
     lowerState(data.status) ??

@@ -66,6 +66,7 @@ export default async function ModelDetailPage({ params }: Props) {
         provider: true,
         type: true,
         scope: true,
+        productCardModelType: true,
         costCredits: true,
         description: true,
         isActive: true,

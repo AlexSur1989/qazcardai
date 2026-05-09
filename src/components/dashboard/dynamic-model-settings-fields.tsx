@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { SchemaField } from "@/lib/generation-form-settings-schema";
+import { KIE_SETTINGS_URL_LIST_FROM_COMPUTER } from "@/lib/kie-computer-upload-fields";
 import {
   SeedanceReferenceUploadList,
   isSeedanceUploadListField,
@@ -130,6 +131,23 @@ export function DynamicModelSettingsFields({
         }
 
         if (field.type === "url-list") {
+          if (KIE_SETTINGS_URL_LIST_FROM_COMPUTER.has(field.name)) {
+            return (
+              <SeedanceReferenceUploadList
+                key={field.name}
+                fieldName={field.name}
+                label={label}
+                variant="image"
+                value={Array.isArray(val) ? (val as string[]) : []}
+                onChange={(next) => setDynField(field.name, next)}
+                maxItems={
+                  typeof field.maxItems === "number" && field.maxItems > 0
+                    ? field.maxItems
+                    : undefined
+                }
+              />
+            );
+          }
           const lines = Array.isArray(val) ? val.join("\n") : "";
           return (
             <div key={field.name} className="space-y-2">
@@ -167,6 +185,32 @@ export function DynamicModelSettingsFields({
                   : undefined
               }
             />
+          );
+        }
+
+        if (field.type === "json") {
+          const display =
+            typeof val === "string"
+              ? val
+              : val !== undefined && val !== null
+                ? JSON.stringify(val, null, 2)
+                : "";
+          return (
+            <div key={field.name} className="space-y-2">
+              <Label htmlFor={id}>{label}</Label>
+              <Textarea
+                id={id}
+                value={display}
+                onChange={(e) => setDynField(field.name, e.target.value)}
+                rows={12}
+                className="font-mono text-xs"
+                placeholder='[{"Scene":"описание кадра","duration":3}]'
+              />
+              <p className="text-muted-foreground text-xs">
+                JSON-массив кадров: у каждого элемента поля Scene (или scene) и
+                duration в секундах.
+              </p>
+            </div>
           );
         }
 

@@ -25,6 +25,20 @@ import {
 import { calculateGenerationCredits } from "@/server/services/pricing";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 import {
+  mergeHailuo23SettingsWithInputFiles,
+  validateHailuo23ImageToVideoSettings,
+} from "@/server/services/hailuo-settings";
+import {
+  isSora2ProStoryboardModel,
+  mergeSoraStoryboardSettingsWithInputFiles,
+  validateSora2ProStoryboardSettings,
+} from "@/server/services/sora-storyboard-settings";
+import {
+  isVeo31FamilyApiModelId,
+  mergeVeo31GenerateImageUrls,
+  validateVeo31ModelSettings,
+} from "@/server/services/veo31-settings";
+import {
   assertKlingMotionUrlsOwnedByUser,
   collectKlingMotionControlHttpUrls,
   isKlingMotionControlModel,
@@ -33,9 +47,25 @@ import {
   validateKlingMotionControlSettings,
 } from "@/server/services/kling-motion-control-settings";
 import {
-  isKling30Model,
-  validateKling30Settings,
+  isKling30StyleMarketModel,
+  validateKling30StyleSettings,
 } from "@/server/services/kling-settings";
+import {
+  collectGrokImagineSettingsHttpUrls,
+  isGrokImagineModel,
+  validateGrokImagineSettings,
+} from "@/server/services/grok-imagine-settings";
+import {
+  collectHappyHorseSettingsHttpUrls,
+  isHappyHorseModel,
+  validateHappyHorseScenario,
+} from "@/server/services/happyhorse-settings";
+import {
+  collectWan27SettingsHttpUrls,
+  isWanMarketModel,
+  isWanVideoEditDurationModel,
+  validateWan27ModelScenario,
+} from "@/server/services/wan-settings";
 import {
   collectSeedanceSettingsHttpUrls,
   isSeedanceScenarioModel,
@@ -116,9 +146,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: v.message }, { status: 400 });
     }
     normalizedSettings = v.settings;
-    if (model.maxDuration != null && !isKlingMotionControlModel(model.apiModelId)) {
+    normalizedSettings = mergeHailuo23SettingsWithInputFiles(
+      model.apiModelId,
+      normalizedSettings,
+      publicHttpUrlsOnly(body.inputFiles ?? []),
+    );
+    normalizedSettings = mergeSoraStoryboardSettingsWithInputFiles(
+      model.apiModelId,
+      normalizedSettings,
+      publicHttpUrlsOnly(body.inputFiles ?? []),
+    );
+    normalizedSettings = mergeVeo31GenerateImageUrls(
+      model.apiModelId,
+      normalizedSettings,
+      publicHttpUrlsOnly(body.inputFiles ?? []),
+    );
+    if (
+      model.maxDuration != null &&
+      !isKlingMotionControlModel(model.apiModelId) &&
+      !isSora2ProStoryboardModel(model.apiModelId) &&
+      !isVeo31FamilyApiModelId(model.apiModelId)
+    ) {
       const d = Number.parseInt(String(normalizedSettings.duration ?? ""), 10);
-      if (
+      if (isWanVideoEditDurationModel(model.apiModelId)) {
+        if (!Number.isInteger(d) || (d !== 0 && (d < 2 || d > 10))) {
+          return NextResponse.json(
+            {
+              error: "Длительность: для Wan Video Edit укажите 0 или от 2 до 10 с",
+            },
+            { status: 400 },
+          );
+        }
+      } else if (
         !Number.isInteger(d) ||
         d < 1 ||
         d > model.maxDuration
@@ -140,8 +199,77 @@ export async function POST(req: Request) {
         );
       }
     }
-    if (isKling30Model(model.apiModelId)) {
-      const kVal = validateKling30Settings(normalizedSettings);
+    if (isHappyHorseModel(model.apiModelId)) {
+      const hVal = validateHappyHorseScenario(
+        normalizedSettings,
+        body.prompt.trim(),
+      );
+      if (!hVal.ok) {
+        return NextResponse.json(
+          { error: hVal.message, message: hVal.message },
+          { status: 400 },
+        );
+      }
+    }
+    if (isWanMarketModel(model.apiModelId)) {
+      const wVal = validateWan27ModelScenario(
+        model.apiModelId,
+        normalizedSettings,
+      );
+      if (!wVal.ok) {
+        return NextResponse.json(
+          { error: wVal.message, message: wVal.message },
+          { status: 400 },
+        );
+      }
+    }
+    if (isGrokImagineModel(model.apiModelId)) {
+      const gVal = validateGrokImagineSettings(model.apiModelId, normalizedSettings);
+      if (!gVal.ok) {
+        return NextResponse.json(
+          { error: gVal.message, message: gVal.message },
+          { status: 400 },
+        );
+      }
+    }
+    {
+      const hVal = validateHailuo23ImageToVideoSettings(
+        model.apiModelId,
+        normalizedSettings,
+      );
+      if (!hVal.ok) {
+        return NextResponse.json(
+          { error: hVal.message, message: hVal.message },
+          { status: 400 },
+        );
+      }
+    }
+    if (isSora2ProStoryboardModel(model.apiModelId)) {
+      const sb = validateSora2ProStoryboardSettings(normalizedSettings);
+      if (!sb.ok) {
+        return NextResponse.json(
+          { error: sb.message, message: sb.message },
+          { status: 400 },
+        );
+      }
+    }
+    {
+      const vVeo = validateVeo31ModelSettings(
+        model.apiModelId,
+        normalizedSettings,
+      );
+      if (!vVeo.ok) {
+        return NextResponse.json(
+          { error: vVeo.message, message: vVeo.message },
+          { status: 400 },
+        );
+      }
+    }
+    if (isKling30StyleMarketModel(model.apiModelId)) {
+      const kVal = validateKling30StyleSettings(
+        model.apiModelId,
+        normalizedSettings,
+      );
       if (!kVal.ok) {
         return NextResponse.json(
           { error: kVal.message, message: kVal.message },
@@ -234,6 +362,15 @@ export async function POST(req: Request) {
     }
     if (isSeedanceScenarioModel(model.apiModelId)) {
       return collectSeedanceSettingsHttpUrls(normalizedSettings);
+    }
+    if (isHappyHorseModel(model.apiModelId)) {
+      return collectHappyHorseSettingsHttpUrls(normalizedSettings);
+    }
+    if (isWanMarketModel(model.apiModelId)) {
+      return collectWan27SettingsHttpUrls(model.apiModelId, normalizedSettings);
+    }
+    if (isGrokImagineModel(model.apiModelId)) {
+      return collectGrokImagineSettingsHttpUrls(model.apiModelId, normalizedSettings);
     }
     if (Array.isArray(normalizedSettings.imageUrls)) {
       return normalizedSettings.imageUrls.filter(

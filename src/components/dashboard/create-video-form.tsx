@@ -142,7 +142,9 @@ export function CreateVideoForm({ models, balanceCredits }: Props) {
 
   const klingMultishotBlocked =
     hasDynamicSettings &&
-    selected?.slug === "kling-3-0" &&
+    (selected?.slug === "kling-3-0" ||
+      selected?.slug === "kling-3-0-video" ||
+      (selected?.slug != null && selected.slug.startsWith("kling-2-6-"))) &&
     dynSettings.multiShots === true;
 
   const [klingImageError, setKlingImageError] = useState<string | null>(null);

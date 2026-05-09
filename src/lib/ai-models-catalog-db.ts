@@ -8,12 +8,13 @@ export function prismaWhereForDashboardModelsCatalog(): Prisma.AiModelWhereInput
   ].filter((s): s is string => typeof s === "string" && s.length > 0);
 
   if (slugNeedle.length === 0) {
-    return { scope: "GENERAL" };
+    return { scope: "GENERAL", productCardModelType: null };
   }
 
   return {
     OR: [
-      { scope: "GENERAL" },
+      /** Без роли карточки товара — иначе «общие» генераторы путаются с PRODUCT_* */
+      { scope: "GENERAL", productCardModelType: null },
       { scope: "PRODUCT_CARD", slug: { in: slugNeedle } },
     ],
   };

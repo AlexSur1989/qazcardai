@@ -8,6 +8,10 @@ import {
   postAuthLandingPath,
   maybeRedirectImageVideoToModelsCatalog,
 } from "@/lib/auth";
+import {
+  isMaintenanceAllowAdminEnv,
+  isMaintenanceModeEnv,
+} from "@/lib/maintenance-mode";
 
 function getMiddlewareJwtSecret(): string | null {
   const s = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
@@ -32,7 +36,102 @@ function isAdminRouteRole(role: unknown): role is UserRole {
   return role === "ADMIN" || role === "SUPER_ADMIN";
 }
 
+/**
+ * MAINTENANCE_MODE=1 — для обычных пользователей редирект на /maintenance.
+ * MAINTENANCE_ALLOW_ADMIN=1 — ADMIN/SUPER_ADMIN во входе видят сайт как без техработ (кабинет + админка + API).
+ * Регистрация по-прежнему закрыта у всех.
+ */
+async function applyMaintenanceGate(
+  req: NextRequest,
+): Promise<NextResponse | null> {
+  if (!isMaintenanceModeEnv()) {
+    return null;
+  }
+
+  const { nextUrl } = req;
+  const pathname = nextUrl.pathname;
+
+  if (
+    pathname.startsWith("/_next") ||
+    /\.(?:ico|png|jpg|jpeg|gif|webp|svg|txt|xml|woff2?)$/i.test(pathname)
+  ) {
+    return NextResponse.next();
+  }
+  if (pathname === "/maintenance") {
+    return NextResponse.next();
+  }
+  if (pathname.startsWith("/api/webhooks") || pathname === "/api/health") {
+    return NextResponse.next();
+  }
+  if (pathname.startsWith("/api/auth")) {
+    return NextResponse.next();
+  }
+
+  const secret = getMiddlewareJwtSecret();
+  const secureCookie = shouldUseSecureSessionCookie(req);
+  const allowAdmin = isMaintenanceAllowAdminEnv();
+
+  let token: Awaited<ReturnType<typeof getToken>> = null;
+  if (secret) {
+    token = await getToken({
+      req,
+      secret,
+      secureCookie,
+    });
+  }
+
+  const isAdmin = isAdminRouteRole(token?.role);
+
+  if (pathname === "/register" || pathname === "/auth/register") {
+    return NextResponse.redirect(
+      new URL("/maintenance?reason=registration", nextUrl.origin),
+    );
+  }
+
+  if (allowAdmin && token?.sub && isAdmin) {
+    return null;
+  }
+
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json(
+      { error: "Ведутся технические работы. Сервис временно недоступен." },
+      { status: 503 },
+    );
+  }
+
+  if (!allowAdmin) {
+    if (pathname === "/login" || pathname === "/auth/login") {
+      return NextResponse.redirect(new URL("/maintenance", nextUrl.origin));
+    }
+    if (token?.sub && !isAdmin) {
+      if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
+        return NextResponse.redirect(new URL("/maintenance", nextUrl.origin));
+      }
+    }
+    return NextResponse.redirect(new URL("/maintenance", nextUrl.origin));
+  }
+
+  if (pathname === "/login" || pathname === "/auth/login") {
+    return null;
+  }
+  if (pathname.startsWith("/admin")) {
+    return null;
+  }
+  if (token?.sub && !isAdmin) {
+    if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
+      return NextResponse.redirect(new URL("/maintenance", nextUrl.origin));
+    }
+  }
+
+  return NextResponse.redirect(new URL("/maintenance", nextUrl.origin));
+}
+
 export async function middleware(req: NextRequest) {
+  const gated = await applyMaintenanceGate(req);
+  if (gated !== null) {
+    return gated;
+  }
+
   const { nextUrl } = req;
   const pathname = nextUrl.pathname;
 
@@ -116,7 +215,6 @@ export async function middleware(req: NextRequest) {
   }
 
   const response = NextResponse.next();
-  // Чтобы CDN/прокси не отдавали закэшированный HTML кабинета без новых пунктов меню.
   if (isDashboard || isAdmin) {
     response.headers.set(
       "Cache-Control",
@@ -128,13 +226,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/login",
-    "/auth/login",
-    "/register",
-    "/auth/register",
-    "/dashboard",
-    "/dashboard/:path*",
-    "/admin",
-    "/admin/:path*",
+    "/((?!_next/static|_next/image|favicon.ico).*)",
   ],
 };

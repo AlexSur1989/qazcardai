@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Package, Sparkles } from "lucide-react";
+import { ImageIcon, Package, Sparkles, Video } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -32,7 +32,7 @@ export default async function CreateHubPage() {
           { label: "Создать" },
         ]}
       />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link href="/dashboard/models" className="block rounded-lg focus-visible:ring-2">
           <Card className="h-full transition-colors hover:border-primary/50">
             <CardHeader>
@@ -42,6 +42,32 @@ export default async function CreateHubPage() {
               </CardTitle>
               <CardDescription>
                 Каталог моделей фото и видео: фильтры по задачам и быстрый запуск генерации
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+        <Link href="/dashboard/create/image" className="block rounded-lg focus-visible:ring-2">
+          <Card className="h-full transition-colors hover:border-primary/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <ImageIcon className="size-5" aria-hidden />
+                Создать фото
+              </CardTitle>
+              <CardDescription>
+                Выбор модели из каталога изображений и постановка задачи в очередь
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+        <Link href="/dashboard/create/video" className="block rounded-lg focus-visible:ring-2">
+          <Card className="h-full transition-colors hover:border-primary/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Video className="size-5" aria-hidden />
+                Создать видео
+              </CardTitle>
+              <CardDescription>
+                Видео-модели (в т.ч. Veo 3.1, Seedance, Kling): параметры из схемы модели
               </CardDescription>
             </CardHeader>
           </Card>

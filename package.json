@@ -2,6 +2,10 @@
   "name": "ai-media-saas",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "dev:lan": "next dev --hostname 0.0.0.0",
@@ -15,7 +19,7 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:validate": "node scripts/patch-prisma-dev-zeptomatch.cjs && prisma validate",
-    "db:seed:admin": "npx tsx scripts/seed-admin.ts",
+    "db:seed:admin": "prisma generate && npx tsx scripts/seed-admin.ts",
     "seed:token-packages": "npx tsx scripts/seed-token-packages.ts",
     "seed:kling": "npx tsx scripts/seed-kling.ts",
     "seed:kling-motion-control": "npx tsx scripts/seed-kling-motion-control.ts",
@@ -25,6 +29,14 @@
     "seed:wan": "npx tsx scripts/seed-wan.ts",
     "seed:seedance": "npx tsx scripts/seed-seedance.ts",
     "seed:seedance-fast": "npx tsx scripts/seed-seedance-fast.ts",
+    "seed:seedance-1-5-pro": "npx tsx scripts/seed-seedance-1-5-pro.ts",
+    "seed:seedance-all":
+      "npx tsx scripts/seed-seedance.ts && npx tsx scripts/seed-seedance-fast.ts && npx tsx scripts/seed-seedance-1-5-pro.ts",
+    "seed:happyhorse": "prisma generate && npx tsx scripts/seed-happyhorse.ts",
+    "seed:grok-imagine": "npx tsx scripts/seed-grok-imagine.ts",
+    "seed:hailuo-2-3": "npx tsx scripts/seed-hailuo-2-3.ts",
+    "seed:sora-2-pro-storyboard": "npx tsx scripts/seed-sora-2-pro-storyboard.ts",
+    "seed:veo-3-1": "npx tsx scripts/seed-veo-31.ts",
     "db:models:wan-only": "npx tsx scripts/delete-models-except-wan.ts",
     "worker": "npx tsx scripts/worker.ts"
   },

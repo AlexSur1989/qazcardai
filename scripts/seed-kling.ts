@@ -1,5 +1,5 @@
 /**
- * Создаёт или обновляет модель Kling 3.0 (Kie.ai Market).
+ * Создаёт или обновляет видео-модели Kling 3.0 и Kling 2.6 (Kie.ai Market).
  * Запуск: npm run seed:kling
  */
 import "dotenv/config";
@@ -66,13 +66,12 @@ const SETTINGS_SCHEMA = {
   ],
 } as const;
 
-const PRICING_SCHEMA = {
+const PRICING_MATRIX = {
   type: "matrix",
   matrixKeyStrategy: "kling_mode_sound",
   currency: "KZT",
   internalTokenValueKzt: 10,
   provider: "KIE_AI",
-  providerModel: "kling-3.0",
   markupPercent: 40,
   defaultCredits: 46,
   matrix: {
@@ -125,7 +124,7 @@ const PRICING_SCHEMA = {
     },
   },
   fallbackCredits: 46,
-} as const;
+} as const satisfies Record<string, unknown>;
 
 const PAYLOAD_MAPPING = {
   prompt: "input.prompt",
@@ -137,58 +136,98 @@ const PAYLOAD_MAPPING = {
   multiShots: "input.multi_shots",
 } as const;
 
+const VARIANTS = [
+  {
+    slug: "kling-3-0",
+    name: "Kling 3.0",
+    apiModelId: "kling-3.0",
+    description:
+      "Kling 3.0 — видео по тексту и изображениям (Kie: kling-3.0): std/pro/4K, звук, single/multi-shot.",
+  },
+  {
+    slug: "kling-3-0-video",
+    name: "Kling 3.0 Video",
+    apiModelId: "kling-3.0/video",
+    description:
+      "Kling 3.0 Video — тот же набор параметров, модель Kie: kling-3.0/video (createTask).",
+  },
+  {
+    slug: "kling-2-6-text-to-video",
+    name: "Kling 2.6 Text to Video",
+    apiModelId: "kling-2.6/text-to-video",
+    description:
+      "Kling 2.6 Text→Video (Kie: kling-2.6/text-to-video): те же поля input, что у Kling 3.0 (без image_urls).",
+  },
+  {
+    slug: "kling-2-6-image-to-video",
+    name: "Kling 2.6 Image to Video",
+    apiModelId: "kling-2.6/image-to-video",
+    description:
+      "Kling 2.6 Image→Video (Kie: kling-2.6/image-to-video): std/pro/4K и image_urls с кадрами.",
+  },
+] as const;
+
+function pricingSchemaFor(providerModel: string): Record<string, unknown> {
+  return {
+    ...PRICING_MATRIX,
+    providerModel,
+  };
+}
+
 async function main() {
-  const row = await prisma.aiModel.upsert({
-    where: { slug: "kling-3-0" },
-    create: {
-      name: "Kling 3.0",
-      slug: "kling-3-0",
-      provider: "KIE_AI",
-      type: "VIDEO",
-      apiModelId: "kling-3.0",
-      endpoint: "/api/v1/jobs/createTask",
-      statusEndpoint: "/api/v1/jobs/recordInfo",
-      costCredits: 46,
-      realCost: 0,
-      isActive: true,
-      supportsImageInput: true,
-      supportsVideoInput: false,
-      supportsNegativePrompt: false,
-      supportsSeed: false,
-      maxDuration: 15,
-      description:
-        "Kling 3.0 — видео-модель для генерации AI-видео по тексту и изображениям. Поддерживает режимы Standard, Pro и 4K, звук, single-shot и multi-shot, aspect ratio 16:9, 9:16 и 1:1, а также длительность до 15 секунд.",
-      availableAspectRatios: ["16:9", "9:16", "1:1"],
-      availableResolutions: ["std", "pro", "4K"],
-      settingsSchema: { ...SETTINGS_SCHEMA },
-      pricingSchema: { ...PRICING_SCHEMA },
-      payloadMapping: { ...PAYLOAD_MAPPING },
-    },
-    update: {
-      name: "Kling 3.0",
-      provider: "KIE_AI",
-      type: "VIDEO",
-      apiModelId: "kling-3.0",
-      endpoint: "/api/v1/jobs/createTask",
-      statusEndpoint: "/api/v1/jobs/recordInfo",
-      costCredits: 46,
-      realCost: 0,
-      isActive: true,
-      supportsImageInput: true,
-      supportsVideoInput: false,
-      supportsNegativePrompt: false,
-      supportsSeed: false,
-      maxDuration: 15,
-      description:
-        "Kling 3.0 — видео-модель для генерации AI-видео по тексту и изображениям. Поддерживает режимы Standard, Pro и 4K, звук, single-shot и multi-shot, aspect ratio 16:9, 9:16 и 1:1, а также длительность до 15 секунд.",
-      availableAspectRatios: ["16:9", "9:16", "1:1"],
-      availableResolutions: ["std", "pro", "4K"],
-      settingsSchema: { ...SETTINGS_SCHEMA },
-      pricingSchema: { ...PRICING_SCHEMA },
-      payloadMapping: { ...PAYLOAD_MAPPING },
-    },
-  });
-  console.log("[seed:kling] OK", row.id, row.slug);
+  for (const v of VARIANTS) {
+    const pricingSchema = pricingSchemaFor(v.apiModelId);
+    const row = await prisma.aiModel.upsert({
+      where: { slug: v.slug },
+      create: {
+        name: v.name,
+        slug: v.slug,
+        provider: "KIE_AI",
+        type: "VIDEO",
+        apiModelId: v.apiModelId,
+        endpoint: "/api/v1/jobs/createTask",
+        statusEndpoint: "/api/v1/jobs/recordInfo",
+        costCredits: 46,
+        realCost: 0,
+        isActive: true,
+        supportsImageInput: true,
+        supportsVideoInput: false,
+        supportsNegativePrompt: false,
+        supportsSeed: false,
+        maxDuration: 15,
+        description: v.description,
+        availableAspectRatios: ["16:9", "9:16", "1:1"],
+        availableResolutions: ["std", "pro", "4K"],
+        settingsSchema: { ...SETTINGS_SCHEMA },
+        pricingSchema: pricingSchema as object,
+        payloadMapping: { ...PAYLOAD_MAPPING },
+      },
+      update: {
+        name: v.name,
+        provider: "KIE_AI",
+        type: "VIDEO",
+        apiModelId: v.apiModelId,
+        endpoint: "/api/v1/jobs/createTask",
+        statusEndpoint: "/api/v1/jobs/recordInfo",
+        costCredits: 46,
+        realCost: 0,
+        isActive: true,
+        supportsImageInput: true,
+        supportsVideoInput: false,
+        supportsNegativePrompt: false,
+        supportsSeed: false,
+        maxDuration: 15,
+        description: v.description,
+        availableAspectRatios: ["16:9", "9:16", "1:1"],
+        availableResolutions: ["std", "pro", "4K"],
+        settingsSchema: { ...SETTINGS_SCHEMA },
+        pricingSchema: pricingSchema as object,
+        payloadMapping: { ...PAYLOAD_MAPPING },
+      },
+    });
+    console.log("[seed:kling]", v.slug, row.id);
+  }
+  console.log("[seed:kling] OK", VARIANTS.length, "variants");
 }
 
 main()

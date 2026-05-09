@@ -1,15 +1,47 @@
 
 export const KLING_30_API_MODEL_ID = "kling-3.0";
 
+/** Kie market ids с тем же профилем, что KLING_30_API_MODEL_ID (payload + validation). */
+export const KLING_30_MARKET_VARIANT_API_IDS = [
+  KLING_30_API_MODEL_ID,
+  "kling-3.0/video",
+] as const;
+
+const KLING_30_MARKET_ID_SET = new Set(
+  KLING_30_MARKET_VARIANT_API_IDS.map((s) => s.toLowerCase()),
+);
+
 export function isKling30Model(
   apiModelId: string | null | undefined,
 ): boolean {
-  return String(apiModelId ?? "").trim() === KLING_30_API_MODEL_ID;
+  return KLING_30_MARKET_ID_SET.has(String(apiModelId ?? "").trim().toLowerCase());
+}
+
+const KLING_26_MARKET_VARIANT_API_IDS = [
+  "kling-2.6/text-to-video",
+  "kling-2.6/image-to-video",
+] as const;
+
+const KLING_26_MARKET_ID_SET = new Set(
+  KLING_26_MARKET_VARIANT_API_IDS.map((s) => s.toLowerCase()),
+);
+
+export function isKling26Model(
+  apiModelId: string | null | undefined,
+): boolean {
+  return KLING_26_MARKET_ID_SET.has(String(apiModelId ?? "").trim().toLowerCase());
+}
+
+/** Kling 3.0 / 3.0 video / 2.6 — один контракт Kie createTask для buildKling30MarketCreateTaskPayload. */
+export function isKling30StyleMarketModel(
+  apiModelId: string | null | undefined,
+): boolean {
+  return isKling30Model(apiModelId) || isKling26Model(apiModelId);
 }
 
 /**
  * Kling 3.0: mode, duration, aspectRatio, sound, multiShots.
- * Multi-shot (MVP) — запрещён РґРѕ отдельного UI.
+ * Multi-shot (MVP) — отключено до отдельного UI.
  */
 export function validateKling30Settings(
   settings: Record<string, unknown>,
@@ -66,6 +98,32 @@ export function validateKling30Settings(
       ok: false,
       message: "Multi-shot mode is not implemented yet",
     };
+  }
+  return { ok: true };
+}
+
+/** Валидация Kling 3.0 + 2.6 (2.6 image-to-video — нужен хотя бы один image URL). */
+export function validateKling30StyleSettings(
+  apiModelId: string | null | undefined,
+  settings: Record<string, unknown>,
+): { ok: true } | { ok: false; message: string } {
+  const base = validateKling30Settings(settings);
+  if (!base.ok) return base;
+
+  const id = String(apiModelId ?? "").trim().toLowerCase();
+  if (id === "kling-2.6/image-to-video") {
+    const urls = Array.isArray(settings.imageUrls)
+      ? settings.imageUrls.filter(
+          (x): x is string => typeof x === "string" && x.trim() !== "",
+        )
+      : [];
+    if (urls.length === 0) {
+      return {
+        ok: false,
+        message:
+          "Kling 2.6 Image→Video: укажите хотя бы один URL изображения (кадры в imageUrls).",
+      };
+    }
   }
   return { ok: true };
 }

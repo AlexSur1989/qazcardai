@@ -15,6 +15,8 @@ export type AiModelCatalogRow = {
   provider: AiModelProvider;
   type: GenerationType;
   scope: string;
+  /** Заполнен для моделей карточки товара — не должны висеть в общем каталоге */
+  productCardModelType: string | null;
   costCredits: number;
   description: string | null;
   isActive: boolean;
@@ -37,6 +39,8 @@ export type MergedCatalogModelCard = {
   status: "active" | "disabled" | "coming_soon";
   detailHref: string;
   gradientClass: string;
+  /** См. CatalogModelDefinition.hideFromModelsCatalog */
+  hideFromModelsCatalog: boolean;
 };
 
 export function providerToLabel(provider: AiModelProvider): string {
@@ -47,6 +51,15 @@ export function providerToLabel(provider: AiModelProvider): string {
 }
 
 export function inferTasksFromDbModel(row: AiModelCatalogRow): GenerationTaskId[] {
+  if (row.type === "VIDEO") {
+    if (row.slug === "veo-get-4k-video" || row.slug === "veo-get-1080p-video") {
+      return ["video_editing"];
+    }
+    if (row.slug === "veo-extend") {
+      return ["video_to_video", "video_editing"];
+    }
+  }
+
   const tasks: GenerationTaskId[] = [];
   if (row.type === "IMAGE") {
     tasks.push("text_to_image");
@@ -167,11 +180,16 @@ export function mergeGenerationCatalog(params: {
       detailHref: resolveDetailHref(def.catalogSlug),
       status,
       gradientClass: def.gradientClass,
+      hideFromModelsCatalog: def.hideFromModelsCatalog === true,
     });
   }
 
   for (const row of dbModels) {
-    if (row.scope !== "GENERAL" || consumed.has(row.slug)) {
+    if (
+      row.scope !== "GENERAL" ||
+      row.productCardModelType != null ||
+      consumed.has(row.slug)
+    ) {
       continue;
     }
     const tasks = inferTasksFromDbModel(row);
@@ -198,6 +216,7 @@ export function mergeGenerationCatalog(params: {
         row.type === "IMAGE"
           ? "from-slate-500/80 via-sky-600/78 to-blue-900/85"
           : "from-indigo-500/82 via-purple-600/78 to-violet-900/85",
+      hideFromModelsCatalog: false,
     });
   }
 
@@ -208,6 +227,13 @@ export function mergeGenerationCatalog(params: {
   });
 
   return merged;
+}
+
+/** Карточки для списка /dashboard/models (без сценариев только для карточки товара). */
+export function visibleInModelsCatalog(
+  merged: MergedCatalogModelCard[],
+): MergedCatalogModelCard[] {
+  return merged.filter((m) => !m.hideFromModelsCatalog);
 }
 
 const CATEGORY_ORDER: Record<GenerationModelCategory, number> = {

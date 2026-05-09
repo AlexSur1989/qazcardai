@@ -102,6 +102,35 @@ export function validateAndNormalizeModelSettings(
       }
     }
 
+    if (typ === "json") {
+      if (v == null || v === "") {
+        out[f.name] = [];
+      } else if (typeof v === "string") {
+        const t = v.trim();
+        if (t === "") {
+          out[f.name] = [];
+        } else {
+          try {
+            out[f.name] = JSON.parse(t) as unknown;
+          } catch {
+            return {
+              ok: false,
+              message: `Поле «${f.label ?? f.name}»: невалидный JSON`,
+            };
+          }
+        }
+      } else if (Array.isArray(v)) {
+        out[f.name] = v;
+      } else if (typeof v === "object" && v !== null) {
+        out[f.name] = v;
+      } else {
+        return {
+          ok: false,
+          message: `Поле «${f.label ?? f.name}»: ожидается JSON`,
+        };
+      }
+    }
+
     if (typ === "select" && Array.isArray(f.options) && v !== undefined && v !== null && v !== "") {
       if (!f.options.includes(v)) {
         const match = f.options.find((o) => String(o) === String(v));
@@ -128,6 +157,14 @@ export function validateAndNormalizeModelSettings(
           ok: false,
           message: `Заполните поле «${f.label ?? f.name}»`,
         };
+      }
+      if (typ === "json" && f.required) {
+        if (!Array.isArray(val) || val.length === 0) {
+          return {
+            ok: false,
+            message: `Заполните поле «${f.label ?? f.name}»`,
+          };
+        }
       }
     }
   }

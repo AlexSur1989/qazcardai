@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
-import { getAppSetting } from "@/server/services/appSettings";
+import { getAppSetting, getMaintenanceFlags } from "@/server/services/appSettings";
 import { trySendWelcomeEmailForNewUser } from "@/server/services/notificationsIntegration";
 import { UserRole, UserStatus } from "@/generated/prisma/enums";
 import { enforceRegistrationRateLimit } from "@/server/services/rateLimitService";
@@ -12,6 +12,17 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export async function POST(req: Request) {
   const limited = await enforceRegistrationRateLimit(req);
   if (limited) return limited;
+
+  const maint = await getMaintenanceFlags();
+  if (maint.maintenanceMode) {
+    return NextResponse.json(
+      {
+        error:
+          "Регистрация временно недоступна: ведутся технические работы. Скоро открытие.",
+      },
+      { status: 503 },
+    );
+  }
 
   let body: unknown;
   try {

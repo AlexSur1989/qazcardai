@@ -20,9 +20,23 @@ import {
   validateKlingMotionControlSettingsForEstimate,
 } from "@/server/services/kling-motion-control-settings";
 import {
-  isKling30Model,
-  validateKling30Settings,
+  isKling30StyleMarketModel,
+  validateKling30StyleSettings,
 } from "@/server/services/kling-settings";
+import {
+  validateHailuo23ImageToVideoSettings,
+} from "@/server/services/hailuo-settings";
+import {
+  isSora2ProStoryboardModel,
+  validateSora2ProStoryboardSettings,
+} from "@/server/services/sora-storyboard-settings";
+import {
+  validateVeo31ModelSettings,
+} from "@/server/services/veo31-settings";
+import {
+  isGrokImagineModel,
+  validateGrokImagineSettings,
+} from "@/server/services/grok-imagine-settings";
 import {
   isSeedanceScenarioModel,
   validateSeedanceScenario,
@@ -87,6 +101,45 @@ export async function POST(req: Request) {
     if (!v.ok) {
       return NextResponse.json({ error: v.message }, { status: 400 });
     }
+    if (isGrokImagineModel(model.apiModelId)) {
+      const gVal = validateGrokImagineSettings(model.apiModelId, v.settings);
+      if (!gVal.ok) {
+        return NextResponse.json(
+          { error: gVal.message, message: gVal.message },
+          { status: 400 },
+        );
+      }
+    }
+    {
+      const hVal = validateHailuo23ImageToVideoSettings(
+        model.apiModelId,
+        v.settings,
+      );
+      if (!hVal.ok) {
+        return NextResponse.json(
+          { error: hVal.message, message: hVal.message },
+          { status: 400 },
+        );
+      }
+    }
+    if (isSora2ProStoryboardModel(model.apiModelId)) {
+      const sb = validateSora2ProStoryboardSettings(v.settings);
+      if (!sb.ok) {
+        return NextResponse.json(
+          { error: sb.message, message: sb.message },
+          { status: 400 },
+        );
+      }
+    }
+    {
+      const vVeo = validateVeo31ModelSettings(model.apiModelId, v.settings);
+      if (!vVeo.ok) {
+        return NextResponse.json(
+          { error: vVeo.message, message: vVeo.message },
+          { status: 400 },
+        );
+      }
+    }
     if (isSeedanceScenarioModel(model.apiModelId)) {
       const sVal = validateSeedanceScenario(v.settings);
       if (!sVal.ok) {
@@ -96,8 +149,8 @@ export async function POST(req: Request) {
         );
       }
     }
-    if (isKling30Model(model.apiModelId)) {
-      const kVal = validateKling30Settings(v.settings);
+    if (isKling30StyleMarketModel(model.apiModelId)) {
+      const kVal = validateKling30StyleSettings(model.apiModelId, v.settings);
       if (!kVal.ok) {
         return NextResponse.json(
           { error: kVal.message, message: kVal.message },

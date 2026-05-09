@@ -39,8 +39,8 @@ import {
   validateKlingMotionControlSettings,
 } from "@/server/services/kling-motion-control-settings";
 import {
-  isKling30Model,
-  validateKling30Settings,
+  isKling30StyleMarketModel,
+  validateKling30StyleSettings,
 } from "@/server/services/kling-settings";
 import {
   collectSeedanceSettingsHttpUrls,
@@ -146,7 +146,9 @@ function mergeProductCardInputIntoKieSettings(
 
   const apiId = (model.apiModelId ?? "").trim().toLowerCase();
   const seedance2 =
-    apiId === "bytedance/seedance-2" || apiId === "bytedance/seedance-2-fast";
+    apiId === "bytedance/seedance-2" ||
+    apiId === "bytedance/seedance-2-fast" ||
+    apiId === "bytedance/seedance-1.5-pro";
 
   const pm = model.payloadMapping;
   const hasPm = isJsonObject(pm);
@@ -560,8 +562,8 @@ export async function queueProductCardVideo(
   })();
   const inputFilesCombined = [...(bodyInputFiles ?? []), ...imageUrlsFromSettings];
 
-  if (isKling30Model(model.apiModelId)) {
-    const kVal = validateKling30Settings(normalizedSettings);
+  if (isKling30StyleMarketModel(model.apiModelId)) {
+    const kVal = validateKling30StyleSettings(model.apiModelId, normalizedSettings);
     if (!kVal.ok) {
       return { ok: false, error: kVal.message, status: 400 };
     }

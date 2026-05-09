@@ -16,7 +16,7 @@ const SCENARIOS = new Set([
 ]);
 
 /**
- * Взаимоисключающие сценарии Seedance 2.0 (Kie bytedance/seedance-2 / seedance-2-fast).
+ * Взаимоисключающие сценарии Seedance (Kie: bytedance/seedance-2, seedance-2-fast, seedance-1.5-pro).
  * См. OpenAPI: https://docs.kie.ai/market/bytedance/seedance-2
  * (Text-to-Video, First&Last, Multimodal reference — не смешивать).
  */
@@ -104,10 +104,17 @@ export const SEEDANCE_API_MODEL_ID = "bytedance/seedance-2";
 
 export const SEEDANCE_FAST_API_MODEL_ID = "bytedance/seedance-2-fast";
 
-/** Сценарии first/last frame / reference — общие для Seedance 2.0 и 2.0 Fast. */
+/** Kie Market: bytedance/seedance-1.5-pro — тот же профиль input, что Seedance 2.x. */
+export const SEEDANCE_1_5_PRO_API_MODEL_ID = "bytedance/seedance-1.5-pro";
+
+/** Сценарии first/last frame / reference — общие для Seedance 2.0, 2.0 Fast и 1.5 Pro. */
 export function isSeedanceScenarioModel(
   apiModelId: string | null | undefined,
 ): boolean {
   const t = String(apiModelId ?? "").trim();
-  return t === SEEDANCE_API_MODEL_ID || t === SEEDANCE_FAST_API_MODEL_ID;
+  return (
+    t === SEEDANCE_API_MODEL_ID ||
+    t === SEEDANCE_FAST_API_MODEL_ID ||
+    t === SEEDANCE_1_5_PRO_API_MODEL_ID
+  );
 }

@@ -26,6 +26,10 @@ import {
   validateAndNormalizeModelSettings,
 } from "@/server/services/model-settings";
 import { calculateGenerationCredits } from "@/server/services/pricing";
+import {
+  isGrokImagineModel,
+  validateGrokImagineSettings,
+} from "@/server/services/grok-imagine-settings";
 
 function redisAndKieReady() {
   return (
@@ -110,6 +114,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: v.message }, { status: 400 });
     }
     normalizedSettings = v.settings;
+  }
+  if (hasSchema && isGrokImagineModel(model.apiModelId)) {
+    const gVal = validateGrokImagineSettings(model.apiModelId, normalizedSettings);
+    if (!gVal.ok) {
+      return NextResponse.json({ error: gVal.message }, { status: 400 });
+    }
   }
 
   const imageUrlsFromSettings =

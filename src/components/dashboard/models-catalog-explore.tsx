@@ -16,6 +16,10 @@ type Props = {
   models: MergedCatalogModelCard[];
   /** Заголовок и описание уже на сервере (PageHeader). */
   suppressTitleBlock?: boolean;
+  /** Из query (?q= / ?search=) на /dashboard/models */
+  initialSearch?: string;
+  /** Из query ?task= (id задачи, через запятую) */
+  initialTaskFilters?: GenerationTaskId[];
 };
 
 function statusLabel(s: MergedCatalogModelCard["status"]): string {
@@ -27,9 +31,13 @@ function statusLabel(s: MergedCatalogModelCard["status"]): string {
 export function ModelsCatalogExplore({
   models,
   suppressTitleBlock = false,
+  initialSearch = "",
+  initialTaskFilters = [],
 }: Props) {
-  const [search, setSearch] = useState("");
-  const [taskFilters, setTaskFilters] = useState<GenerationTaskId[]>([]);
+  const [search, setSearch] = useState(initialSearch);
+  const [taskFilters, setTaskFilters] = useState<GenerationTaskId[]>(
+    initialTaskFilters,
+  );
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const filtered = useMemo(() => {
