@@ -19,6 +19,8 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 const GPT_T2I_SLUG = "gpt-image-2-text-to-image-general";
+/** Тот же apiModelId, что в seed:gpt-image-2-product-card — для «Создать фото» (scope GENERAL). */
+const GPT_I2I_SLUG = "gpt-image-2-image-to-image";
 const SEEDREAM_T2I_SLUG = "seedream-v4-text-to-image-general";
 
 const GPT_PRICING = {
@@ -54,6 +56,12 @@ const GPT_PRICING = {
   fallbackCredits: 20,
 } as const;
 
+/** Матрица как у GPT T2I; providerModel для калькулятора — slug записи GENERAL. */
+const GPT_I2I_PRICING = {
+  ...GPT_PRICING,
+  providerModel: GPT_I2I_SLUG,
+} as const;
+
 const GPT_SETTINGS = {
   fields: [
     {
@@ -82,8 +90,28 @@ const GPT_SETTINGS = {
   ],
 } as const;
 
+const GPT_I2I_SETTINGS = {
+  fields: [
+    {
+      name: "inputUrls",
+      type: "url-list",
+      label: "Входные изображения (input_urls)",
+      required: true,
+      maxItems: 16,
+    },
+    ...GPT_SETTINGS.fields,
+  ],
+} as const;
+
 const GPT_PAYLOAD = {
   prompt: "input.prompt",
+  aspectRatio: "input.aspect_ratio",
+  resolution: "input.resolution",
+} as const;
+
+const GPT_I2I_PAYLOAD = {
+  prompt: "input.prompt",
+  inputUrls: "input.input_urls",
   aspectRatio: "input.aspect_ratio",
   resolution: "input.resolution",
 } as const;
@@ -247,6 +275,63 @@ async function main() {
     }),
   });
 
+  const gptI2IGuard = await prisma.aiModel.findUnique({
+    where: { slug: GPT_I2I_SLUG },
+    select: { pricingSchema: true },
+  });
+  const gptI2I = await prisma.aiModel.upsert({
+    where: { slug: GPT_I2I_SLUG },
+    create: {
+      name: "GPT Image 2 — изображение → изображение",
+      slug: GPT_I2I_SLUG,
+      scope: "GENERAL",
+      productCardModelType: null,
+      provider: "KIE_AI",
+      type: "IMAGE",
+      apiModelId: GPT_I2I_SLUG,
+      endpoint: "/api/v1/jobs/createTask",
+      statusEndpoint: "/api/v1/jobs/recordInfo",
+      costCredits: 20,
+      realCost: 0.03,
+      isActive: true,
+      supportsImageInput: true,
+      supportsVideoInput: false,
+      supportsNegativePrompt: false,
+      supportsSeed: false,
+      description:
+        "Референсы + текст через Kie.ai (gpt-image-2-image-to-image). Общий кабинет «Создать фото».",
+      availableAspectRatios: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
+      availableResolutions: ["1K", "2K", "4K"],
+      settingsSchema: { ...GPT_I2I_SETTINGS },
+      pricingSchema: { ...GPT_I2I_PRICING },
+      payloadMapping: { ...GPT_I2I_PAYLOAD },
+    },
+    update: omitSeedPricingWhenPinned(gptI2IGuard, {
+      name: "GPT Image 2 — изображение → изображение",
+      scope: "GENERAL",
+      productCardModelType: null,
+      provider: "KIE_AI",
+      type: "IMAGE",
+      apiModelId: GPT_I2I_SLUG,
+      endpoint: "/api/v1/jobs/createTask",
+      statusEndpoint: "/api/v1/jobs/recordInfo",
+      costCredits: 20,
+      realCost: 0.03,
+      isActive: true,
+      supportsImageInput: true,
+      supportsVideoInput: false,
+      supportsNegativePrompt: false,
+      supportsSeed: false,
+      description:
+        "Референсы + текст через Kie.ai (gpt-image-2-image-to-image). Общий кабинет «Создать фото».",
+      availableAspectRatios: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
+      availableResolutions: ["1K", "2K", "4K"],
+      settingsSchema: { ...GPT_I2I_SETTINGS },
+      pricingSchema: { ...GPT_I2I_PRICING },
+      payloadMapping: { ...GPT_I2I_PAYLOAD },
+    }),
+  });
+
   const seedreamGuard = await prisma.aiModel.findUnique({
     where: { slug: SEEDREAM_T2I_SLUG },
     select: { pricingSchema: true },
@@ -306,6 +391,7 @@ async function main() {
 
   console.log("[seed:general-kie-image-models] OK");
   console.log("  GPT Image 2 T2I:", gpt.id, gpt.slug);
+  console.log("  GPT Image 2 I2I:", gptI2I.id, gptI2I.slug);
   console.log("  Seedream 4 T2I:", seedream.id, seedream.slug);
 }
 

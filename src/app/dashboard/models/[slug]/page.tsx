@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import type { ReactNode } from "react";
 
 import {
   TASK_LABELS_RU,
   GENERATION_MODEL_CATALOG,
 } from "@/config/generation-models";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { GptImage2Playground } from "@/components/dashboard/model-playgrounds/gpt-image-2-playground";
 import { prismaWhereForDashboardModelsCatalog } from "@/lib/ai-models-catalog-db";
 import {
   mergeGenerationCatalog,
@@ -13,10 +15,23 @@ import {
 } from "@/lib/generation-models-catalog";
 import { prisma } from "@/lib/prisma";
 import { cn } from "@/lib/utils";
+import { getBalance } from "@/server/services/credits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { getCreditsUiFloor } from "@/server/services/pricing";
 
-type Props = { params: Promise<{ slug: string }> };
+function firstSearchParam(v: string | string[] | undefined): string | undefined {
+  if (typeof v === "string") return v;
+  if (Array.isArray(v)) return v[0];
+  return undefined;
+}
+
+const GPT_IMAGE_2_T2I_SLUG = "gpt-image-2-text-to-image-general";
+const GPT_IMAGE_2_I2I_SLUG = "gpt-image-2-image-to-image";
+
+type Props = {
+  params: Promise<{ slug: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
 
 function resolvePrimaryCta(card: MergedCatalogModelCard) {
   const fromCat = GENERATION_MODEL_CATALOG.find(
@@ -44,8 +59,11 @@ export async function generateMetadata({ params }: Props) {
   };
 }
 
-export default async function ModelDetailPage({ params }: Props) {
-  const { slug } = await params;
+export default async function ModelDetailPage({ params, searchParams }: Props) {
+  const [{ slug }, sp] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve({} as Record<string, string | string[] | undefined>),
+  ]);
   if (!slug) {
     notFound();
   }
@@ -57,7 +75,13 @@ export default async function ModelDetailPage({ params }: Props) {
     );
   }
 
-  const [dbRows, productMinRow] = await Promise.all([
+  const variantRaw = firstSearchParam(sp.variant)?.toLowerCase();
+  const initialGptVariant =
+    variantRaw === "i2i" || variantRaw === "image"
+      ? ("i2i" as const)
+      : ("t2i" as const);
+
+  const catalogAndGpt = await Promise.all([
     prisma.aiModel.findMany({
       where: prismaWhereForDashboardModelsCatalog(),
       select: {
@@ -80,7 +104,73 @@ export default async function ModelDetailPage({ params }: Props) {
       where: { scope: "PRODUCT_CARD", isActive: true },
       _min: { costCredits: true },
     }),
+    slug === "gpt-image-2" ?
+      Promise.all([
+        getBalance(current.user.id),
+        prisma.aiModel.findFirst({
+          where: {
+            slug: GPT_IMAGE_2_T2I_SLUG,
+            isActive: true,
+            type: "IMAGE",
+            scope: "GENERAL",
+          },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+            settingsSchema: true,
+          },
+        }),
+        prisma.aiModel.findFirst({
+          where: {
+            slug: GPT_IMAGE_2_I2I_SLUG,
+            isActive: true,
+            type: "IMAGE",
+            scope: "GENERAL",
+          },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+            settingsSchema: true,
+          },
+        }),
+      ])
+    : Promise.resolve(null),
   ]);
+
+  const [dbRows, productMinRow, gptBundle] = catalogAndGpt;
+
+  let gptImage2Playground: ReactNode = null;
+  if (gptBundle && slug === "gpt-image-2") {
+    const [balanceCredits, rowT2I, rowI2I] = gptBundle;
+    if (rowT2I && rowI2I) {
+      gptImage2Playground = (
+        <GptImage2Playground
+          balanceCredits={balanceCredits}
+          initialVariant={initialGptVariant}
+          t2i={{
+            id: rowT2I.id,
+            name: rowT2I.name,
+            slug: rowT2I.slug,
+            description: rowT2I.description,
+            settingsSchema: rowT2I.settingsSchema,
+          }}
+          i2i={{
+            id: rowI2I.id,
+            name: rowI2I.name,
+            slug: rowI2I.slug,
+            description: rowI2I.description,
+            settingsSchema: rowI2I.settingsSchema,
+          }}
+        />
+      );
+    }
+  }
+
+  const showGptPlayground = slug === "gpt-image-2" && gptImage2Playground !== null;
 
   const dbModels = dbRows.map((m) => {
     const { pricingSchema: _p, ...rest } = m;
@@ -101,6 +191,12 @@ export default async function ModelDetailPage({ params }: Props) {
   }
 
   const { href: primaryHref, label: primaryLabel } = resolvePrimaryCta(card);
+  const sidebarPrimaryHref =
+    card.status === "active" && showGptPlayground ?
+      `#gpt-image-2-playground`
+    : primaryHref;
+  const sidebarPrimaryLabel =
+    card.status === "active" && showGptPlayground ? "К генерации" : primaryLabel;
 
   const def = GENERATION_MODEL_CATALOG.find((c) => c.catalogSlug === slug);
 
@@ -151,13 +247,25 @@ export default async function ModelDetailPage({ params }: Props) {
             </p>
           </section>
 
-          <section className="space-y-2">
-            <h2 className="text-lg font-semibold">Примеры</h2>
+          {!showGptPlayground ? (
+            <section className="space-y-2">
+              <h2 className="text-lg font-semibold">Примеры</h2>
+              <p className="text-muted-foreground text-sm">
+                Примеры результатов появятся по мере накопления истории в кабинете. Запустите
+                генерацию и посмотрите превью в разделе «История».
+              </p>
+            </section>
+          ) : null}
+          {gptImage2Playground}
+          {showGptPlayground ?
             <p className="text-muted-foreground text-sm">
-              Примеры результатов появятся по мере накопления истории в кабинете. Запустите
-              генерацию и посмотрите превью в разделе «История».
+              Результат и историю запросов можно посмотреть в разделе{" "}
+              <Link href="/dashboard/history" className="text-primary underline">
+                История
+              </Link>
+              .
             </p>
-          </section>
+          : null}
         </div>
 
         <aside className="bg-card border-border space-y-4 rounded-2xl border p-5 shadow-sm">
@@ -173,12 +281,20 @@ export default async function ModelDetailPage({ params }: Props) {
           </p>
           <div className="flex flex-col gap-2">
             {card.status === "active" ? (
-              <Link href={primaryHref} className={cn(buttonVariants())}>
-                {primaryLabel}
+              <Link href={sidebarPrimaryHref} className={cn(buttonVariants())}>
+                {sidebarPrimaryLabel}
               </Link>
             ) : (
-              <Button disabled>{primaryLabel}</Button>
+              <Button disabled>{sidebarPrimaryLabel}</Button>
             )}
+            {card.status === "active" && showGptPlayground ?
+              <Link
+                href={primaryHref}
+                className={cn(buttonVariants({ variant: "outline" }))}
+              >
+                Открыть в «Создать фото»
+              </Link>
+            : null}
             <Link
               href="/dashboard/models"
               className={cn(buttonVariants({ variant: "outline" }))}
