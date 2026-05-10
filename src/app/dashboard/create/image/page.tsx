@@ -14,7 +14,10 @@ import {
 import { CreateFormSkeleton } from "@/components/dashboard/create-form-skeleton";
 import { getBalance } from "@/server/services/credits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
+import { IMAGE_CREATE_MODEL_GROUPS } from "@/config/generation-models";
+import type { CreateImageFormModel } from "@/components/dashboard/create-image-form";
 import { prisma } from "@/lib/prisma";
+import { getCreditsUiFloor } from "@/server/services/pricing";
 
 export const metadata = {
   title: "Создать изображение — QazCard AI",
@@ -26,7 +29,7 @@ export default async function CreateImagePage() {
     redirect("/login?next=/dashboard/create/image");
   }
 
-  const [models, balanceCredits] = await Promise.all([
+  const [rows, balanceCredits] = await Promise.all([
     prisma.aiModel.findMany({
       where: { isActive: true, type: "IMAGE", scope: "GENERAL" },
       orderBy: { name: "asc" },
@@ -35,6 +38,7 @@ export default async function CreateImagePage() {
         name: true,
         slug: true,
         costCredits: true,
+        pricingSchema: true,
         description: true,
         settingsSchema: true,
         supportsNegativePrompt: true,
@@ -44,6 +48,32 @@ export default async function CreateImagePage() {
     }),
     getBalance(current.user.id),
   ]);
+
+  const models = rows.map((m) => {
+    const { pricingSchema: _p, ...rest } = m;
+    return {
+      ...rest,
+      creditsUiMin: getCreditsUiFloor(m),
+    };
+  });
+
+  const modelsBySlug = new Map(models.map((m) => [m.slug, m]));
+  const groupedSlugSet = new Set(
+    IMAGE_CREATE_MODEL_GROUPS.flatMap((g) => g.variants.map((v) => v.slug)),
+  );
+  const soloModels = models.filter((m) => !groupedSlugSet.has(m.slug));
+  const modelGroups = IMAGE_CREATE_MODEL_GROUPS.map((spec) => ({
+    label: spec.label,
+    members: spec.variants.flatMap((v) => {
+      const base = modelsBySlug.get(v.slug);
+      if (!base) {
+        return [];
+      }
+      return [{ ...base, pickerLabel: v.optionLabel }] satisfies readonly [
+        CreateImageFormModel,
+      ];
+    }),
+  })).filter((g) => g.members.length > 0);
 
   return (
     <div className="space-y-6">
@@ -70,7 +100,11 @@ export default async function CreateImagePage() {
         </CardHeader>
         <CardContent>
           <Suspense fallback={<CreateFormSkeleton />}>
-            <CreateImageForm models={models} balanceCredits={balanceCredits} />
+            <CreateImageForm
+              soloModels={soloModels}
+              modelGroups={modelGroups}
+              balanceCredits={balanceCredits}
+            />
           </Suspense>
         </CardContent>
       </Card>

@@ -103,6 +103,10 @@ export type CatalogModelDefinition = {
   /** Сопоставление с AiModel.slug (первая найденная в БД запись побеждает) */
   dbSlugCandidates: string[];
   /**
+   * Все slug одной «семьи»: при merge считаются одной витринной карточкой и не дают второй строки хвоста.
+   */
+  familyDbSlugCandidates?: string[];
+  /**
    * Slug для ?model= при открытии create flow — обычно короткий (как в ТЗ).
    * Должен мапиться на первую активную модель с одним из dbSlugCandidates через alias map.
    */
@@ -116,6 +120,32 @@ export type CatalogModelDefinition = {
   hideFromModelsCatalog?: boolean;
 };
 
+const GPT_IMAGE_2_FAMILY_VARIANTS: readonly {
+  slug: string;
+  optionLabel: string;
+}[] = [
+  {
+    slug: "gpt-image-2-text-to-image-general",
+    optionLabel: "Текст → изображение",
+  },
+  {
+    slug: "gpt-image-2-image-to-image",
+    optionLabel: "Изображение → изображение",
+  },
+];
+
+const GPT_IMAGE_2_FAMILY_SLUGS = GPT_IMAGE_2_FAMILY_VARIANTS.map((v) => v.slug);
+
+/** Группы в селекторе «Создать фото» (одна папка — несколько AiModel). */
+export type ImageCreateModelGroupSpec = {
+  label: string;
+  variants: readonly { slug: string; optionLabel: string }[];
+};
+
+export const IMAGE_CREATE_MODEL_GROUPS: ImageCreateModelGroupSpec[] = [
+  { label: "GPT Image 2", variants: GPT_IMAGE_2_FAMILY_VARIANTS },
+];
+
 export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   {
     catalogSlug: "gpt-image-2",
@@ -125,7 +155,8 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
       "Генерация и редактирование изображений для товаров, рекламы и карточек.",
     tasks: ["text_to_image", "image_to_image", "image_editing"],
     category: "image",
-    dbSlugCandidates: ["gpt-image-2-text-to-image-general"],
+    dbSlugCandidates: [...GPT_IMAGE_2_FAMILY_SLUGS],
+    familyDbSlugCandidates: [...GPT_IMAGE_2_FAMILY_SLUGS],
     urlSlugForGenerator: "gpt-image-2",
     openBehavior: { kind: "image", querySlug: "gpt-image-2" },
     gradientClass:
@@ -546,6 +577,7 @@ export function buildModelSlugAliasMap(): Record<string, string> {
   map["hailuo-2-3"] = "hailuo-2-3-image-to-video-standard";
   map["sora-storyboard"] = "sora-2-pro-storyboard";
   map.veo = "veo-3-1";
+  map["gpt-image-2-text-to-image"] = "gpt-image-2-text-to-image-general";
   return map;
 }
 

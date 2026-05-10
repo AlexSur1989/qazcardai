@@ -18,6 +18,8 @@ export type AiModelCatalogRow = {
   /** Заполнен для моделей карточки товара — не должны висеть в общем каталоге */
   productCardModelType: string | null;
   costCredits: number;
+  /** Минимум для отображения «от N», сервер (= getCreditsUiFloor), иначе costCredits */
+  creditsUiMin?: number;
   description: string | null;
   isActive: boolean;
   supportsImageInput: boolean;
@@ -132,8 +134,19 @@ export function mergeGenerationCatalog(params: {
       if (hit) {
         row = hit;
         matchedSlug = hit.slug;
-        consumed.add(hit.slug);
         break;
+      }
+    }
+
+    const slugConsumeList =
+      def.familyDbSlugCandidates && def.familyDbSlugCandidates.length > 0
+        ? def.familyDbSlugCandidates
+        : matchedSlug != null
+          ? [matchedSlug]
+          : [];
+    for (const s of slugConsumeList) {
+      if (bySlug.has(s)) {
+        consumed.add(s);
       }
     }
 
@@ -150,7 +163,7 @@ export function mergeGenerationCatalog(params: {
 
     const urlSlugEffective = urlSlugForOpen;
 
-    let costMin: number | null = row?.costCredits ?? null;
+    let costMin: number | null = row?.creditsUiMin ?? row?.costCredits ?? null;
     if (def.openBehavior.kind === "product_card") {
       costMin = productFlowMinCredits;
     }
@@ -205,7 +218,7 @@ export function mergeGenerationCatalog(params: {
       description: row.description ?? "",
       tasks,
       category: row.type === "IMAGE" ? "image" : "video",
-      costCreditsMin: row.costCredits,
+      costCreditsMin: row.creditsUiMin ?? row.costCredits,
       dbSlug: row.slug,
       hasDbMatch: true,
       isActiveInDb: row.isActive,

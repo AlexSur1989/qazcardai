@@ -24,7 +24,11 @@ export type CreateImageFormModel = {
   id: string;
   name: string;
   slug: string;
+  /** Подпись в селекторе для варианта внутри группы (иначе — name). */
+  pickerLabel?: string;
   costCredits: number;
+  /** Минимум с бэкенда (matrix / fallback), для подписи до ответа estimate */
+  creditsUiMin: number;
   description: string | null;
   settingsSchema?: unknown;
   supportsNegativePrompt: boolean;
@@ -32,10 +36,21 @@ export type CreateImageFormModel = {
   supportsSeed: boolean;
 };
 
+export type CreateImageModelGroup = {
+  label: string;
+  members: CreateImageFormModel[];
+};
+
 type Props = {
-  models: CreateImageFormModel[];
+  soloModels: CreateImageFormModel[];
+  modelGroups: CreateImageModelGroup[];
   balanceCredits: number;
 };
+
+function formatModelOptionLabel(m: CreateImageFormModel): string {
+  const title = m.pickerLabel ?? m.name;
+  return `${title} — от ${m.creditsUiMin} кред`;
+}
 
 const TERMINAL: GenerationStatus[] = [
   "COMPLETED",
@@ -45,21 +60,30 @@ const TERMINAL: GenerationStatus[] = [
   "BLOCKED",
 ];
 
-export function CreateImageForm({ models, balanceCredits }: Props) {
+export function CreateImageForm({
+  soloModels,
+  modelGroups,
+  balanceCredits,
+}: Props) {
   const searchParams = useSearchParams();
+  const allModels = useMemo(
+    () => [...soloModels, ...modelGroups.flatMap((g) => g.members)],
+    [soloModels, modelGroups],
+  );
+
   const [modelId, setModelId] = useState(() => {
     const mid = searchParams.get("modelId");
     const canonical = canonicalModelSlug(searchParams.get("model"));
-    if (mid && models.some((m) => m.id === mid)) {
+    if (mid && allModels.some((m) => m.id === mid)) {
       return mid;
     }
     if (canonical) {
-      const bySlug = models.find((m) => m.slug === canonical);
+      const bySlug = allModels.find((m) => m.slug === canonical);
       if (bySlug) {
         return bySlug.id;
       }
     }
-    return models[0]?.id ?? "";
+    return allModels[0]?.id ?? "";
   });
   const [prompt, setPrompt] = useState(() => {
     const pr = searchParams.get("prompt");
@@ -72,8 +96,8 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
   const [inputFileUrls, setInputFileUrls] = useState("");
 
   const selected = useMemo(
-    () => models.find((m) => m.id === modelId),
-    [models, modelId],
+    () => allModels.find((m) => m.id === modelId),
+    [allModels, modelId],
   );
 
   const schemaFields = useMemo(
@@ -86,13 +110,13 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
     const mid = searchParams.get("modelId");
     const canonical = canonicalModelSlug(searchParams.get("model"));
     const bySlugMatch = canonical
-      ? models.find((m) => m.slug === canonical)
+      ? allModels.find((m) => m.slug === canonical)
       : undefined;
     const initialId =
-      mid && models.some((m) => m.id === mid)
+      mid && allModels.some((m) => m.id === mid)
         ? mid
-        : (bySlugMatch?.id ?? models[0]?.id ?? "");
-    const m = models.find((x) => x.id === initialId);
+        : (bySlugMatch?.id ?? allModels[0]?.id ?? "");
+    const m = allModels.find((x) => x.id === initialId);
     return defaultsFromSchema(m?.settingsSchema);
   });
 
@@ -287,6 +311,9 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
         body.inputFiles = lines;
       }
     }
+    if (typeof estimatedCredits === "number" && Number.isFinite(estimatedCredits)) {
+      body.clientEstimateCredits = estimatedCredits;
+    }
 
     setLoading(true);
     const controller = new AbortController();
@@ -304,8 +331,24 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
         generationId?: string;
         status?: string;
         outputUrls?: string[];
+        code?: string;
+        credits?: number;
       };
       if (!res.ok) {
+        if (
+          res.status === 409 &&
+          data.code === "PRICE_CHANGED" &&
+          typeof data.credits === "number"
+        ) {
+          setEstimatedCredits(data.credits);
+          const msg =
+            typeof data.error === "string" && data.error.trim()
+              ? data.error
+              : "Цена изменилась. Обновите оценку и повторите отправку.";
+          setError(msg);
+          toast.error(msg);
+          return;
+        }
         const msg = [
           (typeof data.message === "string" && data.message.trim()
             ? data.message
@@ -347,7 +390,7 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
     }
   }
 
-  if (models.length === 0) {
+  if (allModels.length === 0) {
     return (
       <Alert>
         <AlertTitle>Нет активных IMAGE-моделей</AlertTitle>
@@ -377,7 +420,7 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
             onChange={(e) => {
               const id = e.target.value;
               setModelId(id);
-              const m = models.find((x) => x.id === id);
+              const m = allModels.find((x) => x.id === id);
               setDynSettings(defaultsFromSchema(m?.settingsSchema));
             }}
             className={cn(
@@ -386,10 +429,19 @@ export function CreateImageForm({ models, balanceCredits }: Props) {
               "px-3 py-1 text-sm shadow-sm outline-none focus-visible:ring-2",
             )}
           >
-            {models.map((m) => (
+            {soloModels.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name} — от {m.costCredits} кред
+                {formatModelOptionLabel(m)}
               </option>
+            ))}
+            {modelGroups.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {formatModelOptionLabel(m)}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
           {selected?.description && (
