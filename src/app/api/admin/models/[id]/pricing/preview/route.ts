@@ -6,6 +6,7 @@ import {
   buildPerSecondMotionControlPreview,
   buildPricingPreview,
   isRecord,
+  normalizeMatrixProviderCostBranches,
   recalculatePricingSchema,
 } from "@/server/services/modelPricingCalculator";
 import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
@@ -50,15 +51,16 @@ export async function POST(req: Request, ctx: Ctx) {
   const typ = String(ps.type);
 
   if (typ === "matrix") {
+    let pm = normalizeMatrixProviderCostBranches(ps as Record<string, unknown>);
     if (parsed.data.recalculate) {
-      ps = recalculatePricingSchema(ps as Record<string, unknown>);
+      pm = recalculatePricingSchema(pm);
     }
-    const { rows, summary } = buildPricingPreview(ps as Record<string, unknown>);
+    const { rows, summary } = buildPricingPreview(pm);
     return NextResponse.json({
       rows,
       summary,
       modelId,
-      pricingSchema: ps,
+      pricingSchema: pm,
       previewKind: "matrix" as const,
     });
   }

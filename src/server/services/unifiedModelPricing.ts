@@ -9,6 +9,7 @@ import {
   getFinalCreditsFromPricingSchema,
   manualPricingMatrixCell,
   matrixResolutionDurationCell,
+  normalizeMatrixProviderCostBranches,
 } from "@/server/services/modelPricingCalculator";
 
 export type UnifiedPriceTaskType = "IMAGE" | "VIDEO" | "PRODUCT_CARD";
@@ -83,7 +84,9 @@ export function buildGeneralPriceBreakdownV2(
   const tokens = getFinalCreditsFromPricingSchema(model, settings);
   const fallbackBase = Math.max(0, Math.floor(model.costCredits));
   const raw = model.pricingSchema;
-  const schema = isRecord(raw) ? raw : null;
+  const schema = isRecord(raw)
+    ? normalizeMatrixProviderCostBranches(raw as Record<string, unknown>)
+    : null;
 
   const usdToKzt = schema != null ? num(schema.usdToKzt, 500) : 500;
   const internalTokenValueKzt =

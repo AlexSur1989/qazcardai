@@ -624,6 +624,28 @@ export function ModelPricingStudio({ model, canEdit }: Props) {
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       ) : null}
+      {isMatrix &&
+      rows != null &&
+      rows.length === 0 &&
+      !loading &&
+      !error ? (
+        <Alert>
+          <AlertTitle>Таблица пустая</AlertTitle>
+          <AlertDescription>
+            Не удалось построить строки: в{" "}
+            <code className="text-xs">providerCost</code> нет веток{" "}
+            <code className="text-xs">noVideo</code> / <code className="text-xs">withVideo</code>{" "}
+            со ставками, либо нет верхнеуровневых ключей типа{" "}
+            <code className="text-xs">1K</code> с полями{" "}
+            <code className="text-xs">kieCreditsPerSecond</code> и{" "}
+            <code className="text-xs">usdPerSecond</code>. Если схему повредили при ручном
+            редактировании JSON, восстановите из сид-скриптов модели или задайте ветку{" "}
+            <code className="text-xs">noVideo</code> в редакторе ставок ниже после появления
+            таблицы. Нажмите «Предпросмотр» ещё раз после правок (плоские ставки сервер может
+            обернуть в <code className="text-xs">noVideo</code> — сохраните, если предложено).
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {warnings.map((w) => (
         <Alert key={w} variant="destructive">
           <AlertTitle>Предупреждение</AlertTitle>

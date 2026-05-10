@@ -66,7 +66,68 @@ function deepClone<T>(v: T): T {
 
 function toNum(v: unknown, fallback: number): number {
   if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const t = v.trim().replace(",", ".");
+    if (t !== "") {
+      const n = Number.parseFloat(t);
+      if (Number.isFinite(n)) return n;
+    }
+  }
   return fallback;
+}
+
+/** Лист матрицы: ставки Kie/USD по «секунде» (IMAGE и др.). */
+function isCostRateLeaf(v: unknown): boolean {
+  if (!isRecord(v)) return false;
+  const k = v.kieCreditsPerSecond;
+  const u = v.usdPerSecond;
+  const hasK =
+    (typeof k === "number" && Number.isFinite(k)) ||
+    (typeof k === "string" && k.trim() !== "");
+  const hasU =
+    (typeof u === "number" && Number.isFinite(u)) ||
+    (typeof u === "string" && u.trim() !== "");
+  return hasK || hasU;
+}
+
+function branchHasRateLeaves(branch: unknown): boolean {
+  if (!isRecord(branch)) return false;
+  return Object.values(branch).some(isCostRateLeaf);
+}
+
+/**
+ * Старый/ошибочный JSON: ставки под `providerCost["1K"]` без обёртки `noVideo`/`withVideo`.
+ * Тогда buildPricingPreview и recalculatePricingSchema дают 0 строк.
+ */
+export function normalizeMatrixProviderCostBranches(
+  pricingSchema: Record<string, unknown>,
+): Record<string, unknown> {
+  if (String(pricingSchema.type ?? "") !== "matrix") return pricingSchema;
+  const pc = pricingSchema.providerCost;
+  if (!isRecord(pc)) return pricingSchema;
+
+  if (branchHasRateLeaves(pc.noVideo) || branchHasRateLeaves(pc.withVideo)) {
+    return pricingSchema;
+  }
+
+  const flatNoVideo: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(pc)) {
+    if (k === "noVideo" || k === "withVideo") continue;
+    if (isCostRateLeaf(v)) {
+      flatNoVideo[k] = v;
+    }
+  }
+  if (Object.keys(flatNoVideo).length === 0) {
+    return pricingSchema;
+  }
+
+  return {
+    ...pricingSchema,
+    providerCost: {
+      ...pc,
+      noVideo: flatNoVideo,
+    },
+  };
 }
 
 /**
@@ -76,7 +137,9 @@ function toNum(v: unknown, fallback: number): number {
 export function recalculatePricingSchema(
   pricingSchema: Record<string, unknown>,
 ): Record<string, unknown> {
-  const out = deepClone(pricingSchema) as Record<string, unknown>;
+  const out = deepClone(
+    normalizeMatrixProviderCostBranches(pricingSchema),
+  ) as Record<string, unknown>;
   if (String(out.type) !== "matrix") {
     return out;
   }
@@ -158,13 +221,14 @@ export type PricingPreviewResult = {
 export function buildPricingPreview(
   pricingSchema: Record<string, unknown>,
 ): PricingPreviewResult {
-  const usdToKzt = toNum(pricingSchema.usdToKzt, 500);
-  const internalTokenValueKzt = toNum(pricingSchema.internalTokenValueKzt, 10);
-  const markupPercent = toNum(pricingSchema.markupPercent, 0);
-  const providerCost = pricingSchema.providerCost;
-  const manualRaw = pricingSchema.manualOverrides;
+  const norm = normalizeMatrixProviderCostBranches(pricingSchema);
+  const usdToKzt = toNum(norm.usdToKzt, 500);
+  const internalTokenValueKzt = toNum(norm.internalTokenValueKzt, 10);
+  const markupPercent = toNum(norm.markupPercent, 0);
+  const providerCost = norm.providerCost;
+  const manualRaw = norm.manualOverrides;
   const manual = isRecord(manualRaw) ? manualRaw : null;
-  const durations = pricingSchema.durations;
+  const durations = norm.durations;
   const durList: number[] = Array.isArray(durations)
     ? (durations as unknown[]).map((d) => Number(d)).filter((n) => Number.isFinite(n) && n > 0)
     : [4, 5, 6, 8, 10, 12, 15];
@@ -193,6 +257,12 @@ export function buildPricingPreview(
     if (typeof v === "number" && Number.isFinite(v)) {
       return Math.max(0, Math.floor(v));
     }
+    if (typeof v === "string" && v.trim() !== "") {
+      const n = Number.parseFloat(v.trim().replace(",", "."));
+      if (Number.isFinite(n)) {
+        return Math.max(0, Math.floor(n));
+      }
+    }
     return null;
   }
 
@@ -202,7 +272,7 @@ export function buildPricingPreview(
     matrixKey: "matrix" | "videoInputMatrix",
   ) {
     if (!costBranch) return;
-    const resKeys = pricingSchema.resolutions;
+    const resKeys = norm.resolutions;
     const resolutions: string[] = Array.isArray(resKeys)
       ? (resKeys as unknown[]).map((x) => String(x))
       : Object.keys(costBranch);
@@ -600,10 +670,13 @@ export function getFinalCreditsFromPricingSchema(
   settings: Record<string, unknown>,
 ): number {
   const fallbackBase = Math.max(0, Math.floor(model.costCredits));
-  const raw = model.pricingSchema;
-  if (!isRecord(raw)) {
+  const pricingRaw = model.pricingSchema;
+  if (!isRecord(pricingRaw)) {
     return fallbackBase;
   }
+  const raw = normalizeMatrixProviderCostBranches(
+    pricingRaw as Record<string, unknown>,
+  );
 
   if (String(raw.type) === "per_second") {
     const vd = settings.videoDurationSeconds;
