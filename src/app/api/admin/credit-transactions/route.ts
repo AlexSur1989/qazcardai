@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { CreditTransactionType } from "@/generated/prisma/enums";
 
 import { getCreditTransactionList } from "@/server/services/financeAdmin";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 const TYPES = new Set<CreditTransactionType>([
   "PURCHASE",
@@ -16,12 +16,9 @@ const TYPES = new Set<CreditTransactionType>([
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("credit_transactions.view");
+  if (!gate.ok) {
+    return gate.response;
   }
   const { searchParams } = new URL(req.url);
   const page = Number.parseInt(searchParams.get("page") ?? "1", 10);

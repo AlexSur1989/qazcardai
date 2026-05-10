@@ -6,7 +6,13 @@ export type ProductCardTemplatePresetId =
   | "promo_poster"
   | "lifestyle_model"
   | "clean_catalog"
-  | "feature_grid";
+  | "feature_grid"
+  /** Внутренние fallback-раскладки (не в пикере UI) */
+  | "feature_grid_compact"
+  | "clean_catalog_compact"
+  | "minimal_top_bottom"
+  | "minimal_promo"
+  | "bottom_chips";
 
 export type ProductCardTypographyPresetId =
   | "classic"
@@ -39,6 +45,8 @@ export type ProductCardTemplatePreset = {
   textColor: string;
   mutedTextColor: string;
   bestFor: string[];
+  /** Если false — пресет только для серверных fallback-макетов, не показываем в форме пользователя */
+  publicInPicker?: boolean;
 };
 
 export type ProductCardTypographyPreset = {
@@ -161,6 +169,88 @@ export const PRODUCT_CARD_TEMPLATE_PRESETS: readonly ProductCardTemplatePreset[]
     textColor: "#1e1b4b",
     mutedTextColor: "#4c1d95",
     bestFor: ["техника", "косметика", "БАДы", "характеристики", "функциональные товары"],
+  },
+  {
+    id: "feature_grid_compact",
+    label: "Сетка преимуществ (compact)",
+    description: "Серверный fallback: узкая сетка без крупных полей.",
+    aiStyle: "structured product infographic base, centered product, clean feature grid zones",
+    backgroundStyle: "clean technical infographic background with symmetrical negative spaces",
+    compositionInstruction: "Centered product; peripheral feature bands only, no heavy text regions on product.",
+    theme: "grid",
+    accentColor: "#7c3aed",
+    panelFill: "rgba(255, 255, 255, 0.86)",
+    panelStroke: "rgba(124, 58, 237, 0.34)",
+    textColor: "#1e1b4b",
+    mutedTextColor: "#4c1d95",
+    bestFor: ["_strict_fallback"],
+    publicInPicker: false,
+  },
+  {
+    id: "clean_catalog_compact",
+    label: "Чистый каталог (compact)",
+    description: "Серверный fallback: компактные чипы преимуществ.",
+    aiStyle: "minimal clean catalog product photography base, white or light gray background",
+    backgroundStyle: "simple white or light gray catalog background with soft shadow",
+    compositionInstruction: "Centered dominant product; only narrow bottom chip rows for overlays.",
+    theme: "minimal",
+    accentColor: "#111827",
+    panelFill: "rgba(255, 255, 255, 0.82)",
+    panelStroke: "rgba(17, 24, 39, 0.16)",
+    textColor: "#111827",
+    mutedTextColor: "#4b5563",
+    bestFor: ["_strict_fallback"],
+    publicInPicker: false,
+  },
+  {
+    id: "minimal_top_bottom",
+    label: "Minimal top/bottom",
+    description: "Серверный fallback: заголовок сверху, чипы снизу, без стрелок.",
+    aiStyle: "minimal clean marketplace product hero, generous negative margins top and bottom",
+    backgroundStyle: "flat neutral backdrop with unobstructed hero product center",
+    compositionInstruction:
+      "Reserve top band for headline and subtitle only; reserve bottom gutter for compact chips — no overlays on hero product silhouette.",
+    theme: "minimal",
+    accentColor: "#0c4a6e",
+    panelFill: "rgba(255, 255, 255, 0.82)",
+    panelStroke: "rgba(15, 23, 42, 0.12)",
+    textColor: "#0f172a",
+    mutedTextColor: "#475569",
+    bestFor: ["_strict_fallback"],
+    publicInPicker: false,
+  },
+  {
+    id: "minimal_promo",
+    label: "Промо (minimal)",
+    description: "Серверный fallback: промо-блоки упрощённые.",
+    aiStyle: "bold promotional poster product scene without bitmap text banners",
+    backgroundStyle: "dynamic advertising background",
+    compositionInstruction: "Dominant hero; minimal peripheral zones for typography overlay only.",
+    theme: "promo",
+    accentColor: "#facc15",
+    panelFill: "rgba(255, 255, 255, 0.9)",
+    panelStroke: "rgba(250, 204, 21, 0.6)",
+    textColor: "#082f49",
+    mutedTextColor: "#164e63",
+    bestFor: ["_strict_fallback"],
+    publicInPicker: false,
+  },
+  {
+    id: "bottom_chips",
+    label: "Bottom chips",
+    description: "Серверный fallback: преимущества одной строкой снизу.",
+    aiStyle: "clean commercial product framing with unobstructed hero",
+    backgroundStyle: "minimal catalog background",
+    compositionInstruction:
+      "Product dominant in upper two thirds; reserve only bottom stripe for slim benefit chips.",
+    theme: "grid",
+    accentColor: "#4338ca",
+    panelFill: "rgba(255, 255, 255, 0.84)",
+    panelStroke: "rgba(79, 70, 229, 0.32)",
+    textColor: "#1e1b4b",
+    mutedTextColor: "#312e81",
+    bestFor: ["_strict_fallback"],
+    publicInPicker: false,
   },
 ] as const;
 
@@ -332,6 +422,100 @@ export function getProductCardLayoutPreset(
     };
   }
 
+  if (template.id === "feature_grid_compact") {
+    return {
+      ...base,
+      title: story ? rect(72, 90, 936, 160) : rect(72, 52, 856, 100),
+      subtitle: story ? rect(90, 270, 900, 64) : rect(120, 162, 760, 44),
+      productSafeArea: story ? rect(260, 480, 560, 720) : rect(380, 260, 240, 360),
+      benefits: story
+        ? [
+            rect(44, 420, 360, 110),
+            rect(676, 420, 360, 110),
+            rect(44, 1320, 360, 110),
+            rect(676, 1320, 360, 110),
+          ]
+        : [rect(42, 280, 250, 90), rect(708, 280, 250, 90), rect(42, 460, 250, 90), rect(708, 460, 250, 90)],
+      badges: story ? [rect(220, 1500, 640, 64)] : [rect(340, 720, 320, 48)],
+      callouts: [],
+      arrows: [],
+      footer: story ? rect(72, 1720, 936, 72) : rect(72, 860, 856, 48),
+    };
+  }
+
+  if (template.id === "clean_catalog_compact") {
+    return {
+      ...base,
+      title: story ? rect(80, 90, 920, 150) : rect(82, 52, 836, 95),
+      subtitle: story ? rect(100, 260, 880, 64) : rect(100, 158, 800, 44),
+      productSafeArea: story ? rect(150, 420, 780, 900) : rect(220, 250, 560, 420),
+      benefits: story
+        ? [
+            rect(80, 1320, 430, 80),
+            rect(570, 1320, 430, 80),
+            rect(80, 1420, 430, 80),
+            rect(570, 1420, 430, 80),
+          ]
+        : [rect(80, 698, 380, 64), rect(540, 698, 380, 64), rect(80, 778, 380, 64), rect(540, 778, 380, 64)],
+      badges: story ? [rect(260, 1588, 560, 56)] : [rect(320, 858, 360, 36)],
+      callouts: [],
+      arrows: [],
+      footer: story ? rect(84, 1700, 912, 48) : rect(82, 940, 836, 28),
+    };
+  }
+
+  if (template.id === "minimal_top_bottom") {
+    return {
+      ...base,
+      title: story ? rect(54, 96, 972, 150) : rect(52, 48, 896, 100),
+      subtitle: story ? rect(54, 268, 972, 64) : rect(52, 158, 896, 56),
+      productSafeArea: story ? rect(180, 400, 720, 1040) : rect(260, 240, 480, 520),
+      benefits: story
+        ? [
+            rect(54, 1620, 498, 88),
+            rect(570, 1620, 498, 88),
+            rect(54, 1726, 498, 88),
+          ]
+        : [rect(52, 828, 448, 78), rect(520, 828, 428, 78)],
+      badges: [],
+      callouts: [],
+      arrows: [],
+      footer: story ? rect(54, 1840, 972, 48) : rect(52, 916, 896, 36),
+    };
+  }
+
+  if (template.id === "minimal_promo") {
+    return {
+      ...base,
+      title: story ? rect(70, 96, 940, 200) : rect(60, 52, 880, 120),
+      subtitle: story ? rect(70, 310, 940, 64) : rect(60, 182, 880, 48),
+      productSafeArea: story ? rect(160, 460, 840, 880) : rect(300, 280, 600, 420),
+      benefits: story
+        ? [rect(70, 1440, 460, 86), rect(550, 1440, 460, 86)]
+        : [rect(60, 730, 420, 68), rect(520, 730, 420, 68)],
+      badges: story ? [rect(300, 1560, 480, 56)] : [rect(360, 820, 280, 44)],
+      callouts: [],
+      arrows: [],
+      footer: story ? rect(70, 1680, 940, 56) : rect(60, 896, 880, 36),
+    };
+  }
+
+  if (template.id === "bottom_chips") {
+    return {
+      ...base,
+      title: story ? rect(70, 96, 940, 160) : rect(70, 52, 860, 100),
+      subtitle: story ? rect(70, 276, 940, 60) : rect(90, 164, 820, 44),
+      productSafeArea: story ? rect(140, 420, 800, 1080) : rect(200, 240, 600, 480),
+      benefits: story
+        ? [rect(54, 1660, 328, 72), rect(402, 1660, 328, 72), rect(750, 1660, 276, 72)]
+        : [rect(52, 780, 292, 64), rect(356, 780, 292, 64), rect(660, 780, 288, 64)],
+      badges: [],
+      callouts: [],
+      arrows: [],
+      footer: story ? rect(70, 1760, 940, 48) : rect(70, 858, 860, 40),
+    };
+  }
+
   return {
     ...base,
     title: story ? rect(70, 100, 940, 200) : rect(60, 60, 880, 140),
@@ -357,7 +541,9 @@ export function variantTypographyPresetAt(index: number): ProductCardTypographyP
 }
 
 export function getPublicProductCardTemplatePresets() {
-  return PRODUCT_CARD_TEMPLATE_PRESETS.map(({ id, label, description, bestFor }) => ({ id, label, description, bestFor }));
+  return PRODUCT_CARD_TEMPLATE_PRESETS.filter((p) => p.publicInPicker !== false).map(
+    ({ id, label, description, bestFor }) => ({ id, label, description, bestFor }),
+  );
 }
 
 export function getPublicProductCardTypographyPresets() {

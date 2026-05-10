@@ -1,4 +1,7 @@
-/** Главная: маркетинговый лендинг QazCard AI */
+/**
+ * Главная в Next.js (маркетинг).
+ * Если корень сайта — статика с CDN/хостинга, правьте также `qazcard-landing/` и перезаливайте её.
+ */
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, CreditCard, ImageIcon, Sparkles, Video, Zap } from "lucide-react";
 

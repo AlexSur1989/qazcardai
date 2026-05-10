@@ -2,6 +2,8 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
+
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -109,6 +111,10 @@ async function main() {
   ];
 
   for (const row of rows) {
+    const guard = await prisma.aiModel.findUnique({
+      where: { slug: row.slug },
+      select: { pricingSchema: true },
+    });
     const pricingSchema = await preserveManualOverrides(row.slug, row.pricingSchema);
     await prisma.aiModel.upsert({
       where: { slug: row.slug },
@@ -125,7 +131,7 @@ async function main() {
         ...row,
         pricingSchema,
       },
-      update: {
+      update: omitSeedPricingWhenPinned(guard, {
         name: row.name,
         provider: "KIE_AI",
         type: row.type,
@@ -144,7 +150,7 @@ async function main() {
         settingsSchema: "settingsSchema" in row ? row.settingsSchema : undefined,
         payloadMapping: "payloadMapping" in row ? row.payloadMapping : undefined,
         pricingSchema,
-      },
+      }),
     });
   }
 

@@ -42,12 +42,25 @@ function jsonStringify(v: unknown): string {
   }
 }
 
+function canChangeRow(
+  row: SettingRow,
+  hasManage: boolean,
+  hasCritical: boolean,
+): boolean {
+  if (!hasManage || !row.editable) return false;
+  const needsCritical = row.sensitive || row.group === "maintenance";
+  if (needsCritical && !hasCritical) return false;
+  return true;
+}
+
 export function AdminSettingsCenter({
   initialGroups,
   canEdit,
+  canEditCritical,
 }: {
   initialGroups: Group[];
   canEdit: boolean;
+  canEditCritical: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -112,9 +125,8 @@ export function AdminSettingsCenter({
   }
 
   async function saveKey(key: string) {
-    if (!canEdit) return;
     const row = byKey.get(key);
-    if (!row) return;
+    if (!row || !canChangeRow(row, canEdit, canEditCritical)) return;
     if (row.type === "json") {
       const raw = jsonText[key] ?? "";
       let parsed: unknown;
@@ -135,7 +147,7 @@ export function AdminSettingsCenter({
   }
 
   async function seedDefaults() {
-    if (!canEdit) return;
+    if (!canEditCritical) return;
     setSeeding(true);
     setMessage(null);
     const res = await fetch("/api/admin/settings/seed-defaults", {
@@ -165,10 +177,20 @@ export function AdminSettingsCenter({
         <Alert>
           <AlertTitle>Только просмотр</AlertTitle>
           <AlertDescription>
-            Только SUPER_ADMIN может менять настройки.
+            Нет права settings.manage — доступно только чтение.
           </AlertDescription>
         </Alert>
       )}
+
+      {canEdit && !canEditCritical ? (
+        <Alert>
+          <AlertTitle>Часть настроек только для SUPER_ADMIN</AlertTitle>
+          <AlertDescription>
+            Критичные и технические параметры (maintenance, секреты) недоступны для
+            редактирования.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {message ? (
         <Alert variant={message.type === "err" ? "destructive" : "default"}>
@@ -182,7 +204,7 @@ export function AdminSettingsCenter({
           Settings from database + registry defaults / Настройки в БД и значения
           по умолчанию из реестра.
         </p>
-        {canEdit ? (
+        {canEditCritical ? (
           <Button
             type="button"
             size="sm"
@@ -214,6 +236,7 @@ export function AdminSettingsCenter({
           <TabsContent key={g.group} value={g.group} className="mt-0 space-y-4">
             {g.settings.map((s) => {
               const val = values[s.key];
+              const rowWritable = canChangeRow(s, canEdit, canEditCritical);
               return (
                 <div
                   key={s.key}
@@ -241,7 +264,7 @@ export function AdminSettingsCenter({
                         onChange={(e) =>
                           setValues((m) => ({ ...m, [s.key]: e.target.value }))
                         }
-                        readOnly={!canEdit}
+                        readOnly={!rowWritable}
                         className="font-mono text-sm"
                       />
                     ) : null}
@@ -260,7 +283,7 @@ export function AdminSettingsCenter({
                             [s.key]: Number.isFinite(n) ? n : 0,
                           }));
                         }}
-                        readOnly={!canEdit}
+                        readOnly={!rowWritable}
                         className="font-mono text-sm"
                       />
                     ) : null}
@@ -270,7 +293,7 @@ export function AdminSettingsCenter({
                           type="checkbox"
                           className="size-4 rounded border"
                           checked={val === true}
-                          disabled={!canEdit}
+                          disabled={!rowWritable}
                           onChange={(e) =>
                             setValues((m) => ({ ...m, [s.key]: e.target.checked }))
                           }
@@ -287,18 +310,18 @@ export function AdminSettingsCenter({
                             [s.key]: e.target.value,
                           }))
                         }
-                        readOnly={!canEdit}
+                        readOnly={!rowWritable}
                         rows={6}
                         className="font-mono text-xs"
                       />
                     ) : null}
                   </div>
-                  {s.type === "json" && canEdit ? (
+                  {s.type === "json" && rowWritable ? (
                     <p className="text-muted-foreground text-xs">
                       Сохранение: валидный JSON (массив или объект).
                     </p>
                   ) : null}
-                  {canEdit ? (
+                  {rowWritable ? (
                     <Button
                       type="button"
                       size="sm"

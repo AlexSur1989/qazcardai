@@ -15,6 +15,7 @@ import { CreateFormSkeleton } from "@/components/dashboard/create-form-skeleton"
 import { getBalance } from "@/server/services/credits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { prisma } from "@/lib/prisma";
+import { getCreditsUiFloor } from "@/server/services/pricing";
 
 export const metadata = {
   title: "Создать видео — QazCard AI",
@@ -26,7 +27,7 @@ export default async function CreateVideoPage() {
     redirect("/login?next=/dashboard/create/video");
   }
 
-  const [models, balanceCredits] = await Promise.all([
+  const [rows, balanceCredits] = await Promise.all([
     prisma.aiModel.findMany({
       where: { isActive: true, type: "VIDEO", scope: "GENERAL" },
       orderBy: { name: "asc" },
@@ -35,6 +36,7 @@ export default async function CreateVideoPage() {
         name: true,
         slug: true,
         costCredits: true,
+        pricingSchema: true,
         description: true,
         settingsSchema: true,
         supportsNegativePrompt: true,
@@ -46,6 +48,14 @@ export default async function CreateVideoPage() {
     }),
     getBalance(current.user.id),
   ]);
+
+  const models = rows.map((m) => {
+    const { pricingSchema: _p, ...rest } = m;
+    return {
+      ...rest,
+      creditsUiMin: getCreditsUiFloor(m),
+    };
+  });
 
   return (
     <div className="space-y-6">

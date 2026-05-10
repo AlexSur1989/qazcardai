@@ -143,7 +143,8 @@ export function MarketplaceCardTab({
     return [...map.values()];
   }, [cardSizePresets]);
 
-  const variantCount = generationMode === "marketplace_card_variants" ? 6 : 1;
+  const [variantPackCount, setVariantPackCount] = useState<4 | 5 | 6>(6);
+  const variantCount = generationMode === "marketplace_card_variants" ? variantPackCount : 1;
   const currentStyle = styleForTemplate(templatePreset);
 
   const canEstimate = useMemo(
@@ -487,9 +488,30 @@ export function MarketplaceCardTab({
           <Label className="text-[#0C2D38]">Тип генерации</Label>
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant={generationMode === "marketplace_card" ? "default" : "outline"} className="rounded-xl" onClick={() => setGenerationMode("marketplace_card")}>Один вариант</Button>
-            <Button type="button" size="sm" variant={generationMode === "marketplace_card_variants" ? "default" : "outline"} className="rounded-xl" onClick={() => setGenerationMode("marketplace_card_variants")}>Витрина 6 вариантов</Button>
+            <Button type="button" size="sm" variant={generationMode === "marketplace_card_variants" ? "default" : "outline"} className="rounded-xl" onClick={() => setGenerationMode("marketplace_card_variants")}>Витрина (4–6 вариантов)</Button>
           </div>
         </div>
+
+        {generationMode === "marketplace_card_variants" && (
+          <div className="space-y-2">
+            <Label className="text-[#0C2D38]">Сколько вариантов</Label>
+            <div className="flex flex-wrap gap-2">
+              {([4, 5, 6] as const).map((n) => (
+                <Button
+                  key={n}
+                  type="button"
+                  size="sm"
+                  variant={variantPackCount === n ? "default" : "outline"}
+                  className="rounded-xl"
+                  onClick={() => setVariantPackCount(n)}
+                >
+                  {n}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-[#4a6e7a]">У каждого варианта — своя генерация и общий ID группы; ошибка одного не отменяет остальные.</p>
+          </div>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
@@ -598,6 +620,9 @@ export function MarketplaceCardTab({
           </div>
         </div>
 
+        <p className="text-xs leading-relaxed text-[#4a6e7a]">
+          Превью показывает примерную схему зон. Финальная карточка после генерации подстраивается под силуэт товара на базовом изображении и может использовать другую раскладку, если места для текста мало.
+        </p>
         <ProductCardTemplatePreview svg={overlayPreview?.svg ?? null} width={overlayPreview?.width ?? 1000} height={overlayPreview?.height ?? 1000} label={overlayPreview?.label ?? "Preview"} />
 
         {canUseBackend && (
@@ -628,9 +653,9 @@ export function MarketplaceCardTab({
           {generating ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {generationMode === "marketplace_card_variants" ? "Создаём 6 вариантов…" : "Создаём карточку…"}
+              {generationMode === "marketplace_card_variants" ? `Создаём ${variantCount} вариантов…` : "Создаём карточку…"}
             </>
-          ) : generationMode === "marketplace_card_variants" ? "Создать 6 вариантов карточки" : "Создать карточку"}
+          ) : generationMode === "marketplace_card_variants" ? `Создать ${variantCount} вариантов` : "Создать карточку"}
         </Button>
         {!canUseBackend && <p className="text-xs text-[#4a6e7a]">Сначала привяжите фото к проекту.</p>}
 

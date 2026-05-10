@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -27,12 +27,9 @@ function parseDate(req: Request, k: string): Date | null {
 }
 
 export async function GET(req: Request) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("moderation.logs_view");
+  if (!gate.ok) {
+    return gate.response;
   }
 
   const page = Math.max(1, parseIntQ(req, "page", 1));

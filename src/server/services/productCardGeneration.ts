@@ -58,6 +58,7 @@ import {
   calculateProductCardConceptImageCredits,
   calculateProductCardMarketplaceCardCredits,
   calculateProductCardVideoCredits,
+  resolveMarketplaceVariantBundleTotals,
 } from "@/server/services/productCardPricing";
 import {
   getProductCardSettings,
@@ -275,6 +276,8 @@ export type GenerateMarketplaceCardVariantsOk = {
     templateLayoutKey: string;
     typographyPreset: string;
     variantIndex: number;
+    /** Слот без Generation (ошибка постановки в очередь и т.п.) */
+    errorMessage?: string | null;
   }>;
   status: string;
   costCredits: number;
@@ -300,6 +303,8 @@ export type EstimateMarketplaceCardOk = {
   variantCount: number;
   modelName: string;
   priceBreakdown: Awaited<ReturnType<typeof calculateProductCardMarketplaceCardCredits>>;
+  /** Распределение списаний по вариантам (сумма = credits) */
+  variantAllocations: number[];
 };
 
 export type EstimateMarketplaceCardErr = { ok: false; error: string; status: number };
@@ -370,14 +375,19 @@ export async function estimateMarketplaceCardCredits(
     return { ok: false, error: merged.error, status: 400 };
   }
   const price = await calculateProductCardMarketplaceCardCredits(model, merged.merged);
-  const variantCount = Math.min(6, Math.max(1, Math.round(input.variantCount ?? 1)));
+  const rawVc = Math.round(input.variantCount ?? 1);
+  /** Витрина: 4–6 отдельных Generation; одиночная карточка — множитель 1. */
+  const variantCount =
+    rawVc > 1 ? Math.min(6, Math.max(4, rawVc)) : Math.min(6, Math.max(1, rawVc));
+  const bundle = resolveMarketplaceVariantBundleTotals(model, variantCount, price);
   return {
     ok: true,
-    credits: price.credits * variantCount,
+    credits: bundle.totalCredits,
     perVariantCredits: price.credits,
     variantCount,
     modelName: model.name,
-    priceBreakdown: price,
+    priceBreakdown: bundle.priceBreakdown,
+    variantAllocations: bundle.allocations,
   };
 }
 
@@ -454,9 +464,13 @@ export async function generateMarketplaceCardForProductCard(
     userInstructions: string;
     /** Не доверяйте цене с фронта: при расхождении с пересчётом — 409 PRICE_CHANGED */
     clientEstimateCredits?: number | null;
+    /**
+     * Доля списания при витрине вариантов (сумма allocations = суммарный estimate).
+     */
+    billingCreditsOverride?: number | null;
   },
 ): Promise<GenerateMarketplaceCardResult> {
-  const { userId, projectId, clientEstimateCredits, ...input } = p;
+  const { userId, projectId, clientEstimateCredits, billingCreditsOverride, ...input } = p;
   const project = await getOwnedProjectOrNull(userId, projectId);
   if (!project) {
     return { ok: false, error: "Проект не найден", status: 404 };
@@ -511,7 +525,40 @@ export async function generateMarketplaceCardForProductCard(
     model,
     mergedPricing.merged,
   );
-  const serverCredits = marketplacePricing.credits;
+
+  const billedCredits =
+    billingCreditsOverride != null &&
+    Number.isFinite(billingCreditsOverride) &&
+    billingCreditsOverride >= 0
+      ? Math.max(0, Math.round(billingCreditsOverride))
+      : marketplacePricing.credits;
+
+  const scale =
+    marketplacePricing.credits > 0 ? billedCredits / marketplacePricing.credits : 1;
+  const billingBreakdown =
+    billedCredits === marketplacePricing.credits
+      ? marketplacePricing
+      : {
+          ...marketplacePricing,
+          credits: billedCredits,
+          tokens: billedCredits,
+          revenueKzt:
+            Math.round(marketplacePricing.revenueKzt * scale * 100) / 100,
+          providerCostUsd:
+            Math.round(marketplacePricing.providerCostUsd * scale * 100_000) /
+            100_000,
+          providerCostKzt:
+            Math.round(marketplacePricing.providerCostKzt * scale * 100) / 100,
+          marginKzt:
+            Math.round(
+              (marketplacePricing.revenueKzt * scale -
+                marketplacePricing.providerCostKzt * scale) *
+                100,
+            ) / 100,
+          formula: `${marketplacePricing.formula}; job_allocation=${billedCredits}`,
+        };
+
+  const serverCredits = billingBreakdown.credits;
   if (
     clientEstimateCredits != null &&
     Number.isFinite(clientEstimateCredits) &&
@@ -623,7 +670,7 @@ export async function generateMarketplaceCardForProductCard(
     modelSlug: model.slug,
     pricingScope: "PRODUCT_CARD",
     productCardModelType: model.productCardModelType,
-    priceBreakdown: marketplacePricing,
+    priceBreakdown: billingBreakdown,
     cardSize: cardSize.id,
     cardSizeLabel: cardSize.label,
     outputWidth: cardSize.width,
@@ -682,7 +729,7 @@ export async function generateMarketplaceCardForProductCard(
     null,
     metadataRoot,
     marketplaceCardSettings,
-    marketplacePricing,
+    billingBreakdown,
   );
 
   if (!result.ok) {
@@ -767,43 +814,49 @@ export async function generateMarketplaceCardVariantsForProductCard(
   }
 
   const variantGroupId = randomUUID();
-  const variants: GenerateMarketplaceCardVariantsOk["variants"] = [];
-  for (let i = 0; i < variantCount; i++) {
+  const settled = await Promise.all(
+    Array.from({ length: variantCount }, (_, i) =>
+      generateMarketplaceCardForProductCard({
+        ...p,
+        templatePreset: variantTemplatePresetAt(i),
+        typographyPreset: p.typographyPreset?.trim() || variantTypographyPresetAt(i),
+        generationMode: "marketplace_card_variants",
+        variantGroupId,
+        variantIndex: i,
+        variantCount,
+        clientEstimateCredits: null,
+        billingCreditsOverride:
+          estimate.variantAllocations[i] ?? estimate.perVariantCredits,
+      }).then((single) => ({ i, single })),
+    ),
+  );
+  const variants: GenerateMarketplaceCardVariantsOk["variants"] = settled.map(({ i, single }) => {
     const templatePreset = variantTemplatePresetAt(i);
     const typographyPreset = p.typographyPreset?.trim() || variantTypographyPresetAt(i);
-    const single = await generateMarketplaceCardForProductCard({
-      ...p,
-      templatePreset,
-      typographyPreset,
-      generationMode: "marketplace_card_variants",
-      variantGroupId,
-      variantIndex: i,
-      variantCount,
-      clientEstimateCredits: null,
-    });
+    const templateLayoutKey = getProductCardLayoutKey(templatePreset, p.cardSize);
     if (single.ok) {
-      variants.push({
+      return {
         generationId: single.generationId,
         status: single.status,
         costCredits: single.costCredits,
         templatePreset,
-        templateLayoutKey: getProductCardLayoutKey(templatePreset, p.cardSize),
+        templateLayoutKey,
         typographyPreset,
         variantIndex: i,
-      });
-    } else {
-      // One failed variant should not prevent the rest from being queued.
-      variants.push({
-        generationId: `failed-${variantGroupId}-${i}`,
-        status: "FAILED",
-        costCredits: 0,
-        templatePreset,
-        templateLayoutKey: getProductCardLayoutKey(templatePreset, p.cardSize),
-        typographyPreset,
-        variantIndex: i,
-      });
+        errorMessage: null as string | null,
+      };
     }
-  }
+    return {
+      generationId: `failed-${variantGroupId}-${i}`,
+      status: "FAILED",
+      costCredits: 0,
+      templatePreset,
+      templateLayoutKey,
+      typographyPreset,
+      variantIndex: i,
+      errorMessage: single.error,
+    };
+  });
   const generationIds = variants
     .map((v) => v.generationId)
     .filter((id) => !id.startsWith("failed-"));

@@ -6,6 +6,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -95,6 +96,10 @@ const PAYLOAD_MAPPING = {
 } as const;
 
 async function main() {
+  const guard = await prisma.aiModel.findUnique({
+    where: { slug: MODEL_SLUG },
+    select: { pricingSchema: true },
+  });
   const row = await prisma.aiModel.upsert({
     where: { slug: MODEL_SLUG },
     create: {
@@ -120,7 +125,7 @@ async function main() {
       pricingSchema: { ...PRICING_SCHEMA },
       payloadMapping: { ...PAYLOAD_MAPPING },
     },
-    update: {
+    update: omitSeedPricingWhenPinned(guard, {
       name: "GPT Image 2 Image-to-Image",
       provider: "KIE_AI",
       type: "IMAGE",
@@ -141,7 +146,7 @@ async function main() {
       settingsSchema: { ...SETTINGS_SCHEMA },
       pricingSchema: { ...PRICING_SCHEMA },
       payloadMapping: { ...PAYLOAD_MAPPING },
-    },
+    }),
   });
 
   await prisma.appSetting.upsert({

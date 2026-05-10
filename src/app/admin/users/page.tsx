@@ -13,10 +13,12 @@ import {
 import { getAdminUsersList } from "@/lib/admin-data";
 import { formatAdminDateTime } from "@/lib/admin-format";
 import { AlertCircle } from "lucide-react";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = { title: "Пользователи — QazCard AI" };
 
 export default async function AdminUsersPage() {
+  await requireAdminPagePermission("users.view");
   const res = await getAdminUsersList();
   if (!res.ok) {
     return (

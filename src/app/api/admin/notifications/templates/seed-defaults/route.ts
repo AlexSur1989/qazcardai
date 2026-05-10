@@ -1,26 +1,19 @@
 import { NextResponse } from "next/server";
 
-import { isSuperAdmin } from "@/lib/auth";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { ensureDefaultEmailTemplates } from "@/server/services/emailTemplates";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
-  }
-  if (!isSuperAdmin(current.user.role)) {
-    return NextResponse.json({ error: "super_admin_only" }, { status: 403 });
+  const gate = await requireAdminApiPermission("notifications.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
   const { upserted } = await ensureDefaultEmailTemplates();
   await writeAdminAuditLog({
-    adminUserId: current.user.id,
+    adminUserId: gate.user.id,
     action: "EMAIL_TEMPLATES_SEED_DEFAULTS",
     targetType: "EmailTemplate",
     targetId: "seed",

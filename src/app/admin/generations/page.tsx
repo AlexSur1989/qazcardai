@@ -30,6 +30,7 @@ import { adminTerm } from "@/lib/admin-terms";
 import { generationStatusLabel } from "@/lib/generation-labels";
 import { cn } from "@/lib/utils";
 import type { GenerationStatus, GenerationType } from "@/generated/prisma/enums";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = { title: "Генерации — QazCard AI" };
 
@@ -54,6 +55,7 @@ type PageProps = {
 };
 
 export default async function AdminGenerationsPage({ searchParams }: PageProps) {
+  await requireAdminPagePermission("generations.view_all");
   const sp = (await searchParams) ?? {};
   const userId = first(sp.userId).trim() || undefined;
   const typeRaw = first(sp.type);

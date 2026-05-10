@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/generated/prisma/enums";
-import { isSuperAdmin } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 export type LegalPageRow = {
   slug: string;
@@ -51,7 +51,7 @@ function fmt(iso: string | null) {
 
 export function LegalPagesTable({ rows, role }: Props) {
   const router = useRouter();
-  const canMutate = isSuperAdmin(role);
+  const canMutate = hasPermission(role, "legal.manage");
 
   async function onPublishRow(slug: string) {
     if (!canMutate) return;

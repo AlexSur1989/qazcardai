@@ -2,11 +2,13 @@ import { AdminEmpty } from "@/components/admin/admin-empty";
 import { PromoCodesClientTable } from "@/components/admin/promo-codes-client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { getAdminPromoCodesList } from "@/lib/admin-data";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 import { AlertCircle } from "lucide-react";
 
 export const metadata = { title: "Промокоды — QazCard AI" };
 
 export default async function AdminPromoCodesPage() {
+  await requireAdminPagePermission("promocodes.manage");
   const res = await getAdminPromoCodesList();
   if (!res.ok) {
     return (

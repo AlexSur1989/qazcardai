@@ -6,6 +6,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -224,6 +225,10 @@ const MODELS: GrokSpec[] = [
 
 async function main() {
   for (const m of MODELS) {
+    const guard = await prisma.aiModel.findUnique({
+      where: { slug: m.slug },
+      select: { pricingSchema: true },
+    });
     const row = await prisma.aiModel.upsert({
       where: { slug: m.slug },
       create: {
@@ -248,7 +253,7 @@ async function main() {
         settingsSchema: { fields: [...m.settingsSchema.fields] } as object,
         pricingSchema: m.pricingSchema as object,
       },
-      update: {
+      update: omitSeedPricingWhenPinned(guard, {
         name: m.name,
         provider: "KIE_AI",
         type: m.type,
@@ -268,7 +273,7 @@ async function main() {
         availableResolutions: m.type === "IMAGE" ? ["1K", "2K", "4K"] : ["720p", "1080p"],
         settingsSchema: { fields: [...m.settingsSchema.fields] } as object,
         pricingSchema: m.pricingSchema as object,
-      },
+      }),
     });
     console.log("[seed:grok-imagine]", row.slug, row.id);
   }

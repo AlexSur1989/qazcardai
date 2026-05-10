@@ -23,7 +23,7 @@ const bodySchema = z.object({
   sourceType: z.enum(["original", "concept_generation"]),
   sourceGenerationId: z.string().nullable().optional(),
   generationMode: z.enum(["marketplace_card", "marketplace_card_variants"]).optional().default("marketplace_card"),
-  variantCount: z.number().int().min(1).max(6).optional().default(6),
+  variantCount: z.number().int().min(4).max(6).optional().default(6),
   productTitle: z.string().max(120).optional().default(""),
   subtitle: z.string().max(160).optional().default(""),
   benefits: z

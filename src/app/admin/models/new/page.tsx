@@ -1,8 +1,10 @@
 import { AiModelForm } from "@/components/admin/ai-model-form";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = { title: "Новая AI-модель — QazCard AI" };
 
-export default function AdminNewModelPage() {
+export default async function AdminNewModelPage() {
+  await requireAdminPagePermission("models.manage");
   return (
     <div className="space-y-6">
       <div>

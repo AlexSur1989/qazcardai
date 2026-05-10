@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { moderateGenerationInput } from "@/server/services/moderation";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +11,9 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("moderation.access");
+  if (!gate.ok) {
+    return gate.response;
   }
 
   let json: unknown;
@@ -36,7 +33,7 @@ export async function POST(req: Request) {
     prompt: parsed.data.prompt,
     negativePrompt: null,
     flow: "admin_test",
-    userId: current.user.id,
+    userId: gate.user.id,
   });
   if (r.allowed) {
     return NextResponse.json({

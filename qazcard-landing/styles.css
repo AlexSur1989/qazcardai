@@ -251,6 +251,20 @@ a:hover {
   max-width: 48rem;
 }
 
+.hero__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 auto 1rem;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--primary, #00afca);
+  background: rgba(0, 175, 202, 0.1);
+  border: 1px solid rgba(0, 175, 202, 0.25);
+  border-radius: 9999px;
+}
+
 .hero h1 {
   font-size: clamp(1.75rem, 4vw, 2.75rem);
   line-height: 1.2;

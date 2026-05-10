@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import {
   MARKETPLACE_CARD_STYLES,
@@ -12,7 +11,7 @@ import {
 } from "@/config/product-card-prompts";
 import { prisma } from "@/lib/prisma";
 import { getAppSettingsByGroup } from "@/server/services/appSettings";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 import {
   calculateProductCardConceptImageCredits,
   calculateProductCardMarketplaceCardCredits,
@@ -57,11 +56,7 @@ function jsonPreview(value: unknown): string {
 }
 
 export default async function AdminProductCardPage({ searchParams }: Props) {
-  const session = await getFreshAdminSessionUser();
-  if (!session.ok) {
-    if (session.reason === "forbidden") redirect("/dashboard");
-    redirect("/login?next=/admin/product-card");
-  }
+  await requireAdminPagePermission("models.product_card.manage");
 
   const params = await searchParams;
   const active = TABS.some(([id]) => id === params?.tab) ? params?.tab ?? "overview" : "overview";

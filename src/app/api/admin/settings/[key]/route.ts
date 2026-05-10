@@ -1,9 +1,10 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
-import { isSuperAdmin } from "@/lib/auth";
+import { getRegistryEntry } from "@/config/app-settings-registry";
+import { appSettingPatchRequiresCriticalManage } from "@/lib/permissions";
 import { setAppSettingFromRegistry } from "@/server/services/appSettings";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 import { clearRateUploadSettingsCache } from "@/lib/rate-upload-settings";
 
 export const dynamic = "force-dynamic";
@@ -17,19 +18,23 @@ const CACHE_CLEAR_KEYS = new Set([
 type Ctx = { params: Promise<{ key: string }> };
 
 export async function PATCH(req: Request, ctx: Ctx) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
-  }
-  if (!isSuperAdmin(current.user.role)) {
-    return NextResponse.json({ error: "super_admin_only" }, { status: 403 });
+  const base = await requireAdminApiPermission("settings.manage");
+  if (!base.ok) {
+    return base.response;
   }
 
   const { key: rawKey } = await ctx.params;
   const key = decodeURIComponent(rawKey);
+  const entry = getRegistryEntry(key);
+  if (!entry) {
+    return NextResponse.json({ error: "unknown_key" }, { status: 404 });
+  }
+  if (appSettingPatchRequiresCriticalManage(entry)) {
+    const crit = await requireAdminApiPermission("settings.critical.manage");
+    if (!crit.ok) {
+      return crit.response;
+    }
+  }
 
   let body: unknown;
   try {
@@ -45,7 +50,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const res = await setAppSettingFromRegistry({
     key,
     value,
-    adminUserId: current.user.id,
+    adminUserId: base.user.id,
   });
 
   if (!res.ok) {

@@ -22,7 +22,7 @@ const bodySchema = z.object({
   cardSize: z.string().trim().min(1).max(64).optional(),
   overlayTemplate: z.string().trim().min(1).max(64).optional(),
   generationMode: z.enum(["marketplace_card", "marketplace_card_variants"]).optional().default("marketplace_card"),
-  variantCount: z.number().int().min(1).max(6).optional().default(6),
+  variantCount: z.number().int().min(4).max(6).optional().default(6),
 });
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -84,6 +84,7 @@ export async function POST(req: Request, ctx: Ctx) {
     variantCount: result.variantCount,
     modelName: result.modelName,
     priceBreakdown: result.priceBreakdown,
+    variantAllocations: result.variantAllocations,
     model: {
       id: result.priceBreakdown.modelId,
       slug: result.priceBreakdown.modelSlug,

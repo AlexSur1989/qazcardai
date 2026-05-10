@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
 
 import { getFinanceSummary } from "@/server/services/financeAdmin";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("finance.view");
+  if (!gate.ok) {
+    return gate.response;
   }
   const { searchParams } = new URL(req.url);
   const from = searchParams.get("from");

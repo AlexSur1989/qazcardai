@@ -7,6 +7,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -135,6 +136,10 @@ const PRICING_SCHEMA = {
 } as const;
 
 async function main() {
+  const guard = await prisma.aiModel.findUnique({
+    where: { slug: "happyhorse-1-0" },
+    select: { pricingSchema: true },
+  });
   const row = await prisma.aiModel.upsert({
     where: { slug: "happyhorse-1-0" },
     create: {
@@ -160,7 +165,7 @@ async function main() {
       settingsSchema: { ...SETTINGS_SCHEMA },
       pricingSchema: { ...PRICING_SCHEMA } as object,
     },
-    update: {
+      update: omitSeedPricingWhenPinned(guard, {
       name: "Happy Horse 1.0",
       provider: "KIE_AI",
       type: "VIDEO",
@@ -181,7 +186,7 @@ async function main() {
       availableResolutions: ["720p", "1080p"],
       settingsSchema: { ...SETTINGS_SCHEMA },
       pricingSchema: { ...PRICING_SCHEMA } as object,
-    },
+    }),
   });
   console.log("[seed:happyhorse] OK", row.id, row.slug);
 }

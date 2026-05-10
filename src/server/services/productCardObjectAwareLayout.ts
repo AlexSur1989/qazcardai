@@ -1,12 +1,26 @@
 import type { ProductCardCanvasId, ProductCardLayoutPreset, RectZone } from "@/config/product-card-overlay-presets";
 import { getProductCardLayoutPreset } from "@/config/product-card-overlay-presets";
 
-export type BoundingBox = RectZone & { confidence?: number; source?: "cutout" | "vision" | "estimated" };
+export type BoundingBox = RectZone & {
+  confidence?: number;
+  source?: "cutout" | "vision" | "estimated" | "raster_estimate";
+};
 
 export type SafeZone = { key: string; x: number; y: number; width: number; height: number };
 
+export type ProductAnchor =
+  | "product_left"
+  | "product_right"
+  | "product_center"
+  | "product_large_center";
+
 export type LayoutDecision = {
   selectedLayoutKey: string;
+  productAnchor: ProductAnchor;
+  /** Сколько слотов benefit-зон в preset (после compact / anchor). */
+  benefitSlots: number;
+  compact: boolean;
+  mirroredHorizontally: boolean;
   reason: string;
   avoidedProductOverlap: boolean;
 };
@@ -67,6 +81,67 @@ export function detectProductBox(
   };
 }
 
+export function inferProductAnchor(
+  box: RectZone,
+  canvasW: number,
+  canvasH: number,
+): ProductAnchor {
+  const area = Math.max(1, box.width * box.height);
+  const canvasA = Math.max(1, canvasW * canvasH);
+  const areaRatio = area / canvasA;
+  if (areaRatio >= 0.36) return "product_large_center";
+
+  const cx = (box.x + box.width / 2) / canvasW;
+  const cy = (box.y + box.height / 2) / canvasH;
+
+  if (
+    areaRatio <= 0.32 &&
+    cx > 0.36 &&
+    cx < 0.64 &&
+    cy > 0.3 &&
+    cy < 0.72
+  ) {
+    return "product_center";
+  }
+  if (cx < 0.42) return "product_left";
+  if (cx > 0.58) return "product_right";
+  return "product_center";
+}
+
+function areaRect(r: RectZone): number {
+  return Math.max(0, r.width) * Math.max(0, r.height);
+}
+
+function iou(a: RectZone, b: RectZone): number {
+  const inter = intersectionArea(a, b);
+  const u = areaRect(a) + areaRect(b) - inter;
+  return u <= 0 ? 0 : inter / u;
+}
+
+/**
+ * Слияние эвристики шаблона и bbox с растра: при сомнении оставляем более консервативный (шаблон).
+ */
+export function pickSubjectProductBox(
+  heuristic: BoundingBox,
+  raster: BoundingBox | null | undefined,
+  canvasW: number,
+  canvasH: number,
+): BoundingBox {
+  const h = { ...heuristic, ...clampRectToCanvas(heuristic, canvasW, canvasH) };
+  if (!raster || (raster.confidence ?? 0) < 0.39) {
+    return h;
+  }
+  const r = { ...raster, ...clampRectToCanvas(raster, canvasW, canvasH) };
+  const canvasA = Math.max(1, canvasW * canvasH);
+  if (areaRect(r) / canvasA < 0.014) return h;
+
+  const overlap = iou(r, h);
+  if ((r.confidence ?? 0) >= 0.55 && overlap >= 0.05) return r;
+  if ((r.confidence ?? 0) >= 0.48 && overlap >= 0.02) return r;
+  if (areaRect(r) > areaRect(h) * 1.45 && (r.confidence ?? 0) >= 0.44) return r;
+  return h;
+}
+
 /** Padding around product for “no overlay” zone — spec ranges (mid values). */
 export function buildForbiddenZone(productBox: RectZone, cardSize: string | undefined, canvasW: number, canvasH: number): RectZone {
   const id = cardSize as ProductCardCanvasId;
@@ -79,6 +154,33 @@ export function buildForbiddenZone(productBox: RectZone, cardSize: string | unde
           ? 40
           : 55;
   return clampRectToCanvas(expandRect(productBox, pad), canvasW, canvasH);
+}
+
+/**
+ * Расширение запретной зоны для длинных по горизонтали или вертикали товаров (strict overlay).
+ */
+export function expandForbiddenZoneForAspectRatio(
+  forbidden: RectZone,
+  subject: RectZone,
+  canvasW: number,
+  canvasH: number,
+): RectZone {
+  const sw = Math.max(subject.width, 4);
+  const sh = Math.max(subject.height, 4);
+  let r = clampRectToCanvas({ ...forbidden }, canvasW, canvasH);
+  if (sw / sh >= 1.8) {
+    const cx = r.x + r.width / 2;
+    const nw = r.width * 1.1;
+    const nx = Math.round(cx - nw / 2);
+    r = clampRectToCanvas({ x: nx, y: r.y, width: Math.round(nw), height: r.height }, canvasW, canvasH);
+  }
+  if (sh / sw >= 1.8) {
+    const cy = r.y + r.height / 2;
+    const nh = r.height * 1.1;
+    const ny = Math.round(cy - nh / 2);
+    r = clampRectToCanvas({ x: r.x, y: ny, width: r.width, height: Math.round(nh) }, canvasW, canvasH);
+  }
+  return r;
 }
 
 export function computeSafeZones(canvasW: number, canvasH: number, forbidden: RectZone): SafeZone[] {
@@ -178,25 +280,110 @@ export function cloneLayoutPreset(base: ProductCardLayoutPreset): ProductCardLay
   };
 }
 
+export function mirrorLayoutHorizontally(
+  layout: ProductCardLayoutPreset,
+  canvasW: number,
+): ProductCardLayoutPreset {
+  const flip = (r: RectZone): RectZone => ({
+    ...r,
+    x: canvasW - r.x - r.width,
+  });
+  const flipPt = (p: import("@/config/product-card-overlay-presets").PointZone) => ({
+    x: canvasW - p.x,
+    y: p.y,
+  });
+  const out = cloneLayoutPreset(layout);
+  out.title = flip(out.title);
+  out.subtitle = flip(out.subtitle);
+  out.productSafeArea = flip(out.productSafeArea);
+  out.benefits = out.benefits.map(flip);
+  out.badges = out.badges.map(flip);
+  out.callouts = out.callouts.map(flip);
+  out.footer = flip(out.footer);
+  out.arrows = out.arrows.map((a) => ({
+    from: flipPt(a.from),
+    to: flipPt(a.to),
+  }));
+  return out;
+}
+
+function anchorNudgeTowardFreeSide(
+  layout: ProductCardLayoutPreset,
+  anchor: ProductAnchor,
+  forbidden: RectZone,
+  canvasW: number,
+  canvasH: number,
+): void {
+  if (canvasW <= 8) return;
+  const fcx = forbidden.x + forbidden.width / 2;
+  const steer =
+    anchor === "product_large_center"
+      ? 60
+      : anchor === "product_center"
+        ? 42
+        : 26;
+  const edgeLeft = forbidden.x;
+  const edgeRight = canvasW - (forbidden.x + forbidden.width);
+  const preferLeft = edgeLeft >= edgeRight * 0.92;
+  const preferRight = edgeRight >= edgeLeft * 0.92;
+  let dx = 0;
+  if (anchor === "product_right" || (fcx > canvasW * 0.52 && !preferLeft)) {
+    dx = -steer;
+  } else if (anchor === "product_left" || (fcx < canvasW * 0.48 && !preferRight)) {
+    dx = steer;
+  } else if (anchor === "product_center" || anchor === "product_large_center") {
+    dx = fcx < canvasW * 0.5 ? steer * 0.35 : -steer * 0.35;
+  }
+  if (Math.abs(dx) < 1) return;
+  const shift = (r: RectZone) => {
+    r.x = Math.max(0, Math.min(canvasW - r.width, r.x + dx));
+  };
+  shift(layout.title);
+  shift(layout.subtitle);
+  for (const b of layout.benefits) shift(b);
+  for (const b of layout.badges) shift(b);
+  shift(layout.footer);
+  const dy = anchor === "product_large_center" ? -Math.round(canvasH * 0.02) : 0;
+  if (dy !== 0) {
+    const vshift = (r: RectZone) => {
+      r.y = Math.max(0, Math.min(canvasH - r.height, r.y + dy));
+    };
+    vshift(layout.title);
+    vshift(layout.subtitle);
+    for (const b of layout.benefits) vshift(b);
+    vshift(layout.footer);
+  }
+}
+
 export function chooseAdaptiveLayout(
   templatePreset: string | undefined,
   cardSize: string | undefined,
   productBox: RectZone,
   canvasW: number,
-  _safeZones: SafeZone[],
+  canvasH: number,
+  safeZones: SafeZone[],
+  forbidden: RectZone,
 ): { layout: ProductCardLayoutPreset; decision: LayoutDecision } {
-  void _safeZones;
   const base = getProductCardLayoutPreset(templatePreset, cardSize);
-  const layout = cloneLayoutPreset(base);
+  let layout = cloneLayoutPreset(base);
+  const anchor = inferProductAnchor(productBox, canvasW, canvasH);
+  let mirrored = false;
+
+  if (anchor === "product_left") {
+    layout = mirrorLayoutHorizontally(layout, canvasW);
+    mirrored = true;
+  }
+
   const cx = productBox.x + productBox.width / 2;
   const pxNorm = canvasW > 0 ? cx / canvasW : 0.5;
-
-  let reason = "Template default safe-area alignment";
+  let reasonParts: string[] = [`Anchor: ${anchor}`];
   const shiftX = pxNorm > 0.54 ? -28 : pxNorm < 0.46 ? 28 : 0;
-
   if (shiftX !== 0) {
-    reason =
-      pxNorm > 0.54 ? "Товар правее центра — сдвигаем текстовые блоки влево" : "Товар левее центра — сдвигаем текстовые блоки вправо";
+    reasonParts.push(
+      pxNorm > 0.54
+        ? "центр товара правее — сдвиг текста влево"
+        : "центр товара левее — сдвиг текста вправо",
+    );
     layout.title.x += shiftX;
     layout.subtitle.x += shiftX;
     for (const b of layout.benefits) b.x += shiftX;
@@ -204,11 +391,35 @@ export function chooseAdaptiveLayout(
     layout.footer.x += shiftX;
   }
 
+  anchorNudgeTowardFreeSide(layout, anchor, forbidden, canvasW, canvasH);
+
+  if (anchor === "product_large_center") {
+    while (layout.benefits.length > 3) layout.benefits.pop();
+    while (layout.badges.length > 1) layout.badges.pop();
+    layout.arrows = [];
+    reasonParts.push("крупный центр — компактные benefits");
+  } else if (anchor === "product_center") {
+    while (layout.benefits.length > 4) layout.benefits.pop();
+    reasonParts.push("центр — ограничение benefits");
+  }
+
+  const topZ = safeZones.find((z) => z.key === "top");
+  const topArea = topZ ? topZ.width * topZ.height : 0;
+  const bottomZ = safeZones.find((z) => z.key === "bottom");
+  const bottomArea = bottomZ ? bottomZ.width * bottomZ.height : 0;
+  if (topArea + bottomArea < canvasW * canvasH * 0.14) {
+    reasonParts.push("мало вертикального safe space");
+  }
+
   return {
     layout,
     decision: {
       selectedLayoutKey: layout.key,
-      reason,
+      productAnchor: anchor,
+      benefitSlots: layout.benefits.length,
+      compact: anchor === "product_large_center",
+      mirroredHorizontally: mirrored,
+      reason: reasonParts.join("; "),
       avoidedProductOverlap: true,
     },
   };
@@ -272,17 +483,46 @@ export function compactLayoutForTightSafeZones(layout: ProductCardLayoutPreset):
   return out;
 }
 
+export type BuildObjectAwareOptions = {
+  subjectBoxOverride?: BoundingBox | null;
+  /** Расширить forbidden после построения (частный случай финального marketplace-композита). */
+  strictMarketplace?: boolean;
+};
+
 export function buildObjectAwarePayload(
   templatePreset: string | undefined,
   cardSize: string | undefined,
   canvasW: number,
   canvasH: number,
+  options?: BuildObjectAwareOptions,
 ): ObjectAwareLayoutPayload {
-  const productBox = detectProductBox(templatePreset, cardSize, canvasW, canvasH);
-  const forbiddenZone = buildForbiddenZone(productBox, cardSize, canvasW, canvasH);
+  const heuristic = detectProductBox(templatePreset, cardSize, canvasW, canvasH);
+  const productBox = pickSubjectProductBox(
+    heuristic,
+    options?.subjectBoxOverride,
+    canvasW,
+    canvasH,
+  );
+  let forbiddenZone = buildForbiddenZone(productBox, cardSize, canvasW, canvasH);
+  if (options?.strictMarketplace) {
+    forbiddenZone = expandForbiddenZoneForAspectRatio(
+      forbiddenZone,
+      productBox,
+      canvasW,
+      canvasH,
+    );
+  }
   const safeZones = computeSafeZones(canvasW, canvasH, forbiddenZone);
 
-  let { layout, decision } = chooseAdaptiveLayout(templatePreset, cardSize, productBox, canvasW, safeZones);
+  let { layout, decision } = chooseAdaptiveLayout(
+    templatePreset,
+    cardSize,
+    productBox,
+    canvasW,
+    canvasH,
+    safeZones,
+    forbiddenZone,
+  );
   layout = resolveOverlayAgainstForbidden(layout, forbiddenZone, canvasW, canvasH);
 
   let overlap = measureForbiddenOverlap(layout, forbiddenZone);
@@ -291,14 +531,16 @@ export function buildObjectAwarePayload(
     overlap = measureForbiddenOverlap(layout, forbiddenZone);
     decision = {
       ...decision,
-      reason: `${decision.reason}; compact overlay (fewer chips, no arrows)`,
+      compact: true,
+      benefitSlots: layout.benefits.length,
+      reason: `${decision.reason}; compact overlay (меньше плашек, без стрелок)`,
     };
   }
 
   if (overlap > 0) {
     decision = {
       ...decision,
-      reason: `${decision.reason}; residual overlap ~${Math.round(overlap)}px²`,
+      reason: `${decision.reason}; остаточное пересечение ~${Math.round(overlap)}px²`,
       avoidedProductOverlap: false,
     };
   }

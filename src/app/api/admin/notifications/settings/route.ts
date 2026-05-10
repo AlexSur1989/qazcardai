@@ -1,21 +1,14 @@
 import { NextResponse } from "next/server";
 
-import { isSuperAdmin } from "@/lib/auth";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { updateNotificationAppSettings } from "@/server/services/notificationSettings";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 export const dynamic = "force-dynamic";
 
 export async function PATCH(req: Request) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
-  }
-  if (!isSuperAdmin(current.user.role)) {
-    return NextResponse.json({ error: "super_admin_only" }, { status: 403 });
+  const gate = await requireAdminApiPermission("notifications.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
   let body: unknown;
   try {
@@ -28,7 +21,7 @@ export async function PATCH(req: Request) {
   }
   const res = await updateNotificationAppSettings({
     values: body as Record<string, unknown>,
-    adminUserId: current.user.id,
+    adminUserId: gate.user.id,
   });
   if (!res.ok) {
     return NextResponse.json(

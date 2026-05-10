@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { writeAdminAuditLog } from "@/lib/admin-audit";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { grantTokenPackageToUser } from "@/server/services/tokenPackages";
 import { tokenPackageFormSchema } from "@/lib/validations/token-package";
@@ -19,10 +20,13 @@ const grantSchema = z.object({
   tokenPackageId: z.string().cuid("Некорректный пакет"),
 });
 
-async function requireAdmin() {
+async function requireTokenPackageManage() {
   const current = await getFreshAdminSessionUser();
   if (!current.ok) {
     return { error: "Нет доступа" as const };
+  }
+  if (!hasPermission(current.user.role, "token_packages.manage")) {
+    return { error: "Нет права управлять пакетами токенов" as const };
   }
   return { userId: current.user.id };
 }
@@ -46,7 +50,7 @@ export async function createTokenPackageAction(
   _prev: TokenPackageActionState,
   formData: FormData,
 ): Promise<TokenPackageActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requireTokenPackageManage();
   if ("error" in ctx) return { error: ctx.error };
   const rateErr = await getAdminRateLimitError(ctx.userId);
   if (rateErr) return { error: rateErr };
@@ -104,7 +108,7 @@ export async function updateTokenPackageAction(
   _prev: TokenPackageActionState,
   formData: FormData,
 ): Promise<TokenPackageActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requireTokenPackageManage();
   if ("error" in ctx) return { error: ctx.error };
   const rateErr = await getAdminRateLimitError(ctx.userId);
   if (rateErr) return { error: rateErr };
@@ -214,7 +218,7 @@ export async function deleteTokenPackageAction(
   _prev: TokenPackageActionState,
   formData: FormData,
 ): Promise<TokenPackageActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requireTokenPackageManage();
   if ("error" in ctx) return { error: ctx.error };
   const rateErr = await getAdminRateLimitError(ctx.userId);
   if (rateErr) return { error: rateErr };
@@ -259,7 +263,7 @@ export async function adminGrantTokenPackageAction(
   _prev: TokenPackageActionState,
   formData: FormData,
 ): Promise<TokenPackageActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requireTokenPackageManage();
   if ("error" in ctx) return { error: ctx.error };
   const rateErr = await getAdminRateLimitError(ctx.userId);
   if (rateErr) return { error: rateErr };

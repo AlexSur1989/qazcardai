@@ -6,6 +6,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -278,11 +279,11 @@ function mergeSeedancePricing(
 }
 
 async function main() {
-  const existing = await prisma.aiModel.findUnique({
+  const guard = await prisma.aiModel.findUnique({
     where: { slug: "seedance-2-0" },
     select: { pricingSchema: true },
   });
-  const pricingForUpdate = mergeSeedancePricing(existing?.pricingSchema, PRICING_SCHEMA);
+  const pricingForUpdate = mergeSeedancePricing(guard?.pricingSchema, PRICING_SCHEMA);
   const row = await prisma.aiModel.upsert({
     where: { slug: "seedance-2-0" },
     create: {
@@ -317,7 +318,7 @@ async function main() {
       pricingSchema: { ...PRICING_SCHEMA } as object,
       payloadMapping: { ...PAYLOAD_MAPPING },
     },
-    update: {
+      update: omitSeedPricingWhenPinned(guard, {
       name: "Seedance 2.0",
       provider: "KIE_AI",
       type: "VIDEO",
@@ -347,7 +348,7 @@ async function main() {
       settingsSchema: { ...SETTINGS_SCHEMA },
       pricingSchema: pricingForUpdate as object,
       payloadMapping: { ...PAYLOAD_MAPPING },
-    },
+    }),
   });
   console.log("[seed:seedance] OK", row.id, row.slug);
 }

@@ -1,5 +1,5 @@
 
-import type { CreditTransactionType } from "@/generated/prisma/enums";
+import type { CreditTransactionType, UserRole } from "@/generated/prisma/enums";
 import { Prisma } from "@/generated/prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -353,10 +353,11 @@ export async function listTransactions(userId: string, options: ListTxOptions = 
 export async function adminAdjustCredits(args: {
   userId: string;
   adminUserId: string;
+  adminRole?: UserRole;
   delta: number;
   reason: string;
 }): Promise<{ newBalance: number }> {
-  const { userId, adminUserId, delta, reason } = args;
+  const { userId, adminUserId, adminRole, delta, reason } = args;
   if (!Number.isInteger(delta) || delta === 0) {
     throw new CreditServiceError("INVALID", "Укажите ненулевое целое delta");
   }
@@ -392,7 +393,7 @@ export async function adminAdjustCredits(args: {
     await tx.adminAuditLog.create({
       data: {
         adminUserId,
-        action: "USER_CREDITS_ADJUSTED",
+        action: "balance_adjusted",
         targetType: "User",
         targetId: userId,
         oldValue: { balanceCredits: before.balanceCredits } as Prisma.InputJsonValue,
@@ -402,6 +403,7 @@ export async function adminAdjustCredits(args: {
           reason: reason.slice(0, 300),
           oldBalance: before.balanceCredits,
           newBalance: updated.balanceCredits,
+          ...(adminRole ? { actorRole: adminRole } : {}),
         } as Prisma.InputJsonValue,
       },
     });

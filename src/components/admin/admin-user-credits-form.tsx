@@ -40,7 +40,7 @@ export function AdminUserCreditsForm({ userId, canAdjust }: Props) {
         <Alert>
           <AlertTitle>Только просмотр</AlertTitle>
           <AlertDescription>
-            Корректировка баланса доступна только роли SUPER_ADMIN.
+            Корректировка баланса недоступна для этой роли (нужно право users.adjust_balance).
           </AlertDescription>
         </Alert>
       ) : null}

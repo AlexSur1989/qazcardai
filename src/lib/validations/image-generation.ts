@@ -35,6 +35,7 @@ export const imageGenerationBodySchema = z.object({
     .optional()
     .nullable()
     .transform((v) => (v == null || v === undefined ? undefined : v)),
+  clientEstimateCredits: z.number().optional().nullable(),
   inputFiles: z
     .array(z.string().min(1))
     .max(8, "Слишком много файлов")

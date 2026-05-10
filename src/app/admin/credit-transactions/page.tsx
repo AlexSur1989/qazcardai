@@ -25,6 +25,7 @@ import { formatAdminDateTime } from "@/lib/admin-format";
 import { creditTypeLabel } from "@/lib/credit-labels";
 import { cn } from "@/lib/utils";
 import { getCreditTransactionList } from "@/server/services/financeAdmin";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 import type { CreditTransactionType } from "@/generated/prisma/enums";
 export const metadata = {
   title: "Транзакции токенов / Credit Transactions — QazCard AI",
@@ -81,6 +82,7 @@ function amountClass(type: CreditTransactionType, amount: number): string {
 }
 
 export default async function AdminCreditTransactionsPage({ searchParams }: PageProps) {
+  await requireAdminPagePermission("credit_transactions.view");
   const sp = (await searchParams) ?? {};
   const userEmail = first(sp.userEmail).trim() || undefined;
   const userId = first(sp.userId).trim() || undefined;

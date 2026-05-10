@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getMaxJsonBodyBytes, rejectOversizedBody } from "@/lib/request-body-limits";
 import { CreditServiceError } from "@/server/services/credits";
 import { adjustUserCreditsApi } from "@/server/services/financeAdmin";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 const bodySchema = z.object({
   amount: z.number().int(),
@@ -17,16 +17,11 @@ type Ctx = { params: Promise<{ id: string }> };
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request, ctx: Ctx) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("users.adjust_balance");
+  if (!gate.ok) {
+    return gate.response;
   }
-  if (current.user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "super_admin_only" }, { status: 403 });
-  }
+  const current = gate.user;
   if (rejectOversizedBody(req, getMaxJsonBodyBytes())) {
     return NextResponse.json({ error: "body_too_large" }, { status: 413 });
   }
@@ -50,7 +45,7 @@ export async function POST(req: Request, ctx: Ctx) {
   }
   try {
     const { newBalance } = await adjustUserCreditsApi({
-      adminUserId: current.user.id,
+      adminUserId: current.id,
       userId,
       amount,
       reason,

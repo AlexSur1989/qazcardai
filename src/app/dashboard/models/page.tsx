@@ -9,6 +9,7 @@ import {
 } from "@/lib/generation-models-catalog";
 import { prisma } from "@/lib/prisma";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
+import { getCreditsUiFloor } from "@/server/services/pricing";
 import type { GenerationTaskId } from "@/config/generation-models";
 import { TASK_FILTER_GROUPS } from "@/config/generation-models";
 
@@ -45,7 +46,7 @@ export default async function DashboardModelsPage({ searchParams }: Props) {
     typeof qRaw === "string" ? qRaw : Array.isArray(qRaw) ? (qRaw[0] ?? "") : "";
   const initialTaskFilters = parseTaskParam(sp.task);
 
-  const [dbModels, productMinRow] = await Promise.all([
+  const [dbRows, productMinRow] = await Promise.all([
     prisma.aiModel.findMany({
       where: prismaWhereForDashboardModelsCatalog(),
       orderBy: { name: "asc" },
@@ -58,6 +59,7 @@ export default async function DashboardModelsPage({ searchParams }: Props) {
         scope: true,
         productCardModelType: true,
         costCredits: true,
+        pricingSchema: true,
         description: true,
         isActive: true,
         supportsImageInput: true,
@@ -69,6 +71,14 @@ export default async function DashboardModelsPage({ searchParams }: Props) {
       _min: { costCredits: true },
     }),
   ]);
+
+  const dbModels = dbRows.map((m) => {
+    const { pricingSchema: _p, ...rest } = m;
+    return {
+      ...rest,
+      creditsUiMin: getCreditsUiFloor(m),
+    };
+  });
 
   const productFlowMinCredits = productMinRow._min.costCredits ?? null;
 

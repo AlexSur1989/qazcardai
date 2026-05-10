@@ -4,7 +4,8 @@ import {
   type ProvidersPageInitial,
 } from "@/components/admin/provider-monitor-client";
 import { getKieMonitorStatusPayload } from "@/server/services/providerMonitor";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
+import { hasPermission } from "@/lib/permissions";
 
 export const metadata = {
   title: "Провайдеры — QazCard AI",
@@ -35,11 +36,10 @@ function toClientPayload(
 }
 
 export default async function AdminProvidersPage() {
+  const user = await requireAdminPagePermission("providers.view");
   const payload = await getKieMonitorStatusPayload();
   const initial = toClientPayload(payload);
-  const session = await getFreshAdminSessionUser();
-  const canRunConnectionCheck =
-    session.ok && session.user.role === "SUPER_ADMIN";
+  const canRunConnectionCheck = hasPermission(user.role, "providers.manage");
 
   return (
     <div className="space-y-8">

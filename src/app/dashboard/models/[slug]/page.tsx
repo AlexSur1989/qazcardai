@@ -14,6 +14,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { cn } from "@/lib/utils";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
+import { getCreditsUiFloor } from "@/server/services/pricing";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -56,7 +57,7 @@ export default async function ModelDetailPage({ params }: Props) {
     );
   }
 
-  const [dbModels, productMinRow] = await Promise.all([
+  const [dbRows, productMinRow] = await Promise.all([
     prisma.aiModel.findMany({
       where: prismaWhereForDashboardModelsCatalog(),
       select: {
@@ -68,6 +69,7 @@ export default async function ModelDetailPage({ params }: Props) {
         scope: true,
         productCardModelType: true,
         costCredits: true,
+        pricingSchema: true,
         description: true,
         isActive: true,
         supportsImageInput: true,
@@ -79,6 +81,14 @@ export default async function ModelDetailPage({ params }: Props) {
       _min: { costCredits: true },
     }),
   ]);
+
+  const dbModels = dbRows.map((m) => {
+    const { pricingSchema: _p, ...rest } = m;
+    return {
+      ...rest,
+      creditsUiMin: getCreditsUiFloor(m),
+    };
+  });
 
   const models = mergeGenerationCatalog({
     dbModels,

@@ -23,6 +23,7 @@ import { getAdminOverview } from "@/lib/admin-data";
 import { formatAdminDateTime, truncate } from "@/lib/admin-format";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = {
   title: "Обзор — QazCard AI",
@@ -51,6 +52,7 @@ function StatCard({
 }
 
 export default async function AdminHomePage() {
+  await requireAdminPagePermission("overview.view");
   const res = await getAdminOverview();
   if (!res.ok) {
     return (

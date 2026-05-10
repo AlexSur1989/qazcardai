@@ -16,16 +16,19 @@ import {
 } from "@/lib/request-body-limits";
 import { publicApiErrorMessage } from "@/lib/safe-api-error";
 import { imageGenerationBodySchema } from "@/lib/validations/image-generation";
+import { enqueueGenerationJob } from "@/server/queues/generationQueue";
+import { isRedisReachableForQueue } from "@/server/queues/redisConnection";
 import { CreditServiceError, getBalance, refundCredits, reserveCredits } from "@/server/services/credits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
-import { enqueueGenerationJob } from "@/server/queues/generationQueue";
 import { MODERATION_USER_MESSAGE, moderateGenerationInput } from "@/server/services/moderation";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 import {
   modelHasSettingsSchema,
   validateAndNormalizeModelSettings,
 } from "@/server/services/model-settings";
-import { calculateGenerationCredits } from "@/server/services/pricing";
+import {
+  calculateGenerationCreditsWithBreakdown,
+} from "@/server/services/pricing";
 import {
   isGrokImagineModel,
   validateGrokImagineSettings,
@@ -194,10 +197,25 @@ export async function POST(req: Request) {
     );
   }
 
-  const costCreditsCalculated = calculateGenerationCredits(
-    model,
-    normalizedSettings,
-  );
+  const { credits: costCreditsCalculated, priceBreakdown } =
+    calculateGenerationCreditsWithBreakdown(model, normalizedSettings);
+
+  metadata.priceBreakdown = priceBreakdown;
+
+  if (
+    body.clientEstimateCredits != null &&
+    Number.isFinite(body.clientEstimateCredits) &&
+    Math.round(body.clientEstimateCredits) !== costCreditsCalculated
+  ) {
+    return NextResponse.json(
+      {
+        error: "Цена изменилась. Обновите оценку и повторите отправку.",
+        code: "PRICE_CHANGED" as const,
+        credits: costCreditsCalculated,
+      },
+      { status: 409 },
+    );
+  }
 
   let balance: number;
   try {
@@ -224,10 +242,7 @@ export async function POST(req: Request) {
         ? (inputFilesCombined as Prisma.InputJsonValue)
         : undefined,
       costCredits: costCreditsCalculated,
-      metadata:
-        Object.keys(metadata).length > 0
-          ? (metadata as Prisma.InputJsonValue)
-          : undefined,
+      metadata: metadata as Prisma.InputJsonValue,
     },
   });
 
@@ -249,6 +264,25 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: publicApiErrorMessage(e, "Ошибка резерва кредитов") },
       { status: 400 },
+    );
+  }
+
+  const redisUp = await isRedisReachableForQueue();
+  if (!redisUp) {
+    try {
+      await refundCredits(gen.id, "Возврат: Redis недоступен");
+    } catch {
+      // ignore
+    }
+    await prisma.generation
+      .delete({ where: { id: gen.id } })
+      .catch(() => {});
+    return NextResponse.json(
+      {
+        error: "QUEUE_UNAVAILABLE",
+        message: "Очередь генерации временно недоступна. Проверьте Redis/worker.",
+      },
+      { status: 503 },
     );
   }
 

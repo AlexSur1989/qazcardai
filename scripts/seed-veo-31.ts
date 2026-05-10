@@ -6,6 +6,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -223,12 +224,18 @@ const VARIANTS = [
 
 async function main() {
   for (const v of VARIANTS) {
+    const guard = await prisma.aiModel.findUnique({
+      where: { slug: v.slug },
+      select: { pricingSchema: true },
+    });
     const pricingSchema = pricingStub(v.apiModelId, v.costCredits);
     const row = await prisma.aiModel.upsert({
       where: { slug: v.slug },
       create: {
         name: v.name,
         slug: v.slug,
+        scope: "GENERAL",
+        productCardModelType: null,
         provider: "KIE_AI",
         type: "VIDEO",
         apiModelId: v.apiModelId,
@@ -248,8 +255,10 @@ async function main() {
         settingsSchema: { ...v.settingsSchema } as object,
         pricingSchema: pricingSchema as object,
       },
-      update: {
+      update: omitSeedPricingWhenPinned(guard, {
         name: v.name,
+        scope: "GENERAL",
+        productCardModelType: null,
         provider: "KIE_AI",
         type: "VIDEO",
         apiModelId: v.apiModelId,
@@ -268,7 +277,7 @@ async function main() {
         availableResolutions: v.availableResolutions,
         settingsSchema: { ...v.settingsSchema } as object,
         pricingSchema: pricingSchema as object,
-      },
+      }),
     });
     console.log("[seed:veo-3-1]", row.slug, row.apiModelId, row.id);
   }

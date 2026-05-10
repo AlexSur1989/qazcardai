@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { getAdminAdminsForFilter, getAdminAuditLogsList } from "@/lib/admin-data";
 import { formatAdminDateTime, truncate } from "@/lib/admin-format";
 import { cn } from "@/lib/utils";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 import {
   Table,
   TableBody,
@@ -23,6 +24,7 @@ export const metadata = { title: "Аудит — QazCard AI" };
 type SearchProps = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 export default async function AdminAuditLogsPage({ searchParams }: SearchProps) {
+  await requireAdminPagePermission("audit.view");
   const sp = await searchParams;
   const action = typeof sp.action === "string" ? sp.action : "";
   const adminUserId = typeof sp.adminUserId === "string" ? sp.adminUserId : "";

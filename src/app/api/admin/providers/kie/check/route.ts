@@ -1,22 +1,16 @@
 import { NextResponse } from "next/server";
 
 import { runKieProviderCheckWithAudit } from "@/server/services/providerMonitor";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("providers.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
-  if (current.user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "super_admin_only" }, { status: 403 });
-  }
-  const { checkedAt, result } = await runKieProviderCheckWithAudit(current.user.id);
+  const { checkedAt, result } = await runKieProviderCheckWithAudit(gate.user.id);
   if (result.ok) {
     return NextResponse.json({
       ok: true,

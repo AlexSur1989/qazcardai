@@ -6,6 +6,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -97,6 +98,10 @@ const VARIANTS = [
 
 async function main() {
   for (const v of VARIANTS) {
+    const guard = await prisma.aiModel.findUnique({
+      where: { slug: v.slug },
+      select: { pricingSchema: true },
+    });
     const pricingSchema = pricingFor(v.apiModelId, v.pro);
     const row = await prisma.aiModel.upsert({
       where: { slug: v.slug },
@@ -122,7 +127,7 @@ async function main() {
         settingsSchema: { ...SETTINGS_SCHEMA } as object,
         pricingSchema: pricingSchema as object,
       },
-      update: {
+      update: omitSeedPricingWhenPinned(guard, {
         name: v.name,
         provider: "KIE_AI",
         type: "VIDEO",
@@ -142,7 +147,7 @@ async function main() {
         availableResolutions: ["768P", "1080P"],
         settingsSchema: { ...SETTINGS_SCHEMA } as object,
         pricingSchema: pricingSchema as object,
-      },
+      }),
     });
     console.log("[seed:hailuo-2-3]", row.slug, row.id);
   }

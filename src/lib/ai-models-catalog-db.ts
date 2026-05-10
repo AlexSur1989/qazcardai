@@ -8,13 +8,17 @@ export function prismaWhereForDashboardModelsCatalog(): Prisma.AiModelWhereInput
   ].filter((s): s is string => typeof s === "string" && s.length > 0);
 
   if (slugNeedle.length === 0) {
-    return { scope: "GENERAL", productCardModelType: null };
+    return { scope: "GENERAL" };
   }
 
   return {
     OR: [
-      /** Без роли карточки товара — иначе «общие» генераторы путаются с PRODUCT_* */
-      { scope: "GENERAL", productCardModelType: null },
+      /**
+       * Все модели общего кабинета. Роли карточки товара живут в `scope: PRODUCT_CARD`
+       * (см. seed-product-card-models); не требуем `productCardModelType: null`, чтобы
+       * не скрывать строки с устаревшими/ручными полями после сидов без `update` полей.
+       */
+      { scope: "GENERAL" },
       { scope: "PRODUCT_CARD", slug: { in: slugNeedle } },
     ],
   };

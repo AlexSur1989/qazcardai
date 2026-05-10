@@ -6,6 +6,7 @@ import {
   adminManualRefundGeneration,
   CreditServiceError,
 } from "@/server/services/credits";
+import { hasPermission } from "@/lib/permissions";
 import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { getAdminRateLimitError } from "@/server/services/rateLimitService";
 
@@ -18,6 +19,9 @@ export async function adminRefundGenerationAction(
   const current = await getFreshAdminSessionUser();
   if (!current.ok) {
     return { error: "Нет доступа" };
+  }
+  if (!hasPermission(current.user.role, "generations.refund")) {
+    return { error: "Нет права выполнять возврат генерации" };
   }
   const rateErr = await getAdminRateLimitError(current.user.id);
   if (rateErr) return { error: rateErr };

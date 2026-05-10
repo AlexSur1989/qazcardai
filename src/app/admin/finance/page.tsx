@@ -27,6 +27,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { creditTypeLabel } from "@/lib/credit-labels";
 import { paymentStatusLabel } from "@/lib/payment-labels";
 import { cn } from "@/lib/utils";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = { title: "Финансы / Finance — QazCard AI" };
 
@@ -58,6 +59,7 @@ function Stat({
 }
 
 export default async function AdminFinancePage() {
+  await requireAdminPagePermission("finance.view");
   let data;
   try {
     data = await getFinanceSummary({});

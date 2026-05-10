@@ -5,6 +5,7 @@ import { ClipboardList } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { LaunchChecklistClient } from "@/components/admin/launch-checklist-client";
 import { buildLaunchChecklist } from "@/server/services/launchChecklist";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export const metadata = {
 };
 
 export default async function AdminLaunchChecklistPage() {
+  await requireAdminPagePermission("launch_checklist.view");
   const initial = await buildLaunchChecklist();
 
   return (

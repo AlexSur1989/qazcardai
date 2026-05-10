@@ -6,6 +6,7 @@ import {
   adminAdjustCredits,
   CreditServiceError,
 } from "@/server/services/credits";
+import { hasPermission } from "@/lib/permissions";
 import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { getAdminRateLimitError } from "@/server/services/rateLimitService";
 
@@ -28,8 +29,8 @@ export async function adminAdjustUserCreditsAction(
     }
     return { error: "Нет прав" };
   }
-  if (current.user.role !== "SUPER_ADMIN") {
-    return { error: "Только SUPER_ADMIN может менять баланс" };
+  if (!hasPermission(current.user.role, "users.adjust_balance")) {
+    return { error: "Недостаточно прав для корректировки баланса" };
   }
   const rateErr = await getAdminRateLimitError(current.user.id);
   if (rateErr) {
@@ -52,6 +53,7 @@ export async function adminAdjustUserCreditsAction(
     await adminAdjustCredits({
       userId,
       adminUserId: current.user.id,
+      adminRole: current.user.role,
       delta,
       reason,
     });

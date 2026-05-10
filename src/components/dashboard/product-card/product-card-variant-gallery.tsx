@@ -39,6 +39,7 @@ export function ProductCardVariantGallery({
           const template = getProductCardTemplatePreset(item.templatePreset);
           const isDone = item.status === "COMPLETED" && item.outputUrl;
           const isFailed = item.status === "FAILED" || item.status === "REFUNDED" || item.status === "CANCELLED" || item.status === "BLOCKED";
+          const hasRealGeneration = Boolean(item.generationId) && !item.generationId.startsWith("failed-");
           return (
             <div key={item.generationId} className="space-y-3 rounded-2xl border border-[#B8DCE6] bg-white/90 p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
@@ -59,38 +60,75 @@ export function ProductCardVariantGallery({
                 </div>
               ) : (
                 <div className="flex min-h-44 items-center justify-center rounded-xl border border-dashed border-[#B8DCE6] bg-[#F4FBFD] text-sm text-[#4a6e7a]">
-                  {isFailed ? (item.errorMessage || "Вариант не создан") : "Ожидаем результат генерации…"}
+                  {isFailed
+                    ? item.errorMessage || "Вариант не создан"
+                    : hasRealGeneration
+                      ? "Ожидаем результат генерации…"
+                      : "Не поставлен в очередь"}
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
                 <a
                   className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground aria-disabled:pointer-events-none aria-disabled:opacity-50"
-                  href={`/api/generations/${item.generationId}/download`}
+                  href={hasRealGeneration ? `/api/generations/${item.generationId}/download` : "#"}
                   target="_blank"
                   rel="noreferrer"
-                  aria-disabled={!isDone}
+                  aria-disabled={!isDone || !hasRealGeneration}
+                  onClick={(e) => {
+                    if (!isDone || !hasRealGeneration) e.preventDefault();
+                  }}
                 >
                   <Download className="h-3.5 w-3.5" />
                   Скачать
                 </a>
-                <Button type="button" size="sm" variant="outline" className="rounded-xl border-[#B8DCE6]" onClick={() => onEditText?.(item)}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl border-[#B8DCE6]"
+                  disabled={!hasRealGeneration}
+                  onClick={() => onEditText?.(item)}
+                >
                   <Type className="mr-1 h-3.5 w-3.5" />
                   Редактировать текст
                 </Button>
-                <Button type="button" size="sm" variant="outline" className="rounded-xl border-[#B8DCE6]" onClick={() => onCreateSimilar?.(item)}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl border-[#B8DCE6]"
+                  disabled={!hasRealGeneration}
+                  onClick={() => onCreateSimilar?.(item)}
+                >
                   <RefreshCw className="mr-1 h-3.5 w-3.5" />
                   Создать похожую
                 </Button>
                 <Link
-                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#B8DCE6] bg-white px-3 text-sm font-medium text-[#0C2D38]"
-                  href={`/dashboard/create/product-card?videoSource=${encodeURIComponent(item.generationId)}`}
+                  className={
+                    hasRealGeneration
+                      ? "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#B8DCE6] bg-white px-3 text-sm font-medium text-[#0C2D38]"
+                      : "pointer-events-none inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#B8DCE6]/50 bg-[#f4f8fa] px-3 text-sm font-medium text-[#4a6e7a]"
+                  }
+                  href={hasRealGeneration ? `/dashboard/create/product-card?videoSource=${encodeURIComponent(item.generationId)}` : "#"}
+                  aria-disabled={!hasRealGeneration}
+                  onClick={(e) => {
+                    if (!hasRealGeneration) e.preventDefault();
+                  }}
                 >
                   <Film className="h-3.5 w-3.5" />
                   Для видео
                 </Link>
                 <Link
-                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#B8DCE6] bg-white px-3 text-sm font-medium text-[#0C2D38]"
-                  href={`/dashboard/history/${item.generationId}`}
+                  className={
+                    hasRealGeneration
+                      ? "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#B8DCE6] bg-white px-3 text-sm font-medium text-[#0C2D38]"
+                      : "pointer-events-none inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#B8DCE6]/50 bg-[#f4f8fa] px-3 text-sm font-medium text-[#4a6e7a]"
+                  }
+                  href={hasRealGeneration ? `/dashboard/history/${item.generationId}` : "#"}
+                  aria-disabled={!hasRealGeneration}
+                  onClick={(e) => {
+                    if (!hasRealGeneration) e.preventDefault();
+                  }}
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   История

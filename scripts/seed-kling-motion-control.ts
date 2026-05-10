@@ -7,6 +7,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
 import { PrismaClient, Prisma } from "../src/generated/prisma/client";
+import { isAdminPricingPinned } from "../src/lib/admin-pricing-pinned";
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -110,7 +112,7 @@ const DESCRIPTION =
   "Kling 3.0 Motion Control — модель для переноса движения из reference video на персонажа или объект из reference image. Подходит для анимации персонажей, танцев, motion transfer, performance video и управляемого движения.";
 
 async function main() {
-  const existing = await prisma.aiModel.findUnique({
+  const guard = await prisma.aiModel.findUnique({
     where: { slug: "kling-3-0-motion-control" },
     select: { pricingSchema: true },
   });
@@ -118,8 +120,12 @@ async function main() {
   let mergedPricing: Record<string, unknown> = {
     ...PRICING_SCHEMA_NEW,
   };
-  if (existing?.pricingSchema && isRecord(existing.pricingSchema)) {
-    const prevMan = existing.pricingSchema.manualOverrides;
+  if (
+    guard?.pricingSchema &&
+    isRecord(guard.pricingSchema) &&
+    !isAdminPricingPinned(guard.pricingSchema)
+  ) {
+    const prevMan = guard.pricingSchema.manualOverrides;
     const nextMan = mergedPricing.manualOverrides;
     if (isRecord(prevMan) && isRecord(nextMan)) {
       mergedPricing = {
@@ -160,7 +166,7 @@ async function main() {
       pricingSchema: mergedPricing as Prisma.InputJsonValue,
       payloadMapping: { ...PAYLOAD_MAPPING },
     },
-    update: {
+    update: omitSeedPricingWhenPinned(guard, {
       name: "Kling 3.0 Motion Control",
       provider: "KIE_AI",
       type: "VIDEO",
@@ -181,7 +187,7 @@ async function main() {
       settingsSchema: { ...SETTINGS_SCHEMA },
       pricingSchema: mergedPricing as Prisma.InputJsonValue,
       payloadMapping: { ...PAYLOAD_MAPPING },
-    },
+    }),
   });
   console.log("[seed:kling-motion-control] OK", row.id, row.slug);
 }

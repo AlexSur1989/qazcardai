@@ -1,8 +1,6 @@
-import { AlertCircle } from "lucide-react";
 
 import { AdminSettingsCenter } from "@/components/admin/admin-settings-center";
 import { PageHeader } from "@/components/layout/page-header";
-import { Alert, AlertTitle } from "@/components/ui/alert";
 import {
   Card,
   CardContent,
@@ -10,24 +8,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { isSuperAdmin } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 import { MODERATION_APP_SETTING_KEY } from "@/lib/moderation-defaults";
 import { getAllAppSettingsForAdminResponse } from "@/server/services/appSettings";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = { title: "Настройки / Settings — QazCard AI" };
 
 export default async function AdminSettingsPage() {
-  const session = await getFreshAdminSessionUser();
-  if (!session.ok) {
-    return (
-      <Alert variant="destructive">
-        <AlertCircle />
-        <AlertTitle>Нет доступа</AlertTitle>
-      </Alert>
-    );
-  }
-  const canEdit = isSuperAdmin(session.user.role);
+  const user = await requireAdminPagePermission("settings.view");
+  const canEdit = hasPermission(user.role, "settings.manage");
+  const canEditCritical = hasPermission(user.role, "settings.critical.manage");
 
   const data = await getAllAppSettingsForAdminResponse();
 
@@ -68,6 +59,7 @@ export default async function AdminSettingsPage() {
         key={settingsSnapshotKey}
         initialGroups={data.groups}
         canEdit={canEdit}
+        canEditCritical={canEditCritical}
       />
     </div>
   );

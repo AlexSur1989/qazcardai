@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getMaxJsonBodyBytes, rejectOversizedBody } from "@/lib/request-body-limits";
 import { runAdminModelRealKieTest } from "@/server/services/adminModelTest";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 import {
   adminModelTestBodySchema,
@@ -12,16 +12,11 @@ import {
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function POST(req: Request, ctx: Ctx) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("providers.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
-  if (current.user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "super_admin_only" }, { status: 403 });
-  }
+  const current = gate.user;
   if (rejectOversizedBody(req, getMaxJsonBodyBytes())) {
     return NextResponse.json({ error: "body_too_large" }, { status: 413 });
   }
@@ -61,7 +56,7 @@ export async function POST(req: Request, ctx: Ctx) {
   const result = await runAdminModelRealKieTest({
     model,
     input,
-    adminUserId: current.user.id,
+    adminUserId: current.id,
   });
   if (result.ok) {
     return NextResponse.json({

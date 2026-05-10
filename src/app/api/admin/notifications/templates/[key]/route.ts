@@ -1,24 +1,20 @@
 import { NextResponse } from "next/server";
 
-import { isSuperAdmin } from "@/lib/auth";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import {
   getEmailTemplate,
   isEmailTemplateKey,
   updateEmailTemplate,
 } from "@/server/services/emailTemplates";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 type RouteCtx = { params: Promise<{ key: string }> };
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: Request, ctx: RouteCtx) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("notifications.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
   const { key: raw } = await ctx.params;
   if (!isEmailTemplateKey(raw)) {
@@ -32,15 +28,9 @@ export async function GET(_req: Request, ctx: RouteCtx) {
 }
 
 export async function PATCH(req: Request, ctx: RouteCtx) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
-  }
-  if (!isSuperAdmin(current.user.role)) {
-    return NextResponse.json({ error: "super_admin_only" }, { status: 403 });
+  const gate = await requireAdminApiPermission("notifications.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
   const { key: raw } = await ctx.params;
   if (!isEmailTemplateKey(raw)) {
@@ -80,7 +70,7 @@ export async function PATCH(req: Request, ctx: RouteCtx) {
     bodyText,
     bodyHtml,
     isActive: b.isActive,
-    adminUserId: current.user.id,
+    adminUserId: gate.user.id,
   });
   if (!res.ok) {
     return NextResponse.json(

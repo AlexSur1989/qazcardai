@@ -13,12 +13,15 @@ import {
 } from "@/components/ui/card";
 import { getAdminGenerationById, getAdminGenerationRefundEligibility } from "@/lib/admin-data";
 import type { UserGenerationDetail } from "@/lib/generation-history-data";
+import { hasPermission } from "@/lib/permissions";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = { title: "Генерация — QazCard AI" };
 
 type Props = { params: Promise<{ id: string }> };
 
 export default async function AdminGenerationDetailPage({ params }: Props) {
+  const user = await requireAdminPagePermission("generations.view_all");
   const { id } = await params;
   const res = await getAdminGenerationById(id);
 
@@ -56,8 +59,9 @@ export default async function AdminGenerationDetailPage({ params }: Props) {
           userIdForAdminLink={g.user.id}
           showRepeat={false}
           adminBilingualLabels
+          suppressFinanceAndProviderInternals={user.role === "MODERATOR"}
         />
-        {ref.ok && ref.canRefund ? (
+        {ref.ok && ref.canRefund && hasPermission(user.role, "generations.refund") ? (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Ручной возврат кредитов</CardTitle>

@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
 
 import { getAdminLegalPages } from "@/server/services/legalPages";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("legal.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
   const items = await getAdminLegalPages();
   return NextResponse.json({ items });

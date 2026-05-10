@@ -1,21 +1,15 @@
 import { AdminNotificationsPage } from "@/components/admin/admin-notifications-page";
 import { PageHeader } from "@/components/layout/page-header";
 import { adminTerm } from "@/lib/admin-terms";
-import { isSuperAdmin } from "@/lib/auth";
 import { getEmailTemplates } from "@/server/services/emailTemplates";
 import { getNotificationAdminState } from "@/server/services/notificationSettings";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = { title: "Уведомления — QazCard AI" };
 
 export default async function AdminNotificationsPageRoute() {
-  const session = await getFreshAdminSessionUser();
-  if (!session.ok) {
-    return (
-      <p className="text-muted-foreground text-sm">Нет доступа</p>
-    );
-  }
-  const canEdit = isSuperAdmin(session.user.role);
+  await requireAdminPagePermission("notifications.manage");
+  const canEdit = true;
   const [state, templates] = await Promise.all([
     getNotificationAdminState(),
     getEmailTemplates(),

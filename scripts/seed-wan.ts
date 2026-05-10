@@ -6,6 +6,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 import { Prisma, PrismaClient } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -523,6 +524,10 @@ const WAN_MODELS: WanSpec[] = [
 
 async function main() {
   for (const spec of WAN_MODELS) {
+    const guard = await prisma.aiModel.findUnique({
+      where: { slug: spec.slug },
+      select: { pricingSchema: true },
+    });
     const row = await prisma.aiModel.upsert({
       where: { slug: spec.slug },
       create: {
@@ -550,7 +555,7 @@ async function main() {
           ? { payloadMapping: spec.payloadMapping as object }
           : {}),
       },
-      update: {
+      update: omitSeedPricingWhenPinned(guard, {
         name: spec.name,
         provider: "KIE_AI",
         type: "VIDEO",
@@ -574,7 +579,7 @@ async function main() {
           spec.payloadMapping != null
             ? (spec.payloadMapping as object)
             : Prisma.DbNull,
-      },
+      }) as Prisma.AiModelUpdateInput,
     });
     console.log("[seed:wan]", row.slug, row.id);
   }

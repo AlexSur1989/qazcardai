@@ -4,10 +4,19 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { Prisma } from "@/generated/prisma/client";
+import {
+  ADMIN_PRICING_PINNED_KEY,
+  withAdminPricingPinned,
+} from "@/lib/admin-pricing-pinned";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
+import { isRecord } from "@/lib/model-pricing-shared";
 import { prisma } from "@/lib/prisma";
 import type { AiModelFormPayload } from "@/lib/validations/ai-model";
 import { parseAiModelFormData } from "@/lib/validations/ai-model";
+import {
+  defaultAdminLandingPath,
+  hasPermission,
+} from "@/lib/permissions";
 import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { getAdminRateLimitError } from "@/server/services/rateLimitService";
 
@@ -32,6 +41,9 @@ async function getAdminContext(): Promise<{ userId: string }> {
       redirect("/dashboard");
     }
     redirect("/login?next=/admin/models");
+  }
+  if (!hasPermission(current.user.role, "models.manage")) {
+    redirect(defaultAdminLandingPath(current.user.role));
   }
   return { userId: current.user.id };
 }
@@ -178,6 +190,7 @@ export async function createAiModelAction(
     return { error: "Не удалось создать запись" };
   }
   revalidatePath("/admin/models");
+  revalidatePath("/admin/pricing");
   redirect("/admin/models");
 }
 
@@ -203,10 +216,43 @@ export async function updateAiModelAction(
     return { error: "Модель не найдена" };
   }
   const oldSnapshot = modelSnapshot(existing);
+
+  function realMoneyString(v: unknown): string {
+    if (v == null) return "";
+    if (
+      typeof v === "object" &&
+      v !== null &&
+      "toString" in v &&
+      typeof (v as { toString: () => string }).toString === "function"
+    ) {
+      return (v as { toString: () => string }).toString();
+    }
+    return String(v);
+  }
+
+  const creditsChanged = parsed.data.costCredits !== existing.costCredits;
+  const realCostChanged =
+    realMoneyString(parsed.data.realCost) !== realMoneyString(existing.realCost);
+  let pricingPinJson: Prisma.InputJsonValue | undefined;
+  if (creditsChanged || realCostChanged) {
+    if (existing.pricingSchema != null && isRecord(existing.pricingSchema)) {
+      pricingPinJson = withAdminPricingPinned(
+        existing.pricingSchema as Record<string, unknown>,
+      ) as unknown as Prisma.InputJsonValue;
+    } else {
+      pricingPinJson = {
+        [ADMIN_PRICING_PINNED_KEY]: true,
+      } as unknown as Prisma.InputJsonValue;
+    }
+  }
+
   try {
     const updated = await prisma.aiModel.update({
       where: { id },
-      data: toUpdateInput(parsed.data),
+      data: {
+        ...toUpdateInput(parsed.data),
+        ...(pricingPinJson != null ? { pricingSchema: pricingPinJson } : {}),
+      },
     });
     const newSnapshot = modelSnapshot(updated);
     await writeAdminAuditLog({
@@ -224,7 +270,7 @@ export async function updateAiModelAction(
     if (costOld !== costNew || realOld !== realNew) {
       await writeAdminAuditLog({
         adminUserId: userId,
-        action: "model.price_changed",
+        action: "model_cost_changed",
         targetType: "AiModel",
         targetId: id,
         oldValue: { costCredits: oldSnapshot.costCredits, realCost: oldSnapshot.realCost },
@@ -239,6 +285,7 @@ export async function updateAiModelAction(
     return { error: "Не удалось сохранить" };
   }
   revalidatePath("/admin/models");
+  revalidatePath("/admin/pricing");
   revalidatePath(`/admin/models/${id}/edit`);
   return null;
 }
@@ -276,6 +323,7 @@ export async function deleteAiModelAction(
     oldValue: snap,
   });
   revalidatePath("/admin/models");
+  revalidatePath("/admin/pricing");
   redirect("/admin/models");
 }
 
@@ -284,6 +332,7 @@ export async function toggleAiModelActiveAction(formData: FormData): Promise<voi
   const rateErr = await getAdminRateLimitError(userId);
   if (rateErr) {
     revalidatePath("/admin/models");
+    revalidatePath("/admin/pricing");
     return;
   }
   const id = String(formData.get("id") ?? "");
@@ -297,6 +346,7 @@ export async function toggleAiModelActiveAction(formData: FormData): Promise<voi
   }
   if (existing.isActive === next) {
     revalidatePath("/admin/models");
+    revalidatePath("/admin/pricing");
     return;
   }
   const oldSnapshot = modelSnapshot(existing);
@@ -306,11 +356,12 @@ export async function toggleAiModelActiveAction(formData: FormData): Promise<voi
   });
   await writeAdminAuditLog({
     adminUserId: userId,
-    action: "model.active_changed",
+    action: next ? "model_enabled" : "model_disabled",
     targetType: "AiModel",
     targetId: id,
     oldValue: { isActive: oldSnapshot.isActive },
     newValue: { isActive: updated.isActive },
   });
   revalidatePath("/admin/models");
+  revalidatePath("/admin/pricing");
 }

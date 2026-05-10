@@ -28,6 +28,7 @@ import {
 import { formatAdminDateTime } from "@/lib/admin-format";
 import { paymentStatusLabel } from "@/lib/payment-labels";
 import { cn } from "@/lib/utils";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 import type { PaymentStatus } from "@/generated/prisma/enums";
 
 export const metadata = { title: "Платежи — QazCard AI" };
@@ -51,6 +52,7 @@ type PageProps = {
 };
 
 export default async function AdminPaymentsPage({ searchParams }: PageProps) {
+  await requireAdminPagePermission("payments.view");
   const sp = (await searchParams) ?? {};
   const userId = first(sp.userId).trim() || undefined;
   const statusRaw = first(sp.status);

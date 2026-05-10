@@ -18,10 +18,12 @@ import { getAdminModelsList } from "@/lib/admin-data";
 import { formatAdminDateTime } from "@/lib/admin-format";
 import { adminTerm } from "@/lib/admin-terms";
 import { cn } from "@/lib/utils";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = { title: "Модели — QazCard AI" };
 
 export default async function AdminModelsPage() {
+  await requireAdminPagePermission("models.view");
   const res = await getAdminModelsList();
   if (!res.ok) {
     return (

@@ -278,7 +278,7 @@ function klingModeSoundMatrixKey(settings: Record<string, unknown>): string {
   return "";
 }
 
-function matrixResolutionDurationCell(
+export function matrixResolutionDurationCell(
   matrix: unknown,
   resKey: string,
   dur: string,
@@ -303,7 +303,8 @@ function matrixResolutionDurationCell(
   return null;
 }
 
-function manualCell(
+/** Используется unified breakdown / админ-превью живого расчёта. */
+export function manualPricingMatrixCell(
   manualOverrides: unknown,
   matrixKey: string,
   resKey: string,
@@ -356,7 +357,7 @@ function seedanceStyleCredits(
   }
   const hasVideo = hasSeedanceVideoInput(settings);
   const matrixKey = hasVideo ? "videoInputMatrix" : "matrix";
-  const manual = manualCell(raw.manualOverrides, matrixKey, resKey, dur);
+  const manual = manualPricingMatrixCell(raw.manualOverrides, matrixKey, resKey, dur);
   if (manual !== null) {
     return applySeedanceAddOns(raw, settings, manual);
   }
@@ -422,7 +423,7 @@ function resolutionDurationMatrixCredits(
   if (!effectiveRes || !dur) {
     return null;
   }
-  const manual = manualCell(raw.manualOverrides, "matrix", effectiveRes, dur);
+  const manual = manualPricingMatrixCell(raw.manualOverrides, "matrix", effectiveRes, dur);
   if (manual !== null) {
     return manual;
   }

@@ -1,22 +1,16 @@
 import { NextResponse } from "next/server";
 
 import { runStorageCheckWithAudit } from "@/server/services/storageMonitor";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("storage.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
-  if (current.user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "super_admin_only" }, { status: 403 });
-  }
-  const r = await runStorageCheckWithAudit(current.user.id);
+  const r = await runStorageCheckWithAudit(gate.user.id);
   if (r.ok) {
     return NextResponse.json({
       ok: true,

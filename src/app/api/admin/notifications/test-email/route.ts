@@ -1,26 +1,19 @@
 import { NextResponse } from "next/server";
 
-import { isSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendTemplateEmail, getEmailFlowUrls } from "@/server/services/emailService";
 import {
   isEmailTemplateKey,
   type EmailTemplateKey,
 } from "@/server/services/emailTemplates";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
-  }
-  if (!isSuperAdmin(current.user.role)) {
-    return NextResponse.json({ error: "super_admin_only" }, { status: 403 });
+  const gate = await requireAdminApiPermission("notifications.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
   let body: unknown;
   try {
@@ -41,11 +34,11 @@ export async function POST(req: Request) {
   const templateKey = b.templateKey as EmailTemplateKey;
   const { appName, dashboardUrl, billingUrl } = getEmailFlowUrls();
   const u = await prisma.user.findUnique({
-    where: { id: current.user.id },
+    where: { id: gate.user.id },
     select: { name: true, email: true },
   });
   const userName = u?.name ?? "Admin";
-  const userEmail = u?.email ?? current.user.email;
+  const userEmail = u?.email ?? gate.user.email;
 
   const result = await sendTemplateEmail({
     to: b.to.trim(),

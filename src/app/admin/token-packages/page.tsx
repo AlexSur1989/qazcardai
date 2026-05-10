@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { TokenPackagesAdmin } from "@/components/admin/token-packages-admin";
 import { listAllTokenPackagesForAdmin } from "@/server/services/token-packages-catalog";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = { title: "Пакеты токенов — QazCard AI" };
 
 export default async function AdminTokenPackagesPage() {
+  await requireAdminPagePermission("token_packages.view");
   const packages = await listAllTokenPackagesForAdmin();
   const users = await prisma.user.findMany({
     take: 500,

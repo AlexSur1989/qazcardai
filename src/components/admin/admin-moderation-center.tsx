@@ -14,14 +14,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { UserRole } from "@/generated/prisma/enums";
 import { cn } from "@/lib/utils";
 import { MODERATION_APP_SETTING_KEYS } from "@/lib/moderation-app-settings";
 
-type Role = "ADMIN" | "SUPER_ADMIN" | string;
-
 type Props = {
-  initialRole: Role;
+  initialRole: UserRole | string;
   initialSettings: Record<string, unknown>;
+  /** Только таблица логов (отдельная страница для модераторов). */
+  logsOnly?: boolean;
 };
 
 type SettingsState = Record<string, unknown>;
@@ -48,7 +49,11 @@ type LogRow = {
   promptPreview: string | null;
 };
 
-export function AdminModerationCenter({ initialRole, initialSettings }: Props) {
+export function AdminModerationCenter({
+  initialRole,
+  initialSettings,
+  logsOnly = false,
+}: Props) {
   const canSave = initialRole === "SUPER_ADMIN";
   const [settings, setSettings] = useState<SettingsState>(initialSettings);
   const [saving, setSaving] = useState(false);
@@ -202,7 +207,9 @@ export function AdminModerationCenter({ initialRole, initialSettings }: Props) {
         </p>
       )}
 
-      <section className="space-y-4">
+      {!logsOnly && (
+        <>
+          <section className="space-y-4">
         <h2 className="text-lg font-semibold">Settings / Настройки</h2>
         <div className="grid max-w-2xl gap-6">
           <label className="flex items-center justify-between gap-4">
@@ -323,6 +330,9 @@ export function AdminModerationCenter({ initialRole, initialSettings }: Props) {
           </div>
         )}
       </section>
+
+        </>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Moderation logs / Логи модерации</h2>

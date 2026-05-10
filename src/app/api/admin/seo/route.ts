@@ -1,33 +1,23 @@
 import { NextResponse } from "next/server";
 
-import { isSuperAdmin } from "@/lib/auth";
 import { getSeoChecklist, getSeoSettings, updateSeoSettings } from "@/server/services/seoSettings";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("seo.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
   const [settings, checklist] = await Promise.all([getSeoSettings(), getSeoChecklist()]);
   return NextResponse.json({ settings, checklist });
 }
 
 export async function PATCH(req: Request) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
-  }
-  if (!isSuperAdmin(current.user.role)) {
-    return NextResponse.json({ error: "super_admin_only" }, { status: 403 });
+  const gate = await requireAdminApiPermission("seo.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
   let body: unknown;
   try {
@@ -40,7 +30,7 @@ export async function PATCH(req: Request) {
   }
   const res = await updateSeoSettings({
     values: body as Record<string, unknown>,
-    adminUserId: current.user.id,
+    adminUserId: gate.user.id,
   });
   if (!res.ok) {
     return NextResponse.json(

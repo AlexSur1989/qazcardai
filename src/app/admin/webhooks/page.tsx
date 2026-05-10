@@ -12,6 +12,7 @@ import {
 import { getAdminWebhookEventsList } from "@/lib/admin-data";
 import { formatAdminDateTime, truncate } from "@/lib/admin-format";
 import { adminTerm } from "@/lib/admin-terms";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 import { AlertCircle } from "lucide-react";
 
 function jsonPreview(v: unknown, max: number): string {
@@ -26,6 +27,7 @@ function jsonPreview(v: unknown, max: number): string {
 export const metadata = { title: "Webhooks — QazCard AI" };
 
 export default async function AdminWebhooksPage() {
+  await requireAdminPagePermission("webhooks.view");
   const res = await getAdminWebhookEventsList();
   if (!res.ok) {
     return (

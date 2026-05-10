@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { getEmailTemplates } from "@/server/services/emailTemplates";
 import { getNotificationAdminState } from "@/server/services/notificationSettings";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -10,12 +10,9 @@ export const dynamic = "force-dynamic";
  * Сводка: настройки, шаблоны, статусы env (без секретов).
  */
 export async function GET() {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("notifications.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
   const [state, templates] = await Promise.all([
     getNotificationAdminState(),

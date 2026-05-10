@@ -3,16 +3,20 @@
 import { revalidatePath } from "next/cache";
 
 import { writeAdminAuditLog } from "@/lib/admin-audit";
+import { hasPermission } from "@/lib/permissions";
 import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { getAdminRateLimitError } from "@/server/services/rateLimitService";
 import { prisma } from "@/lib/prisma";
 
 export type PromoCodeActionState = { error?: string; ok?: boolean } | null;
 
-function requireAdmin() {
+function requirePromoManage() {
   return getFreshAdminSessionUser().then((current) => {
     if (!current.ok) {
       return { error: "Нет доступа" as const };
+    }
+    if (!hasPermission(current.user.role, "promocodes.manage")) {
+      return { error: "Нет права управлять промокодами" as const };
     }
     return { userId: current.user.id };
   });
@@ -39,7 +43,7 @@ export async function createPromoCodeAction(
   _prev: PromoCodeActionState,
   formData: FormData,
 ): Promise<PromoCodeActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requirePromoManage();
   if ("error" in ctx) return { error: ctx.error };
   const rateErr = await getAdminRateLimitError(ctx.userId);
   if (rateErr) return { error: rateErr };
@@ -106,7 +110,7 @@ export async function updatePromoCodeAction(
   _prev: PromoCodeActionState,
   formData: FormData,
 ): Promise<PromoCodeActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requirePromoManage();
   if ("error" in ctx) return { error: ctx.error };
   const rateErr = await getAdminRateLimitError(ctx.userId);
   if (rateErr) return { error: rateErr };

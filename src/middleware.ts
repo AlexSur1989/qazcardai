@@ -4,6 +4,11 @@ import { getToken } from "next-auth/jwt";
 
 import type { UserRole } from "@/generated/prisma/enums";
 import {
+  canAccessAdminPanel,
+  isModeratorAllowedAdminPath,
+  isStaffMaintenanceRole,
+} from "@/lib/permissions";
+import {
   pickLoginRedirectParam,
   postAuthLandingPath,
   maybeRedirectImageVideoToModelsCatalog,
@@ -32,13 +37,13 @@ function shouldUseSecureSessionCookie(req: NextRequest): boolean {
   return false;
 }
 
-function isAdminRouteRole(role: unknown): role is UserRole {
-  return role === "ADMIN" || role === "SUPER_ADMIN";
+function isAdminDashboardRole(role: unknown): role is UserRole {
+  return canAccessAdminPanel(role as UserRole);
 }
 
 /**
  * MAINTENANCE_MODE=1 — для обычных пользователей редирект на /maintenance.
- * MAINTENANCE_ALLOW_ADMIN=1 — ADMIN/SUPER_ADMIN во входе видят сайт как без техработ (кабинет + админка + API).
+ * MAINTENANCE_ALLOW_ADMIN=1 — персонал (MODERATOR/ADMIN/SUPER_ADMIN) видит кабинет и админку как без техработ.
  * Регистрация по-прежнему закрыта у всех.
  */
 async function applyMaintenanceGate(
@@ -80,7 +85,7 @@ async function applyMaintenanceGate(
     });
   }
 
-  const isAdmin = isAdminRouteRole(token?.role);
+  const isStaff = isStaffMaintenanceRole(token?.role);
 
   if (pathname === "/register" || pathname === "/auth/register") {
     return NextResponse.redirect(
@@ -88,7 +93,7 @@ async function applyMaintenanceGate(
     );
   }
 
-  if (allowAdmin && token?.sub && isAdmin) {
+  if (allowAdmin && token?.sub && isStaff) {
     return null;
   }
 
@@ -103,7 +108,7 @@ async function applyMaintenanceGate(
     if (pathname === "/login" || pathname === "/auth/login") {
       return NextResponse.redirect(new URL("/maintenance", nextUrl.origin));
     }
-    if (token?.sub && !isAdmin) {
+    if (token?.sub && !isStaff) {
       if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
         return NextResponse.redirect(new URL("/maintenance", nextUrl.origin));
       }
@@ -117,7 +122,7 @@ async function applyMaintenanceGate(
   if (pathname.startsWith("/admin")) {
     return null;
   }
-  if (token?.sub && !isAdmin) {
+  if (token?.sub && !isStaff) {
     if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
       return NextResponse.redirect(new URL("/maintenance", nextUrl.origin));
     }
@@ -142,7 +147,7 @@ export async function middleware(req: NextRequest) {
     pathname === "/auth/register";
 
   const isDashboard = pathname === "/dashboard" || pathname.startsWith("/dashboard/");
-  const isAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
+  const isAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
 
   const secret = getMiddlewareJwtSecret();
   const secureCookie = shouldUseSecureSessionCookie(req);
@@ -171,7 +176,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!isDashboard && !isAdmin) {
+  if (!isDashboard && !isAdminPath) {
     return NextResponse.next();
   }
 
@@ -195,8 +200,15 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (isAdmin && !isAdminRouteRole(token.role)) {
+  if (isAdminPath && !isAdminDashboardRole(token.role)) {
     return NextResponse.redirect(new URL("/dashboard", nextUrl.origin));
+  }
+
+  const role = token.role as UserRole | undefined;
+  if (isAdminPath && role === "MODERATOR") {
+    if (pathname === "/admin" || !isModeratorAllowedAdminPath(pathname)) {
+      return NextResponse.redirect(new URL("/admin/moderation", nextUrl.origin));
+    }
   }
 
   const toCatalog = maybeRedirectImageVideoToModelsCatalog(
@@ -215,7 +227,7 @@ export async function middleware(req: NextRequest) {
   }
 
   const response = NextResponse.next();
-  if (isDashboard || isAdmin) {
+  if (isDashboard || isAdminPath) {
     response.headers.set(
       "Cache-Control",
       "private, no-store, max-age=0, must-revalidate",

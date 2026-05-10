@@ -12,6 +12,7 @@ import {
 import { getAdminApiLogsList } from "@/lib/admin-data";
 import { formatAdminDateTime, truncate } from "@/lib/admin-format";
 import { adminTerm } from "@/lib/admin-terms";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 import { AlertCircle } from "lucide-react";
 
 function jsonPreview(v: unknown, max: number): string {
@@ -26,6 +27,7 @@ function jsonPreview(v: unknown, max: number): string {
 export const metadata = { title: "API логи — QazCard AI" };
 
 export default async function AdminLogsPage() {
+  await requireAdminPagePermission("api_logs.view");
   const res = await getAdminApiLogsList();
   if (!res.ok) {
     return (

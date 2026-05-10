@@ -51,6 +51,8 @@ import {
 import {
   compositeProductCardMarketplaceOverlayOnImage,
   shouldApplyProductCardMarketplaceOverlay,
+  type OverlayObjectLayoutMetaV1,
+  type OverlayObjectLayoutMetaV2,
 } from "@/server/services/marketplaceCardImageComposite";
 import {
   StorageError,
@@ -651,6 +653,17 @@ export async function processGenerationJob(
   }
 }
 
+function mergeGenerationMetadataOverlayLayout(
+  current: Prisma.JsonValue | null | undefined,
+  overlayLayout: OverlayObjectLayoutMetaV1 | OverlayObjectLayoutMetaV2,
+): Prisma.InputJsonValue {
+  const base =
+    current && typeof current === "object" && !Array.isArray(current)
+      ? { ...(current as Record<string, unknown>) }
+      : {};
+  return { ...base, overlayObjectLayout: overlayLayout } as Prisma.InputJsonValue;
+}
+
 /**
  * Сохранение результата (S3 при наличии), COMPLETED, confirmCredits. Используется worker и webhook Kie.
  */
@@ -700,6 +713,7 @@ export async function completeWithOutput(
       };
       const outputItems: Record<string, unknown>[] = [];
       const fileRows: FileRow[] = [];
+      let overlayObjectLayoutPatch: OverlayObjectLayoutMetaV1 | OverlayObjectLayoutMetaV2 | undefined;
       try {
         for (let i = 0; i < providerUrls.length; i++) {
           const src = providerUrls[i];
@@ -714,22 +728,23 @@ export async function completeWithOutput(
               downloaded.buffer,
               gen,
             );
-            if (composed.overlayApplied) {
-              key = `generations/${gen.userId}/${gen.id}/out-${i}.jpg`;
-              const fileUp = await uploadFile(composed.buffer, key, composed.contentType);
-              up = {
-                ...fileUp,
-                contentType: composed.contentType,
-                sourceUrl: src,
-              };
-            } else {
-              const fileUp = await uploadFile(downloaded.buffer, key, downloaded.contentType);
-              up = {
-                ...fileUp,
-                contentType: downloaded.contentType,
-                sourceUrl: src,
-              };
+            if (composed.objectLayoutForMetadata != null) {
+              overlayObjectLayoutPatch = composed.objectLayoutForMetadata;
             }
+            if (composed.contentType?.trim().startsWith("image/jpeg")) {
+              key = `generations/${gen.userId}/${gen.id}/out-${i}.jpg`;
+            }
+            const bytesToUpload =
+              composed.buffer.length > 0 && composed.contentType?.trim()
+                ? composed.buffer
+                : downloaded.buffer;
+            const uploadMime = composed.contentType?.trim() || downloaded.contentType;
+            const fileUp = await uploadFile(bytesToUpload, key, uploadMime);
+            up = {
+              ...fileUp,
+              contentType: uploadMime,
+              sourceUrl: src,
+            };
           } else {
             up = await uploadFromUrl(src, key);
           }
@@ -782,6 +797,14 @@ export async function completeWithOutput(
               status: "COMPLETED",
               outputFiles: outputItems as unknown as Prisma.InputJsonValue,
               completedAt: new Date(),
+              ...(overlayObjectLayoutPatch != null
+                ? {
+                    metadata: mergeGenerationMetadataOverlayLayout(
+                      gen.metadata,
+                      overlayObjectLayoutPatch,
+                    ),
+                  }
+                : {}),
             },
           });
         });

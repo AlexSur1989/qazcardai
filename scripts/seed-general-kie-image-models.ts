@@ -6,6 +6,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -189,6 +190,10 @@ const SEEDREAM_PAYLOAD = {
 } as const;
 
 async function main() {
+  const gptGuard = await prisma.aiModel.findUnique({
+    where: { slug: GPT_T2I_SLUG },
+    select: { pricingSchema: true },
+  });
   const gpt = await prisma.aiModel.upsert({
     where: { slug: GPT_T2I_SLUG },
     create: {
@@ -216,7 +221,7 @@ async function main() {
       pricingSchema: { ...GPT_PRICING },
       payloadMapping: { ...GPT_PAYLOAD },
     },
-    update: {
+    update: omitSeedPricingWhenPinned(gptGuard, {
       name: "GPT Image 2 — текст → изображение",
       scope: "GENERAL",
       productCardModelType: null,
@@ -239,9 +244,13 @@ async function main() {
       settingsSchema: { ...GPT_SETTINGS },
       pricingSchema: { ...GPT_PRICING },
       payloadMapping: { ...GPT_PAYLOAD },
-    },
+    }),
   });
 
+  const seedreamGuard = await prisma.aiModel.findUnique({
+    where: { slug: SEEDREAM_T2I_SLUG },
+    select: { pricingSchema: true },
+  });
   const seedream = await prisma.aiModel.upsert({
     where: { slug: SEEDREAM_T2I_SLUG },
     create: {
@@ -269,7 +278,7 @@ async function main() {
       pricingSchema: { ...SEEDREAM_PRICING },
       payloadMapping: { ...SEEDREAM_PAYLOAD },
     },
-    update: {
+    update: omitSeedPricingWhenPinned(seedreamGuard, {
       name: "Seedream 4.0 — текст → изображение",
       scope: "GENERAL",
       productCardModelType: null,
@@ -292,7 +301,7 @@ async function main() {
       settingsSchema: { ...SEEDREAM_SETTINGS },
       pricingSchema: { ...SEEDREAM_PRICING },
       payloadMapping: { ...SEEDREAM_PAYLOAD },
-    },
+    }),
   });
 
   console.log("[seed:general-kie-image-models] OK");

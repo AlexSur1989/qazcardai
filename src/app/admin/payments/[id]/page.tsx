@@ -25,12 +25,14 @@ import { formatAdminDateTime } from "@/lib/admin-format";
 import { creditTypeLabel } from "@/lib/credit-labels";
 import { paymentStatusLabel } from "@/lib/payment-labels";
 import { cn } from "@/lib/utils";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = { title: "Платёж — QazCard AI" };
 
 type Props = { params: Promise<{ id: string }> };
 
 export default async function AdminPaymentDetailPage({ params }: Props) {
+  await requireAdminPagePermission("payments.view");
   const { id } = await params;
   const res = await getAdminPaymentById(id);
 

@@ -1,9 +1,12 @@
-import { notFound, redirect } from "next/navigation";
+
+
+import { notFound } from "next/navigation";
 
 import { AdminModelEditTabs } from "@/components/admin/admin-model-edit-tabs";
 import { fromDbModelToFormFields } from "@/lib/ai-model-form-mappers";
 import { getAdminAiModelById } from "@/lib/ai-model-admin-queries";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { hasPermission } from "@/lib/permissions";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -18,19 +21,14 @@ export async function generateMetadata({ params }: Props) {
 
 export default async function AdminEditModelPage({ params }: Props) {
   const { id } = await params;
-  const session = await getFreshAdminSessionUser();
-  if (!session.ok) {
-    if (session.reason === "forbidden") {
-      redirect("/dashboard");
-    }
-    redirect("/login?next=/admin/models");
-  }
+  const sessionUser = await requireAdminPagePermission("models.manage");
+
   const m = await getAdminAiModelById(id);
   if (!m) {
     notFound();
   }
-  const canEditPricing = session.user.role === "SUPER_ADMIN";
-  const canRunRealKie = session.user.role === "SUPER_ADMIN";
+  const canEditPricing = hasPermission(sessionUser.role, "models.pricing.manage");
+  const canRunRealKie = hasPermission(sessionUser.role, "providers.manage");
   return (
     <div className="space-y-6">
       <div>

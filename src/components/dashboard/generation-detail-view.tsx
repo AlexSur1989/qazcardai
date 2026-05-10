@@ -48,6 +48,10 @@ type Props = {
   showRepeat?: boolean;
   /** Админка: bilingual для технических полей + providerTaskId */
   adminBilingualLabels?: boolean;
+  /**
+   * Для MODERATOR: не показывать стоимость и внутренности, где могут быть цены Kie и т.п.
+   */
+  suppressFinanceAndProviderInternals?: boolean;
 };
 
 export function GenerationDetailView({
@@ -58,6 +62,7 @@ export function GenerationDetailView({
   userIdForAdminLink,
   showRepeat = true,
   adminBilingualLabels = false,
+  suppressFinanceAndProviderInternals = false,
 }: Props) {
   const files = parseOutputFilesList(gen.outputFiles);
   const showTech = adminBilingualLabels;
@@ -152,24 +157,28 @@ export function GenerationDetailView({
         ) : null}
         {showTech ? (
           <>
-            <div>
-              <p className="text-muted-foreground text-xs font-medium">
-                {adminTerm("providerTaskId")}
-              </p>
-              <p className="text-foreground mt-0.5 font-mono text-sm break-all">
-                {gen.providerTaskId ?? "—"}
-              </p>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs font-medium">
-                {adminTerm("metadata")}
-              </p>
-              <pre className="bg-muted/50 text-foreground mt-1 max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs">
-                {gen.metadata == null
-                  ? "—"
-                  : JSON.stringify(gen.metadata, null, 2)}
-              </pre>
-            </div>
+            {!suppressFinanceAndProviderInternals ? (
+              <>
+                <div>
+                  <p className="text-muted-foreground text-xs font-medium">
+                    {adminTerm("providerTaskId")}
+                  </p>
+                  <p className="text-foreground mt-0.5 font-mono text-sm break-all">
+                    {gen.providerTaskId ?? "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs font-medium">
+                    {adminTerm("metadata")}
+                  </p>
+                  <pre className="bg-muted/50 text-foreground mt-1 max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs">
+                    {gen.metadata == null
+                      ? "—"
+                      : JSON.stringify(gen.metadata, null, 2)}
+                  </pre>
+                </div>
+              </>
+            ) : null}
             <div>
               <p className="text-muted-foreground text-xs font-medium">
                 {adminTerm("inputFiles")}
@@ -238,13 +247,17 @@ export function GenerationDetailView({
         ) : null}
 
         <div className="grid gap-1 text-sm sm:grid-cols-2">
-          <p>
-            <span className="text-muted-foreground">
-              {adminBilingualLabels ? adminTerm("costCredits") : "Стоимость (токены)"}:
-            </span>{" "}
-            <span className="tabular-nums font-medium">{gen.costCredits}</span>
-          </p>
-          <p>
+          {!suppressFinanceAndProviderInternals ? (
+            <p>
+              <span className="text-muted-foreground">
+                {adminBilingualLabels ? adminTerm("costCredits") : "Стоимость (токены)"}:
+              </span>{" "}
+              <span className="tabular-nums font-medium">{gen.costCredits}</span>
+            </p>
+          ) : null}
+          <p
+            className={cn(!suppressFinanceAndProviderInternals ? "" : "sm:col-span-2")}
+          >
             <span className="text-muted-foreground">
               {adminBilingualLabels ? adminTerm("createdAt") : "Создана"}:
             </span>{" "}

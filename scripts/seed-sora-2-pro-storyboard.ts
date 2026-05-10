@@ -6,6 +6,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -81,6 +82,10 @@ const PRICING_SCHEMA = {
 } as const;
 
 async function main() {
+  const guard = await prisma.aiModel.findUnique({
+    where: { slug: "sora-2-pro-storyboard" },
+    select: { pricingSchema: true },
+  });
   const row = await prisma.aiModel.upsert({
     where: { slug: "sora-2-pro-storyboard" },
     create: {
@@ -106,28 +111,28 @@ async function main() {
       settingsSchema: { ...SETTINGS_SCHEMA } as object,
       pricingSchema: PRICING_SCHEMA as object,
     },
-    update: {
-      name: "Sora 2 Pro Storyboard",
-      provider: "KIE_AI",
-      type: "VIDEO",
-      apiModelId: "sora-2-pro-storyboard",
-      endpoint: ENDPOINT,
-      statusEndpoint: STATUS_ENDPOINT,
-      costCredits: 320,
-      realCost: 0,
-      isActive: true,
-      supportsImageInput: true,
-      supportsVideoInput: false,
-      supportsNegativePrompt: false,
-      supportsSeed: false,
-      maxDuration: 25,
-      description:
-        "Сториборд: массив shots (Scene + duration), n_frames 10/15/25, опционально 1 image_urls. Kie: sora-2-pro-storyboard.",
-      availableAspectRatios: ["portrait", "landscape"],
-      availableResolutions: ["10", "15", "25"],
-      settingsSchema: { ...SETTINGS_SCHEMA } as object,
-      pricingSchema: PRICING_SCHEMA as object,
-    },
+      update: omitSeedPricingWhenPinned(guard, {
+        name: "Sora 2 Pro Storyboard",
+        provider: "KIE_AI",
+        type: "VIDEO",
+        apiModelId: "sora-2-pro-storyboard",
+        endpoint: ENDPOINT,
+        statusEndpoint: STATUS_ENDPOINT,
+        costCredits: 320,
+        realCost: 0,
+        isActive: true,
+        supportsImageInput: true,
+        supportsVideoInput: false,
+        supportsNegativePrompt: false,
+        supportsSeed: false,
+        maxDuration: 25,
+        description:
+          "Сториборд: массив shots (Scene + duration), n_frames 10/15/25, опционально 1 image_urls. Kie: sora-2-pro-storyboard.",
+        availableAspectRatios: ["portrait", "landscape"],
+        availableResolutions: ["10", "15", "25"],
+        settingsSchema: { ...SETTINGS_SCHEMA } as object,
+        pricingSchema: PRICING_SCHEMA as object,
+      }),
   });
   console.log("[seed:sora-2-pro-storyboard]", row.slug, row.id);
 }

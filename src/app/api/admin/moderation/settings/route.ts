@@ -7,41 +7,32 @@ import {
   type ModerationAppSettingKey,
 } from "@/lib/moderation-app-settings";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
-import { isSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getAppSetting } from "@/server/services/appSettings";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 import { getRegistryEntry } from "@/config/app-settings-registry";
 import { clearModerationConfigCache } from "@/server/services/moderation";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("moderation.access");
+  if (!gate.ok) {
+    return gate.response;
   }
   const settings: Record<string, unknown> = {};
   for (const key of MODERATION_APP_SETTING_KEYS) {
     settings[key] = await getAppSetting(key);
   }
-  return NextResponse.json({ settings, role: current.user.role });
+  return NextResponse.json({ settings, role: gate.user.role });
 }
 
 export async function PATCH(req: Request) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("settings.critical.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
-  if (!isSuperAdmin(current.user.role)) {
-    return NextResponse.json({ error: "super_admin_only" }, { status: 403 });
-  }
+  const current = gate.user;
 
   let body: unknown;
   try {
@@ -74,13 +65,13 @@ export async function PATCH(req: Request) {
         type: def.type,
         value: coerced.value,
         description: def.description,
-        updatedBy: current.user.id,
+        updatedBy: current.id,
       },
       update: {
         type: def.type,
         value: coerced.value,
         description: def.description,
-        updatedBy: current.user.id,
+        updatedBy: current.id,
       },
     });
     after[k] = await getAppSetting(k);
@@ -88,7 +79,7 @@ export async function PATCH(req: Request) {
 
   clearModerationConfigCache();
   await writeAdminAuditLog({
-    adminUserId: current.user.id,
+    adminUserId: current.id,
     action: "MODERATION_SETTINGS_UPDATED",
     targetType: "Moderation",
     targetId: "settings",

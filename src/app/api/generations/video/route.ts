@@ -22,7 +22,9 @@ import {
   modelHasSettingsSchema,
   validateAndNormalizeModelSettings,
 } from "@/server/services/model-settings";
-import { calculateGenerationCredits } from "@/server/services/pricing";
+import {
+  calculateGenerationCreditsWithBreakdown,
+} from "@/server/services/pricing";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 import {
   mergeHailuo23SettingsWithInputFiles,
@@ -451,10 +453,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const costCreditsCalculated = calculateGenerationCredits(
-    model,
-    normalizedSettings,
-  );
+  const {
+    credits: costCreditsCalculated,
+    priceBreakdown,
+  } = calculateGenerationCreditsWithBreakdown(model, normalizedSettings);
+  metadata.priceBreakdown = priceBreakdown;
 
   if (
     body.clientEstimateCredits != null &&
@@ -496,10 +499,7 @@ export async function POST(req: Request) {
         ? (inputFilesCombined as Prisma.InputJsonValue)
         : undefined,
       costCredits: costCreditsCalculated,
-      metadata:
-        Object.keys(metadata).length > 0
-          ? (metadata as Prisma.InputJsonValue)
-          : undefined,
+      metadata: metadata as Prisma.InputJsonValue,
     },
   });
 

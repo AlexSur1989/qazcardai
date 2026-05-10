@@ -38,7 +38,8 @@
     "seed:sora-2-pro-storyboard": "npx tsx scripts/seed-sora-2-pro-storyboard.ts",
     "seed:veo-3-1": "npx tsx scripts/seed-veo-31.ts",
     "db:models:wan-only": "npx tsx scripts/delete-models-except-wan.ts",
-    "worker": "npx tsx scripts/worker.ts"
+    "worker": "npx tsx scripts/worker.ts",
+    "verify:product-card-overlay": "npx tsx scripts/verify-product-card-overlay-strict.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1045.0",

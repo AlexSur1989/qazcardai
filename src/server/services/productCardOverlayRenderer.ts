@@ -6,7 +6,14 @@ import {
 } from "@/config/product-card-overlay-presets";
 import type { ProductCardTemplatePresetId, ProductCardTypographyPresetId } from "@/config/product-card-overlay-presets";
 import { estimateTextWidth, fitTextToBox } from "@/lib/fit-text-to-box";
-import { buildObjectAwarePayload, type ObjectAwareLayoutPayload } from "@/server/services/productCardObjectAwareLayout";
+import { buildObjectAwarePayload, type BoundingBox, type ObjectAwareLayoutPayload } from "@/server/services/productCardObjectAwareLayout";
+
+export type MarketplaceOverlayRenderOverrides = {
+  hideFooter?: boolean;
+  hideBadges?: boolean;
+  hideArrows?: boolean;
+  maxBenefitSlots?: number;
+};
 
 export type ProductCardOverlayInput = {
   template: string;
@@ -28,6 +35,16 @@ export type ProductCardOverlayInput = {
   useArrows?: boolean;
   useShadows?: boolean;
   preserveProductLabel?: boolean;
+  /**
+   * Bbox товара с финального JPEG (до SVG). Только координаты; текст по-прежнему рендерит SVG.
+   */
+  subjectBoxFromImage?: BoundingBox | null;
+  /**
+   * Если задан — рендер V2 берёт уже рассчитанный layout (строгий финальный режим после Kie).
+   */
+  objectAwareLayoutPayload?: ObjectAwareLayoutPayload | null;
+  /** Серверное урезание футера/бейджей/стрелок и лимита benefits (строгая раскладка). */
+  marketplaceOverlayRenderOverrides?: MarketplaceOverlayRenderOverrides | null;
   /** preview = схема зон; production = только итоговый оверлей */
   overlayRenderMode?: "production" | "preview";
   /** Только для админов: запретная зона и safe zones */
@@ -838,7 +855,16 @@ function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): stri
   const profile = v2TypographyProfile(input);
   const width = Number(spec.outputWidth) || resolveProductCardCanvas(String(spec.cardSize)).width;
   const height = Number(spec.outputHeight) || resolveProductCardCanvas(String(spec.cardSize)).height;
-  const awareness = buildObjectAwarePayload(String(spec.templatePreset), String(spec.cardSize), width, height);
+  const ro = input.marketplaceOverlayRenderOverrides ?? undefined;
+  const awareness =
+    input.objectAwareLayoutPayload ??
+    buildObjectAwarePayload(
+      String(spec.templatePreset),
+      String(spec.cardSize),
+      width,
+      height,
+      { subjectBoxOverride: input.subjectBoxFromImage ?? null },
+    );
   const layout = awareness.adjustedLayout;
   const text = spec.text as {
     title: string;
@@ -849,16 +875,31 @@ function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): stri
     sizeText?: string;
   };
   const useIcons = spec.useIcons !== false;
-  const useArrows = spec.useArrows !== false;
   const useShadows = spec.useShadows !== false;
+  const slotCap =
+    typeof ro?.maxBenefitSlots === "number" ? ro.maxBenefitSlots : awareness.layoutDecision.benefitSlots;
+  const benefitSlots = Math.max(
+    1,
+    Math.min(slotCap, awareness.layoutDecision.benefitSlots, layout.benefits.length),
+  );
+  const useArrows = !ro?.hideArrows && spec.useArrows !== false;
   const renderMode = input.overlayRenderMode ?? "production";
   const minSide = Math.min(width, height);
   const titleSize = Math.max(34, Math.round(minSide * layout.titleScale));
   const subtitleSize = Math.max(20, Math.round(minSide * layout.bodyScale * 0.95));
   const bodySize = Math.max(20, Math.round(minSide * layout.bodyScale));
   const smallSize = Math.max(16, Math.round(minSide * layout.smallScale));
+  const omitTitleHeroPanel =
+    templatePreset.id === "clean_catalog" ||
+    templatePreset.id === "lifestyle_model" ||
+    templatePreset.id === "light_marketplace" ||
+    templatePreset.id === "dark_infographic" ||
+    templatePreset.id === "minimal_top_bottom" ||
+    templatePreset.id === "minimal_promo" ||
+    templatePreset.id === "bottom_chips" ||
+    templatePreset.id.endsWith("_compact");
   const titlePanel =
-    templatePreset.id === "clean_catalog" || templatePreset.id === "lifestyle_model" || templatePreset.id === "light_marketplace" || templatePreset.id === "dark_infographic"
+    omitTitleHeroPanel
       ? ""
       : roundRect(
           layout.title.x - 18,
@@ -870,42 +911,49 @@ function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): stri
           profile.panelStroke,
           panelAttrs(useShadows),
         );
-  const benefitEls = layout.benefits.slice(0, 5).map((zone, idx) => {
-    const label = text.benefits[idx];
-    if (!label) return "";
-    return renderV2BenefitCard(
-      label,
-      zone,
-      profile,
-      bodySize,
-      idx,
-      useIcons && templatePreset.id !== "clean_catalog",
-      useShadows,
-      templatePreset.id,
-    );
-  });
+  const benefitEls = layout.benefits
+    .slice(0, benefitSlots)
+    .map((zone, idx) => {
+      const label = text.benefits[idx];
+      if (!label) return "";
+      return renderV2BenefitCard(
+        label,
+        zone,
+        profile,
+        bodySize,
+        idx,
+        useIcons &&
+          templatePreset.id !== "clean_catalog" &&
+          templatePreset.id !== "clean_catalog_compact",
+        useShadows,
+        templatePreset.id,
+      );
+    });
   const badgeTexts = [text.extraText, text.statsText, text.sizeText].map((x) => (x ?? "").trim()).filter(Boolean);
-  const badgeEls = layout.badges.map((zone, idx) => {
-    const value = badgeTexts[idx];
-    if (!value) return "";
-    return accentPill(value, zone.x, zone.y, zone.width, zone.height, profile, smallSize, "middle");
-  });
+  const badgeEls = ro?.hideBadges
+    ? []
+    : layout.badges.map((zone, idx) => {
+        const value = badgeTexts[idx];
+        if (!value) return "";
+        return accentPill(value, zone.x, zone.y, zone.width, zone.height, profile, smallSize, "middle");
+      });
   const arrowEls = useArrows ? layout.arrows.map((a) => arrowPath(a.from, a.to, profile.markerFill)) : [];
   const schematic = overlaySchematicLayer(layout, awareness, profile, renderMode, input.layoutDebug, minSide);
   const footerText = [text.extraText, text.statsText, text.sizeText].filter(Boolean).join(" · ");
-  const footer = footerText
-    ? textEl(footerText, {
-        x: layout.footer.x,
-        y: layout.footer.y + Math.round(layout.footer.height * 0.58),
-        width: layout.footer.width,
-        fontSize: smallSize,
-        lineHeight: Math.round(smallSize * 1.2),
-        maxLines: 2,
-        maxBoxHeight: Math.round(layout.footer.height * 0.82),
-        anchor: "middle",
-        role: "extra",
-      }, profile)
-    : "";
+  const footerRendered =
+    ro?.hideFooter || !footerText
+      ? ""
+      : textEl(footerText, {
+          x: layout.footer.x,
+          y: layout.footer.y + Math.round(layout.footer.height * 0.58),
+          width: layout.footer.width,
+          fontSize: smallSize,
+          lineHeight: Math.round(smallSize * 1.2),
+          maxLines: 2,
+          maxBoxHeight: Math.round(layout.footer.height * 0.82),
+          anchor: "middle",
+          role: "extra",
+        }, profile);
   const inner = [
     schematic,
     titlePanel,
@@ -933,7 +981,7 @@ function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): stri
     ...arrowEls,
     ...benefitEls,
     ...badgeEls,
-    footer,
+    footerRendered,
   ].filter(Boolean).join("\n  ");
   return svgWrap(width, height, inner);
 }

@@ -6,11 +6,10 @@ import { LegalPageEditor } from "@/components/admin/legal-page-editor";
 import { PageHeader } from "@/components/layout/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { adminTerm } from "@/lib/admin-terms";
-import { isSuperAdmin } from "@/lib/auth";
 import { isLegalPageSlug } from "@/lib/legal-page-config";
-import { getAdminLegalPage } from "@/server/services/legalPages";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
 import { cn } from "@/lib/utils";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
+import { getAdminLegalPage } from "@/server/services/legalPages";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -19,15 +18,12 @@ export default async function AdminLegalEditPage({ params }: Props) {
   if (!isLegalPageSlug(slug)) {
     notFound();
   }
-  const session = await getFreshAdminSessionUser();
-  if (!session.ok) {
-    notFound();
-  }
+  await requireAdminPagePermission("legal.manage");
   const page = await getAdminLegalPage(slug);
   if (!page) {
     notFound();
   }
-  const canEdit = isSuperAdmin(session.user.role);
+  const canEdit = true;
   const initial = {
     slug: page.slug,
     title: page.title,

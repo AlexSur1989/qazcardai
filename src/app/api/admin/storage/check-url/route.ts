@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { getMaxJsonBodyBytes, rejectOversizedBody } from "@/lib/request-body-limits";
 import { checkPublicUrlAccess } from "@/server/services/storageMonitor";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 const bodySchema = z.object({
   url: z.string().min(1, "url required"),
@@ -12,12 +12,9 @@ const bodySchema = z.object({
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("storage.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
   if (rejectOversizedBody(req, getMaxJsonBodyBytes())) {
     return NextResponse.json({ error: "body_too_large" }, { status: 413 });

@@ -25,7 +25,7 @@ export type CreateVideoFormModel = {
   id: string;
   name: string;
   slug: string;
-  costCredits: number;
+  creditsUiMin: number;
   description: string | null;
   settingsSchema?: unknown;
   supportsNegativePrompt: boolean;
@@ -524,7 +524,7 @@ export function CreateVideoForm({ models, balanceCredits }: Props) {
           >
             {models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name} — от {m.costCredits} кред
+                {m.name} — от {m.creditsUiMin} кред
               </option>
             ))}
           </select>

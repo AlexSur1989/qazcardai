@@ -1,26 +1,19 @@
 import { NextResponse } from "next/server";
 
 import { writeAdminAuditLog } from "@/lib/admin-audit";
-import { isSuperAdmin } from "@/lib/auth";
 import { ensureDefaultLegalPages } from "@/server/services/legalPages";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
-  }
-  if (!isSuperAdmin(current.user.role)) {
-    return NextResponse.json({ error: "super_admin_only" }, { status: 403 });
+  const gate = await requireAdminApiPermission("legal.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
   const { created, createdSlugs } = await ensureDefaultLegalPages();
   await writeAdminAuditLog({
-    adminUserId: current.user.id,
+    adminUserId: gate.user.id,
     action: "LEGAL_PAGES_DEFAULTS_SEEDED",
     targetType: "LegalPage",
     targetId: null,

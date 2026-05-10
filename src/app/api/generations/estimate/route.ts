@@ -11,7 +11,7 @@ import {
   modelHasSettingsSchema,
   validateAndNormalizeModelSettings,
 } from "@/server/services/model-settings";
-import { calculateGenerationCredits } from "@/server/services/pricing";
+import { calculateGenerationCreditsWithBreakdown } from "@/server/services/pricing";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 import {
   isKlingMotionControlModel,
@@ -181,18 +181,25 @@ export async function POST(req: Request) {
         dur.videoDurationSeconds,
         dur.billingDurationSeconds,
       );
-      const credits = calculateGenerationCredits(model, pricedSettings);
+      const { credits, priceBreakdown } = calculateGenerationCreditsWithBreakdown(
+        model,
+        pricedSettings,
+      );
       return NextResponse.json({
         credits,
+        priceBreakdown,
         billingDurationSeconds: dur.billingDurationSeconds,
         videoDurationSeconds: dur.videoDurationSeconds,
         modelName: model.name,
       });
     }
-    const credits = calculateGenerationCredits(model, v.settings);
-    return NextResponse.json({ credits });
+    const { credits, priceBreakdown } = calculateGenerationCreditsWithBreakdown(
+      model,
+      v.settings,
+    );
+    return NextResponse.json({ credits, priceBreakdown });
   }
 
-  const credits = calculateGenerationCredits(model, {});
-  return NextResponse.json({ credits });
+  const { credits, priceBreakdown } = calculateGenerationCreditsWithBreakdown(model, {});
+  return NextResponse.json({ credits, priceBreakdown });
 }

@@ -4,7 +4,7 @@ import {
   type StoragePageInitial,
 } from "@/components/admin/storage-monitor-client";
 import { getStorageStatusPayload } from "@/server/services/storageMonitor";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = {
   title: "Хранилище — QazCard AI",
@@ -23,11 +23,10 @@ function toInitial(
 }
 
 export default async function AdminStoragePage() {
-  const session = await getFreshAdminSessionUser();
+  await requireAdminPagePermission("storage.manage");
   const raw = await getStorageStatusPayload();
   const initial = toInitial(raw);
-  const canRunStorageCheck =
-    session.ok && session.user.role === "SUPER_ADMIN";
+  const canRunStorageCheck = true;
   const isProduction = process.env.NODE_ENV === "production";
 
   return (

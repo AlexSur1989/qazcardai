@@ -1,9 +1,20 @@
 import type { UserRole } from "@/generated/prisma/enums";
+import {
+  canAccessAdminPanel,
+  defaultAdminLandingPath,
+  isAdmin,
+  isModerator,
+  isSuperAdmin,
+  requirePermission,
+} from "@/lib/permissions";
 
-/** Доступ к разделу /admin: только ADMIN и SUPER_ADMIN (см. PROJECT_SPEC.md). */
-export function canAccessAdminPanel(role: UserRole): boolean {
-  return role === "ADMIN" || role === "SUPER_ADMIN";
-}
+export {
+  canAccessAdminPanel,
+  isAdmin,
+  isModerator,
+  isSuperAdmin,
+  requirePermission,
+};
 
 const AUTH_FLOW_PATHS = new Set([
   "/auth/login",
@@ -139,10 +150,6 @@ export function postAuthLandingPath(
       }
     }
   }
-  if (role && canAccessAdminPanel(role)) return "/admin";
+  if (role && canAccessAdminPanel(role)) return defaultAdminLandingPath(role);
   return "/dashboard";
-}
-
-export function isSuperAdmin(role: UserRole): boolean {
-  return role === "SUPER_ADMIN";
 }

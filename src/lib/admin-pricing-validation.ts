@@ -79,6 +79,99 @@ function validatePerSecondMotionSchema(
   return { ok: true, pricingSchema: input };
 }
 
+function validateProductCardMatrixSchema(
+  input: Record<string, unknown>,
+): { ok: true; pricingSchema: Record<string, unknown> } | { ok: false; error: string } {
+  const base = input.baseTokens ?? input.fallbackTokens;
+  if (typeof base !== "number" || !Number.isFinite(base) || base < 0) {
+    return { ok: false, error: "baseTokens / fallbackTokens — число ≥ 0" };
+  }
+  const pm = input.priceMultiplier;
+  if (pm !== undefined) {
+    const p = typeof pm === "number" ? pm : Number(pm);
+    if (!Number.isFinite(p) || p <= 0) {
+      return { ok: false, error: "priceMultiplier должно быть > 0" };
+    }
+  }
+  const mpc = input.minTokens;
+  if (mpc !== undefined) {
+    const n = typeof mpc === "number" ? mpc : Number(mpc);
+    if (!Number.isFinite(n) || n < 0) {
+      return { ok: false, error: "minTokens должно быть ≥ 0" };
+    }
+  }
+  const bt = input.variantsBundleTokens;
+  if (bt !== undefined) {
+    const n = typeof bt === "number" ? bt : Number(bt);
+    if (!Number.isFinite(n) || n < 0) {
+      return { ok: false, error: "variantsBundleTokens должно быть ≥ 0" };
+    }
+  }
+  const vpc = input.variantCount;
+  if (vpc !== undefined) {
+    const n = typeof vpc === "number" ? vpc : Number(vpc);
+    if (!Number.isInteger(n) || n < 1 || n > 12) {
+      return { ok: false, error: "variantCount должно быть от 1 до 12" };
+    }
+  }
+  const by = input.variantsBundleByCount;
+  if (by !== undefined) {
+    if (!isRecord(by)) {
+      return { ok: false, error: "variantsBundleByCount должен быть объектом" };
+    }
+    for (const [k, v] of Object.entries(by)) {
+      if (!/^\d+$/.test(k)) continue;
+      if (typeof v !== "number" || !Number.isFinite(v) || v < 0) {
+        return { ok: false, error: `variantsBundleByCount.${k}: число ≥ 0` };
+      }
+    }
+  }
+
+  function assertMultiplierMap(title: string, raw: unknown): { ok: false; error: string } | null {
+    if (raw === undefined) return null;
+    if (!isRecord(raw)) {
+      return { ok: false, error: `${title} должен быть объектом` };
+    }
+    for (const val of Object.values(raw)) {
+      if (typeof val !== "number" || !Number.isFinite(val) || val <= 0) {
+        return { ok: false, error: `${title}: множитель > 0` };
+      }
+    }
+    return null;
+  }
+
+  const m1 = assertMultiplierMap("cardSizeMultipliers", input.cardSizeMultipliers);
+  if (m1) return m1;
+  const m2 = assertMultiplierMap("templateMultipliers", input.templateMultipliers);
+  if (m2) return m2;
+
+  const tgt = input.targetMarginPercent;
+  if (tgt !== undefined) {
+    const n = typeof tgt === "number" ? tgt : Number(tgt);
+    if (!Number.isFinite(n) || n < 0 || n > 99) {
+      return {
+        ok: false,
+        error: "targetMarginPercent должно быть от 0 до 99",
+      };
+    }
+  }
+
+  const pUsd = input.providerCostUsd;
+  if (
+    pUsd !== undefined &&
+    (typeof pUsd !== "number" || !Number.isFinite(pUsd) || pUsd < 0)
+  ) {
+    return { ok: false, error: "providerCostUsd ≥ 0" };
+  }
+
+  const mo = input.manualOverrides;
+  if (mo !== undefined && typeof mo !== "object") {
+    return { ok: false, error: "manualOverrides: ожидается JSON объект" };
+  }
+
+  return { ok: true, pricingSchema: input };
+}
+
 export function validateAdminPricingSchema(
   input: unknown,
 ): { ok: true; pricingSchema: Record<string, unknown> } | { ok: false; error: string } {
@@ -87,6 +180,9 @@ export function validateAdminPricingSchema(
   }
   if (String(input.type) === "per_second") {
     return validatePerSecondMotionSchema(input);
+  }
+  if (String(input.type) === "product_card_matrix") {
+    return validateProductCardMatrixSchema(input);
   }
   if (String(input.type) !== "matrix") {
     return { ok: true, pricingSchema: input };

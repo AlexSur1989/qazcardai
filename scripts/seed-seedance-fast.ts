@@ -6,6 +6,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -209,6 +210,10 @@ const DESCRIPTION =
   "Seedance 2.0 Fast (Kie: bytedance/seedance-2-fast). Быстрый вариант той же линейки API, что и Seedance 2.0: text-to-video, first/last frame, reference, aspect_ratio в т.ч. adaptive, 4–15 с. Док семейства: docs.kie.ai/market/bytedance/seedance-2";
 
 async function main() {
+  const guard = await prisma.aiModel.findUnique({
+    where: { slug: "seedance-2-0-fast" },
+    select: { pricingSchema: true },
+  });
   const row = await prisma.aiModel.upsert({
     where: { slug: "seedance-2-0-fast" },
     create: {
@@ -242,7 +247,7 @@ async function main() {
       pricingSchema: { ...PRICING_SCHEMA },
       payloadMapping: { ...PAYLOAD_MAPPING },
     },
-    update: {
+    update: omitSeedPricingWhenPinned(guard, {
       name: "Seedance 2.0 Fast",
       provider: "KIE_AI",
       type: "VIDEO",
@@ -271,7 +276,7 @@ async function main() {
       settingsSchema: { ...SETTINGS_SCHEMA },
       pricingSchema: { ...PRICING_SCHEMA },
       payloadMapping: { ...PAYLOAD_MAPPING },
-    },
+    }),
   });
   console.log("[seed:seedance-fast] OK", row.id, row.slug);
 }

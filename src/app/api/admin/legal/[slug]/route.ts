@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { isSuperAdmin } from "@/lib/auth";
 import { isLegalPageSlug, LEGAL_PAGE_STATUS } from "@/lib/legal-page-config";
 import { getAdminLegalPage, updateLegalPage } from "@/server/services/legalPages";
-import { getFreshAdminSessionUser } from "@/server/services/fresh-session-user";
+import { requireAdminApiPermission } from "@/server/guards/admin-api-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +20,9 @@ export async function GET(_req: Request, context: RouteContext) {
   if (!isLegalPageSlug(slug)) {
     return NextResponse.json({ error: "invalid_slug" }, { status: 400 });
   }
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("legal.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
   const page = await getAdminLegalPage(slug);
   if (!page) {
@@ -40,16 +36,11 @@ export async function PATCH(req: Request, context: RouteContext) {
   if (!isLegalPageSlug(slug)) {
     return NextResponse.json({ error: "invalid_slug" }, { status: 400 });
   }
-  const current = await getFreshAdminSessionUser();
-  if (!current.ok) {
-    return NextResponse.json(
-      { error: "forbidden" },
-      { status: current.reason === "unauthenticated" ? 401 : 403 },
-    );
+  const gate = await requireAdminApiPermission("legal.manage");
+  if (!gate.ok) {
+    return gate.response;
   }
-  if (!isSuperAdmin(current.user.role)) {
-    return NextResponse.json({ error: "super_admin_only" }, { status: 403 });
-  }
+  const current = gate.user;
   let body: unknown;
   try {
     body = await req.json();
@@ -69,7 +60,7 @@ export async function PATCH(req: Request, context: RouteContext) {
       title: parsed.data.title,
       content: parsed.data.content,
       status: parsed.data.status,
-      adminUserId: current.user.id,
+      adminUserId: current.id,
     });
     return NextResponse.json({ page });
   } catch (e) {

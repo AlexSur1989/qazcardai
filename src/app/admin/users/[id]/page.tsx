@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { UserStatus } from "@/generated/prisma/enums";
+import type { UserRole, UserStatus } from "@/generated/prisma/enums";
 import { AlertCircle, ArrowLeft } from "lucide-react";
 
 import { AdminUserStatusForm } from "@/components/admin/admin-user-status-form";
 import { AdminUserCreditsForm } from "@/components/admin/admin-user-credits-form";
+import { AdminUserRoleForm } from "@/components/admin/admin-user-role-form";
 import { AdminEmpty } from "@/components/admin/admin-empty";
 import {
   Card,
@@ -26,6 +27,7 @@ import { creditTypeLabel } from "@/lib/credit-labels";
 import { formatAdminDateTime } from "@/lib/admin-format";
 import { formatKzt, formatRuDate } from "@/lib/format-kzt";
 import { paymentStatusLabel } from "@/lib/payment-labels";
+import { hasPermission } from "@/lib/permissions";
 import { adminTerm } from "@/lib/admin-terms";
 import { userTokenPackageStatusLabel } from "@/lib/user-token-package-labels";
 import { getUserFinanceSummary } from "@/server/services/financeAdmin";
@@ -45,14 +47,21 @@ export default async function AdminUserDetailPage({ params }: Props) {
   const res = await getAdminUserById(id);
   if (res.ok) {
     const { user } = res;
-    const [txs, lastPack, packHistory, finance, session] = await Promise.all([
-      listTransactions(user.id, { take: 30 }),
-      getUserLastTokenPackage(user.id),
-      getUserTokenPackageHistoryForAdmin(user.id),
-      getUserFinanceSummary(user.id),
-      getFreshAdminSessionUser(),
+    const session = await getFreshAdminSessionUser();
+    const canFinance = session.ok && hasPermission(session.user.role, "finance.view");
+    const canCreditTx =
+      session.ok && hasPermission(session.user.role, "credit_transactions.view");
+    const canAdjustBalance =
+      session.ok && hasPermission(session.user.role, "users.adjust_balance");
+    const canChangeRole =
+      session.ok && hasPermission(session.user.role, "users.change_role");
+
+    const [txs, lastPack, packHistory, finance] = await Promise.all([
+      canCreditTx ? listTransactions(user.id, { take: 30 }) : Promise.resolve([]),
+      canFinance ? getUserLastTokenPackage(user.id) : Promise.resolve(null),
+      canFinance ? getUserTokenPackageHistoryForAdmin(user.id) : Promise.resolve([]),
+      canFinance ? getUserFinanceSummary(user.id) : Promise.resolve(null),
     ]);
-    const canAdjust = session.ok && session.user.role === "SUPER_ADMIN";
 
     return (
     <div className="space-y-8">
@@ -84,6 +93,20 @@ export default async function AdminUserDetailPage({ params }: Props) {
         </CardContent>
       </Card>
 
+      {canChangeRole ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Роль аккаунта</CardTitle>
+            <CardDescription>
+              Изменять роли может только SUPER_ADMIN. Действия пишутся в аудит.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AdminUserRoleForm userId={user.id} currentRole={user.role as UserRole} />
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-2 text-sm sm:grid-cols-2 sm:max-w-md">
         <p>
           <span className="text-muted-foreground">Роль:</span> {user.role}
@@ -91,19 +114,23 @@ export default async function AdminUserDetailPage({ params }: Props) {
         <p>
           <span className="text-muted-foreground">Статус (текущий):</span> {user.status}
         </p>
-        <p>
-          <span className="text-muted-foreground">Токенов сейчас (balanceCredits):</span>{" "}
-          <span className="font-mono font-medium tabular-nums">
-            {user.balanceCredits}
-          </span>
-        </p>
+        {canFinance ? (
+          <p>
+            <span className="text-muted-foreground">Токенов сейчас (balanceCredits):</span>{" "}
+            <span className="font-mono font-medium tabular-nums">{user.balanceCredits}</span>
+          </p>
+        ) : (
+          <p className="text-muted-foreground text-xs sm:col-span-2">
+            Баланс и платежи скрыты для этой роли.
+          </p>
+        )}
         <p>
           <span className="text-muted-foreground">Регистрация:</span>{" "}
           {formatAdminDateTime(user.createdAt)}
         </p>
       </div>
 
-      {finance ? (
+      {canFinance && finance ? (
         <Card className="rounded-2xl border border-[#b8dce6] bg-white shadow-sm">
           <CardHeader>
             <CardTitle className="text-base text-sky-950">{adminTerm("userFinance")}</CardTitle>
@@ -233,148 +260,156 @@ export default async function AdminUserDetailPage({ params }: Props) {
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Пакет токенов (последний)</CardTitle>
-          <CardDescription>Разовая покупка, не подписка (последний COMPLETED)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {lastPack ? (
-            <div className="text-sm">
-              <p className="font-medium">{lastPack.packageName}</p>
-              <p className="text-muted-foreground mt-1">
-                {lastPack.totalTokens} ток. · {formatKzt(lastPack.priceKzt)} ·{" "}
-                {formatRuDate(lastPack.purchasedAt)} ·{" "}
-                {userTokenPackageStatusLabel(lastPack.status)}
-                {lastPack.paymentId ? (
-                  <span className="block font-mono text-xs">
-                    payment: {lastPack.paymentId}
-                  </span>
-                ) : null}
-              </p>
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-sm">Пакетов ещё не покупал</p>
-          )}
-        </CardContent>
-      </Card>
+      {canFinance ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Пакет токенов (последний)</CardTitle>
+            <CardDescription>Разовая покупка, не подписка (последний COMPLETED)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {lastPack ? (
+              <div className="text-sm">
+                <p className="font-medium">{lastPack.packageName}</p>
+                <p className="text-muted-foreground mt-1">
+                  {lastPack.totalTokens} ток. · {formatKzt(lastPack.priceKzt)} ·{" "}
+                  {formatRuDate(lastPack.purchasedAt)} ·{" "}
+                  {userTokenPackageStatusLabel(lastPack.status)}
+                  {lastPack.paymentId ? (
+                    <span className="block font-mono text-xs">
+                      payment: {lastPack.paymentId}
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm">Пакетов ещё не покупал</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">История пакетов токенов</CardTitle>
-          <CardDescription>Записи UserTokenPackage</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {packHistory.length === 0 ? (
-            <AdminEmpty
-              title="Нет записей"
-              description="Покупки пакетов появятся после оплаты или ручного начисления."
-            />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Дата</TableHead>
-                    <TableHead>Пакет</TableHead>
-                    <TableHead className="text-right">Цена</TableHead>
-                    <TableHead className="text-right">Итого</TableHead>
-                    <TableHead>Статус</TableHead>
-                    <TableHead>Payment</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {packHistory.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="whitespace-nowrap text-xs">
-                        {formatRuDate(r.purchasedAt)}
-                      </TableCell>
-                      <TableCell className="text-xs font-medium">
-                        {r.packageName}
-                      </TableCell>
-                      <TableCell className="text-right text-xs tabular-nums">
-                        {formatKzt(r.priceKzt)}
-                      </TableCell>
-                      <TableCell className="text-right text-xs tabular-nums">
-                        {r.totalTokens}
-                      </TableCell>
-                      <TableCell className="text-xs">
-                        {userTokenPackageStatusLabel(r.status)}
-                      </TableCell>
-                      <TableCell className="max-w-[8rem] truncate font-mono text-xs">
-                        {r.paymentId || "—"}
-                      </TableCell>
+      {canFinance ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">История пакетов токенов</CardTitle>
+            <CardDescription>Записи UserTokenPackage</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {packHistory.length === 0 ? (
+              <AdminEmpty
+                title="Нет записей"
+                description="Покупки пакетов появятся после оплаты или ручного начисления."
+              />
+            ) : (
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Дата</TableHead>
+                      <TableHead>Пакет</TableHead>
+                      <TableHead className="text-right">Цена</TableHead>
+                      <TableHead className="text-right">Итого</TableHead>
+                      <TableHead>Статус</TableHead>
+                      <TableHead>Payment</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {packHistory.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="whitespace-nowrap text-xs">
+                          {formatRuDate(r.purchasedAt)}
+                        </TableCell>
+                        <TableCell className="text-xs font-medium">
+                          {r.packageName}
+                        </TableCell>
+                        <TableCell className="text-right text-xs tabular-nums">
+                          {formatKzt(r.priceKzt)}
+                        </TableCell>
+                        <TableCell className="text-right text-xs tabular-nums">
+                          {r.totalTokens}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {userTokenPackageStatusLabel(r.status)}
+                        </TableCell>
+                        <TableCell className="max-w-[8rem] truncate font-mono text-xs">
+                          {r.paymentId || "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Корректировка кредитов</CardTitle>
-          <CardDescription>
-            Создаётся движение <code>ADMIN_ADJUSTMENT</code> и запись в аудите
-            администратора.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AdminUserCreditsForm userId={user.id} canAdjust={canAdjust} />
-        </CardContent>
-      </Card>
+      {canAdjustBalance ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Корректировка кредитов</CardTitle>
+            <CardDescription>
+              Создаётся движение <code>ADMIN_ADJUSTMENT</code> и запись в аудите
+              администратора.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AdminUserCreditsForm userId={user.id} canAdjust={canAdjustBalance} />
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Операции с кредитами</CardTitle>
-          <CardDescription>Последние 30 (новые сверху)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {txs.length === 0 ? (
-            <AdminEmpty
-              title="Нет движений"
-              description="Появятся после начислений, резервов и ручных правок."
-            />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Дата</TableHead>
-                    <TableHead>Тип</TableHead>
-                    <TableHead className="text-right">Сумма</TableHead>
-                    <TableHead>Причина</TableHead>
-                    <TableHead>Генерация</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {txs.map((t) => (
-                    <TableRow key={t.id}>
-                      <TableCell className="whitespace-nowrap text-xs">
-                        {formatAdminDateTime(t.createdAt)}
-                      </TableCell>
-                      <TableCell className="text-xs">
-                        {creditTypeLabel(t.type)}
-                      </TableCell>
-                      <TableCell className="text-right text-xs font-mono tabular-nums">
-                        {t.amount > 0 ? `+${t.amount}` : t.amount}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground max-w-xs text-xs">
-                        {t.reason?.slice(0, 120) || "—"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground max-w-[6rem] truncate font-mono text-xs">
-                        {t.generationId?.slice(0, 8) || "—"}
-                      </TableCell>
+      {canCreditTx ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Операции с кредитами</CardTitle>
+            <CardDescription>Последние 30 (новые сверху)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {txs.length === 0 ? (
+              <AdminEmpty
+                title="Нет движений"
+                description="Появятся после начислений, резервов и ручных правок."
+              />
+            ) : (
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Дата</TableHead>
+                      <TableHead>Тип</TableHead>
+                      <TableHead className="text-right">Сумма</TableHead>
+                      <TableHead>Причина</TableHead>
+                      <TableHead>Генерация</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {txs.map((t) => (
+                      <TableRow key={t.id}>
+                        <TableCell className="whitespace-nowrap text-xs">
+                          {formatAdminDateTime(t.createdAt)}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {creditTypeLabel(t.type)}
+                        </TableCell>
+                        <TableCell className="text-right text-xs font-mono tabular-nums">
+                          {t.amount > 0 ? `+${t.amount}` : t.amount}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground max-w-xs text-xs">
+                          {t.reason?.slice(0, 120) || "—"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground max-w-[6rem] truncate font-mono text-xs">
+                          {t.generationId?.slice(0, 8) || "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
     );
   }
