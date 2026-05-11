@@ -24,7 +24,9 @@
     "seed:kling": "npx tsx scripts/seed-kling.ts",
     "seed:kling-motion-control": "npx tsx scripts/seed-kling-motion-control.ts",
     "seed:gpt-image-2-product-card": "npx tsx scripts/seed-gpt-image-2-product-card.ts",
+    "seed:kie-general-models": "npx tsx scripts/seed-kie-general-models.ts",
     "seed:general-kie-image-models": "npx tsx scripts/seed-general-kie-image-models.ts",
+    "archive:legacy-general-models": "npx tsx scripts/archive-legacy-general-models.ts",
     "seed:product-card-models": "npx tsx scripts/seed-product-card-models.ts",
     "seed:wan": "npx tsx scripts/seed-wan.ts",
     "seed:seedance": "npx tsx scripts/seed-seedance.ts",
@@ -40,6 +42,7 @@
     "db:models:wan-only": "npx tsx scripts/delete-models-except-wan.ts",
     "worker": "npx tsx scripts/worker.ts",
     "verify:kie-payloads": "npx tsx scripts/verify-kie-model-payloads.ts",
+    "verify:kie-general-models": "npx tsx scripts/verify-kie-general-models.ts",
     "verify:product-card-overlay": "npx tsx scripts/verify-product-card-overlay-strict.ts"
   },
   "dependencies": {

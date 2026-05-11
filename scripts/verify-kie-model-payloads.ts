@@ -28,11 +28,9 @@ const gptT2iMapping = {
   required: ["aspect_ratio"],
   input: {
     aspect_ratio: "$settings.aspectRatio",
-    resolution: "$settings.resolution",
   },
   coerce: {
     aspect_ratio: "string",
-    resolution: "string",
   },
 } satisfies KiePayloadMapping;
 
@@ -43,12 +41,10 @@ const gptI2iMapping = {
   input: {
     input_urls: "$settings.inputUrls",
     aspect_ratio: "$settings.aspectRatio",
-    resolution: "$settings.resolution",
   },
   coerce: {
     input_urls: "stringArray",
     aspect_ratio: "string",
-    resolution: "string",
   },
 } satisfies KiePayloadMapping;
 
@@ -86,7 +82,6 @@ const klingI2vMapping = {
 
 const gptT2i = body("gpt-image-2-text-to-image", gptT2iMapping, {
   aspectRatio: "auto",
-  resolution: "1K",
 });
 assert.deepEqual(gptT2i, {
   model: "gpt-image-2-text-to-image",
@@ -94,14 +89,12 @@ assert.deepEqual(gptT2i, {
   input: {
     prompt,
     aspect_ratio: "auto",
-    resolution: "1K",
   },
 });
 
 const gptI2i = body("gpt-image-2-image-to-image", gptI2iMapping, {
   inputUrls: ["https://example.com/a.png"],
   aspectRatio: "auto",
-  resolution: "1K",
 });
 assert.deepEqual(gptI2i, {
   model: "gpt-image-2-image-to-image",
@@ -110,7 +103,6 @@ assert.deepEqual(gptI2i, {
     prompt,
     input_urls: ["https://example.com/a.png"],
     aspect_ratio: "auto",
-    resolution: "1K",
   },
 });
 assert.ok(!("image_urls" in (gptI2i.input as Record<string, unknown>)));

@@ -19,18 +19,11 @@ function validateGptImage2Settings(
   }
 
   const aspectRatio = String(settings.aspectRatio ?? "").trim();
-  const resolution = String(settings.resolution ?? "1K").trim();
-
-  if (aspectRatio === "auto" && resolution !== "1K") {
+  const allowed = new Set(["auto", "1:1", "9:16", "16:9", "4:3", "3:4"]);
+  if (!allowed.has(aspectRatio)) {
     return {
       ok: false,
-      message: "GPT Image 2: для формата auto доступно только разрешение 1K",
-    };
-  }
-  if (aspectRatio === "1:1" && resolution === "4K") {
-    return {
-      ok: false,
-      message: "GPT Image 2: для формата 1:1 разрешение 4K недоступно",
+      message: "GPT Image 2: выберите допустимое значение формата",
     };
   }
   return { ok: true };

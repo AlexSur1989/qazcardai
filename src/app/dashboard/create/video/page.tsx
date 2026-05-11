@@ -40,7 +40,7 @@ export default async function CreateVideoPage({ searchParams }: PageProps) {
 
   const [rows, balanceCredits] = await Promise.all([
     prisma.aiModel.findMany({
-      where: { isActive: true, type: "VIDEO", scope: "GENERAL" },
+      where: { isActive: true, type: "VIDEO", scope: "GENERAL", productCardModelType: null },
       orderBy: { name: "asc" },
       select: {
         id: true,

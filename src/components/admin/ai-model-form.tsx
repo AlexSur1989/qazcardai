@@ -187,10 +187,14 @@ export function AiModelForm({ mode, modelId, initialData }: AiModelFormProps) {
           <Input
             id="endpoint"
             name="endpoint"
-            type="url"
+            type="text"
             defaultValue={d.endpoint}
-            placeholder="https://…"
+            placeholder="/api/v1/jobs/createTask или https://api.example.com/..."
+            className="font-mono"
           />
+          <p className="text-muted-foreground text-xs">
+            Можно указать относительный путь к `KIE_BASE_URL` или полный URL.
+          </p>
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input

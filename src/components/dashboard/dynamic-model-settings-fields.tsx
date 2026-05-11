@@ -63,6 +63,20 @@ export function DynamicModelSettingsFields({
         }
 
         if (field.type === "select" && Array.isArray(field.options)) {
+          const optValue = (opt: unknown) =>
+            typeof opt === "object" &&
+            opt !== null &&
+            "value" in opt &&
+            typeof (opt as { value: unknown }).value === "string"
+              ? (opt as { value: string }).value
+              : String(opt);
+          const optLabel = (opt: unknown) =>
+            typeof opt === "object" &&
+            opt !== null &&
+            "label" in opt &&
+            typeof (opt as { label: unknown }).label === "string"
+              ? (opt as { label: string }).label
+              : optValue(opt);
           return (
             <div key={field.name} className="space-y-2">
               <Label htmlFor={id}>{label}</Label>
@@ -75,8 +89,8 @@ export function DynamicModelSettingsFields({
                 onChange={(e) => setDynField(field.name, e.target.value)}
               >
                 {field.options.map((opt) => (
-                  <option key={String(opt)} value={String(opt)}>
-                    {String(opt)}
+                  <option key={optValue(opt)} value={optValue(opt)}>
+                    {optLabel(opt)}
                   </option>
                 ))}
               </select>

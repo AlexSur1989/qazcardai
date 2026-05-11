@@ -34,13 +34,14 @@ function firstSearchParam(v: string | string[] | undefined): string | undefined 
   return undefined;
 }
 
-const GPT_IMAGE_2_T2I_SLUG = "gpt-image-2-text-to-image-general";
+const GPT_IMAGE_2_T2I_SLUG = "gpt-image-2-text-to-image";
 const GPT_IMAGE_2_I2I_SLUG = "gpt-image-2-image-to-image";
 const KLING_26_T2V_SLUG = "kling-2-6-text-to-video";
 const KLING_26_I2V_SLUG = "kling-2-6-image-to-video";
 
 /** Старые URL карточек до объединения семейств */
 const LEGACY_CATALOG_SLUG_REDIRECTS: Record<string, string> = {
+  "gpt-image-2-text-to-image-general": "/dashboard/models/gpt-image-2",
   "kling-3-0-video": "/dashboard/models/kling-3?mode=kling-3-0-video",
   "kling-2-6-text-to-video": "/dashboard/models/kling-2-6?mode=t2v",
   "kling-2-6-image-to-video": "/dashboard/models/kling-2-6?mode=i2v",
@@ -235,6 +236,7 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
           isActive: true,
           type: "IMAGE",
           scope: "GENERAL",
+          productCardModelType: null,
         },
         select: {
           id: true,
@@ -250,6 +252,7 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
           isActive: true,
           type: "IMAGE",
           scope: "GENERAL",
+          productCardModelType: null,
         },
         select: {
           id: true,
@@ -293,6 +296,7 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
           isActive: true,
           type: "VIDEO",
           scope: "GENERAL",
+          productCardModelType: null,
         },
         select: KLING_VIDEO_SELECT,
       }),
@@ -302,6 +306,7 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
           isActive: true,
           type: "VIDEO",
           scope: "GENERAL",
+          productCardModelType: null,
         },
         select: KLING_VIDEO_SELECT,
       }),
@@ -387,6 +392,7 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
         slug: { in: familySlugs },
         isActive: true,
         scope: "GENERAL",
+        productCardModelType: null,
       },
       select: FAMILY_MODEL_SELECT,
     });

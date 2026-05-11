@@ -17,7 +17,7 @@ export type DashboardNavItem = {
 /** Единый список пунктов кабинета (layout + при необходимости другие компоненты). */
 export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
   { href: "/dashboard", label: "Обзор", icon: LayoutDashboard },
-  { href: "/dashboard/models", label: "AI-модели", icon: Sparkles },
+  { href: "/dashboard/models", label: "AI модели", icon: Sparkles },
   {
     href: "/dashboard/create/product-card",
     label: "Создать карточку товара",

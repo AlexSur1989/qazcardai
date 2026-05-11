@@ -13,6 +13,13 @@ type SchemaField = {
   maxItems?: number;
 };
 
+function selectOptionValues(options: unknown[]): string[] {
+  return options.map((o) => {
+    if (isRecord(o) && typeof o.value === "string") return o.value;
+    return String(o);
+  });
+}
+
 function asFields(settingsSchema: unknown): SchemaField[] {
   if (!isRecord(settingsSchema) || !Array.isArray(settingsSchema.fields)) {
     return [];
@@ -133,16 +140,15 @@ export function validateAndNormalizeModelSettings(
     }
 
     if (typ === "select" && Array.isArray(f.options) && v !== undefined && v !== null && v !== "") {
-      if (!f.options.includes(v)) {
-        const match = f.options.find((o) => String(o) === String(v));
-        if (match === undefined) {
-          return {
-            ok: false,
-            message: `Недопустимое значение поля «${f.label ?? f.name}»`,
-          };
-        }
-        out[f.name] = match;
+      const allowed = selectOptionValues(f.options);
+      const valStr = String(v);
+      if (!allowed.includes(valStr)) {
+        return {
+          ok: false,
+          message: `Недопустимое значение поля «${f.label ?? f.name}»`,
+        };
       }
+      out[f.name] = valStr;
     }
 
     if (f.required) {

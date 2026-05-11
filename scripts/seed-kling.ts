@@ -291,6 +291,8 @@ async function main() {
       create: {
         name: v.name,
         slug: v.slug,
+        scope: "GENERAL",
+        productCardModelType: null,
         provider: "KIE_AI",
         type: "VIDEO",
         apiModelId: v.apiModelId,
@@ -313,6 +315,8 @@ async function main() {
       },
       update: omitSeedPricingWhenPinned(guard, {
         name: v.name,
+        scope: "GENERAL",
+        productCardModelType: null,
         provider: "KIE_AI",
         type: "VIDEO",
         apiModelId: v.apiModelId,

@@ -130,7 +130,7 @@ const GPT_IMAGE_2_FAMILY_VARIANTS: readonly {
   optionLabel: string;
 }[] = [
   {
-    slug: "gpt-image-2-text-to-image-general",
+    slug: "gpt-image-2-text-to-image",
     optionLabel: "Текст → изображение",
   },
   {
@@ -195,6 +195,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     openBehavior: { kind: "video", querySlug: "seedance-2" },
     gradientClass:
       "from-violet-500/88 via-purple-600/85 to-fuchsia-700/88",
+    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "seedance-2-fast",
@@ -209,6 +210,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     openBehavior: { kind: "video", querySlug: "seedance-2-fast" },
     gradientClass:
       "from-violet-500/82 via-purple-500/78 to-pink-600/82",
+    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "seedance-1-5-pro",
@@ -223,6 +225,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     openBehavior: { kind: "video", querySlug: "seedance-1-5-pro" },
     gradientClass:
       "from-fuchsia-500/85 via-violet-600/82 to-indigo-700/88",
+    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "kling-3",
@@ -247,13 +250,14 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     catalogOpenIsModelHub: true,
     gradientClass:
       "from-orange-500/87 via-rose-500/82 to-red-700/85",
+    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "kling-2-6",
     displayName: "Kling 2.6",
     providerLabel: "Kuaishou",
     descriptionFallback:
-      "Видео по тексту и из изображения (Kie: kling-2.6/text-to-video и kling-2.6/image-to-video). Поля как у Kling 3.0.",
+      "Видео по тексту и из изображения (Kie: kling-2.6/text-to-video и kling-2.6/image-to-video) — отдельные поля по документации Kie для каждого режима.",
     tasks: ["text_to_video", "image_to_video"],
     category: "video",
     dbSlugCandidates: [
@@ -295,6 +299,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     catalogOpenIsModelHub: true,
     gradientClass:
       "from-emerald-500/86 via-teal-600/84 to-cyan-700/87",
+    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "wan-2-6",
@@ -319,6 +324,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     catalogOpenIsModelHub: true,
     gradientClass:
       "from-teal-500/85 via-cyan-600/82 to-emerald-800/85",
+    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "grok-imagine",
@@ -345,6 +351,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     catalogOpenIsModelHub: true,
     gradientClass:
       "from-slate-600/85 via-zinc-700/82 to-neutral-900/88",
+    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "hailuo-2-3",
@@ -367,6 +374,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     catalogOpenIsModelHub: true,
     gradientClass:
       "from-indigo-600/87 via-violet-600/85 to-purple-900/88",
+    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "sora-2-pro-storyboard",
@@ -381,6 +389,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     openBehavior: { kind: "video", querySlug: "sora-2-storyboard" },
     gradientClass:
       "from-violet-500/88 via-fuchsia-600/85 to-pink-700/90",
+    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "veo-3-1",
@@ -407,6 +416,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     catalogOpenIsModelHub: true,
     gradientClass:
       "from-emerald-500/86 via-teal-600/84 to-cyan-800/88",
+    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "happyhorse-1-0",
@@ -421,6 +431,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     openBehavior: { kind: "video", querySlug: "happyhorse" },
     gradientClass:
       "from-amber-500/88 via-orange-600/85 to-rose-700/88",
+    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "gemini-product-helper",
@@ -476,7 +487,8 @@ export function buildModelSlugAliasMap(): Record<string, string> {
   map["veo-extend"] = "veo-extend";
   map["veo-get-4k"] = "veo-get-4k-video";
   map["veo-get-1080p"] = "veo-get-1080p-video";
-  map["gpt-image-2-text-to-image"] = "gpt-image-2-text-to-image-general";
+  /** Старый slug после переименования канонического T2I */
+  map["gpt-image-2-text-to-image-general"] = "gpt-image-2-text-to-image";
   return map;
 }
 

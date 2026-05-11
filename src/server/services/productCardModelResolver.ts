@@ -16,6 +16,16 @@ export class ProductCardModelResolverError extends Error {
   }
 }
 
+/** Slug из настроек указывает на GENERAL-модель вместо PRODUCT_CARD. */
+export class ProductCardModelMisconfiguredError extends Error {
+  constructor(slug: string) {
+    super(
+      `Некорректная конфигурация карточки товара: slug «${slug}» сопоставлен записи scope GENERAL. Назначьте модель с scope PRODUCT_CARD в админке (настройки приложения).`,
+    );
+    this.name = "ProductCardModelMisconfiguredError";
+  }
+}
+
 function expectedGenerationType(productCardModelType: ProductCardModelType): GenerationType {
   return productCardModelType === "PRODUCT_VIDEO" ? "VIDEO" : "IMAGE";
 }
@@ -26,6 +36,15 @@ async function resolveStrictProductCardModel(
   const settings = await getProductCardSettings();
   const slug = defaultSlugForProductCardType(settings, productCardModelType);
   if (!slug) return null;
+
+  const wrongScope = await prisma.aiModel.findFirst({
+    where: { slug, isActive: true, scope: "GENERAL" },
+    select: { id: true },
+  });
+  if (wrongScope) {
+    throw new ProductCardModelMisconfiguredError(slug);
+  }
+
   return prisma.aiModel.findFirst({
     where: {
       slug,

@@ -37,7 +37,7 @@ const TERMINAL: GenerationStatus[] = [
 ];
 
 const GPT_DOCS_HINT =
-  "Поля соответствуют Kie GPT Image 2 (prompt → input.prompt, aspect_ratio → input.aspect_ratio, resolution → input.resolution; для image-to-image — input.input_urls через загрузку файлов).";
+  "Поля Kie GPT Image 2: prompt → input.prompt, aspect_ratio — из настроек; image-to-image — input_urls из загрузки файлов (/api/uploads).";
 
 type Props = {
   balanceCredits: number;
@@ -68,9 +68,15 @@ export function GptImage2Playground({
 
   const resolutionOptions = useMemo(() => {
     const opts = resolutionField?.options;
-    return Array.isArray(opts)
-      ? opts.map((o) => String(o))
-      : (["1K", "2K", "4K"] as string[]);
+    if (!Array.isArray(opts)) {
+      return ["1K", "2K", "4K"] as string[];
+    }
+    return opts.map((o) => {
+      if (o && typeof o === "object" && "value" in o) {
+        return String((o as { value: unknown }).value);
+      }
+      return String(o);
+    });
   }, [resolutionField]);
 
   const dynamicFields = useMemo(
@@ -419,40 +425,42 @@ export function GptImage2Playground({
             setDynField={setDynField}
           />
 
-          <div className="space-y-2">
-            <Label>Разрешение (resolution)</Label>
-            <div className="flex flex-wrap gap-2">
-              {resolutionOptions.map((opt) => {
-                const current =
-                  dynSettings.resolution != null
-                    ? String(dynSettings.resolution)
-                    : "";
-                const isActive = current === opt;
-                return (
-                  <Button
-                    key={opt}
-                    type="button"
-                    variant={isActive ? "default" : "outline"}
-                    className={cn(
-                      "min-w-[4rem] rounded-lg font-semibold tabular-nums",
-                    )}
-                    onClick={() => setDynField("resolution", opt)}
-                  >
-                    {opt}
-                  </Button>
-                );
-              })}
+          {resolutionField ? (
+            <div className="space-y-2">
+              <Label>Разрешение (resolution)</Label>
+              <div className="flex flex-wrap gap-2">
+                {resolutionOptions.map((opt) => {
+                  const current =
+                    dynSettings.resolution != null
+                      ? String(dynSettings.resolution)
+                      : "";
+                  const isActive = current === opt;
+                  return (
+                    <Button
+                      key={opt}
+                      type="button"
+                      variant={isActive ? "default" : "outline"}
+                      className={cn(
+                        "min-w-[4rem] rounded-lg font-semibold tabular-nums",
+                      )}
+                      onClick={() => setDynField("resolution", opt)}
+                    >
+                      {opt}
+                    </Button>
+                  );
+                })}
+              </div>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                По документации Kie допустимы <span className="font-mono">1K</span>,{" "}
+                <span className="font-mono">2K</span>,{" "}
+                <span className="font-mono">4K</span>. Если{" "}
+                <span className="font-mono">aspect_ratio</span> не 1:1, вывод 4K
+                может ограничиваться (фактически 1K). Для{" "}
+                <span className="font-mono">auto</span> или без заданной пары может
+                применяться сценарий 1K.
+              </p>
             </div>
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              По документации Kie допустимы <span className="font-mono">1K</span>,{" "}
-              <span className="font-mono">2K</span>,{" "}
-              <span className="font-mono">4K</span>. Если{" "}
-              <span className="font-mono">aspect_ratio</span> не 1:1, вывод 4K
-              может ограничиваться (фактически 1K). Для{" "}
-              <span className="font-mono">auto</span> или без заданной пары может
-              применяться сценарий 1K.
-            </p>
-          </div>
+          ) : null}
 
           {variant === "i2i" && (
             <p className="text-muted-foreground text-xs leading-relaxed">

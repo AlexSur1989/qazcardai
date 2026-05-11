@@ -85,6 +85,7 @@ export async function POST(req: Request) {
       isActive: true,
       type: { in: ["IMAGE", "VIDEO"] },
       scope: "GENERAL",
+      productCardModelType: null,
     },
   });
   if (!model) {

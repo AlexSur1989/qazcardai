@@ -128,6 +128,7 @@ export async function POST(req: Request) {
       isActive: true,
       type: "VIDEO",
       scope: "GENERAL",
+      productCardModelType: null,
     },
   });
   if (!model) {

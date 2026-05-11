@@ -1,12 +1,14 @@
 /**
- * Kie.ai: модели scope GENERAL для /dashboard/create/image (не карточки товара).
- * Запуск: npm run seed:general-kie-image-models
+ * Раньше содержал GPT Image 2 + Seedream. Актуальный сид для GPT/Kling 2.6 GENERAL:
+ * `npm run seed:kie-general-models`.
+ *
+ * Этот скрипт сохранён для обратной совместимости: деактивирует legacy Seedream GENERAL
+ * и устаревший slug T2I `gpt-image-2-text-to-image-general`, если строка ещё есть в БД.
  */
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
-import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -18,399 +20,38 @@ const pool = new pg.Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-const GPT_T2I_SLUG = "gpt-image-2-text-to-image-general";
-/** Тот же apiModelId, что в seed:gpt-image-2-product-card — для «Создать фото» (scope GENERAL). */
-const GPT_I2I_SLUG = "gpt-image-2-image-to-image";
-const SEEDREAM_T2I_SLUG = "seedream-v4-text-to-image-general";
-
-const GPT_PRICING = {
-  type: "matrix",
-  currency: "KZT",
-  provider: "KIE_AI",
-  providerModel: GPT_T2I_SLUG,
-  resolutions: ["1K", "2K", "4K"],
-  durations: [1],
-  internalTokenValueKzt: 10,
-  usdToKzt: 500,
-  markupPercent: 150,
-  defaultCredits: 20,
-  matrix: {
-    "1K": { "1": 20 },
-    "2K": { "1": 25 },
-    "4K": { "1": 35 },
-  },
-  providerCost: {
-    noVideo: {
-      "1K": { kieCreditsPerSecond: 6, usdPerSecond: 0.03 },
-      "2K": { kieCreditsPerSecond: 10, usdPerSecond: 0.05 },
-      "4K": { kieCreditsPerSecond: 16, usdPerSecond: 0.08 },
-    },
-  },
-  manualOverrides: {
-    matrix: {
-      "1K": { "1": 20 },
-      "2K": { "1": 25 },
-      "4K": { "1": 35 },
-    },
-  },
-  fallbackCredits: 20,
-} as const;
-
-/** Матрица как у GPT T2I; providerModel для калькулятора — slug записи GENERAL. */
-const GPT_I2I_PRICING = {
-  ...GPT_PRICING,
-  providerModel: GPT_I2I_SLUG,
-} as const;
-
-const GPT_SETTINGS = {
-  fields: [
-    {
-      name: "aspectRatio",
-      type: "select",
-      label: "Формат",
-      default: "auto",
-      options: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
-      required: true,
-    },
-    {
-      name: "resolution",
-      type: "select",
-      label: "Разрешение",
-      default: "1K",
-      options: ["1K", "2K", "4K"],
-      required: true,
-    },
-    {
-      name: "duration",
-      type: "hidden",
-      label: "Pricing unit",
-      default: "1",
-      required: true,
-    },
-  ],
-} as const;
-
-const GPT_I2I_SETTINGS = {
-  fields: [
-    {
-      name: "inputUrls",
-      type: "upload-list",
-      label: "Исходные изображения",
-      required: true,
-      maxItems: 16,
-      accept: "image/*",
-    },
-    ...GPT_SETTINGS.fields,
-  ],
-} as const;
-
-const GPT_PAYLOAD = {
-  adapter: "market-create-task",
-  omitNull: true,
-  required: ["aspect_ratio"],
-  input: {
-    aspect_ratio: "$settings.aspectRatio",
-    resolution: "$settings.resolution",
-  },
-  coerce: {
-    aspect_ratio: "string",
-    resolution: "string",
-  },
-} as const;
-
-const GPT_I2I_PAYLOAD = {
-  adapter: "market-create-task",
-  omitNull: true,
-  required: ["input_urls", "aspect_ratio"],
-  input: {
-    input_urls: "$settings.inputUrls",
-    aspect_ratio: "$settings.aspectRatio",
-    resolution: "$settings.resolution",
-  },
-  coerce: {
-    input_urls: "stringArray",
-    aspect_ratio: "string",
-    resolution: "string",
-  },
-} as const;
-
-const SEEDREAM_PRICING = {
-  type: "matrix",
-  currency: "KZT",
-  provider: "KIE_AI",
-  providerModel: SEEDREAM_T2I_SLUG,
-  resolutions: ["1K", "2K", "4K"],
-  durations: [1],
-  internalTokenValueKzt: 10,
-  usdToKzt: 500,
-  markupPercent: 150,
-  defaultCredits: 18,
-  matrix: {
-    "1K": { "1": 18 },
-    "2K": { "1": 24 },
-    "4K": { "1": 32 },
-  },
-  providerCost: {
-    noVideo: {
-      "1K": { kieCreditsPerSecond: 5, usdPerSecond: 0.025 },
-      "2K": { kieCreditsPerSecond: 8, usdPerSecond: 0.04 },
-      "4K": { kieCreditsPerSecond: 14, usdPerSecond: 0.07 },
-    },
-  },
-  manualOverrides: {
-    matrix: {
-      "1K": { "1": 18 },
-      "2K": { "1": 24 },
-      "4K": { "1": 32 },
-    },
-  },
-  fallbackCredits: 18,
-} as const;
-
-const SEEDREAM_SETTINGS = {
-  fields: [
-    {
-      name: "size",
-      type: "select",
-      label: "Формат (image_size)",
-      default: "square_hd",
-      options: [
-        "square",
-        "square_hd",
-        "portrait_4_3",
-        "portrait_3_2",
-        "portrait_16_9",
-        "landscape_4_3",
-        "landscape_3_2",
-        "landscape_16_9",
-        "landscape_21_9",
-      ],
-      required: true,
-    },
-    {
-      name: "resolution",
-      type: "select",
-      label: "Разрешение",
-      default: "1K",
-      options: ["1K", "2K", "4K"],
-      required: true,
-    },
-    {
-      name: "numberOfImages",
-      type: "select",
-      label: "Число картинок",
-      default: "1",
-      options: ["1", "2", "3", "4", "5", "6"],
-      required: true,
-    },
-    {
-      name: "seed",
-      type: "number",
-      label: "Seed (необязательно)",
-      required: false,
-    },
-    {
-      name: "nsfwChecker",
-      type: "boolean",
-      label: "NSFW checker",
-      default: false,
-      required: false,
-    },
-    {
-      name: "duration",
-      type: "hidden",
-      label: "Pricing unit",
-      default: "1",
-      required: true,
-    },
-  ],
-} as const;
-
-const SEEDREAM_PAYLOAD = {
-  prompt: "input.prompt",
-  size: "input.image_size",
-  resolution: "input.image_resolution",
-  numberOfImages: "input.max_images",
-  seed: "input.seed",
-  nsfwChecker: "input.nsfw_checker",
-} as const;
+const LEGACY_GPT_T2I_SLUG = "gpt-image-2-text-to-image-general";
 
 async function main() {
-  const gptGuard = await prisma.aiModel.findUnique({
-    where: { slug: GPT_T2I_SLUG },
-    select: { pricingSchema: true },
-  });
-  const gpt = await prisma.aiModel.upsert({
-    where: { slug: GPT_T2I_SLUG },
-    create: {
-      name: "GPT Image 2 — текст → изображение",
-      slug: GPT_T2I_SLUG,
-      scope: "GENERAL",
-      productCardModelType: null,
-      provider: "KIE_AI",
-      type: "IMAGE",
-      apiModelId: "gpt-image-2-text-to-image",
-      endpoint: "/api/v1/jobs/createTask",
-      statusEndpoint: "/api/v1/jobs/recordInfo",
-      costCredits: 20,
-      realCost: 0.03,
-      isActive: true,
-      supportsImageInput: false,
-      supportsVideoInput: false,
-      supportsNegativePrompt: false,
-      supportsSeed: false,
-      description:
-        "Генерация изображения по тексту через Kie.ai (модель gpt-image-2-text-to-image). Для раздела «Создать фото», не для карточек товара.",
-      availableAspectRatios: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
-      availableResolutions: ["1K", "2K", "4K"],
-      settingsSchema: { ...GPT_SETTINGS },
-      pricingSchema: { ...GPT_PRICING },
-      payloadMapping: { ...GPT_PAYLOAD },
+  console.warn(
+    "[seed:general-kie-image-models] Для GPT Image 2 / Kling 2.6 запустите: npm run seed:kie-general-models",
+  );
+
+  const legacyGpt = await prisma.aiModel.updateMany({
+    where: { slug: LEGACY_GPT_T2I_SLUG, scope: "GENERAL" },
+    data: {
+      isActive: false,
     },
-    update: omitSeedPricingWhenPinned(gptGuard, {
-      name: "GPT Image 2 — текст → изображение",
-      scope: "GENERAL",
-      productCardModelType: null,
-      provider: "KIE_AI",
-      type: "IMAGE",
-      apiModelId: "gpt-image-2-text-to-image",
-      endpoint: "/api/v1/jobs/createTask",
-      statusEndpoint: "/api/v1/jobs/recordInfo",
-      costCredits: 20,
-      realCost: 0.03,
-      isActive: true,
-      supportsImageInput: false,
-      supportsVideoInput: false,
-      supportsNegativePrompt: false,
-      supportsSeed: false,
-      description:
-        "Генерация изображения по тексту через Kie.ai (модель gpt-image-2-text-to-image). Для раздела «Создать фото», не для карточек товара.",
-      availableAspectRatios: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
-      availableResolutions: ["1K", "2K", "4K"],
-      settingsSchema: { ...GPT_SETTINGS },
-      pricingSchema: { ...GPT_PRICING },
-      payloadMapping: { ...GPT_PAYLOAD },
-    }),
   });
 
-  const gptI2IGuard = await prisma.aiModel.findUnique({
-    where: { slug: GPT_I2I_SLUG },
-    select: { pricingSchema: true },
-  });
-  const gptI2I = await prisma.aiModel.upsert({
-    where: { slug: GPT_I2I_SLUG },
-    create: {
-      name: "GPT Image 2 — изображение → изображение",
-      slug: GPT_I2I_SLUG,
-      scope: "GENERAL",
-      productCardModelType: null,
-      provider: "KIE_AI",
-      type: "IMAGE",
-      apiModelId: GPT_I2I_SLUG,
-      endpoint: "/api/v1/jobs/createTask",
-      statusEndpoint: "/api/v1/jobs/recordInfo",
-      costCredits: 20,
-      realCost: 0.03,
-      isActive: true,
-      supportsImageInput: true,
-      supportsVideoInput: false,
-      supportsNegativePrompt: false,
-      supportsSeed: false,
-      description:
-        "Референсы + текст через Kie.ai (gpt-image-2-image-to-image). Общий кабинет «Создать фото».",
-      availableAspectRatios: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
-      availableResolutions: ["1K", "2K", "4K"],
-      settingsSchema: { ...GPT_I2I_SETTINGS },
-      pricingSchema: { ...GPT_I2I_PRICING },
-      payloadMapping: { ...GPT_I2I_PAYLOAD },
-    },
-    update: omitSeedPricingWhenPinned(gptI2IGuard, {
-      name: "GPT Image 2 — изображение → изображение",
-      scope: "GENERAL",
-      productCardModelType: null,
-      provider: "KIE_AI",
-      type: "IMAGE",
-      apiModelId: GPT_I2I_SLUG,
-      endpoint: "/api/v1/jobs/createTask",
-      statusEndpoint: "/api/v1/jobs/recordInfo",
-      costCredits: 20,
-      realCost: 0.03,
-      isActive: true,
-      supportsImageInput: true,
-      supportsVideoInput: false,
-      supportsNegativePrompt: false,
-      supportsSeed: false,
-      description:
-        "Референсы + текст через Kie.ai (gpt-image-2-image-to-image). Общий кабинет «Создать фото».",
-      availableAspectRatios: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
-      availableResolutions: ["1K", "2K", "4K"],
-      settingsSchema: { ...GPT_I2I_SETTINGS },
-      pricingSchema: { ...GPT_I2I_PRICING },
-      payloadMapping: { ...GPT_I2I_PAYLOAD },
-    }),
+  const seedreamSlug = "seedream-v4-text-to-image-general";
+  const existing = await prisma.aiModel.findUnique({
+    where: { slug: seedreamSlug },
+    select: { id: true },
   });
 
-  const seedreamGuard = await prisma.aiModel.findUnique({
-    where: { slug: SEEDREAM_T2I_SLUG },
-    select: { pricingSchema: true },
-  });
-  const seedream = await prisma.aiModel.upsert({
-    where: { slug: SEEDREAM_T2I_SLUG },
-    create: {
-      name: "Seedream 4.0 — текст → изображение",
-      slug: SEEDREAM_T2I_SLUG,
-      scope: "GENERAL",
-      productCardModelType: null,
-      provider: "KIE_AI",
-      type: "IMAGE",
-      apiModelId: "bytedance/seedream-v4-text-to-image",
-      endpoint: "/api/v1/jobs/createTask",
-      statusEndpoint: "/api/v1/jobs/recordInfo",
-      costCredits: 18,
-      realCost: 0.025,
-      isActive: true,
-      supportsImageInput: false,
-      supportsVideoInput: false,
-      supportsNegativePrompt: false,
-      supportsSeed: true,
-      description:
-        "Фотореалистичные картинки по тексту (bytedance/seedream-v4-text-to-image). Для раздела «Создать фото».",
-      availableAspectRatios: [],
-      availableResolutions: ["1K", "2K", "4K"],
-      settingsSchema: { ...SEEDREAM_SETTINGS },
-      pricingSchema: { ...SEEDREAM_PRICING },
-      payloadMapping: { ...SEEDREAM_PAYLOAD },
-    },
-    update: omitSeedPricingWhenPinned(seedreamGuard, {
-      name: "Seedream 4.0 — текст → изображение",
-      scope: "GENERAL",
-      productCardModelType: null,
-      provider: "KIE_AI",
-      type: "IMAGE",
-      apiModelId: "bytedance/seedream-v4-text-to-image",
-      endpoint: "/api/v1/jobs/createTask",
-      statusEndpoint: "/api/v1/jobs/recordInfo",
-      costCredits: 18,
-      realCost: 0.025,
-      isActive: true,
-      supportsImageInput: false,
-      supportsVideoInput: false,
-      supportsNegativePrompt: false,
-      supportsSeed: true,
-      description:
-        "Фотореалистичные картинки по тексту (bytedance/seedream-v4-text-to-image). Для раздела «Создать фото».",
-      availableAspectRatios: [],
-      availableResolutions: ["1K", "2K", "4K"],
-      settingsSchema: { ...SEEDREAM_SETTINGS },
-      pricingSchema: { ...SEEDREAM_PRICING },
-      payloadMapping: { ...SEEDREAM_PAYLOAD },
-    }),
-  });
+  if (existing) {
+    await prisma.aiModel.update({
+      where: { slug: seedreamSlug },
+      data: {
+        isActive: false,
+      },
+    });
+  }
 
   console.log("[seed:general-kie-image-models] OK");
-  console.log("  GPT Image 2 T2I:", gpt.id, gpt.slug);
-  console.log("  GPT Image 2 I2I:", gptI2I.id, gptI2I.slug);
-  console.log("  Seedream 4 T2I:", seedream.id, seedream.slug);
+  console.log("  legacy GPT slug deactivated rows:", legacyGpt.count);
+  console.log("  Seedream row:", existing ? "deactivated" : "absent");
 }
 
 main()

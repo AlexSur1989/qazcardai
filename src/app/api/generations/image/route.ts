@@ -86,6 +86,7 @@ export async function POST(req: Request) {
       isActive: true,
       type: "IMAGE",
       scope: "GENERAL",
+      productCardModelType: null,
     },
   });
   if (!model) {
