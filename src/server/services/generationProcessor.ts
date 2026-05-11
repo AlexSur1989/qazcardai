@@ -182,6 +182,7 @@ export function buildImageKieInput(
       gen.prompt,
       model,
       settings,
+      httpUrls,
     );
     return {
       apiModelId: modelId,
@@ -277,6 +278,7 @@ export function buildVideoKieInput(
       gen.prompt,
       model,
       merged,
+      inputUrls,
     );
     return {
       apiModelId: modelId,

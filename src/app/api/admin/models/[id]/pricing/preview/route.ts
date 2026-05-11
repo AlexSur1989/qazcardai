@@ -43,7 +43,7 @@ export async function POST(req: Request, ctx: Ctx) {
       { status: 400 },
     );
   }
-  let ps = parsed.data.pricingSchema;
+  const ps = parsed.data.pricingSchema;
   if (!isRecord(ps)) {
     return NextResponse.json({ error: "invalid_pricingSchema" }, { status: 400 });
   }

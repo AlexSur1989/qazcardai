@@ -130,7 +130,7 @@ export function DynamicModelSettingsFields({
           );
         }
 
-        if (field.type === "url-list") {
+        if (field.type === "url-list" || field.type === "upload-list") {
           if (KIE_SETTINGS_URL_LIST_FROM_COMPUTER.has(field.name)) {
             return (
               <SeedanceReferenceUploadList

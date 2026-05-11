@@ -29,6 +29,7 @@ import {
 import {
   calculateGenerationCreditsWithBreakdown,
 } from "@/server/services/pricing";
+import { validateStrictKieMarketPayload } from "@/server/services/kieModelPayloadValidation";
 import {
   isGrokImagineModel,
   validateGrokImagineSettings,
@@ -167,6 +168,16 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+  }
+
+  const strictKiePayload = validateStrictKieMarketPayload(
+    model,
+    body.prompt,
+    normalizedSettings,
+    httpUrls,
+  );
+  if (!strictKiePayload.ok) {
+    return NextResponse.json({ error: strictKiePayload.message }, { status: 400 });
   }
 
   const metadata: Record<string, unknown> = {};

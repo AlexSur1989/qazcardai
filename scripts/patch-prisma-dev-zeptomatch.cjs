@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Prisma CLI 7.8 bundles @prisma/dev, whose state.cjs does require('zeptomatch').
  * zeptomatch>=2 is ESM-only → Node ERR_REQUIRE_ESM breaks every prisma command.

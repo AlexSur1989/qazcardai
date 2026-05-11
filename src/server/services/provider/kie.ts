@@ -1,5 +1,11 @@
 
 /** Таймаут HTTP к Kie.ai (генерация и polling). Переопределение: KIE_FETCH_TIMEOUT_MS. */
+import {
+  buildKieMarketPayloadFromMapping,
+  defaultKieCallBackUrl,
+  isStrictKiePayloadMapping,
+} from "@/server/services/kiePayloadMapping";
+
 const DEFAULT_KIE_FETCH_TIMEOUT_MS = 120_000;
 
 function kieFetchTimeoutMs(): number {
@@ -1508,8 +1514,18 @@ export function buildKieMarketCreateTaskPayload(
   prompt: string,
   model: { apiModelId: string; payloadMapping: unknown },
   settings: Record<string, unknown>,
+  inputFiles: string[] = [],
 ): JsonRecord {
   const modelId = assertKieModelIdSet(model.apiModelId);
+  if (isStrictKiePayloadMapping(model.payloadMapping)) {
+    return buildKieMarketPayloadFromMapping(model.payloadMapping, {
+      model: { apiModelId: modelId },
+      prompt: prompt.trim(),
+      settings,
+      inputFiles,
+      callBackUrl: defaultKieCallBackUrl(),
+    });
+  }
   if (isWanMarketFamilyModelId(modelId)) {
     return buildWan27MarketCreateTaskPayload(prompt, modelId, settings);
   }
@@ -1526,13 +1542,12 @@ export function buildKieMarketCreateTaskPayload(
       settings,
     );
   }
-  /** Kie: Kling 2.6 / 3.0 / 3.0 video — одинаковые поля input (model из apiModelId). */
+  /** Kie: Kling 3.0 / 3.0 video share a legacy special builder. Kling 2.6 is strict payloadMapping-driven. */
   {
     const m = modelId.toLowerCase();
     if (
       m === "kling-3.0" ||
-      m === "kling-3.0/video" ||
-      m.startsWith("kling-2.6/")
+      m === "kling-3.0/video"
     ) {
       return buildKling30MarketCreateTaskPayload(prompt, modelId, settings);
     }

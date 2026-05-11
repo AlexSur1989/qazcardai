@@ -12,6 +12,7 @@ import {
   validateAndNormalizeModelSettings,
 } from "@/server/services/model-settings";
 import { calculateGenerationCreditsWithBreakdown } from "@/server/services/pricing";
+import { validateStrictKieMarketPayload } from "@/server/services/kieModelPayloadValidation";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 import {
   isKlingMotionControlModel,
@@ -157,6 +158,18 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
+    }
+    const strictKiePayload = validateStrictKieMarketPayload(
+      model,
+      "estimate",
+      v.settings,
+      [],
+    );
+    if (!strictKiePayload.ok) {
+      return NextResponse.json(
+        { error: strictKiePayload.message, message: strictKiePayload.message },
+        { status: 400 },
+      );
     }
     if (isKlingMotionControlModel(model.apiModelId)) {
       const mVal = validateKlingMotionControlSettingsForEstimate(v.settings);

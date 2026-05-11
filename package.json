@@ -39,6 +39,7 @@
     "seed:veo-3-1": "npx tsx scripts/seed-veo-31.ts",
     "db:models:wan-only": "npx tsx scripts/delete-models-except-wan.ts",
     "worker": "npx tsx scripts/worker.ts",
+    "verify:kie-payloads": "npx tsx scripts/verify-kie-model-payloads.ts",
     "verify:product-card-overlay": "npx tsx scripts/verify-product-card-overlay-strict.ts"
   },
   "dependencies": {

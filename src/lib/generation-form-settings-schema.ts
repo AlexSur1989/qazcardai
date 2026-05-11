@@ -47,6 +47,7 @@ export function defaultsFromSchema(schema: unknown): Record<string, unknown> {
       d[field.name] = "";
     } else if (
       field.type === "url-list" ||
+      field.type === "upload-list" ||
       field.type === "image-upload-list" ||
       field.type === "video-upload-list" ||
       field.type === "audio-upload-list"

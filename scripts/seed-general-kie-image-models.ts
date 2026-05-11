@@ -67,8 +67,8 @@ const GPT_SETTINGS = {
     {
       name: "aspectRatio",
       type: "select",
-      label: "Соотношение сторон",
-      default: "1:1",
+      label: "Формат",
+      default: "auto",
       options: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
       required: true,
     },
@@ -94,26 +94,44 @@ const GPT_I2I_SETTINGS = {
   fields: [
     {
       name: "inputUrls",
-      type: "url-list",
-      label: "Входные изображения (input_urls)",
+      type: "upload-list",
+      label: "Исходные изображения",
       required: true,
       maxItems: 16,
+      accept: "image/*",
     },
     ...GPT_SETTINGS.fields,
   ],
 } as const;
 
 const GPT_PAYLOAD = {
-  prompt: "input.prompt",
-  aspectRatio: "input.aspect_ratio",
-  resolution: "input.resolution",
+  adapter: "market-create-task",
+  omitNull: true,
+  required: ["aspect_ratio"],
+  input: {
+    aspect_ratio: "$settings.aspectRatio",
+    resolution: "$settings.resolution",
+  },
+  coerce: {
+    aspect_ratio: "string",
+    resolution: "string",
+  },
 } as const;
 
 const GPT_I2I_PAYLOAD = {
-  prompt: "input.prompt",
-  inputUrls: "input.input_urls",
-  aspectRatio: "input.aspect_ratio",
-  resolution: "input.resolution",
+  adapter: "market-create-task",
+  omitNull: true,
+  required: ["input_urls", "aspect_ratio"],
+  input: {
+    input_urls: "$settings.inputUrls",
+    aspect_ratio: "$settings.aspectRatio",
+    resolution: "$settings.resolution",
+  },
+  coerce: {
+    input_urls: "stringArray",
+    aspect_ratio: "string",
+    resolution: "string",
+  },
 } as const;
 
 const SEEDREAM_PRICING = {

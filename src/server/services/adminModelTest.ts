@@ -12,6 +12,7 @@ import {
 } from "@/server/services/model-settings";
 import { createApiLog } from "@/server/services/api-log";
 import { calculateGenerationCredits } from "@/server/services/pricing";
+import { validateStrictKieMarketPayload } from "@/server/services/kieModelPayloadValidation";
 import { assertKlingMotionUrlsOwnedByUser } from "@/server/services/kling-motion-control-settings";
 import {
   collectKlingMotionControlHttpUrls,
@@ -193,6 +194,15 @@ function buildImageTest(
     if (publicHttpUrlsOnly(inputFilesCombined).length === 0) {
       return { ok: false, error: "Нужен публичный http(s) URL", statusCode: 400 };
     }
+  }
+  const strictKiePayload = validateStrictKieMarketPayload(
+    model,
+    body.prompt,
+    normalizedSettings,
+    publicHttpUrlsOnly(inputFilesCombined),
+  );
+  if (!strictKiePayload.ok) {
+    return { ok: false, error: strictKiePayload.message, statusCode: 400 };
   }
 
   const costCredits = calculateGenerationCredits(model, normalizedSettings);
@@ -469,6 +479,15 @@ async function buildVideoTest(
     if (publicHttpUrlsOnly(inputFilesCombined).length === 0) {
       return { ok: false, error: "Нужен публичный http(s) URL", statusCode: 400 };
     }
+  }
+  const strictKiePayload = validateStrictKieMarketPayload(
+    model,
+    body.prompt,
+    normalizedSettings,
+    publicHttpUrlsOnly(inputFilesCombined),
+  );
+  if (!strictKiePayload.ok) {
+    return { ok: false, error: strictKiePayload.message, statusCode: 400 };
   }
 
   const costCredits = calculateGenerationCredits(model, normalizedSettings);

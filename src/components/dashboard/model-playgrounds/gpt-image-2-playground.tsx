@@ -83,16 +83,6 @@ export function GptImage2Playground({
     defaultsFromSchema(selected.settingsSchema),
   );
 
-  useEffect(() => {
-    queueMicrotask(() => {
-      setDynSettings(defaultsFromSchema(selected.settingsSchema));
-      setResult(null);
-      setPoll(null);
-      setPollComplete(false);
-      setError(null);
-    });
-  }, [variant, selected.id, selected.settingsSchema]);
-
   const [prompt, setPrompt] = useState("");
 
   const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null);
@@ -112,6 +102,16 @@ export function GptImage2Playground({
     outputFiles: unknown;
   } | null>(null);
   const [pollComplete, setPollComplete] = useState(false);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setDynSettings(defaultsFromSchema(selected.settingsSchema));
+      setResult(null);
+      setPoll(null);
+      setPollComplete(false);
+      setError(null);
+    });
+  }, [variant, selected.id, selected.settingsSchema]);
 
   function setDynField(name: string, value: unknown) {
     setDynSettings((prev) => ({ ...prev, [name]: value }));
@@ -146,7 +146,7 @@ export function GptImage2Playground({
         }
       }
     },
-    [],
+    [setPoll, setPollComplete],
   );
 
   const fetchStatus = useCallback(
@@ -218,11 +218,16 @@ export function GptImage2Playground({
       return;
     }
     const id = result.generationId;
-    void fetchStatus(id);
+    const first = window.setTimeout(() => {
+      void fetchStatus(id);
+    }, 0);
     const interval = setInterval(() => {
       void fetchStatus(id);
     }, 3000);
-    return () => clearInterval(interval);
+    return () => {
+      window.clearTimeout(first);
+      clearInterval(interval);
+    };
   }, [result?.generationId, fetchStatus, pollComplete]);
 
   async function onSubmit(e: React.FormEvent) {

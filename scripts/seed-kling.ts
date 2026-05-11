@@ -137,6 +137,94 @@ const PAYLOAD_MAPPING = {
   multiShots: "input.multi_shots",
 } as const;
 
+const KLING_26_T2V_SETTINGS_SCHEMA = {
+  fields: [
+    {
+      name: "duration",
+      type: "select",
+      label: "Длительность",
+      default: "5",
+      options: ["5", "10"],
+      required: true,
+    },
+    {
+      name: "aspectRatio",
+      type: "select",
+      label: "Формат",
+      default: "1:1",
+      options: ["1:1", "16:9", "9:16"],
+      required: true,
+    },
+    {
+      name: "sound",
+      type: "boolean",
+      label: "Звук",
+      default: false,
+      required: true,
+    },
+  ],
+} as const;
+
+const KLING_26_I2V_SETTINGS_SCHEMA = {
+  fields: [
+    {
+      name: "imageUrls",
+      type: "upload-list",
+      label: "Исходное изображение",
+      required: true,
+      maxItems: 1,
+      accept: "image/*",
+    },
+    {
+      name: "duration",
+      type: "select",
+      label: "Длительность",
+      default: "5",
+      options: ["5", "10"],
+      required: true,
+    },
+    {
+      name: "sound",
+      type: "boolean",
+      label: "Звук",
+      default: false,
+      required: true,
+    },
+  ],
+} as const;
+
+const KLING_26_T2V_PAYLOAD_MAPPING = {
+  adapter: "market-create-task",
+  omitNull: true,
+  required: ["sound", "aspect_ratio", "duration"],
+  input: {
+    sound: "$settings.sound",
+    aspect_ratio: "$settings.aspectRatio",
+    duration: "$settings.duration",
+  },
+  coerce: {
+    sound: "boolean",
+    aspect_ratio: "string",
+    duration: "string",
+  },
+} as const;
+
+const KLING_26_I2V_PAYLOAD_MAPPING = {
+  adapter: "market-create-task",
+  omitNull: true,
+  required: ["image_urls", "sound", "duration"],
+  input: {
+    image_urls: "$settings.imageUrls",
+    sound: "$settings.sound",
+    duration: "$settings.duration",
+  },
+  coerce: {
+    image_urls: "stringArray",
+    sound: "boolean",
+    duration: "string",
+  },
+} as const;
+
 const VARIANTS = [
   {
     slug: "kling-3-0",
@@ -157,14 +245,14 @@ const VARIANTS = [
     name: "Kling 2.6 Text to Video",
     apiModelId: "kling-2.6/text-to-video",
     description:
-      "Kling 2.6 Text→Video (Kie: kling-2.6/text-to-video): те же поля input, что у Kling 3.0 (без image_urls).",
+      "Kling 2.6 Text→Video (Kie: kling-2.6/text-to-video): prompt, sound, aspect_ratio, duration.",
   },
   {
     slug: "kling-2-6-image-to-video",
     name: "Kling 2.6 Image to Video",
     apiModelId: "kling-2.6/image-to-video",
     description:
-      "Kling 2.6 Image→Video (Kie: kling-2.6/image-to-video): std/pro/4K и image_urls с кадрами.",
+      "Kling 2.6 Image→Video (Kie: kling-2.6/image-to-video): prompt, image_urls, sound, duration.",
   },
 ] as const;
 
@@ -177,6 +265,22 @@ function pricingSchemaFor(providerModel: string): Record<string, unknown> {
 
 async function main() {
   for (const v of VARIANTS) {
+    const isKling26T2V = v.apiModelId === "kling-2.6/text-to-video";
+    const isKling26I2V = v.apiModelId === "kling-2.6/image-to-video";
+    const settingsSchema = isKling26T2V
+      ? KLING_26_T2V_SETTINGS_SCHEMA
+      : isKling26I2V
+        ? KLING_26_I2V_SETTINGS_SCHEMA
+        : SETTINGS_SCHEMA;
+    const payloadMapping = isKling26T2V
+      ? KLING_26_T2V_PAYLOAD_MAPPING
+      : isKling26I2V
+        ? KLING_26_I2V_PAYLOAD_MAPPING
+        : PAYLOAD_MAPPING;
+    const supportsImageInput = isKling26T2V ? false : true;
+    const maxDuration = isKling26T2V || isKling26I2V ? 10 : 15;
+    const availableAspectRatios = isKling26I2V ? [] : ["16:9", "9:16", "1:1"];
+    const availableResolutions = isKling26T2V || isKling26I2V ? [] : ["std", "pro", "4K"];
     const guard = await prisma.aiModel.findUnique({
       where: { slug: v.slug },
       select: { pricingSchema: true },
@@ -195,17 +299,17 @@ async function main() {
         costCredits: 46,
         realCost: 0,
         isActive: true,
-        supportsImageInput: true,
+        supportsImageInput,
         supportsVideoInput: false,
         supportsNegativePrompt: false,
         supportsSeed: false,
-        maxDuration: 15,
+        maxDuration,
         description: v.description,
-        availableAspectRatios: ["16:9", "9:16", "1:1"],
-        availableResolutions: ["std", "pro", "4K"],
-        settingsSchema: { ...SETTINGS_SCHEMA },
+        availableAspectRatios,
+        availableResolutions,
+        settingsSchema: { ...settingsSchema },
         pricingSchema: pricingSchema as object,
-        payloadMapping: { ...PAYLOAD_MAPPING },
+        payloadMapping: { ...payloadMapping },
       },
       update: omitSeedPricingWhenPinned(guard, {
         name: v.name,
@@ -217,17 +321,17 @@ async function main() {
         costCredits: 46,
         realCost: 0,
         isActive: true,
-        supportsImageInput: true,
+        supportsImageInput,
         supportsVideoInput: false,
         supportsNegativePrompt: false,
         supportsSeed: false,
-        maxDuration: 15,
+        maxDuration,
         description: v.description,
-        availableAspectRatios: ["16:9", "9:16", "1:1"],
-        availableResolutions: ["std", "pro", "4K"],
-        settingsSchema: { ...SETTINGS_SCHEMA },
+        availableAspectRatios,
+        availableResolutions,
+        settingsSchema: { ...settingsSchema },
         pricingSchema: pricingSchema as object,
-        payloadMapping: { ...PAYLOAD_MAPPING },
+        payloadMapping: { ...payloadMapping },
       }),
     });
     console.log("[seed:kling]", v.slug, row.id);

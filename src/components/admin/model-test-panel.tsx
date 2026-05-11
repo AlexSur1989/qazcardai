@@ -104,6 +104,7 @@ export function ModelTestPanel({ model, canRunRealKie }: Props) {
       note?: string;
     };
     payload: unknown;
+    kieBody?: unknown;
     warnings: string[];
   } | null>(null);
   const [mockData, setMockData] = useState<{
@@ -409,7 +410,10 @@ export function ModelTestPanel({ model, canRunRealKie }: Props) {
               </ul>
             )}
           </div>
-          <JsonBlock title="Payload JSON (sanitized)" value={previewData.payload} />
+          <JsonBlock
+            title="Итоговый Kie body / Final Kie body (sanitized)"
+            value={previewData.kieBody ?? previewData.payload}
+          />
         </div>
       )}
 

@@ -376,7 +376,7 @@ export function chooseAdaptiveLayout(
 
   const cx = productBox.x + productBox.width / 2;
   const pxNorm = canvasW > 0 ? cx / canvasW : 0.5;
-  let reasonParts: string[] = [`Anchor: ${anchor}`];
+  const reasonParts: string[] = [`Anchor: ${anchor}`];
   const shiftX = pxNorm > 0.54 ? -28 : pxNorm < 0.46 ? 28 : 0;
   if (shiftX !== 0) {
     reasonParts.push(

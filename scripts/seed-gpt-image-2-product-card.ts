@@ -24,16 +24,17 @@ const SETTINGS_SCHEMA = {
   fields: [
     {
       name: "inputUrls",
-      type: "url-list",
+      type: "upload-list",
       label: "Reference image URLs",
       required: true,
-      maxItems: 4,
+      maxItems: 16,
+      accept: "image/*",
     },
     {
       name: "aspectRatio",
       type: "select",
       label: "Aspect ratio",
-      default: "1:1",
+      default: "auto",
       options: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
       required: true,
     },
@@ -89,10 +90,19 @@ const PRICING_SCHEMA = {
 } as const;
 
 const PAYLOAD_MAPPING = {
-  prompt: "input.prompt",
-  inputUrls: "input.input_urls",
-  aspectRatio: "input.aspect_ratio",
-  resolution: "input.resolution",
+  adapter: "market-create-task",
+  omitNull: true,
+  required: ["input_urls", "aspect_ratio"],
+  input: {
+    input_urls: "$settings.inputUrls",
+    aspect_ratio: "$settings.aspectRatio",
+    resolution: "$settings.resolution",
+  },
+  coerce: {
+    input_urls: "stringArray",
+    aspect_ratio: "string",
+    resolution: "string",
+  },
 } as const;
 
 async function main() {

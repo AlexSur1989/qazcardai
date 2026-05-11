@@ -73,6 +73,7 @@ export function validateAndNormalizeModelSettings(
 
     const isUrlList =
       typ === "url-list" ||
+      typ === "upload-list" ||
       typ === "image-upload-list" ||
       typ === "video-upload-list" ||
       typ === "audio-upload-list";

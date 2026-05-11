@@ -32,11 +32,11 @@ export function isKling26Model(
   return KLING_26_MARKET_ID_SET.has(String(apiModelId ?? "").trim().toLowerCase());
 }
 
-/** Kling 3.0 / 3.0 video / 2.6 — один контракт Kie createTask для buildKling30MarketCreateTaskPayload. */
+/** Kling 3.0 / 3.0 video share one createTask contract. Kling 2.6 uses per-mode payloadMapping. */
 export function isKling30StyleMarketModel(
   apiModelId: string | null | undefined,
 ): boolean {
-  return isKling30Model(apiModelId) || isKling26Model(apiModelId);
+  return isKling30Model(apiModelId);
 }
 
 /**

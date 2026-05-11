@@ -74,6 +74,7 @@ export async function POST(req: Request, ctx: Ctx) {
     costCredits: built.costCredits,
     pricing: built.pricing,
     payload: built.payload,
+    kieBody: built.payload,
     warnings: built.warnings,
   });
 }
