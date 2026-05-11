@@ -26,7 +26,7 @@ import {
 import {
   collectHappyHorseSettingsHttpUrls,
   isHappyHorseModel,
-  validateHappyHorseScenario,
+  validateHappyHorseSettings,
 } from "@/server/services/happyhorse-settings";
 import {
   collectSeedanceSettingsHttpUrls,
@@ -310,7 +310,11 @@ async function buildVideoTest(
       }
     }
     if (isHappyHorseModel(model.apiModelId)) {
-      const hVal = validateHappyHorseScenario(normalizedSettings, body.prompt.trim());
+      const hVal = validateHappyHorseSettings(
+        model.apiModelId,
+        normalizedSettings,
+        body.prompt.trim(),
+      );
       if (!hVal.ok) {
         return { ok: false, error: hVal.message, statusCode: 400 };
       }
@@ -435,7 +439,10 @@ async function buildVideoTest(
       return collectSeedanceSettingsHttpUrls(normalizedSettings);
     }
     if (isHappyHorseModel(model.apiModelId)) {
-      return collectHappyHorseSettingsHttpUrls(normalizedSettings);
+      return collectHappyHorseSettingsHttpUrls(
+        model.apiModelId,
+        normalizedSettings,
+      );
     }
     if (isWanMarketModel(model.apiModelId)) {
       return collectWan27SettingsHttpUrls(model.apiModelId, normalizedSettings);

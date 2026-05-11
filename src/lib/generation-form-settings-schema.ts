@@ -5,11 +5,21 @@ export type SchemaField = {
   type?: string;
   label?: string;
   default?: unknown;
+  /** Алиас сидов Kie (preferred в новых схемах) */
+  defaultValue?: unknown;
+  /** Подсказка под полем (Kie playground / docs) */
+  helpText?: string;
   options?: unknown[];
   required?: boolean;
   /** Для upload-list: макс. число файлов (референсы Seedance и т.п.) */
   maxItems?: number;
 };
+
+function schemaFieldEffectiveDefault(field: SchemaField): unknown | undefined {
+  if (field.default !== undefined) return field.default;
+  if (field.defaultValue !== undefined) return field.defaultValue;
+  return undefined;
+}
 
 export function getSchemaFields(schema: unknown): SchemaField[] {
   let s: unknown = schema;
@@ -39,9 +49,12 @@ export function defaultsFromSchema(schema: unknown): Record<string, unknown> {
   const fields = getSchemaFields(schema);
   const d: Record<string, unknown> = {};
   for (const field of fields) {
-    if (field.default !== undefined) {
-      d[field.name] = field.default;
-    } else if (field.type === "boolean") {
+    const effective = schemaFieldEffectiveDefault(field);
+    if (effective !== undefined) {
+      d[field.name] = effective;
+      continue;
+    }
+    if (field.type === "boolean") {
       d[field.name] = false;
     } else if (field.type === "image-upload" || field.type === "url") {
       d[field.name] = "";
@@ -54,10 +67,7 @@ export function defaultsFromSchema(schema: unknown): Record<string, unknown> {
     ) {
       d[field.name] = [];
     } else if (field.type === "json") {
-      d[field.name] =
-        field.default !== undefined
-          ? field.default
-          : '[{"Scene":"","duration":3}]';
+      d[field.name] = '[{"Scene":"","duration":3}]';
     }
   }
   return d;

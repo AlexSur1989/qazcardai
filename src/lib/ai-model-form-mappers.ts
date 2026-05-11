@@ -9,9 +9,13 @@ export type AiModelFormFieldValues = {
   productCardModelType: string;
   apiModelId: string;
   endpoint: string;
+  statusEndpoint: string;
   costCredits: number;
   realCost: string;
   isActive: boolean;
+  isPublic: boolean;
+  metadataJson: string;
+  payloadMappingJson: string;
   settingsSchema: string;
   description: string;
   supportsImageInput: boolean;
@@ -32,9 +36,13 @@ export function fromDbModelToFormFields(m: {
   productCardModelType: string | null;
   apiModelId: string;
   endpoint: string | null;
+  statusEndpoint?: string | null;
   costCredits: number;
   realCost: unknown;
   isActive: boolean;
+  isPublic?: boolean | null;
+  payloadMapping?: unknown | null;
+  metadata?: unknown | null;
   settingsSchema: unknown;
   description: string | null;
   supportsImageInput: boolean;
@@ -54,6 +62,7 @@ export function fromDbModelToFormFields(m: {
     productCardModelType: m.productCardModelType ?? "",
     apiModelId: m.apiModelId,
     endpoint: m.endpoint ?? "",
+    statusEndpoint: m.statusEndpoint ?? "",
     costCredits: m.costCredits,
     realCost:
       m.realCost != null
@@ -62,6 +71,13 @@ export function fromDbModelToFormFields(m: {
           : String(m.realCost)
         : "",
     isActive: m.isActive,
+    isPublic: m.isPublic === true,
+    metadataJson:
+      m.metadata == null ? "{}" : JSON.stringify(m.metadata, null, 2),
+    payloadMappingJson:
+      m.payloadMapping == null
+        ? "{}"
+        : JSON.stringify(m.payloadMapping, null, 2),
     settingsSchema:
       m.settingsSchema == null
         ? ""

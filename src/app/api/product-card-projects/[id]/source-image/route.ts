@@ -8,6 +8,7 @@ import {
 } from "@/lib/request-body-limits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { attachSourceImageToProject } from "@/server/services/productCardProjects";
+import { tryAutoClassifyProductProject } from "@/server/services/productCardClassificationPersist";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 
 const bodySchema = z.object({
@@ -54,7 +55,8 @@ export async function POST(req: Request, ctx: Ctx) {
       projectId,
       parsed.data.fileId,
     );
-    return NextResponse.json({ project });
+    const withCategory = await tryAutoClassifyProductProject(userId, project);
+    return NextResponse.json({ project: withCategory });
   } catch (e) {
     const err = e as Error & { code?: string };
     if (

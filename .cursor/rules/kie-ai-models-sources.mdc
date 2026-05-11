@@ -1,0 +1,37 @@
+---
+description: Kie.ai модели QazCard AI — источники правды и запреты (см. AGENTS.md)
+globs:
+  - "src/server/kie/**"
+  - "scripts/seed-kie*.ts"
+  - "scripts/verify-kie*.ts"
+  - "src/server/services/kie*.ts"
+  - "src/server/services/provider/kie.ts"
+  - "src/server/services/generationProcessor.ts"
+---
+
+# Kie.ai — источники правды (краткая выжимка)
+
+**Каноничный полный текст правила:** файл **`AGENTS.md`**, раздел **«Kie / модели генерации»**. Ниже — только напоминание для ассистента при правках в указанных globs.
+
+## Порядок источников
+
+1. **`docs.kie.ai/market/<model>`** — backend API: endpoint, `model` / `input.*`, body, task id, recordInfo / callback.
+2. **`kie.ai` Playground / Run with API** — `settingsSchema`: поля UI, options, лимиты загрузок, связи полей, `helpText`.
+3. **`docs.kie.ai`** Common API / Getting Started — async task, polling, headers, limits, retention.
+4. **`kie.ai/pricing`** — `realCost`, `pricingSchema`, себестоимость.
+
+## Запрещено
+
+Настройки **не** брать из старой БД, старых seed, старого UI, догадок, другой версии модели, Kling 3.x для 2.6, смешения text-to-video и image-to-video без сверки с docs.
+
+## Расхождение docs vs Playground
+
+Не угадывать; зафиксировать в `metadata` или комментарии; payload строго по **docs**; полнота UI по **Playground**; обновить verify на итоговый body.
+
+## Metadata (минимум)
+
+`docsUrl`, `playgroundUrl`, `docsCheckedAt`, `source: "docs.kie.ai + kie.ai playground"`.
+
+## GPT Image 2 / Kling 2.6 / uploads / payloadMapping / verify / scope
+
+См. **`AGENTS.md`** (подразделы GPT Image 2, Kling 2.6, Upload logic, Payload builder, Verify scripts, Product-card isolation).

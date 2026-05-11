@@ -18,6 +18,7 @@ import {
   type FamilyVideoMode,
 } from "@/components/dashboard/model-family-generation-hub";
 import { prismaWhereForDashboardModelsCatalog } from "@/lib/ai-models-catalog-db";
+import { isAiModelVisibleInUserCatalog } from "@/lib/ai-model-public-catalog";
 import {
   mergeGenerationCatalog,
   type MergedCatalogModelCard,
@@ -92,6 +93,8 @@ const FAMILY_MODEL_SELECT = {
   supportsVideoInput: true,
   supportsSeed: true,
   maxDuration: true,
+  isPublic: true,
+  metadata: true,
 } as const;
 
 function modeLabelFromModel(slug: string, name: string): string {
@@ -215,8 +218,10 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
           pricingSchema: true,
           description: true,
           isActive: true,
+          isPublic: true,
           supportsImageInput: true,
           supportsVideoInput: true,
+          metadata: true,
         },
       }),
       prisma.aiModel.aggregate({
@@ -396,7 +401,16 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
       },
       select: FAMILY_MODEL_SELECT,
     });
-    const sortedRows = rows.sort(
+    const sortedRows = rows
+      .filter((r) =>
+        isAiModelVisibleInUserCatalog({
+          slug: r.slug,
+          isActive: true,
+          isPublic: r.isPublic,
+          metadata: r.metadata,
+        }),
+      )
+      .sort(
       (a, b) => familySlugs.indexOf(a.slug) - familySlugs.indexOf(b.slug),
     );
     const imageModes: FamilyImageMode[] = sortedRows

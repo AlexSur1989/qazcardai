@@ -263,8 +263,18 @@ function pricingSchemaFor(providerModel: string): Record<string, unknown> {
   };
 }
 
+/** Управляются только `seed:kie-general-models` + общий реестр phase1 */
+const PHASE1_REGISTRY_SLUGS = new Set<string>([
+  "kling-2-6-text-to-video",
+  "kling-2-6-image-to-video",
+]);
+
 async function main() {
   for (const v of VARIANTS) {
+    if (PHASE1_REGISTRY_SLUGS.has(v.slug)) {
+      console.log("[seed:kling] skip — реестрируется через seed:kie-general-models:", v.slug);
+      continue;
+    }
     const isKling26T2V = v.apiModelId === "kling-2.6/text-to-video";
     const isKling26I2V = v.apiModelId === "kling-2.6/image-to-video";
     const settingsSchema = isKling26T2V

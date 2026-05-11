@@ -16,6 +16,7 @@ import { getBalance } from "@/server/services/credits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { IMAGE_CREATE_MODEL_GROUPS } from "@/config/generation-models";
 import type { CreateImageFormModel } from "@/components/dashboard/create-image-form";
+import { isAiModelVisibleInUserCatalog } from "@/lib/ai-model-public-catalog";
 import { prisma } from "@/lib/prisma";
 import { getCreditsUiFloor } from "@/server/services/pricing";
 
@@ -42,7 +43,7 @@ export default async function CreateImagePage({ searchParams }: PageProps) {
 
   const [rows, balanceCredits] = await Promise.all([
     prisma.aiModel.findMany({
-    where: { isActive: true, type: "IMAGE", scope: "GENERAL", productCardModelType: null },
+    where: { isActive: true, isPublic: true, type: "IMAGE", scope: "GENERAL", productCardModelType: null },
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -55,12 +56,22 @@ export default async function CreateImagePage({ searchParams }: PageProps) {
         supportsNegativePrompt: true,
         supportsImageInput: true,
         supportsSeed: true,
+        isActive: true,
+        isPublic: true,
+        metadata: true,
       },
     }),
     getBalance(current.user.id),
   ]);
 
-  const models = rows.map((m) => {
+  const models = rows.filter((m) =>
+    isAiModelVisibleInUserCatalog({
+      slug: m.slug,
+      isActive: m.isActive,
+      isPublic: m.isPublic,
+      metadata: m.metadata,
+    }),
+  ).map((m) => {
     const { pricingSchema: _p, ...rest } = m;
     return {
       ...rest,

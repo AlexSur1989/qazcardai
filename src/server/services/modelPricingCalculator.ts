@@ -1,5 +1,8 @@
 
 import type { AiModel } from "@/generated/prisma/client";
+
+import type { FormulaEvaluationResult } from "@/server/services/formulaPricing";
+import { evaluateFormulaCredits } from "@/server/services/formulaPricing";
 import {
   isRecord,
   type CalculatePricingRowInput,
@@ -500,6 +503,25 @@ function resolutionDurationMatrixCredits(
   return matrixResolutionDurationCell(raw.matrix, effectiveRes, dur);
 }
 
+function sanitizeFormulaCredits(
+  ev: FormulaEvaluationResult,
+  fallbackBase: number,
+  raw: Record<string, unknown>,
+): number {
+  if (ev.error) {
+    return pickFallbackCredits(raw, fallbackBase);
+  }
+  const n = Math.max(0, Math.floor(ev.credits));
+  if (!Number.isFinite(n)) {
+    return pickFallbackCredits(raw, fallbackBase);
+  }
+  if (n < 1) {
+    const fb = pickFallbackCredits(raw, fallbackBase);
+    return fb >= 1 ? fb : fallbackBase >= 1 ? fallbackBase : n;
+  }
+  return n;
+}
+
 function pickFallbackCredits(
   raw: Record<string, unknown>,
   costCredits: number,
@@ -688,6 +710,32 @@ export function getFinalCreditsFromPricingSchema(
       return computed;
     }
     return pickFallbackCredits(raw, fallbackBase);
+  }
+
+  const typ = String(raw.type ?? "");
+
+  if (typ === "fixed") {
+    const cr = raw.credits;
+    if (typeof cr === "number" && Number.isFinite(cr)) {
+      const n = Math.max(0, Math.floor(cr));
+      return n >= 1 ? n : fallbackBase >= 1 ? fallbackBase : pickFallbackCredits(raw, fallbackBase);
+    }
+    return pickFallbackCredits(raw, fallbackBase);
+  }
+
+  if (
+    typ === "fixed_by_model_costCredits" ||
+    typ === "flat_costCredits_note"
+  ) {
+    return pickFallbackCredits(raw, fallbackBase);
+  }
+
+  if (typ === "formula") {
+    const ev = evaluateFormulaCredits(raw, settings);
+    if (ev.error) {
+      return pickFallbackCredits(raw, fallbackBase);
+    }
+    return sanitizeFormulaCredits(ev, fallbackBase, raw);
   }
 
   if (raw.type !== "matrix") {

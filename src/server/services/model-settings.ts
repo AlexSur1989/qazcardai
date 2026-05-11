@@ -8,10 +8,18 @@ type SchemaField = {
   type?: string;
   label?: string;
   default?: unknown;
+  /** Алиас сидов Kie (preferred в новых схемах) */
+  defaultValue?: unknown;
   options?: unknown[];
   required?: boolean;
   maxItems?: number;
 };
+
+function schemaFieldEffectiveDefault(f: SchemaField): unknown | undefined {
+  if (f.default !== undefined) return f.default;
+  if (f.defaultValue !== undefined) return f.defaultValue;
+  return undefined;
+}
 
 function selectOptionValues(options: unknown[]): string[] {
   return options.map((o) => {
@@ -45,8 +53,11 @@ export function validateAndNormalizeModelSettings(
   const out: Record<string, unknown> = { ...raw };
 
   for (const f of fields) {
-    if (out[f.name] === undefined && f.default !== undefined) {
-      out[f.name] = f.default;
+    if (out[f.name] === undefined) {
+      const d = schemaFieldEffectiveDefault(f);
+      if (d !== undefined) {
+        out[f.name] = d;
+      }
     }
   }
 

@@ -1,4 +1,7 @@
-import { publicHttpUrlsOnly } from "@/lib/generation-input-limits";
+import {
+  isUrlPubliclyReachableForKie,
+  publicHttpUrlsOnly,
+} from "@/lib/generation-input-limits";
 
 export type KiePayloadMapping = {
   adapter?: "market-create-task" | "custom";
@@ -22,6 +25,33 @@ export type KieMarketPayloadContext = {
 };
 
 type JsonRecord = Record<string, unknown>;
+
+const PUBLIC_URL_ARRAY_FIELDS = new Set([
+  "input_urls",
+  "image_urls",
+  "reference_image",
+  "reference_image_urls",
+  "reference_video",
+  "reference_video_urls",
+  "reference_audio_urls",
+  "image_input",
+  "image_url",
+  "mask_url",
+]);
+
+const PUBLIC_URL_STRING_FIELDS = new Set([
+  "audio_url",
+  "first_frame_url",
+  "last_frame_url",
+  "first_clip_url",
+  "driving_audio_url",
+  "first_frame",
+  "reference_voice",
+  "reference_image",
+  "image_url",
+  "mask_url",
+  "video_url",
+]);
 
 export class KiePayloadMappingError extends Error {
   constructor(message: string) {
@@ -58,8 +88,14 @@ export function defaultKieCallBackUrl(): string {
 }
 
 function getByPath(source: unknown, path: string[]): unknown {
-  let cur = source;
+  let cur: unknown = source;
   for (const part of path) {
+    if (Array.isArray(cur) && /^\d+$/.test(part)) {
+      const idx = Number(part);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= cur.length) return undefined;
+      cur = cur[idx];
+      continue;
+    }
     if (!isRecord(cur)) return undefined;
     cur = cur[part];
   }
@@ -153,21 +189,50 @@ function normalizeMappedValue(
       .map((item) => item.trim())
       .filter(Boolean);
 
-    if (
-      fieldName === "input_urls" ||
-      fieldName === "image_urls" ||
-      fieldName === "reference_image_urls"
-    ) {
+    if (PUBLIC_URL_ARRAY_FIELDS.has(fieldName)) {
       const publicUrls = publicHttpUrlsOnly(stringList);
       if (publicUrls.length !== stringList.length) {
         throw new KiePayloadMappingError(
           `Поле «${fieldName}» должно содержать только публичные http(s) URL`,
         );
       }
+
+      const mustBeInternetReachable =
+        process.env.NODE_ENV === "production" ||
+        process.env.KIE_ENFORCE_PUBLIC_INPUT_URL_HOST === "1";
+      if (mustBeInternetReachable && publicUrls.length > 0) {
+        const badHost = publicUrls.filter((u) => !isUrlPubliclyReachableForKie(u));
+        if (badHost.length > 0) {
+          throw new KiePayloadMappingError(
+            `Для Kie нужны домены с публичной доставкой (не localhost/private): поле «${fieldName}»`,
+          );
+        }
+      }
+
       value = publicUrls;
     } else {
       value = stringList;
     }
+  }
+
+  if (PUBLIC_URL_STRING_FIELDS.has(fieldName) && typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return value;
+    const publicUrls = publicHttpUrlsOnly([trimmed]);
+    if (publicUrls.length !== 1) {
+      throw new KiePayloadMappingError(
+        `Поле «${fieldName}» должно быть одним публичным http(s) URL`,
+      );
+    }
+    const mustBeInternetReachable =
+      process.env.NODE_ENV === "production" ||
+      process.env.KIE_ENFORCE_PUBLIC_INPUT_URL_HOST === "1";
+    if (mustBeInternetReachable && !isUrlPubliclyReachableForKie(publicUrls[0]!)) {
+      throw new KiePayloadMappingError(
+        `Для Kie нужен «${fieldName}» с публично достигаемым хостом (не localhost/private).`,
+      );
+    }
+    value = publicUrls[0];
   }
 
   return value;

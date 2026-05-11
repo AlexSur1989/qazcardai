@@ -37,7 +37,7 @@ The app must be deployable to a VPS.
 
 Do not make the project depend only on Vercel.
 
-Use Docker and Docker Compose for production deployment.
+Use Docker and Compose for production deployment.
 
 The project should include:
 
@@ -59,6 +59,14 @@ Nginx can be used as a reverse proxy.
 Do not hardcode domain names.
 
 Do not hardcode production secrets.
+
+### Ответы пользователю после задач с кодом/деплоем (QazCard AI)
+
+Полное правило: **`AGENTS.md`**, раздел **«Деплой на сервере»** — когда писать короткое «деплой сейчас не нужен», когда дать **`ВНИМАНИЕ`** о срочном выкате, по каким фразам выдавать единый блок **`## СДЕЛАЙ ЭТО НА СЕРВЕРЕ`**, и готовые `bash`-сценарии (frontend / backend+worker / Prisma / Kie seed / образы). Детальный runbook: **`README_DEPLOY.md`**.
+
+### Kie.ai модели (источники правды, verify, изоляция GENERAL / PRODUCT_CARD)
+
+Полная спецификация: **`AGENTS.md`**, раздел **«Kie / модели генерации»** (иерархия docs / Playground / Common API / pricing, запрет «по аналогии», metadata, GPT Image 2, Kling 2.6, uploads, `payloadMapping`, verify, product-card). Краткое правило для автоподхвата в Cursor: `.cursor/rules/kie-ai-models-sources.mdc`.
 
 ## Security
 

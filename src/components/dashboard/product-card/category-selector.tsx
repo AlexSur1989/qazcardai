@@ -51,7 +51,10 @@ export function CategorySelector({
     return (
       <div className="space-y-2">
         <h3 className="text-foreground text-base font-semibold">Категория товара</h3>
-        <p className="text-muted-foreground text-sm">Загрузите фото, чтобы определить категорию.</p>
+        <p className="text-muted-foreground text-sm">
+          После сохранения фото на сервер категория определяется автоматически. При необходимости
+          скорректируйте её вручную.
+        </p>
       </div>
     );
   }
@@ -90,7 +93,8 @@ export function CategorySelector({
           <Alert variant="destructive">
             <AlertTitle>Автоматическая категория</AlertTitle>
             <AlertDescription>
-              Не удалось определить категорию автоматически. Выберите категорию вручную.
+              Не удалось уверенно распознать категорию — по умолчанию выставлено «Прочее». При
+              необходимости выберите другую категорию вручную.
               {classifyInfo.reason?.trim() ? (
                 <span className="mt-2 block text-sm opacity-90">
                   {classifyInfo.reason.trim()}
@@ -130,7 +134,10 @@ export function CategorySelector({
         )}
 
         {classifyFlow === "not_started" && canPersist && !classifyLoading && !classifyInfo && (
-          <p className="text-muted-foreground text-xs">Нажмите кнопку, чтобы проанализировать фото.</p>
+          <p className="text-muted-foreground text-xs">
+            Если категория не появилась после загрузки фото или вы сменили снимки, нажмите кнопку
+            ниже для повторного анализа.
+          </p>
         )}
 
         <div className="flex flex-wrap items-center gap-2">

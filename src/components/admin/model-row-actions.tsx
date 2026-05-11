@@ -9,6 +9,7 @@ import {
   deleteAiModelAction,
   type AiModelActionState,
   toggleAiModelActiveAction,
+  toggleAiModelPublicAction,
 } from "@/server/actions/ai-model";
 import { cn } from "@/lib/utils";
 
@@ -17,12 +18,14 @@ const delInitial: AiModelActionState = null;
 type ModelRowActionsProps = {
   id: string;
   isActive: boolean;
+  isPublic: boolean;
   canDelete: boolean;
 };
 
 export function ModelRowActions({
   id,
   isActive,
+  isPublic,
   canDelete,
 }: ModelRowActionsProps) {
   const [delState, deleteAction] = useActionState(
@@ -50,6 +53,21 @@ export function ModelRowActions({
             )}
           >
             {isActive ? "Выкл" : "Вкл"}
+          </button>
+        </form>
+        <form action={toggleAiModelPublicAction} className="inline">
+          <input type="hidden" name="id" value={id} />
+          <input type="hidden" name="nextPublic" value={String(!isPublic)} />
+          <button
+            type="submit"
+            disabled={!isActive}
+            className={cn(
+              buttonVariants({ size: "xs", variant: isPublic ? "outline" : "secondary" }),
+              !isActive && "pointer-events-none opacity-40",
+            )}
+            title={!isActive ? "Сначала включите модель" : undefined}
+          >
+            {isPublic ? "Скрыть" : "Публично"}
           </button>
         </form>
         <Link

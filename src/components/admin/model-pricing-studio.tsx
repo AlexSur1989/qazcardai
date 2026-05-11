@@ -14,8 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { isRecord, type CalculatedPricingRow, type PerSecondMotionPreviewRow } from "@/lib/model-pricing-shared";
+import { Textarea } from "@/components/ui/textarea";
+import { ADMIN_PRICING_PINNED_KEY } from "@/lib/admin-pricing-pinned";
 import { adminTerm } from "@/lib/admin-terms";
+import {
+  isRecord,
+  type CalculatedPricingRow,
+  type PerSecondMotionPreviewRow,
+} from "@/lib/model-pricing-shared";
 import { cn } from "@/lib/utils";
 
 type StudioModel = {
@@ -29,11 +35,27 @@ type StudioModel = {
   pricingSchema: unknown;
 };
 
+export type FormulaFixedPreviewRow = {
+  label: string;
+  settings?: Record<string, unknown>;
+  credits: number;
+};
+
+type PreviewSummary = {
+  minTokens: number;
+  maxTokens: number;
+  avgMarginPercent: number;
+};
+
 type PreviewResponse = {
-  rows: CalculatedPricingRow[] | PerSecondMotionPreviewRow[];
-  summary: { minTokens: number; maxTokens: number; avgMarginPercent: number };
+  rows:
+    | CalculatedPricingRow[]
+    | PerSecondMotionPreviewRow[]
+    | FormulaFixedPreviewRow[];
+  summary: PreviewSummary;
   pricingSchema?: Record<string, unknown>;
-  previewKind?: "matrix" | "per_second";
+  previewKind?: "matrix" | "per_second" | "formula" | "fixed" | "raw";
+  unsupportedVisualType?: string;
 };
 
 function cloneSchema(v: unknown): Record<string, unknown> {
@@ -62,6 +84,13 @@ export function ModelPricingStudio({ model, canEdit }: Props) {
   const [perSecondRows, setPerSecondRows] = useState<PerSecondMotionPreviewRow[] | null>(
     null,
   );
+  const [simpleRows, setSimpleRows] = useState<FormulaFixedPreviewRow[] | null>(
+    null,
+  );
+  const [rawJsonDraft, setRawJsonDraft] = useState(() =>
+    JSON.stringify(cloneSchema(model.pricingSchema), null, 2),
+  );
+  const [rawJsonError, setRawJsonError] = useState<string | null>(null);
   const [summary, setSummary] = useState<PreviewResponse["summary"] | null>(
     null,
   );
@@ -71,6 +100,41 @@ export function ModelPricingStudio({ model, canEdit }: Props) {
 
   const isMatrix = String(schema.type) === "matrix";
   const isPerSecond = String(schema.type) === "per_second";
+  const isFixed = String(schema.type) === "fixed";
+  const isFormula = String(schema.type) === "formula";
+
+  const knownVisualTypes = ["matrix", "per_second", "fixed", "formula"] as const;
+  const typeStr = String(schema.type ?? "");
+  const selectedPricingTypeOption = (
+    knownVisualTypes as readonly string[]
+  ).includes(typeStr)
+    ? typeStr
+    : "__custom";
+  const isUnknownVisualType =
+    selectedPricingTypeOption === "__custom" && Boolean(typeStr);
+
+  function applyPricingType(next: (typeof knownVisualTypes)[number]): void {
+    setSchema((s) => ({
+      ...s,
+      type: next,
+      ...(next === "fixed"
+        ? {
+            credits:
+              typeof s.credits === "number" ? s.credits : model.costCredits,
+          }
+        : {}),
+      ...(next === "formula"
+        ? {
+            baseCredits:
+              typeof s.baseCredits === "number"
+                ? s.baseCredits
+                : model.costCredits,
+            rules: Array.isArray(s.rules) ? s.rules : [],
+            round: typeof s.round === "string" ? s.round : "ceil",
+          }
+        : {}),
+    }));
+  }
 
   const setGlobal = useCallback(
     (key: string, v: string, parse: (s: string) => unknown) => {
@@ -108,18 +172,30 @@ export function ModelPricingStudio({ model, canEdit }: Props) {
           setError(data.error ?? "Ошибка предпросмотра");
           setRows(null);
           setPerSecondRows(null);
+          setSimpleRows(null);
           setSummary(null);
           return;
         }
         if (data.pricingSchema && isRecord(data.pricingSchema)) {
           setSchema(data.pricingSchema);
         }
-        if (data.previewKind === "per_second") {
+        const kind = data.previewKind;
+        if (kind === "per_second") {
           setPerSecondRows((data.rows ?? []) as PerSecondMotionPreviewRow[]);
           setRows(null);
-        } else {
+          setSimpleRows(null);
+        } else if (kind === "matrix") {
           setRows((data.rows ?? []) as CalculatedPricingRow[]);
           setPerSecondRows(null);
+          setSimpleRows(null);
+        } else if (kind === "formula" || kind === "fixed") {
+          setSimpleRows((data.rows ?? []) as FormulaFixedPreviewRow[]);
+          setRows(null);
+          setPerSecondRows(null);
+        } else {
+          setRows(null);
+          setPerSecondRows(null);
+          setSimpleRows(null);
         }
         setSummary(data.summary ?? null);
         if (!recalculate) {
@@ -137,7 +213,29 @@ export function ModelPricingStudio({ model, canEdit }: Props) {
   );
 
   useEffect(() => {
-    if (!isMatrix && !isPerSecond) return;
+    // Сброс JSON-черновика при смене модели из БД (родитель меняет только model.id между страницами).
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- намеренная синхронизация при смене записи
+    setRawJsonDraft(JSON.stringify(cloneSchema(model.pricingSchema), null, 2));
+    setRawJsonError(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- черновик сбрасываем только при смене model.id (другая запись админки)
+  }, [model.id]);
+
+  function applyPricingJsonDraft(): void {
+    if (!canEdit) return;
+    try {
+      const parsed = JSON.parse(rawJsonDraft) as unknown;
+      if (!isRecord(parsed)) {
+        setRawJsonError("Корень JSON должен быть объектом.");
+        return;
+      }
+      setRawJsonError(null);
+      setSchema(parsed);
+    } catch {
+      setRawJsonError("Невалидный JSON pricingSchema.");
+    }
+  }
+
+  useEffect(() => {
     const ac = new AbortController();
     void (async () => {
       setLoading(true);
@@ -155,18 +253,31 @@ export function ModelPricingStudio({ model, canEdit }: Props) {
           },
         );
         const data = (await r.json().catch(() => ({}))) as PreviewResponse;
-        if (!r.ok || !data.rows) return;
+        if (!r.ok) return;
         if (data.pricingSchema && isRecord(data.pricingSchema)) {
           setSchema(data.pricingSchema);
         }
-        if (data.previewKind === "per_second") {
+        const kind = data.previewKind;
+        if (kind === "per_second") {
           setPerSecondRows(data.rows as PerSecondMotionPreviewRow[]);
           setRows(null);
-        } else {
+          setSimpleRows(null);
+        } else if (kind === "matrix") {
           setRows(data.rows as CalculatedPricingRow[]);
           setPerSecondRows(null);
+          setSimpleRows(null);
+        } else if (kind === "formula" || kind === "fixed") {
+          setSimpleRows(data.rows as FormulaFixedPreviewRow[]);
+          setRows(null);
+          setPerSecondRows(null);
+        } else {
+          setRows(null);
+          setPerSecondRows(null);
+          setSimpleRows(null);
         }
-        setSummary(data.summary ?? null);
+        if (kind !== "raw" && data.summary) {
+          setSummary(data.summary ?? null);
+        }
       } catch {
         /* прервано или сеть */
       } finally {
@@ -186,7 +297,10 @@ export function ModelPricingStudio({ model, canEdit }: Props) {
       const r = await fetch(`/api/admin/models/${model.id}/pricing`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pricingSchema: schema }),
+        body: JSON.stringify({
+          pricingSchema: schema,
+          adminPricingPinned: schema[ADMIN_PRICING_PINNED_KEY] === true,
+        }),
       });
       const data = (await r.json().catch(() => ({}))) as { error?: string };
       if (!r.ok) {
@@ -240,12 +354,23 @@ export function ModelPricingStudio({ model, canEdit }: Props) {
       if (data.pricingSchema && isRecord(data.pricingSchema)) {
         setSchema(data.pricingSchema);
       }
-      if (data.previewKind === "per_second") {
+      const kind = data.previewKind;
+      if (kind === "per_second") {
         setPerSecondRows((data.rows ?? []) as PerSecondMotionPreviewRow[]);
         setRows(null);
-      } else {
+        setSimpleRows(null);
+      } else if (kind === "matrix") {
         setRows((data.rows ?? []) as CalculatedPricingRow[]);
         setPerSecondRows(null);
+        setSimpleRows(null);
+      } else if (kind === "formula" || kind === "fixed") {
+        setSimpleRows((data.rows ?? []) as FormulaFixedPreviewRow[]);
+        setRows(null);
+        setPerSecondRows(null);
+      } else {
+        setRows(null);
+        setPerSecondRows(null);
+        setSimpleRows(null);
       }
       setSummary(data.summary ?? null);
       setMessage("Ручные значения сброены, матрица пересчитана. Сохраните, чтобы применить.");
@@ -323,39 +448,37 @@ export function ModelPricingStudio({ model, canEdit }: Props) {
     [canEdit],
   );
 
+  const formulaRulesFingerprint = JSON.stringify(schema.rules ?? []);
+
   const fmt = (n: number, d = 2) =>
     Number.isFinite(n) ? n.toFixed(d) : "—";
 
   const warnings = useMemo(() => {
-    if (!rows?.length) return [] as string[];
     const w: string[] = [];
-    for (const r of rows) {
-      if (r.marginKzt < 0) {
-        w.push("Маржа отрицательная (есть строки).");
-        break;
+    if (rows?.length) {
+      for (const r of rows) {
+        if (r.marginKzt < 0) {
+          w.push("Маржа отрицательная (есть строки).");
+          break;
+        }
+      }
+      for (const r of rows) {
+        if (r.finalClientTokens === 0) {
+          w.push("Клиентская цена равна 0 (есть строки).");
+          break;
+        }
       }
     }
-    for (const r of rows) {
-      if (r.finalClientTokens === 0) {
-        w.push("Клиентская цена равна 0 (есть строки).");
-        break;
+    if (simpleRows?.length) {
+      for (const r of simpleRows) {
+        if (r.credits < 1) {
+          w.push("В образцах есть строка с < 1 токена.");
+          break;
+        }
       }
     }
     return w;
-  }, [rows]);
-
-  if (!isMatrix && !isPerSecond) {
-    return (
-      <Alert>
-        <AlertTitle>Pricing Studio</AlertTitle>
-        <AlertDescription>
-          Для этой модели <code>pricingSchema.type</code> не <code>matrix</code> и не{" "}
-          <code>per_second</code> — таблицу предпросмотра не показываем. Рабочие цены остаются в{" "}
-          {adminTerm("pricingSchema")} в БД.
-        </AlertDescription>
-      </Alert>
-    );
-  }
+  }, [rows, simpleRows]);
 
   return (
     <div className="space-y-6">
@@ -368,6 +491,219 @@ export function ModelPricingStudio({ model, canEdit }: Props) {
           </AlertDescription>
         </Alert>
       ) : null}
+
+      {isUnknownVisualType ? (
+        <Alert>
+          <AlertTitle>Неизвестный тип pricingSchema</AlertTitle>
+          <AlertDescription>
+            Тип «
+            <code className="text-xs">{typeStr}</code>
+            » пока без отдельного визуального редактора. Используйте полный JSON ниже или
+            смените type в выпадающем списке.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {canEdit ? (
+        <section className="grid gap-3 rounded-lg border p-4 md:grid-cols-2">
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Тип ценообразования</Label>
+              <select
+                className="border-border bg-background h-9 w-full rounded-md border px-2 text-sm"
+                value={selectedPricingTypeOption}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (
+                    v === "matrix" ||
+                    v === "per_second" ||
+                    v === "fixed" ||
+                    v === "formula"
+                  ) {
+                    applyPricingType(v);
+                  }
+                }}
+              >
+                <option value="matrix">matrix</option>
+                <option value="per_second">per_second</option>
+                <option value="fixed">fixed</option>
+                <option value="formula">formula</option>
+              </select>
+            </div>
+            <label className="flex items-start gap-2 text-xs leading-snug">
+              <input
+                type="checkbox"
+                checked={schema[ADMIN_PRICING_PINNED_KEY] === true}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setSchema((prev) => {
+                    const n = { ...prev };
+                    if (on) {
+                      (n as Record<string, unknown>)[ADMIN_PRICING_PINNED_KEY] = true;
+                    } else {
+                      delete (n as Record<string, unknown>)[ADMIN_PRICING_PINNED_KEY];
+                    }
+                    return n;
+                  });
+                }}
+                className="mt-1 size-4"
+              />
+              <span>
+                Закрепить цену, чтобы seed не перезаписал (
+                <code>{ADMIN_PRICING_PINNED_KEY}</code>)
+              </span>
+            </label>
+          </div>
+          {isFixed ? (
+            <div className="space-y-1">
+              <Label className="text-xs">Токены (fixed)</Label>
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                value={
+                  typeof schema.credits === "number" ? String(schema.credits) : ""
+                }
+                onChange={(e) =>
+                  setSchema((prev) => ({
+                    ...prev,
+                    credits: Math.max(1, Math.floor(asNum(e.target.value, 1))),
+                  }))
+                }
+              />
+            </div>
+          ) : null}
+          {isFormula ? (
+            <div className="grid gap-2 sm:grid-cols-3 md:col-span-2">
+              <div className="space-y-1">
+                <Label className="text-xs">baseCredits</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={
+                    typeof schema.baseCredits === "number"
+                      ? String(schema.baseCredits)
+                      : ""
+                  }
+                  onChange={(e) =>
+                    setSchema((prev) => ({
+                      ...prev,
+                      baseCredits: Math.max(
+                        0,
+                        Math.floor(asNum(e.target.value, 0)),
+                      ),
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">minCredits</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={
+                    typeof schema.minCredits === "number"
+                      ? String(schema.minCredits)
+                      : ""
+                  }
+                  onChange={(e) =>
+                    setSchema((prev) => ({
+                      ...prev,
+                      minCredits: Math.max(
+                        0,
+                        Math.floor(asNum(e.target.value, 0)),
+                      ),
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">round</Label>
+                <select
+                  className="border-border bg-background h-9 w-full rounded-md border px-2 text-xs"
+                  value={typeof schema.round === "string" ? schema.round : "ceil"}
+                  onChange={(e) =>
+                    setSchema((prev) => ({
+                      ...prev,
+                      round: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="ceil">ceil</option>
+                  <option value="floor">floor</option>
+                  <option value="round">round</option>
+                </select>
+              </div>
+              <div className="space-y-1 sm:col-span-3">
+                <Label className="text-xs">rules</Label>
+                <Textarea
+                  rows={10}
+                  className="font-mono text-[11px] leading-snug"
+                  spellCheck={false}
+                  defaultValue={JSON.stringify(
+                    Array.isArray(schema.rules) ? schema.rules : [],
+                    null,
+                    2,
+                  )}
+                  key={`${model.id}:rules:${formulaRulesFingerprint}`}
+                  onBlur={(e) => {
+                    try {
+                      const parsed = JSON.parse(e.target.value || "[]") as unknown;
+                      setSchema((prev) => ({
+                        ...prev,
+                        rules: Array.isArray(parsed) ? parsed : [],
+                      }));
+                      setError(null);
+                    } catch {
+                      setError("formula.rules: невалидный JSON");
+                    }
+                  }}
+                />
+                <p className="text-muted-foreground text-[11px]">
+                  Уход с поля применит JSON как <code className="text-[11px]">rules</code>, затем
+                  нажмите «Предпросмотр».
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      <div className="space-y-2 rounded-lg border p-4">
+        <h3 className="text-foreground text-sm font-medium">{adminTerm("pricingSchema")} (полный JSON)</h3>
+        <Textarea
+          rows={8}
+          className="font-mono text-xs"
+          spellCheck={false}
+          value={rawJsonDraft}
+          onChange={(e) => setRawJsonDraft(e.target.value)}
+          readOnly={!canEdit}
+        />
+        {rawJsonError ? (
+          <p className="text-destructive text-xs">{rawJsonError}</p>
+        ) : null}
+        {canEdit ? (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+              onClick={() =>
+                setRawJsonDraft(JSON.stringify(schema, null, 2))
+              }
+            >
+              Подставить из схемы
+            </button>
+            <button
+              type="button"
+              className={cn(buttonVariants({ size: "sm" }))}
+              onClick={() => applyPricingJsonDraft()}
+            >
+              Применить JSON
+            </button>
+          </div>
+        ) : null}
+      </div>
+
       <div className="space-y-3 rounded-lg border p-4">
         <h3 className="text-foreground text-sm font-medium">Пояснения</h3>
         <ul className="text-muted-foreground space-y-2 text-xs leading-relaxed">
@@ -697,6 +1033,32 @@ export function ModelPricingStudio({ model, canEdit }: Props) {
           min tokens: {summary.minTokens}, max: {summary.maxTokens}, ср. маржа %:{" "}
           {summary.avgMarginPercent}
         </p>
+      ) : null}
+
+      {simpleRows && simpleRows.length > 0 ? (
+        <div className="space-y-2">
+          <h3 className="text-foreground text-sm font-medium">Образцы (formula / fixed)</h3>
+          <Table className="min-w-[620px] table-fixed">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Сценарий</TableHead>
+                <TableHead className="text-xs">Токены</TableHead>
+                <TableHead className="text-xs">Настройки (fixture)</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {simpleRows.map((row) => (
+                <TableRow key={row.label}>
+                  <TableCell className="text-xs">{row.label}</TableCell>
+                  <TableCell className="font-mono text-xs font-medium">{row.credits}</TableCell>
+                  <TableCell className="font-mono text-[11px] break-all">
+                    {JSON.stringify(row.settings ?? {})}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       ) : null}
 
       {isMatrix && rows && rows.length > 0 ? (

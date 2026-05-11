@@ -10,6 +10,7 @@ import pg from "pg";
 
 import { KIE_GENERAL_MODEL_SLUG_WHITELIST } from "./lib/kie-general-model-whitelist";
 import { PrismaClient } from "../src/generated/prisma/client";
+import type { Prisma } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -19,6 +20,24 @@ if (!connectionString) {
 const pool = new pg.Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
+
+function mergeLegacyArchiveMetadata(previous: unknown): Prisma.InputJsonValue {
+  const base =
+    typeof previous === "object" && previous !== null && !Array.isArray(previous)
+      ? ({ ...(previous as Record<string, unknown>) } satisfies Record<
+          string,
+          unknown
+        >)
+      : {};
+
+  const next: Record<string, unknown> = {
+    ...base,
+    legacyArchivedAt: new Date().toISOString(),
+    legacyReason:
+      "Rebuilt Kie general model catalog from official Kie docs",
+  };
+  return next as Prisma.InputJsonValue;
+}
 
 async function main() {
   const whitelist = new Set<string>([...KIE_GENERAL_MODEL_SLUG_WHITELIST]);
@@ -32,9 +51,17 @@ async function main() {
   });
 
   for (const row of legacy) {
+    const prev = await prisma.aiModel.findUnique({
+      where: { id: row.id },
+      select: { metadata: true },
+    });
+
     await prisma.aiModel.update({
       where: { id: row.id },
-      data: { isActive: false },
+      data: {
+        isActive: false,
+        metadata: mergeLegacyArchiveMetadata(prev?.metadata),
+      },
     });
     console.log("[archive] deactivated GENERAL:", row.slug);
   }

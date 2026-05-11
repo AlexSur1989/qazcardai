@@ -1,5 +1,6 @@
 
 /** Таймаут HTTP к Kie.ai (генерация и polling). Переопределение: KIE_FETCH_TIMEOUT_MS. */
+import { normalizeGptImage2AspectIfOmittedForKie } from "@/server/kie/general-phase1-models";
 import {
   buildKieMarketPayloadFromMapping,
   defaultKieCallBackUrl,
@@ -631,7 +632,7 @@ function normalizeKieKlingMode(raw: unknown): "std" | "pro" | "4K" {
 
 function isWanMarketFamilyModelId(modelId: string): boolean {
   const t = modelId.toLowerCase();
-  return t.startsWith("wan/2-7-") || t.startsWith("wan/2-6-");
+  return t.startsWith("wan/2-6-");
 }
 
 const BYTEDANCE_SEEDANCE_2_API_ID = "bytedance/seedance-2";
@@ -646,142 +647,6 @@ function isBytedanceSeedance2FamilyModelId(modelId: string): boolean {
     t === BYTEDANCE_SEEDANCE_2_FAST_API_ID ||
     t === BYTEDANCE_SEEDANCE_1_5_PRO_API_ID
   );
-}
-
-/** Kie Market: happyhorse/text-to-video, …/image-to-video, …/reference-to-video, …/video-edit */
-function isHappyHorseFamilyModelId(modelId: string): boolean {
-  return modelId.toLowerCase().startsWith("happyhorse/");
-}
-
-const HAPPY_HORSE_SCENARIO_TO_MODEL: Record<string, string> = {
-  "text-to-video": "happyhorse/text-to-video",
-  "image-to-video": "happyhorse/image-to-video",
-  "reference-to-video": "happyhorse/reference-to-video",
-  "video-edit": "happyhorse/video-edit",
-};
-
-function happyHorseMarketModelId(settings: Record<string, unknown>): string {
-  const raw = settings.scenario;
-  const s =
-    typeof raw === "string" && raw.trim() !== "" ? raw.trim() : "text-to-video";
-  return HAPPY_HORSE_SCENARIO_TO_MODEL[s] ?? "happyhorse/text-to-video";
-}
-
-/**
- * Happy Horse 1.0 — разные `model` в createTask по полю settings.scenario.
- * @see https://docs.kie.ai/market/happyhorse/
- */
-function buildHappyHorseMarketCreateTaskPayload(
-  prompt: string,
-  _modelId: string,
-  settings: Record<string, unknown>,
-): JsonRecord {
-  const base = getAppUrlForKieCallback();
-  const marketModel = happyHorseMarketModelId(settings);
-
-  const resolutionRaw =
-    typeof settings.resolution === "string" && settings.resolution.trim() !== ""
-      ? settings.resolution.trim().toLowerCase()
-      : "1080p";
-  const resolution = resolutionRaw === "720p" ? "720p" : "1080p";
-
-  const seedRaw = settings.seed;
-  let seed: number | undefined;
-  if (seedRaw != null && String(seedRaw).trim() !== "") {
-    const s = Number(seedRaw);
-    if (Number.isFinite(s)) seed = Math.floor(s);
-  }
-
-  const durationNum = Number(settings.duration);
-  const duration =
-    Number.isFinite(durationNum) && durationNum > 0
-      ? Math.min(15, Math.max(3, Math.floor(durationNum)))
-      : 5;
-
-  const input: JsonRecord = {};
-
-  if (marketModel === "happyhorse/text-to-video") {
-    const aspect =
-      typeof settings.aspectRatio === "string" &&
-      settings.aspectRatio.trim() !== ""
-        ? settings.aspectRatio.trim()
-        : "16:9";
-    input.prompt = prompt.trim();
-    input.resolution = resolution;
-    input.aspect_ratio = aspect;
-    input.duration = duration;
-    if (seed !== undefined) input.seed = seed;
-  } else if (marketModel === "happyhorse/image-to-video") {
-    const imageUrls = Array.isArray(settings.imageUrls)
-      ? settings.imageUrls
-          .filter((x): x is string => typeof x === "string" && x.trim() !== "")
-          .map((s) => s.trim())
-          .slice(0, 1)
-      : [];
-    const p = prompt.trim();
-    if (p) input.prompt = p;
-    if (imageUrls.length > 0) {
-      input.image_urls = imageUrls;
-    }
-    input.resolution = resolution;
-    input.duration = duration;
-    if (seed !== undefined) input.seed = seed;
-  } else if (marketModel === "happyhorse/reference-to-video") {
-    const refs = Array.isArray(settings.referenceImageUrls)
-      ? settings.referenceImageUrls
-          .filter((x): x is string => typeof x === "string" && x.trim() !== "")
-          .map((s) => s.trim())
-          .slice(0, 9)
-      : [];
-    const aspect =
-      typeof settings.aspectRatio === "string" &&
-      settings.aspectRatio.trim() !== ""
-        ? settings.aspectRatio.trim()
-        : "16:9";
-    input.prompt = prompt.trim();
-    if (refs.length > 0) {
-      input.reference_image = refs;
-    }
-    input.resolution = resolution;
-    input.aspect_ratio = aspect;
-    input.duration = duration;
-    if (seed !== undefined) input.seed = seed;
-  } else if (marketModel === "happyhorse/video-edit") {
-    const vu = Array.isArray(settings.videoUrls)
-      ? settings.videoUrls
-          .filter((x): x is string => typeof x === "string" && x.trim() !== "")
-          .map((s) => s.trim())
-          .slice(0, 1)
-      : [];
-    const editRefs = Array.isArray(settings.editReferenceImageUrls)
-      ? settings.editReferenceImageUrls
-          .filter((x): x is string => typeof x === "string" && x.trim() !== "")
-          .map((s) => s.trim())
-          .slice(0, 5)
-      : [];
-    input.prompt = prompt.trim();
-    if (vu[0]) {
-      input.video_url = vu[0];
-    }
-    if (editRefs.length > 0) {
-      input.reference_image = editRefs;
-    }
-    input.resolution = resolution;
-    const audio =
-      typeof settings.audioSetting === "string" &&
-      settings.audioSetting.trim() !== ""
-        ? settings.audioSetting.trim().toLowerCase()
-        : "auto";
-    input.audio_setting = audio === "origin" ? "origin" : "auto";
-    if (seed !== undefined) input.seed = seed;
-  }
-
-  const cleaned = stripKieSeedanceInput(input);
-  return stripUndefinedDeep({
-    model: marketModel,
-    callBackUrl: `${base}/api/webhooks/kie`,
-    input: cleaned,
-  }) as JsonRecord;
 }
 
 function stripKieWan27InputFields(input: JsonRecord): JsonRecord {
@@ -1518,10 +1383,14 @@ export function buildKieMarketCreateTaskPayload(
 ): JsonRecord {
   const modelId = assertKieModelIdSet(model.apiModelId);
   if (isStrictKiePayloadMapping(model.payloadMapping)) {
+    const normalized = normalizeGptImage2AspectIfOmittedForKie(
+      modelId,
+      settings,
+    );
     return buildKieMarketPayloadFromMapping(model.payloadMapping, {
       model: { apiModelId: modelId },
       prompt: prompt.trim(),
-      settings,
+      settings: normalized,
       inputFiles,
       callBackUrl: defaultKieCallBackUrl(),
     });
@@ -1531,9 +1400,6 @@ export function buildKieMarketCreateTaskPayload(
   }
   if (isBytedanceSeedance2FamilyModelId(modelId)) {
     return buildSeedance2MarketCreateTaskPayload(prompt, modelId, settings);
-  }
-  if (isHappyHorseFamilyModelId(modelId)) {
-    return buildHappyHorseMarketCreateTaskPayload(prompt, modelId, settings);
   }
   if (modelId === KLING_30_MOTION_CONTROL_API_ID) {
     return buildKlingMotionControlMarketCreateTaskPayload(

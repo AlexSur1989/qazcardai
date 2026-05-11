@@ -16,5 +16,5 @@ export const adminModelTestBodySchema = z.object({
 export type AdminModelTestBody = z.infer<typeof adminModelTestBodySchema>;
 
 export async function loadAiModelForAdminTest(modelId: string) {
-  return prisma.aiModel.findUnique({ where: { id: modelId } });
+  return prisma.aiModel.findFirst({ where: { id: modelId, isActive: true } });
 }

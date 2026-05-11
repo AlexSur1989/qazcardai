@@ -466,7 +466,7 @@ export function useProductCardProject() {
           return d.selectedCategory as ProductCategoryId;
         }
         if (d.classifierFailed) {
-          return prev;
+          return (prev ?? "other") as ProductCategoryId;
         }
         return (d.detectedCategory ?? d.category ?? "other") as ProductCategoryId;
       });

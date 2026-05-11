@@ -5,6 +5,7 @@
 import type { AiModel } from "@/generated/prisma/client";
 import { isAdminPricingPinned } from "@/lib/admin-pricing-pinned";
 import { isRecord } from "@/lib/model-pricing-shared";
+import { evaluateFormulaCredits } from "@/server/services/formulaPricing";
 import {
   getFinalCreditsFromPricingSchema,
   manualPricingMatrixCell,
@@ -19,7 +20,9 @@ export type PriceBreakdownPriceSource =
   | "matrix"
   | "manual_override"
   | "fallback"
-  | "legacy_model_cost";
+  | "legacy_model_cost"
+  | "formula"
+  | "fixed";
 
 export type PriceBreakdownV2General = {
   v: 2;
@@ -43,6 +46,8 @@ export type PriceBreakdownV2General = {
   pricingSchemaType: string | null;
   matrixKeyStrategy: string | null;
   settingsSnapshot: Record<string, unknown>;
+  /** Детальный снимок формулы или fixed для metadata / отладки. */
+  formulaPricingDetail?: Record<string, unknown> | null;
 };
 
 function num(v: unknown, d: number): number {
@@ -138,12 +143,47 @@ export function buildGeneralPriceBreakdownV2(
       pricingSchemaType,
       matrixKeyStrategy,
       settingsSnapshot: { ...settings },
+      formulaPricingDetail: null,
     };
   }
 
   const typ = String(schema.type ?? "");
 
-  if (typ === "per_second") {
+  let formulaPricingDetail: Record<string, unknown> | null = null;
+  if (typ === "fixed" && typeof schema.credits === "number") {
+    formulaPricingDetail = {
+      type: "fixed",
+      credits: Math.max(0, Math.floor(schema.credits as number)),
+    };
+    priceSource = pinnedFlag ? "admin" : "fixed";
+    formula = `fixed: ${String(schema.credits)} → ${tokens}`;
+  } else if (typ === "formula") {
+    const ev = evaluateFormulaCredits(schema, settings);
+    const baseCredits =
+      typeof schema.baseCredits === "number"
+        ? Math.floor(schema.baseCredits as number)
+        : undefined;
+    formulaPricingDetail = {
+      type: "formula",
+      baseCredits,
+      appliedRules: ev.error
+        ? []
+        : ev.appliedRules.map((r) => ({
+            field: r.field,
+            operator: r.operator,
+            value: r.value,
+            effect: r.effect,
+            amount: r.amount,
+          })),
+      finalCredits: tokens,
+      ...(ev.error ? { evaluationError: ev.error } : {}),
+    };
+    priceSource =
+      pinnedFlag ? "admin" : ev.error ? "fallback" : "formula";
+    formula = ev.error
+      ? `formula (ошибка: ${ev.error}) → fallback ${tokens}`
+      : `formula(base=${String(baseCredits ?? "")}) → ${tokens}`;
+  } else if (typ === "per_second") {
     const vd = settings.videoDurationSeconds;
     const sec =
       typeof vd === "number" && Number.isFinite(vd) && vd > 0 ? Math.ceil(vd) : 1;
@@ -271,6 +311,7 @@ export function buildGeneralPriceBreakdownV2(
     pricingSchemaType,
     matrixKeyStrategy,
     settingsSnapshot: { ...settings },
+    formulaPricingDetail,
   };
 }
 

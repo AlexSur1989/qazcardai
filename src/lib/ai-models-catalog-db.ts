@@ -7,6 +7,7 @@ export function prismaWhereForDashboardModelsCatalog(): Prisma.AiModelWhereInput
   return {
     scope: "GENERAL",
     isActive: true,
+    isPublic: true,
     productCardModelType: null,
   };
 }

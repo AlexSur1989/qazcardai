@@ -65,10 +65,14 @@ function toCreateInput(
     productCardModelType: d.productCardModelType,
     apiModelId: d.apiModelId,
     endpoint: d.endpoint,
+    statusEndpoint: d.statusEndpoint,
     costCredits: d.costCredits,
     realCost: d.realCost,
     isActive: d.isActive,
+    isPublic: d.isPublic,
     settingsSchema: jsonIn(d.settingsSchema),
+    payloadMapping: jsonIn(d.payloadMapping),
+    metadata: jsonIn(d.metadata),
     description: d.description,
     supportsImageInput: d.supportsImageInput,
     supportsVideoInput: d.supportsVideoInput,
@@ -92,10 +96,14 @@ function toUpdateInput(
     productCardModelType: d.productCardModelType,
     apiModelId: d.apiModelId,
     endpoint: d.endpoint,
+    statusEndpoint: d.statusEndpoint,
     costCredits: d.costCredits,
     realCost: d.realCost,
     isActive: d.isActive,
+    isPublic: d.isPublic,
     settingsSchema: jsonIn(d.settingsSchema),
+    payloadMapping: jsonIn(d.payloadMapping),
+    metadata: jsonIn(d.metadata),
     description: d.description,
     supportsImageInput: d.supportsImageInput,
     supportsVideoInput: d.supportsVideoInput,
@@ -117,10 +125,14 @@ function modelSnapshot(
     productCardModelType: string | null;
     apiModelId: string;
     endpoint: string | null;
+    statusEndpoint?: string | null;
+    payloadMapping?: unknown;
     costCredits: number;
     realCost: unknown;
     isActive: boolean;
+    isPublic?: boolean | null;
     settingsSchema: unknown;
+    metadata?: unknown;
     description: string | null;
     supportsImageInput: boolean;
     supportsVideoInput: boolean;
@@ -140,13 +152,17 @@ function modelSnapshot(
     productCardModelType: m.productCardModelType,
     apiModelId: m.apiModelId,
     endpoint: m.endpoint,
+    statusEndpoint: m.statusEndpoint ?? null,
     costCredits: m.costCredits,
     realCost:
       m.realCost != null && typeof m.realCost === "object" && "toString" in m.realCost
         ? (m.realCost as { toString: () => string }).toString()
         : m.realCost,
     isActive: m.isActive,
+    isPublic: m.isPublic === true,
+    payloadMapping: m.payloadMapping,
     settingsSchema: m.settingsSchema,
+    metadata: m.metadata,
     description: m.description,
     supportsImageInput: m.supportsImageInput,
     supportsVideoInput: m.supportsVideoInput,
@@ -156,6 +172,27 @@ function modelSnapshot(
     availableAspectRatios: m.availableAspectRatios,
     availableResolutions: m.availableResolutions,
   };
+}
+
+function metadataWithPublicReady(
+  metadata: unknown,
+  isPublic: boolean,
+): Prisma.InputJsonValue {
+  const base =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? { ...(metadata as Record<string, unknown>) }
+      : {};
+  base.publicReady = isPublic;
+  return base as Prisma.InputJsonValue;
+}
+
+function revalidateModelVisibilityPaths(id?: string): void {
+  revalidatePath("/admin/models");
+  revalidatePath("/dashboard/models");
+  revalidatePath("/dashboard/create/image");
+  revalidatePath("/dashboard/create/video");
+  revalidatePath("/admin/pricing");
+  if (id) revalidatePath(`/admin/models/${id}/edit`);
 }
 
 export async function createAiModelAction(
@@ -284,9 +321,7 @@ export async function updateAiModelAction(
     console.error(e);
     return { error: "Не удалось сохранить" };
   }
-  revalidatePath("/admin/models");
-  revalidatePath("/admin/pricing");
-  revalidatePath(`/admin/models/${id}/edit`);
+  revalidateModelVisibilityPaths(id);
   return null;
 }
 
@@ -331,8 +366,7 @@ export async function toggleAiModelActiveAction(formData: FormData): Promise<voi
   const { userId } = await getAdminContext();
   const rateErr = await getAdminRateLimitError(userId);
   if (rateErr) {
-    revalidatePath("/admin/models");
-    revalidatePath("/admin/pricing");
+    revalidateModelVisibilityPaths();
     return;
   }
   const id = String(formData.get("id") ?? "");
@@ -345,8 +379,7 @@ export async function toggleAiModelActiveAction(formData: FormData): Promise<voi
     return;
   }
   if (existing.isActive === next) {
-    revalidatePath("/admin/models");
-    revalidatePath("/admin/pricing");
+    revalidateModelVisibilityPaths();
     return;
   }
   const oldSnapshot = modelSnapshot(existing);
@@ -362,6 +395,39 @@ export async function toggleAiModelActiveAction(formData: FormData): Promise<voi
     oldValue: { isActive: oldSnapshot.isActive },
     newValue: { isActive: updated.isActive },
   });
-  revalidatePath("/admin/models");
-  revalidatePath("/admin/pricing");
+  revalidateModelVisibilityPaths();
+}
+
+export async function toggleAiModelPublicAction(formData: FormData): Promise<void> {
+  const { userId } = await getAdminContext();
+  const rateErr = await getAdminRateLimitError(userId);
+  if (rateErr) {
+    revalidateModelVisibilityPaths();
+    return;
+  }
+  const id = String(formData.get("id") ?? "");
+  const next = String(formData.get("nextPublic") ?? "") === "true";
+  if (!id) return;
+  const existing = await prisma.aiModel.findUnique({ where: { id } });
+  if (!existing) return;
+  if (existing.isPublic === next) {
+    revalidateModelVisibilityPaths();
+    return;
+  }
+  const updated = await prisma.aiModel.update({
+    where: { id },
+    data: {
+      isPublic: next,
+      metadata: metadataWithPublicReady(existing.metadata, next),
+    },
+  });
+  await writeAdminAuditLog({
+    adminUserId: userId,
+    action: next ? "model_public_enabled" : "model_public_disabled",
+    targetType: "AiModel",
+    targetId: id,
+    oldValue: { isPublic: existing.isPublic },
+    newValue: { isPublic: updated.isPublic },
+  });
+  revalidateModelVisibilityPaths();
 }

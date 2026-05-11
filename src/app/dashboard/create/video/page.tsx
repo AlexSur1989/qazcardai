@@ -15,6 +15,7 @@ import { CreateFormSkeleton } from "@/components/dashboard/create-form-skeleton"
 import { getBalance } from "@/server/services/credits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { prisma } from "@/lib/prisma";
+import { isAiModelVisibleInUserCatalog } from "@/lib/ai-model-public-catalog";
 import { getCreditsUiFloor } from "@/server/services/pricing";
 
 export const metadata = {
@@ -40,7 +41,7 @@ export default async function CreateVideoPage({ searchParams }: PageProps) {
 
   const [rows, balanceCredits] = await Promise.all([
     prisma.aiModel.findMany({
-      where: { isActive: true, type: "VIDEO", scope: "GENERAL", productCardModelType: null },
+      where: { isActive: true, isPublic: true, type: "VIDEO", scope: "GENERAL", productCardModelType: null },
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -55,12 +56,23 @@ export default async function CreateVideoPage({ searchParams }: PageProps) {
         supportsVideoInput: true,
         supportsSeed: true,
         maxDuration: true,
+        isPublic: true,
+        metadata: true,
       },
     }),
     getBalance(current.user.id),
   ]);
 
-  const models = rows.map((m) => {
+  const models = rows
+    .filter((m) =>
+      isAiModelVisibleInUserCatalog({
+        slug: m.slug,
+        isActive: true,
+        isPublic: m.isPublic,
+        metadata: m.metadata,
+      }),
+    )
+    .map((m) => {
     const { pricingSchema: _p, ...rest } = m;
     return {
       ...rest,

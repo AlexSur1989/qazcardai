@@ -51,6 +51,20 @@ export function getCreditsUiFloor(
     return base;
   }
   const t = String(raw.type ?? "");
+  if (t === "fixed" && typeof raw.credits === "number" && Number.isFinite(raw.credits)) {
+    return Math.max(0, Math.floor(raw.credits));
+  }
+  if (t === "formula") {
+    const b =
+      typeof raw.baseCredits === "number" && Number.isFinite(raw.baseCredits)
+        ? Math.max(0, Math.floor(raw.baseCredits))
+        : base;
+    const mc =
+      typeof raw.minCredits === "number" && Number.isFinite(raw.minCredits)
+        ? Math.max(0, Math.floor(raw.minCredits))
+        : null;
+    return Math.max(base, b, mc ?? b);
+  }
   if (t === "per_second") {
     const preview = buildPerSecondMotionControlPreview(raw);
     const m = preview.summary.minTokens;

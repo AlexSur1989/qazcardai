@@ -193,12 +193,16 @@ model AiModel {
   costCredits            Int
   realCost               Decimal?          @db.Decimal(12, 4)
   isActive               Boolean           @default(true)
+  /// Публичная доступность GENERAL-модели для пользователей. false = доступна только в админке/тестах.
+  isPublic               Boolean           @default(false)
   /// JSON Schema или иной JSON с описанием полей модели для админки/UI
   settingsSchema         Json?
   /// Правила динамической цены (matrix и т.д.)
   pricingSchema          Json?
   /// Соответствие полей настроек телу запроса провайдера (например Kie Market createTask)
   payloadMapping         Json?
+  /// Связанные с Kie и документацией метаданные (не для расчёта цены по matrix).
+  metadata               Json?
   /// Относительный путь или URL для polling статуса задачи (recordInfo)
   statusEndpoint         String?
   description            String?
@@ -217,6 +221,7 @@ model AiModel {
 
   @@index([provider, isActive])
   @@index([type, isActive])
+  @@index([scope, type, isActive, isPublic])
   @@index([scope, type, isActive])
   @@index([scope, productCardModelType, isActive])
   @@map("ai_models")

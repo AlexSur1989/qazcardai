@@ -7,6 +7,7 @@ import {
   type GenerationTaskId,
   TASK_LABELS_RU,
 } from "@/config/generation-models";
+import { isAiModelVisibleInUserCatalog } from "@/lib/ai-model-public-catalog";
 
 export type AiModelCatalogRow = {
   id: string;
@@ -22,8 +23,11 @@ export type AiModelCatalogRow = {
   creditsUiMin?: number;
   description: string | null;
   isActive: boolean;
+  isPublic?: boolean | null;
   supportsImageInput: boolean;
   supportsVideoInput: boolean;
+  /** JSON metadata AiModel — для gated публичности (HappyHorse Video Edit и т.д.) */
+  metadata?: unknown | null;
 };
 
 export type MergedCatalogModelCard = {
@@ -35,6 +39,7 @@ export type MergedCatalogModelCard = {
   category: GenerationModelCategory;
   costCreditsMin: number | null;
   dbSlug: string | null;
+  dbSlugCandidates: string[];
   isActiveInDb: boolean;
   hasDbMatch: boolean;
   openHref: string;
@@ -173,7 +178,13 @@ export function mergeGenerationCatalog(params: {
       let floor: number | null = null;
       for (const s of def.familyDbSlugCandidates) {
         const r = bySlug.get(s);
-        if (!r?.isActive) continue;
+        if (!r?.isActive || !isAiModelVisibleInUserCatalog({
+          slug: r.slug,
+          isActive: r.isActive,
+          isPublic: r.isPublic,
+          metadata: r.metadata ?? null,
+        }))
+          continue;
         const c = r.creditsUiMin ?? r.costCredits;
         if (floor == null || c < floor) floor = c;
       }
@@ -185,11 +196,28 @@ export function mergeGenerationCatalog(params: {
       hasDbMatch = def.familyDbSlugCandidates.some((s) => bySlug.has(s));
     }
 
-    let isActiveInDb = row?.isActive ?? false;
+    let isActiveInDb =
+      row != null &&
+      isAiModelVisibleInUserCatalog({
+        slug: row.slug,
+        isActive: row.isActive,
+        isPublic: row.isPublic,
+        metadata: row.metadata ?? null,
+      });
     if (multiVariantFamily && def.familyDbSlugCandidates) {
-      isActiveInDb = def.familyDbSlugCandidates.some(
-        (s) => bySlug.get(s)?.isActive === true,
-      );
+      isActiveInDb = def.familyDbSlugCandidates.some((s) => {
+        const r = bySlug.get(s);
+        return !!(
+          r &&
+          r.isActive &&
+          isAiModelVisibleInUserCatalog({
+            slug: r.slug,
+            isActive: r.isActive,
+            isPublic: r.isPublic,
+            metadata: r.metadata ?? null,
+          })
+        );
+      });
     }
 
     let status: MergedCatalogModelCard["status"] = "coming_soon";
@@ -223,6 +251,7 @@ export function mergeGenerationCatalog(params: {
       category: def.category,
       costCreditsMin: costCreditsMinEffective,
       dbSlug: matchedSlug,
+      dbSlugCandidates: [...def.dbSlugCandidates],
       hasDbMatch,
       isActiveInDb,
       openHref: resolveOpenHref(def, row, String(urlSlugEffective)),
@@ -245,6 +274,15 @@ export function mergeGenerationCatalog(params: {
     ) {
       continue;
     }
+    if (
+      !isAiModelVisibleInUserCatalog({
+        slug: row.slug,
+        isActive: row.isActive,
+        isPublic: row.isPublic,
+        metadata: row.metadata ?? null,
+      })
+    )
+      continue;
     const tasks = inferTasksFromDbModel(row);
     const openHref =
       row.type === "IMAGE"
@@ -260,8 +298,16 @@ export function mergeGenerationCatalog(params: {
       category: row.type === "IMAGE" ? "image" : "video",
       costCreditsMin: row.creditsUiMin ?? row.costCredits,
       dbSlug: row.slug,
+      dbSlugCandidates: [row.slug],
       hasDbMatch: true,
-      isActiveInDb: row.isActive,
+      isActiveInDb:
+        row.isActive &&
+        isAiModelVisibleInUserCatalog({
+          slug: row.slug,
+          isActive: row.isActive,
+          isPublic: row.isPublic,
+          metadata: row.metadata ?? null,
+        }),
       openHref,
       detailHref: resolveDetailHref(row.slug),
       status: row.isActive ? "active" : "disabled",
@@ -286,7 +332,12 @@ export function mergeGenerationCatalog(params: {
 export function visibleInModelsCatalog(
   merged: MergedCatalogModelCard[],
 ): MergedCatalogModelCard[] {
-  return merged.filter((m) => !m.hideFromModelsCatalog);
+  return merged.filter((m) => {
+    if (m.hideFromModelsCatalog) return false;
+    if (m.dbSlugCandidates.length > 0 && !m.hasDbMatch) return false;
+    if (m.hasDbMatch && !m.isActiveInDb) return false;
+    return true;
+  });
 }
 
 const CATEGORY_ORDER: Record<GenerationModelCategory, number> = {

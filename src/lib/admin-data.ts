@@ -195,6 +195,7 @@ export async function getAdminModelsList() {
         productCardModelType: true,
         provider: true,
         isActive: true,
+        isPublic: true,
         costCredits: true,
         createdAt: true,
         _count: { select: { generations: true } },

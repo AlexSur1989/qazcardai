@@ -84,6 +84,7 @@ export async function POST(req: Request) {
     where: {
       id: body.modelId,
       isActive: true,
+      isPublic: true,
       type: "IMAGE",
       scope: "GENERAL",
       productCardModelType: null,

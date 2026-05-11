@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 
 import { getProductCategoryById } from "@/config/product-card-categories";
-import { prisma } from "@/lib/prisma";
 import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { classifyProductImage } from "@/server/services/productClassifier";
+import { persistProductCardClassification } from "@/server/services/productCardClassificationPersist";
 import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 import { normalizeProductSourceImages } from "@/server/services/productCardProjects";
 import { enforceProductClassifyRateLimit } from "@/server/services/rateLimitService";
@@ -46,54 +46,13 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
-  const wasManual = project.categorySource === "manual";
-  const prevSelected = project.selectedCategory;
-  const prevCategorySource = project.categorySource;
-
   const result = await classifyProductImage(url);
 
-  const nextSource: "ai" | "mock" =
-    result.provider === "mock" ? "mock" : "ai";
-  const failed = result.classifierFailed === true;
-  const keepUserSelection = failed && !wasManual;
-
-  const categorySourceAfter: "ai" | "manual" | "mock" = wasManual
-    ? "manual"
-    : keepUserSelection
-      ? prevCategorySource === "mock" || prevCategorySource === "ai"
-        ? prevCategorySource
-        : "ai"
-      : nextSource;
-
-  const data = {
-    detectedCategory: result.category,
-    classificationConfidence: result.confidence,
-    classificationReason: result.reason,
-    selectedCategory: wasManual
-      ? project.selectedCategory
-      : keepUserSelection
-        ? prevSelected
-        : (result.category as string),
-    categorySource: categorySourceAfter,
-  };
-
-  const updated = await prisma.productCardProject.update({
-    where: { id: project.id },
-    data: {
-      detectedCategory: data.detectedCategory,
-      classificationConfidence: data.classificationConfidence,
-      classificationReason: data.classificationReason,
-      selectedCategory: data.selectedCategory,
-      categorySource: data.categorySource,
-      metadata: {
-        ...((project.metadata as Record<string, unknown> | null) ?? {}),
-        classificationSourceImagesCount: sourceImages.length,
-        classificationProvider: result.provider,
-        classificationModel: result.model,
-        classificationRunFailed: failed,
-      },
-    },
-  });
+  const updated = await persistProductCardClassification(
+    project,
+    result,
+    sourceImages,
+  );
 
   const label =
     getProductCategoryById(result.category)?.label ??

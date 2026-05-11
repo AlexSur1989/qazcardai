@@ -8,6 +8,7 @@ import {
 } from "@/lib/request-body-limits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { updateProductSourceImages } from "@/server/services/productCardProjects";
+import { tryAutoClassifyProductProject } from "@/server/services/productCardClassificationPersist";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 
 const sourceImageSchema = z.object({
@@ -60,7 +61,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
       projectId,
       images: parsed.data.images,
     });
-    return NextResponse.json({ project });
+    const withCategory = await tryAutoClassifyProductProject(userId, project);
+    return NextResponse.json({ project: withCategory });
   } catch (e) {
     const err = e as Error & { code?: string };
     if (

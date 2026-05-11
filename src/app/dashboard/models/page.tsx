@@ -62,8 +62,10 @@ export default async function DashboardModelsPage({ searchParams }: Props) {
         pricingSchema: true,
         description: true,
         isActive: true,
+        isPublic: true,
         supportsImageInput: true,
         supportsVideoInput: true,
+        metadata: true,
       },
     }),
     prisma.aiModel.aggregate({

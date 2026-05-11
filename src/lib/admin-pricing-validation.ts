@@ -172,6 +172,98 @@ function validateProductCardMatrixSchema(
   return { ok: true, pricingSchema: input };
 }
 
+function validateFixedSchema(
+  input: Record<string, unknown>,
+): { ok: true; pricingSchema: Record<string, unknown> } | { ok: false; error: string } {
+  const c = input.credits;
+  if (typeof c !== "number" || !Number.isFinite(c) || !Number.isInteger(c) || c < 1) {
+    return {
+      ok: false,
+      error: "fixed: credits — целое число ≥ 1",
+    };
+  }
+  return { ok: true, pricingSchema: input };
+}
+
+function validateFormulaPricingSchema(
+  input: Record<string, unknown>,
+): { ok: true; pricingSchema: Record<string, unknown> } | { ok: false; error: string } {
+  const b = input.baseCredits;
+  if (typeof b !== "number" || !Number.isFinite(b) || b < 0) {
+    return { ok: false, error: "formula.baseCredits — число ≥ 0" };
+  }
+  const rules = input.rules;
+  if (!Array.isArray(rules)) {
+    return { ok: false, error: "formula.rules — массив" };
+  }
+  for (const ru of rules) {
+    if (!isRecord(ru)) {
+      return { ok: false, error: "каждое правило formula.rules — объект" };
+    }
+    if (!isRecord(ru.when)) {
+      return { ok: false, error: "правило: обязателен when" };
+    }
+    const w = ru.when;
+    if (typeof w.field !== "string" || w.field.trim() === "") {
+      return { ok: false, error: "when.field — непустая строка" };
+    }
+    const hasCond =
+      "equals" in w ||
+      "in" in w ||
+      w.exists === true ||
+      "min" in w ||
+      "max" in w;
+    if (!hasCond) {
+      return {
+        ok: false,
+        error: `when для поля "${w.field}": нужно equals | in | exists | min | max`,
+      };
+    }
+    if ("min" in w && typeof w.min !== "number") {
+      return { ok: false, error: "when.min — число" };
+    }
+    if ("max" in w && typeof w.max !== "number") {
+      return { ok: false, error: "when.max — число" };
+    }
+    const hasFx =
+      (typeof ru.multiply === "number" && Number.isFinite(ru.multiply)) ||
+      (typeof ru.addCredits === "number" && Number.isFinite(ru.addCredits)) ||
+      (typeof ru.setCredits === "number" && Number.isFinite(ru.setCredits)) ||
+      (typeof ru.action === "string" &&
+        typeof ru.amount === "number" &&
+        Number.isFinite(ru.amount) &&
+        (ru.action === "multiply" ||
+          ru.action === "addCredits" ||
+          ru.action === "setCredits"));
+    if (!hasFx) {
+      return {
+        ok: false,
+        error: `правило для "${w.field}": multiply | addCredits | setCredits или action+amount`,
+      };
+    }
+  }
+  const r = input.round;
+  if (
+    r !== undefined &&
+    r !== "ceil" &&
+    r !== "floor" &&
+    r !== "round"
+  ) {
+    return {
+      ok: false,
+      error: "formula.round — одно из: ceil | floor | round",
+    };
+  }
+  const mc = input.minCredits;
+  if (
+    mc !== undefined &&
+    (typeof mc !== "number" || !Number.isFinite(mc) || mc < 0)
+  ) {
+    return { ok: false, error: "formula.minCredits — число ≥ 0" };
+  }
+  return { ok: true, pricingSchema: input };
+}
+
 export function validateAdminPricingSchema(
   input: unknown,
 ): { ok: true; pricingSchema: Record<string, unknown> } | { ok: false; error: string } {
@@ -183,6 +275,12 @@ export function validateAdminPricingSchema(
   }
   if (String(input.type) === "product_card_matrix") {
     return validateProductCardMatrixSchema(input);
+  }
+  if (String(input.type) === "fixed") {
+    return validateFixedSchema(input);
+  }
+  if (String(input.type) === "formula") {
+    return validateFormulaPricingSchema(input);
   }
   if (String(input.type) !== "matrix") {
     return { ok: true, pricingSchema: input };

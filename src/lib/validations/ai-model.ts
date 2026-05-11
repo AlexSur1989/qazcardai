@@ -47,6 +47,14 @@ const coreSchema = z.object({
     },
     z.union([z.string().max(2048), z.null()]),
   ),
+  statusEndpoint: z.preprocess(
+    (v) => {
+      if (v === undefined || v === null) return null;
+      const s = String(v).trim();
+      return s.length === 0 ? null : s.slice(0, 2048);
+    },
+    z.union([z.string().max(2048), z.null()]),
+  ),
   costCredits: z.coerce.number().int().min(0, "Стоимость в кредитах ≥ 0"),
   realCost: z
     .union([z.string(), z.number(), z.null(), z.undefined()])
@@ -65,6 +73,7 @@ const coreSchema = z.object({
         .nullable(),
     ),
   isActive: z.boolean(),
+  isPublic: z.boolean(),
   description: z
     .string()
     .optional()
@@ -115,7 +124,9 @@ export type AiModelFormResult =
   | { ok: false; message: string; fieldErrors?: Record<string, string> };
 
 export type AiModelFormPayload = AiModelCoreParsed & {
+  metadata: unknown;
   settingsSchema: unknown;
+  payloadMapping: unknown;
   availableAspectRatios: unknown;
   availableResolutions: unknown;
 };
@@ -130,6 +141,14 @@ export function parseAiModelFormData(
     if (v == null) return undefined;
     return String(v);
   };
+
+  const payloadMapResult = parseJsonField(
+    get("payloadMappingJson"),
+    "payloadMapping",
+  );
+  if (!payloadMapResult.ok) {
+    return { ok: false, message: payloadMapResult.message };
+  }
 
   const settingsResult = parseJsonField(get("settingsSchema"), "settingsSchema");
   if (!settingsResult.ok) {
@@ -148,6 +167,10 @@ export function parseAiModelFormData(
   );
   if (!resResult.ok) {
     return { ok: false, message: resResult.message };
+  }
+  const metadataResult = parseJsonField(get("metadataJson"), "metadata");
+  if (!metadataResult.ok) {
+    return { ok: false, message: metadataResult.message };
   }
 
   const id = get("id");
@@ -173,6 +196,7 @@ export function parseAiModelFormData(
         : null,
     apiModelId: get("apiModelId") ?? "",
     endpoint: get("endpoint"),
+    statusEndpoint: get("statusEndpoint"),
     costCredits: get("costCredits") ?? "0",
     realCost:
       realCostRaw === undefined || realCostRaw === ""
@@ -180,6 +204,8 @@ export function parseAiModelFormData(
         : realCostRaw,
     isActive:
       get("isActive") === "true" || get("isActive") === "on",
+    isPublic:
+      get("isPublic") === "true" || get("isPublic") === "on",
     description: get("description"),
     supportsImageInput:
       get("supportsImageInput") === "true" || get("supportsImageInput") === "on",
@@ -223,11 +249,21 @@ export function parseAiModelFormData(
     };
   }
 
+  const metadata =
+    metadataResult.value &&
+    typeof metadataResult.value === "object" &&
+    !Array.isArray(metadataResult.value)
+      ? { ...(metadataResult.value as Record<string, unknown>) }
+      : {};
+  metadata.publicReady = parsed.data.isPublic;
+
   return {
     ok: true,
     data: {
       ...parsed.data,
+      metadata,
       settingsSchema: settingsResult.value,
+      payloadMapping: payloadMapResult.value,
       availableAspectRatios: arResult.value,
       availableResolutions: resResult.value,
     },

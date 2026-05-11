@@ -190,12 +190,18 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
       "Видео по тексту, first/last frame, референсы изображений/видео/аудио (Kie: bytedance/seedance-2).",
     tasks: ["text_to_video", "image_to_video", "lip_sync"],
     category: "video",
-    dbSlugCandidates: ["seedance-2-0"],
+    dbSlugCandidates: [
+      "seedance-2-0-text-to-video",
+      "seedance-2-0-image-to-video",
+    ],
+    familyDbSlugCandidates: [
+      "seedance-2-0-text-to-video",
+      "seedance-2-0-image-to-video",
+    ],
     urlSlugForGenerator: "seedance-2",
     openBehavior: { kind: "video", querySlug: "seedance-2" },
     gradientClass:
       "from-violet-500/88 via-purple-600/85 to-fuchsia-700/88",
-    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "seedance-2-fast",
@@ -205,12 +211,18 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
       "Более быстрый режим той же линейки API (Kie: bytedance/seedance-2-fast).",
     tasks: ["text_to_video", "image_to_video", "lip_sync"],
     category: "video",
-    dbSlugCandidates: ["seedance-2-0-fast"],
+    dbSlugCandidates: [
+      "seedance-2-0-fast-text-to-video",
+      "seedance-2-0-fast-image-to-video",
+    ],
+    familyDbSlugCandidates: [
+      "seedance-2-0-fast-text-to-video",
+      "seedance-2-0-fast-image-to-video",
+    ],
     urlSlugForGenerator: "seedance-2-fast",
     openBehavior: { kind: "video", querySlug: "seedance-2-fast" },
     gradientClass:
       "from-violet-500/82 via-purple-500/78 to-pink-600/82",
-    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "seedance-1-5-pro",
@@ -225,7 +237,6 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     openBehavior: { kind: "video", querySlug: "seedance-1-5-pro" },
     gradientClass:
       "from-fuchsia-500/85 via-violet-600/82 to-indigo-700/88",
-    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "kling-3",
@@ -276,7 +287,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   },
   {
     catalogSlug: "wan-2-7",
-    displayName: "Wan 2.7",
+    displayName: "Wan 2.7 Video",
     providerLabel: "Alibaba",
     descriptionFallback:
       "Wan 2.7: текст → видео, изображение → видео, reference → video и редактирование видео по Kie.",
@@ -299,7 +310,6 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     catalogOpenIsModelHub: true,
     gradientClass:
       "from-emerald-500/86 via-teal-600/84 to-cyan-700/87",
-    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "wan-2-6",
@@ -352,6 +362,127 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     gradientClass:
       "from-slate-600/85 via-zinc-700/82 to-neutral-900/88",
     hideFromModelsCatalog: true,
+  },
+  {
+    catalogSlug: "nano-banana-2",
+    displayName: "Nano Banana 2",
+    providerLabel: "Google (Kie)",
+    descriptionFallback:
+      "Nano Banana 2 image generation with optional reference images.",
+    tasks: ["text_to_image", "image_to_image"],
+    category: "image",
+    dbSlugCandidates: [
+      "nano-banana-2-text-to-image",
+      "nano-banana-2-image-to-image",
+    ],
+    familyDbSlugCandidates: [
+      "nano-banana-2-text-to-image",
+      "nano-banana-2-image-to-image",
+    ],
+    urlSlugForGenerator: "nano-banana-2",
+    openBehavior: { kind: "image", querySlug: "nano-banana-2" },
+    catalogOpenIsModelHub: true,
+    gradientClass:
+      "from-yellow-400/86 via-amber-500/82 to-orange-700/86",
+  },
+  {
+    catalogSlug: "nano-banana-pro",
+    displayName: "Nano Banana Pro",
+    providerLabel: "Google (Kie)",
+    descriptionFallback: "Nano Banana Pro image-to-image generation.",
+    tasks: ["image_to_image", "image_editing"],
+    category: "image",
+    dbSlugCandidates: ["nano-banana-pro-image-to-image"],
+    urlSlugForGenerator: "nano-banana-pro",
+    openBehavior: { kind: "image", querySlug: "nano-banana-pro" },
+    gradientClass:
+      "from-amber-500/88 via-yellow-600/84 to-lime-700/85",
+  },
+  {
+    catalogSlug: "seedream-5-lite",
+    displayName: "Seedream 5.0 Lite",
+    providerLabel: "ByteDance (Kie)",
+    descriptionFallback: "Seedream 5.0 Lite image-to-image generation.",
+    tasks: ["image_to_image", "image_editing"],
+    category: "image",
+    dbSlugCandidates: ["seedream-5-lite-image-to-image"],
+    urlSlugForGenerator: "seedream-5-lite",
+    openBehavior: { kind: "image", querySlug: "seedream-5-lite" },
+    gradientClass:
+      "from-pink-500/86 via-rose-600/82 to-orange-700/86",
+  },
+  {
+    catalogSlug: "seedream-4-5",
+    displayName: "Seedream 4.5",
+    providerLabel: "ByteDance (Kie)",
+    descriptionFallback: "Seedream 4.5 text-to-image and edit modes.",
+    tasks: ["text_to_image", "image_to_image", "image_editing"],
+    category: "image",
+    dbSlugCandidates: [
+      "seedream-4-5-text-to-image",
+      "seedream-4-5-edit",
+    ],
+    familyDbSlugCandidates: [
+      "seedream-4-5-text-to-image",
+      "seedream-4-5-edit",
+    ],
+    urlSlugForGenerator: "seedream-4-5",
+    openBehavior: { kind: "image", querySlug: "seedream-4-5" },
+    catalogOpenIsModelHub: true,
+    gradientClass:
+      "from-rose-500/86 via-pink-600/82 to-purple-800/86",
+  },
+  {
+    catalogSlug: "flux-2",
+    displayName: "Flux 2",
+    providerLabel: "Black Forest Labs (Kie)",
+    descriptionFallback:
+      "Flux 2 Flex: текст в изображение и изображение в изображение (Kie).",
+    tasks: ["text_to_image", "image_to_image"],
+    category: "image",
+    dbSlugCandidates: [
+      "flux-2-flex-text-to-image",
+      "flux-2-flex-image-to-image",
+    ],
+    familyDbSlugCandidates: [
+      "flux-2-flex-text-to-image",
+      "flux-2-flex-image-to-image",
+    ],
+    urlSlugForGenerator: "flux-2",
+    openBehavior: { kind: "image", querySlug: "flux-2" },
+    catalogOpenIsModelHub: true,
+    gradientClass:
+      "from-neutral-700/86 via-zinc-800/82 to-black/88",
+  },
+  {
+    catalogSlug: "qwen-image",
+    displayName: "Qwen Image",
+    providerLabel: "Alibaba (Kie)",
+    descriptionFallback: "Qwen text-to-image and Qwen2 image edit.",
+    tasks: ["text_to_image", "image_editing"],
+    category: "image",
+    dbSlugCandidates: ["qwen-text-to-image", "qwen2-image-edit"],
+    familyDbSlugCandidates: ["qwen-text-to-image", "qwen2-image-edit"],
+    urlSlugForGenerator: "qwen-image",
+    openBehavior: { kind: "image", querySlug: "qwen-image" },
+    catalogOpenIsModelHub: true,
+    gradientClass:
+      "from-blue-500/86 via-indigo-600/82 to-violet-800/86",
+  },
+  {
+    catalogSlug: "ideogram-v3",
+    displayName: "Ideogram V3",
+    providerLabel: "Ideogram (Kie)",
+    descriptionFallback: "Ideogram V3 edit and remix modes.",
+    tasks: ["image_to_image", "image_editing"],
+    category: "image",
+    dbSlugCandidates: ["ideogram-v3-edit", "ideogram-v3-remix"],
+    familyDbSlugCandidates: ["ideogram-v3-edit", "ideogram-v3-remix"],
+    urlSlugForGenerator: "ideogram-v3",
+    openBehavior: { kind: "image", querySlug: "ideogram-v3" },
+    catalogOpenIsModelHub: true,
+    gradientClass:
+      "from-lime-500/84 via-emerald-600/82 to-teal-800/86",
   },
   {
     catalogSlug: "hailuo-2-3",
@@ -420,18 +551,29 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   },
   {
     catalogSlug: "happyhorse-1-0",
-    displayName: "Happy Horse 1.0",
-    providerLabel: "Alibaba ATH",
+    displayName: "HappyHorse-1.0",
+    providerLabel: "Alibaba ATH (Kie)",
     descriptionFallback:
-      "Текст → видео, изображение → видео, по референсам и редактирование готового ролика (загрузки с компьютера).",
+      "Текст → видео, изображение → видео, по референсам и редактирование ролика (Kie HappyHorse-1.0).",
     tasks: ["text_to_video", "image_to_video", "video_editing"],
     category: "video",
-    dbSlugCandidates: ["happyhorse-1-0"],
-    urlSlugForGenerator: "happyhorse",
-    openBehavior: { kind: "video", querySlug: "happyhorse" },
+    dbSlugCandidates: [
+      "happyhorse-1-0-text-to-video",
+      "happyhorse-1-0-image-to-video",
+      "happyhorse-1-0-reference-to-video",
+      "happyhorse-1-0-video-edit",
+    ],
+    familyDbSlugCandidates: [
+      "happyhorse-1-0-text-to-video",
+      "happyhorse-1-0-image-to-video",
+      "happyhorse-1-0-reference-to-video",
+      "happyhorse-1-0-video-edit",
+    ],
+    urlSlugForGenerator: "happyhorse-1-0",
+    openBehavior: { kind: "video", querySlug: "happyhorse-1-0" },
+    catalogOpenIsModelHub: true,
     gradientClass:
       "from-amber-500/88 via-orange-600/85 to-rose-700/88",
-    hideFromModelsCatalog: true,
   },
   {
     catalogSlug: "gemini-product-helper",
@@ -463,8 +605,12 @@ export function buildModelSlugAliasMap(): Record<string, string> {
   map["kling-2.6"] = "kling-2-6-text-to-video";
   map["kling-2-6-t2v"] = "kling-2-6-text-to-video";
   map["kling-2-6-i2v"] = "kling-2-6-image-to-video";
-  map.seedance = "seedance-2-0";
-  map["seedance-fast"] = "seedance-2-0-fast";
+  map.seedance = "seedance-2-0-text-to-video";
+  map["seedance-2"] = "seedance-2-0-text-to-video";
+  map["seedance-2-i2v"] = "seedance-2-0-image-to-video";
+  map["seedance-fast"] = "seedance-2-0-fast-text-to-video";
+  map["seedance-2-fast"] = "seedance-2-0-fast-text-to-video";
+  map["seedance-2-fast-i2v"] = "seedance-2-0-fast-image-to-video";
   map["seedance-1.5"] = "seedance-1-5-pro";
   map.wan = "wan-2-7-text-to-video";
   map["wan-2-7-i2v"] = "wan-2-7-image-to-video";
@@ -473,7 +619,23 @@ export function buildModelSlugAliasMap(): Record<string, string> {
   map["wan-2-6"] = "wan-2-6-text-to-video";
   map["wan-2-6-i2v"] = "wan-2-6-image-to-video";
   map["wan-2-6-v2v"] = "wan-2-6-video-to-video";
-  map["happyhorse-1"] = "happyhorse-1-0";
+  map["happyhorse-1-0"] = "happyhorse-1-0-text-to-video";
+  map.happyhorse = "happyhorse-1-0-text-to-video";
+  map["happyhorse-1"] = "happyhorse-1-0-text-to-video";
+  map["nano-banana-2"] = "nano-banana-2-text-to-image";
+  map["nano-banana-2-i2i"] = "nano-banana-2-image-to-image";
+  map["nano-banana-pro"] = "nano-banana-pro-image-to-image";
+  map["seedream-5-lite"] = "seedream-5-lite-image-to-image";
+  map["seedream-4-5"] = "seedream-4-5-text-to-image";
+  map["seedream-4-5-edit"] = "seedream-4-5-edit";
+  map["flux-2"] = "flux-2-flex-text-to-image";
+  map["flux-2-i2i"] = "flux-2-flex-image-to-image";
+  map["flux-2-flex-i2i"] = "flux-2-flex-image-to-image";
+  map["qwen-image"] = "qwen-text-to-image";
+  map.qwen = "qwen-text-to-image";
+  map.qwen2 = "qwen2-image-edit";
+  map["ideogram-v3"] = "ideogram-v3-edit";
+  map["ideogram-v3-remix"] = "ideogram-v3-remix";
   map["grok-imagine"] = "grok-imagine-text-to-image";
   map["grok-imagine-t2i"] = "grok-imagine-text-to-image";
   map["grok-imagine-i2i"] = "grok-imagine-image-to-image";

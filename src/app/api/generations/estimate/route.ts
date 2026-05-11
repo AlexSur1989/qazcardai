@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
+import { isAiModelVisibleInUserCatalog } from "@/lib/ai-model-public-catalog";
 import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
@@ -83,6 +84,7 @@ export async function POST(req: Request) {
     where: {
       id: parsed.data.modelId,
       isActive: true,
+      isPublic: true,
       type: { in: ["IMAGE", "VIDEO"] },
       scope: "GENERAL",
       productCardModelType: null,
@@ -92,6 +94,20 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "Модель не найдена или недоступна" },
       { status: 404 },
+    );
+  }
+
+  if (
+    !isAiModelVisibleInUserCatalog({
+      slug: model.slug,
+      isActive: model.isActive,
+      isPublic: model.isPublic,
+      metadata: model.metadata,
+    })
+  ) {
+    return NextResponse.json(
+      { error: "Модель временно недоступна для публичной генерации" },
+      { status: 403 },
     );
   }
 

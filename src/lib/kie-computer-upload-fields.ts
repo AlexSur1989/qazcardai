@@ -7,4 +7,5 @@ export const KIE_SETTINGS_URL_LIST_FROM_COMPUTER = new Set([
   "imageUrls",
   "inputUrls",
   "referenceImageUrls",
+  "referenceImage",
 ]);
