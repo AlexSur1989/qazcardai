@@ -38,6 +38,15 @@ export type CreateVideoFormModel = {
 type Props = {
   models: CreateVideoFormModel[];
   balanceCredits: number;
+  /**
+   * Режим «семейство на странице модели»: без выпадающего списка, только переключение режимов.
+   * Длина labels совпадает с models.
+   */
+  familyHub?: {
+    labels: string[];
+    /** Какой slug БД выбрать при монтировании (например из ?mode= на странице хаба) */
+    initialSlug?: string;
+  };
 };
 
 const TERMINAL: GenerationStatus[] = [
@@ -48,10 +57,17 @@ const TERMINAL: GenerationStatus[] = [
   "BLOCKED",
 ];
 
-export function CreateVideoForm({ models, balanceCredits }: Props) {
+export function CreateVideoForm({ models, balanceCredits, familyHub }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [modelId, setModelId] = useState(() => {
+    if (familyHub && models.length > 0) {
+      if (familyHub.initialSlug) {
+        const hit = models.find((m) => m.slug === familyHub.initialSlug);
+        if (hit) return hit.id;
+      }
+      return models[0]?.id ?? "";
+    }
     const mid = searchParams.get("modelId");
     const canonical = canonicalModelSlug(searchParams.get("model"));
     if (mid && models.some((m) => m.id === mid)) {
@@ -96,6 +112,11 @@ export function CreateVideoForm({ models, balanceCredits }: Props) {
   const hasDynamicSettings = schemaFields.length > 0;
 
   const [dynSettings, setDynSettings] = useState<Record<string, unknown>>(() => {
+    if (familyHub && models.length > 0) {
+      const slug = familyHub.initialSlug;
+      const m = slug ? models.find((x) => x.slug === slug) : undefined;
+      return defaultsFromSchema((m ?? models[0])?.settingsSchema);
+    }
     const mid = searchParams.get("modelId");
     const canonical = canonicalModelSlug(searchParams.get("model"));
     const bySlugMatch = canonical
@@ -501,37 +522,70 @@ export function CreateVideoForm({ models, balanceCredits }: Props) {
           </Alert>
         )}
 
-        <div className="space-y-2">
-          <Label htmlFor="vmodel">Модель</Label>
-          <select
-            id="vmodel"
-            name="modelId"
-            value={modelId}
-            onChange={(e) => {
-              const id = e.target.value;
-              setModelId(id);
-              setKlingImageError(null);
-              setKlingVideoError(null);
-              setMotionEstimateExtra(null);
-              const m = models.find((x) => x.id === id);
-              setDynSettings(defaultsFromSchema(m?.settingsSchema));
-            }}
-            className={cn(
-              "border-input file:text-foreground placeholder:text-muted-foreground",
-              "focus-visible:ring-ring flex h-9 w-full min-w-0 rounded-md border bg-transparent",
-              "px-3 py-1 text-sm shadow-sm outline-none focus-visible:ring-2",
+        {familyHub ? (
+          <div className="space-y-2">
+            <Label>Режим</Label>
+            <div className="flex flex-wrap gap-2">
+              {models.map((m, i) => {
+                const label = familyHub.labels[i] ?? m.name;
+                const isOn = modelId === m.id;
+                return (
+                  <Button
+                    key={m.id}
+                    type="button"
+                    variant={isOn ? "default" : "outline"}
+                    className="rounded-full"
+                    onClick={() => {
+                      if (modelId === m.id) return;
+                      setModelId(m.id);
+                      setKlingImageError(null);
+                      setKlingVideoError(null);
+                      setMotionEstimateExtra(null);
+                      setDynSettings(defaultsFromSchema(m.settingsSchema));
+                    }}
+                  >
+                    {label}
+                  </Button>
+                );
+              })}
+            </div>
+            {selected?.description && (
+              <p className="text-muted-foreground text-xs">{selected.description}</p>
             )}
-          >
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} — от {m.creditsUiMin} кред
-              </option>
-            ))}
-          </select>
-          {selected?.description && (
-            <p className="text-muted-foreground text-xs">{selected.description}</p>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Label htmlFor="vmodel">Модель</Label>
+            <select
+              id="vmodel"
+              name="modelId"
+              value={modelId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setModelId(id);
+                setKlingImageError(null);
+                setKlingVideoError(null);
+                setMotionEstimateExtra(null);
+                const m = models.find((x) => x.id === id);
+                setDynSettings(defaultsFromSchema(m?.settingsSchema));
+              }}
+              className={cn(
+                "border-input file:text-foreground placeholder:text-muted-foreground",
+                "focus-visible:ring-ring flex h-9 w-full min-w-0 rounded-md border bg-transparent",
+                "px-3 py-1 text-sm shadow-sm outline-none focus-visible:ring-2",
+              )}
+            >
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} — от {m.creditsUiMin} кред
+                </option>
+              ))}
+            </select>
+            {selected?.description && (
+              <p className="text-muted-foreground text-xs">{selected.description}</p>
+            )}
+          </div>
+        )}
 
         {hasDynamicSettings && (
           <DynamicModelSettingsFields

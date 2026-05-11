@@ -247,30 +247,23 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
       "from-orange-500/84 via-rose-500/80 to-red-600/82",
   },
   {
-    catalogSlug: "kling-2-6-text-to-video",
-    displayName: "Kling 2.6 · Текст → видео",
+    catalogSlug: "kling-2-6",
+    displayName: "Kling 2.6",
     providerLabel: "Kuaishou",
     descriptionFallback:
-      "Видео по тексту (Kie: kling-2.6/text-to-video). Поля как у Kling 3.0.",
-    tasks: ["text_to_video"],
+      "Видео по тексту и из изображения (Kie: kling-2.6/text-to-video и kling-2.6/image-to-video). Поля как у Kling 3.0.",
+    tasks: ["text_to_video", "image_to_video"],
     category: "video",
-    dbSlugCandidates: ["kling-2-6-text-to-video"],
-    urlSlugForGenerator: "kling-2-6-t2v",
-    openBehavior: { kind: "video", querySlug: "kling-2-6-t2v" },
-    gradientClass:
-      "from-amber-500/86 via-orange-600/83 to-rose-700/86",
-  },
-  {
-    catalogSlug: "kling-2-6-image-to-video",
-    displayName: "Kling 2.6 · Изображение → видео",
-    providerLabel: "Kuaishou",
-    descriptionFallback:
-      "Кадры в image_urls (Kie: kling-2.6/image-to-video). Режим std/pro/4K как у Kling 3.0.",
-    tasks: ["image_to_video", "text_to_video"],
-    category: "video",
-    dbSlugCandidates: ["kling-2-6-image-to-video"],
-    urlSlugForGenerator: "kling-2-6-i2v",
-    openBehavior: { kind: "video", querySlug: "kling-2-6-i2v" },
+    dbSlugCandidates: [
+      "kling-2-6-text-to-video",
+      "kling-2-6-image-to-video",
+    ],
+    familyDbSlugCandidates: [
+      "kling-2-6-text-to-video",
+      "kling-2-6-image-to-video",
+    ],
+    urlSlugForGenerator: "kling-2-6",
+    openBehavior: { kind: "video", querySlug: "kling-2-6" },
     gradientClass:
       "from-amber-500/86 via-orange-600/83 to-rose-700/86",
   },
@@ -567,6 +560,8 @@ export function buildModelSlugAliasMap(): Record<string, string> {
   // Явные алиасы без отдельного catalog entry (например motion control)
   map["kling-motion"] = "kling-3-0-motion-control";
   map["kling-2.6"] = "kling-2-6-text-to-video";
+  map["kling-2-6-t2v"] = "kling-2-6-text-to-video";
+  map["kling-2-6-i2v"] = "kling-2-6-image-to-video";
   map.seedance = "seedance-2-0";
   map["seedance-fast"] = "seedance-2-0-fast";
   map["seedance-1.5"] = "seedance-1-5-pro";

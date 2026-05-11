@@ -144,6 +144,9 @@ export function mergeGenerationCatalog(params: {
         : matchedSlug != null
           ? [matchedSlug]
           : [];
+    const multiVariantFamily =
+      def.familyDbSlugCandidates != null && def.familyDbSlugCandidates.length > 1;
+
     for (const s of slugConsumeList) {
       if (bySlug.has(s)) {
         consumed.add(s);
@@ -164,12 +167,29 @@ export function mergeGenerationCatalog(params: {
     const urlSlugEffective = urlSlugForOpen;
 
     let costMin: number | null = row?.creditsUiMin ?? row?.costCredits ?? null;
-    if (def.openBehavior.kind === "product_card") {
-      costMin = productFlowMinCredits;
+    if (multiVariantFamily && def.familyDbSlugCandidates) {
+      let floor: number | null = null;
+      for (const s of def.familyDbSlugCandidates) {
+        const r = bySlug.get(s);
+        if (!r?.isActive) continue;
+        const c = r.creditsUiMin ?? r.costCredits;
+        if (floor == null || c < floor) floor = c;
+      }
+      if (floor != null) costMin = floor;
     }
 
-    const hasDbMatch = !!row;
-    const isActiveInDb = row?.isActive ?? false;
+    let hasDbMatch = !!row;
+    if (multiVariantFamily && def.familyDbSlugCandidates) {
+      hasDbMatch = def.familyDbSlugCandidates.some((s) => bySlug.has(s));
+    }
+
+    let isActiveInDb = row?.isActive ?? false;
+    if (multiVariantFamily && def.familyDbSlugCandidates) {
+      isActiveInDb = def.familyDbSlugCandidates.some(
+        (s) => bySlug.get(s)?.isActive === true,
+      );
+    }
+
     let status: MergedCatalogModelCard["status"] = "coming_soon";
 
     if (def.openBehavior.kind === "product_card") {
@@ -178,14 +198,26 @@ export function mergeGenerationCatalog(params: {
       status = isActiveInDb ? "active" : "disabled";
     }
 
+    const displayTitle = multiVariantFamily
+      ? def.displayName
+      : (row?.name ?? def.displayName);
+    const displayDescriptionRaw = multiVariantFamily
+      ? def.descriptionFallback
+      : (row?.description ?? def.descriptionFallback);
+
+    let costCreditsMinEffective = costMin;
+    if (def.openBehavior.kind === "product_card") {
+      costCreditsMinEffective = productFlowMinCredits;
+    }
+
     merged.push({
       catalogSlug: def.catalogSlug,
-      displayName: row?.name ?? def.displayName,
+      displayName: displayTitle,
       providerLabel: def.providerLabel,
-      description: (row?.description ?? def.descriptionFallback).trim(),
+      description: displayDescriptionRaw.trim(),
       tasks: def.tasks,
       category: def.category,
-      costCreditsMin: costMin,
+      costCreditsMin: costCreditsMinEffective,
       dbSlug: matchedSlug,
       hasDbMatch,
       isActiveInDb,

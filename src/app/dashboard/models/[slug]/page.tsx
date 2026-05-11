@@ -7,6 +7,10 @@ import {
   GENERATION_MODEL_CATALOG,
 } from "@/config/generation-models";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  CreateVideoForm,
+  type CreateVideoFormModel,
+} from "@/components/dashboard/create-video-form";
 import { GptImage2Playground } from "@/components/dashboard/model-playgrounds/gpt-image-2-playground";
 import { prismaWhereForDashboardModelsCatalog } from "@/lib/ai-models-catalog-db";
 import {
@@ -27,6 +31,55 @@ function firstSearchParam(v: string | string[] | undefined): string | undefined 
 
 const GPT_IMAGE_2_T2I_SLUG = "gpt-image-2-text-to-image-general";
 const GPT_IMAGE_2_I2I_SLUG = "gpt-image-2-image-to-image";
+const KLING_26_T2V_SLUG = "kling-2-6-text-to-video";
+const KLING_26_I2V_SLUG = "kling-2-6-image-to-video";
+
+/** Старые URL карточек до объединения семейств */
+const LEGACY_CATALOG_SLUG_REDIRECTS: Record<string, string> = {
+  "kling-2-6-text-to-video": "/dashboard/models/kling-2-6?mode=t2v",
+  "kling-2-6-image-to-video": "/dashboard/models/kling-2-6?mode=i2v",
+};
+
+const FAMILY_HUB_SLUGS = new Set(["gpt-image-2", "kling-2-6"]);
+
+const KLING_VIDEO_SELECT = {
+  id: true,
+  name: true,
+  slug: true,
+  costCredits: true,
+  pricingSchema: true,
+  description: true,
+  settingsSchema: true,
+  supportsNegativePrompt: true,
+  supportsImageInput: true,
+  supportsVideoInput: true,
+  supportsSeed: true,
+  maxDuration: true,
+} as const;
+
+function resolveKling26InitialSlug(
+  raw: string | string[] | undefined,
+): string | undefined {
+  const s = firstSearchParam(raw)?.trim().toLowerCase();
+  if (!s) return undefined;
+  if (
+    s === "i2v" ||
+    s === "image-to-video" ||
+    s === "image" ||
+    s === KLING_26_I2V_SLUG
+  ) {
+    return KLING_26_I2V_SLUG;
+  }
+  if (
+    s === "t2v" ||
+    s === "text-to-video" ||
+    s === "text" ||
+    s === KLING_26_T2V_SLUG
+  ) {
+    return KLING_26_T2V_SLUG;
+  }
+  return undefined;
+}
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -75,77 +128,82 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
     );
   }
 
+  const legacyTarget = LEGACY_CATALOG_SLUG_REDIRECTS[slug];
+  if (legacyTarget) {
+    redirect(legacyTarget);
+  }
+
   const variantRaw = firstSearchParam(sp.variant)?.toLowerCase();
   const initialGptVariant =
     variantRaw === "i2i" || variantRaw === "image"
       ? ("i2i" as const)
       : ("t2i" as const);
 
-  const catalogAndGpt = await Promise.all([
-    prisma.aiModel.findMany({
-      where: prismaWhereForDashboardModelsCatalog(),
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        provider: true,
-        type: true,
-        scope: true,
-        productCardModelType: true,
-        costCredits: true,
-        pricingSchema: true,
-        description: true,
-        isActive: true,
-        supportsImageInput: true,
-        supportsVideoInput: true,
-      },
-    }),
-    prisma.aiModel.aggregate({
-      where: { scope: "PRODUCT_CARD", isActive: true },
-      _min: { costCredits: true },
-    }),
-    slug === "gpt-image-2" ?
-      Promise.all([
-        getBalance(current.user.id),
-        prisma.aiModel.findFirst({
-          where: {
-            slug: GPT_IMAGE_2_T2I_SLUG,
-            isActive: true,
-            type: "IMAGE",
-            scope: "GENERAL",
-          },
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            description: true,
-            settingsSchema: true,
-          },
-        }),
-        prisma.aiModel.findFirst({
-          where: {
-            slug: GPT_IMAGE_2_I2I_SLUG,
-            isActive: true,
-            type: "IMAGE",
-            scope: "GENERAL",
-          },
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            description: true,
-            settingsSchema: true,
-          },
-        }),
-      ])
-    : Promise.resolve(null),
+  const klingInitialSlug = resolveKling26InitialSlug(sp.mode);
+  const needPlaygroundBalance = FAMILY_HUB_SLUGS.has(slug);
+
+  const [[dbRows, productMinRow], balanceCredits] = await Promise.all([
+    Promise.all([
+      prisma.aiModel.findMany({
+        where: prismaWhereForDashboardModelsCatalog(),
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          provider: true,
+          type: true,
+          scope: true,
+          productCardModelType: true,
+          costCredits: true,
+          pricingSchema: true,
+          description: true,
+          isActive: true,
+          supportsImageInput: true,
+          supportsVideoInput: true,
+        },
+      }),
+      prisma.aiModel.aggregate({
+        where: { scope: "PRODUCT_CARD", isActive: true },
+        _min: { costCredits: true },
+      }),
+    ]),
+    needPlaygroundBalance ? getBalance(current.user.id) : Promise.resolve(0),
   ]);
 
-  const [dbRows, productMinRow, gptBundle] = catalogAndGpt;
-
   let gptImage2Playground: ReactNode = null;
-  if (gptBundle && slug === "gpt-image-2") {
-    const [balanceCredits, rowT2I, rowI2I] = gptBundle;
+  if (slug === "gpt-image-2") {
+    const [rowT2I, rowI2I] = await Promise.all([
+      prisma.aiModel.findFirst({
+        where: {
+          slug: GPT_IMAGE_2_T2I_SLUG,
+          isActive: true,
+          type: "IMAGE",
+          scope: "GENERAL",
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          settingsSchema: true,
+        },
+      }),
+      prisma.aiModel.findFirst({
+        where: {
+          slug: GPT_IMAGE_2_I2I_SLUG,
+          isActive: true,
+          type: "IMAGE",
+          scope: "GENERAL",
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          settingsSchema: true,
+        },
+      }),
+    ]);
     if (rowT2I && rowI2I) {
       gptImage2Playground = (
         <GptImage2Playground
@@ -170,7 +228,79 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
     }
   }
 
+  let kling26Playground: ReactNode = null;
+  if (slug === "kling-2-6") {
+    const [rowT2V, rowI2V] = await Promise.all([
+      prisma.aiModel.findFirst({
+        where: {
+          slug: KLING_26_T2V_SLUG,
+          isActive: true,
+          type: "VIDEO",
+          scope: "GENERAL",
+        },
+        select: KLING_VIDEO_SELECT,
+      }),
+      prisma.aiModel.findFirst({
+        where: {
+          slug: KLING_26_I2V_SLUG,
+          isActive: true,
+          type: "VIDEO",
+          scope: "GENERAL",
+        },
+        select: KLING_VIDEO_SELECT,
+      }),
+    ]);
+
+    if (rowT2V && rowI2V) {
+      const toFormModel = (row: NonNullable<typeof rowT2V>): CreateVideoFormModel => ({
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        creditsUiMin: getCreditsUiFloor(row),
+        description: row.description,
+        settingsSchema: row.settingsSchema,
+        supportsNegativePrompt: row.supportsNegativePrompt,
+        supportsImageInput: row.supportsImageInput,
+        supportsVideoInput: row.supportsVideoInput,
+        supportsSeed: row.supportsSeed,
+        maxDuration: row.maxDuration,
+      });
+
+      kling26Playground = (
+        <section
+          id="kling-2-6-playground"
+          className="border-border rounded-2xl border bg-muted/25 p-5 shadow-inner md:p-6"
+        >
+          <div className="mb-6 space-y-1">
+            <h2 className="text-lg font-semibold">Генерация Kling 2.6</h2>
+            <p className="text-muted-foreground text-sm">
+              Режимы Kie:{" "}
+              <span className="font-mono">kling-2.6/text-to-video</span> и{" "}
+              <span className="font-mono">kling-2.6/image-to-video</span>. Параметры
+              берутся из схемы модели; списание — в токенах QazCard.
+            </p>
+          </div>
+          <CreateVideoForm
+            models={[toFormModel(rowT2V), toFormModel(rowI2V)]}
+            balanceCredits={balanceCredits}
+            familyHub={{
+              labels: ["Текст → видео", "Изображение → видео"],
+              initialSlug: klingInitialSlug,
+            }}
+          />
+        </section>
+      );
+    }
+  }
+
   const showGptPlayground = slug === "gpt-image-2" && gptImage2Playground !== null;
+  const showKlingPlayground = slug === "kling-2-6" && kling26Playground !== null;
+  const showAnyPlayground = showGptPlayground || showKlingPlayground;
+
+  const playgroundAnchor =
+    showGptPlayground ? "#gpt-image-2-playground"
+    : showKlingPlayground ? "#kling-2-6-playground"
+    : null;
 
   const dbModels = dbRows.map((m) => {
     const { pricingSchema: _p, ...rest } = m;
@@ -192,13 +322,19 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
 
   const { href: primaryHref, label: primaryLabel } = resolvePrimaryCta(card);
   const sidebarPrimaryHref =
-    card.status === "active" && showGptPlayground ?
-      `#gpt-image-2-playground`
-    : primaryHref;
+    card.status === "active" && playgroundAnchor ? playgroundAnchor : primaryHref;
   const sidebarPrimaryLabel =
-    card.status === "active" && showGptPlayground ? "К генерации" : primaryLabel;
+    card.status === "active" && playgroundAnchor ? "К генерации" : primaryLabel;
 
   const def = GENERATION_MODEL_CATALOG.find((c) => c.catalogSlug === slug);
+
+  const hubTitle =
+    def && FAMILY_HUB_SLUGS.has(slug) ? def.displayName : card.displayName;
+
+  const secondaryCreateLabel =
+    def?.openBehavior.kind === "video"
+      ? "Открыть в «Создать видео»"
+      : "Открыть в «Создать фото»";
 
   const catalogDescription =
     def?.descriptionFallback ??
@@ -216,7 +352,7 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
             {card.providerLabel}
           </p>
           <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-            {card.displayName}
+            {hubTitle}
           </h1>
           <p className="text-sm leading-relaxed text-white/90">{catalogDescription}</p>
         </div>
@@ -247,7 +383,7 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
             </p>
           </section>
 
-          {!showGptPlayground ? (
+          {!showAnyPlayground ? (
             <section className="space-y-2">
               <h2 className="text-lg font-semibold">Примеры</h2>
               <p className="text-muted-foreground text-sm">
@@ -257,7 +393,8 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
             </section>
           ) : null}
           {gptImage2Playground}
-          {showGptPlayground ?
+          {kling26Playground}
+          {showAnyPlayground ?
             <p className="text-muted-foreground text-sm">
               Результат и историю запросов можно посмотреть в разделе{" "}
               <Link href="/dashboard/history" className="text-primary underline">
@@ -287,12 +424,12 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
             ) : (
               <Button disabled>{sidebarPrimaryLabel}</Button>
             )}
-            {card.status === "active" && showGptPlayground ?
+            {card.status === "active" && showAnyPlayground ?
               <Link
                 href={primaryHref}
                 className={cn(buttonVariants({ variant: "outline" }))}
               >
-                Открыть в «Создать фото»
+                {secondaryCreateLabel}
               </Link>
             : null}
             <Link
