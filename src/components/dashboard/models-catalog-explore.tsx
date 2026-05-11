@@ -253,8 +253,13 @@ export function ModelsCatalogExplore({
                       <div className="flex flex-wrap gap-2">
                         {card.status === "active" ? (
                           <Link
-                            href={card.openHref}
-                            className={cn(buttonVariants({ size: "sm" }), "flex-1 text-center")}
+                            href={
+                              card.catalogListOpenHref ?? card.openHref
+                            }
+                            className={cn(
+                              buttonVariants({ size: "sm" }),
+                              "flex-1 text-center",
+                            )}
                           >
                             Открыть
                           </Link>
@@ -263,15 +268,27 @@ export function ModelsCatalogExplore({
                             Открыть
                           </Button>
                         )}
-                        <Link
-                          href={card.detailHref}
-                          className={cn(
-                            buttonVariants({ variant: "outline", size: "sm" }),
-                            "flex-1 text-center sm:flex-initial",
-                          )}
-                        >
-                          Подробнее
-                        </Link>
+                        {card.status === "active" && card.catalogListOpenHref ?
+                          <Link
+                            href={card.openHref}
+                            className={cn(
+                              buttonVariants({ variant: "outline", size: "sm" }),
+                              "flex-1 text-center sm:flex-initial",
+                            )}
+                          >
+                            Общая форма
+                          </Link>
+                        : (
+                          <Link
+                            href={card.detailHref}
+                            className={cn(
+                              buttonVariants({ variant: "outline", size: "sm" }),
+                              "flex-1 text-center sm:flex-initial",
+                            )}
+                          >
+                            Подробнее
+                          </Link>
+                        )}
                       </div>
                     </div>
                   </article>

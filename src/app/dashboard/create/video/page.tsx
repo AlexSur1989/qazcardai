@@ -21,7 +21,18 @@ export const metadata = {
   title: "Создать видео — QazCard AI",
 };
 
-export default async function CreateVideoPage() {
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function CreateVideoPage({ searchParams }: PageProps) {
+  const sp = (await searchParams) ?? {};
+  const rawModel =
+    typeof sp.model === "string" ? sp.model : Array.isArray(sp.model) ? sp.model[0] : undefined;
+  if (rawModel?.trim() === "kling-2-6") {
+    redirect("/dashboard/models/kling-2-6");
+  }
+
   const current = await getFreshSessionUser();
   if (!current.ok) {
     redirect("/login?next=/dashboard/create/video");

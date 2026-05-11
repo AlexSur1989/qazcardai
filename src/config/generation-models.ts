@@ -114,6 +114,11 @@ export type CatalogModelDefinition = {
   /** CSS gradient для карточки без превью */
   gradientClass: string;
   /**
+   * Каталог: кнопка «Открыть» ведёт на /dashboard/models/[slug] (хаб с режимами),
+   * а не сразу на общую форму create/image|video.
+   */
+  catalogOpenIsModelHub?: boolean;
+  /**
    * Не показывать карточку на /dashboard/models (общий каталог).
    * Сценарии карточки товара остаются в /dashboard/create/product-card.
    */
@@ -159,6 +164,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     familyDbSlugCandidates: [...GPT_IMAGE_2_FAMILY_SLUGS],
     urlSlugForGenerator: "gpt-image-2",
     openBehavior: { kind: "image", querySlug: "gpt-image-2" },
+    catalogOpenIsModelHub: true,
     gradientClass:
       "from-sky-500/90 via-blue-600/85 to-indigo-700/90",
   },
@@ -264,6 +270,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     ],
     urlSlugForGenerator: "kling-2-6",
     openBehavior: { kind: "video", querySlug: "kling-2-6" },
+    catalogOpenIsModelHub: true,
     gradientClass:
       "from-amber-500/86 via-orange-600/83 to-rose-700/86",
   },

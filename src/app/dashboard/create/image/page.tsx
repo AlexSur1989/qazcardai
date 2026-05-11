@@ -23,7 +23,18 @@ export const metadata = {
   title: "Создать изображение — QazCard AI",
 };
 
-export default async function CreateImagePage() {
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function CreateImagePage({ searchParams }: PageProps) {
+  const sp = (await searchParams) ?? {};
+  const rawModel =
+    typeof sp.model === "string" ? sp.model : Array.isArray(sp.model) ? sp.model[0] : undefined;
+  if (rawModel?.trim() === "gpt-image-2") {
+    redirect("/dashboard/models/gpt-image-2");
+  }
+
   const current = await getFreshSessionUser();
   if (!current.ok) {
     redirect("/login?next=/dashboard/create/image");

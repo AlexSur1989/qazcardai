@@ -38,6 +38,8 @@ export type MergedCatalogModelCard = {
   isActiveInDb: boolean;
   hasDbMatch: boolean;
   openHref: string;
+  /** Каталог: куда вести «Открыть», если отличается от openHref (хаб модели). */
+  catalogListOpenHref?: string;
   status: "active" | "disabled" | "coming_soon";
   detailHref: string;
   gradientClass: string;
@@ -210,6 +212,8 @@ export function mergeGenerationCatalog(params: {
       costCreditsMinEffective = productFlowMinCredits;
     }
 
+    const detailPath = resolveDetailHref(def.catalogSlug);
+
     merged.push({
       catalogSlug: def.catalogSlug,
       displayName: displayTitle,
@@ -222,7 +226,9 @@ export function mergeGenerationCatalog(params: {
       hasDbMatch,
       isActiveInDb,
       openHref: resolveOpenHref(def, row, String(urlSlugEffective)),
-      detailHref: resolveDetailHref(def.catalogSlug),
+      catalogListOpenHref:
+        def.catalogOpenIsModelHub === true ? detailPath : undefined,
+      detailHref: detailPath,
       status,
       gradientClass: def.gradientClass,
       hideFromModelsCatalog: def.hideFromModelsCatalog === true,
