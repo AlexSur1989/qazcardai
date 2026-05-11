@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://qazcard.ai/sitemap.xml
+Sitemap: https://qazcardai.kz/sitemap.xml

@@ -226,31 +226,27 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   },
   {
     catalogSlug: "kling-3",
-    displayName: "Kling",
+    displayName: "Kling 3.0",
     providerLabel: "Kuaishou",
     descriptionFallback:
-      "Качественное видео из изображения и текста; расширенные режимы в каталоге.",
+      "Качественное видео из изображения и текста; режимы Kling 3.0, Kling 3.0 Video и Motion Control.",
     tasks: ["image_to_video", "text_to_video", "video_to_video"],
     category: "video",
-    dbSlugCandidates: ["kling-3-0", "kling-3-0-motion-control"],
+    dbSlugCandidates: [
+      "kling-3-0",
+      "kling-3-0-video",
+      "kling-3-0-motion-control",
+    ],
+    familyDbSlugCandidates: [
+      "kling-3-0",
+      "kling-3-0-video",
+      "kling-3-0-motion-control",
+    ],
     urlSlugForGenerator: "kling",
     openBehavior: { kind: "video", querySlug: "kling" },
+    catalogOpenIsModelHub: true,
     gradientClass:
       "from-orange-500/87 via-rose-500/82 to-red-700/85",
-  },
-  {
-    catalogSlug: "kling-3-0-video",
-    displayName: "Kling 3.0 Video",
-    providerLabel: "Kuaishou",
-    descriptionFallback:
-      "Тот же сценарий, что у Kling 3.0; отдельная запись Kie Market: kling-3.0/video.",
-    tasks: ["image_to_video", "text_to_video", "video_to_video"],
-    category: "video",
-    dbSlugCandidates: ["kling-3-0-video"],
-    urlSlugForGenerator: "kling-3-video",
-    openBehavior: { kind: "video", querySlug: "kling-3-video" },
-    gradientClass:
-      "from-orange-500/84 via-rose-500/80 to-red-600/82",
   },
   {
     catalogSlug: "kling-2-6",
@@ -276,183 +272,99 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   },
   {
     catalogSlug: "wan-2-7",
-    displayName: "Wan 2.7 · Текст → видео",
+    displayName: "Wan 2.7",
     providerLabel: "Alibaba",
     descriptionFallback:
-      "Генерация видео по тексту (ratio, аудио, negative prompt). Модель Kie: wan/2-7-text-to-video.",
-    tasks: ["text_to_video"],
+      "Wan 2.7: текст → видео, изображение → видео, reference → video и редактирование видео по Kie.",
+    tasks: ["text_to_video", "image_to_video", "video_to_video", "video_editing"],
     category: "video",
-    dbSlugCandidates: ["wan-2-7-text-to-video"],
+    dbSlugCandidates: [
+      "wan-2-7-text-to-video",
+      "wan-2-7-image-to-video",
+      "wan-2-7-r2v",
+      "wan-2-7-videoedit",
+    ],
+    familyDbSlugCandidates: [
+      "wan-2-7-text-to-video",
+      "wan-2-7-image-to-video",
+      "wan-2-7-r2v",
+      "wan-2-7-videoedit",
+    ],
     urlSlugForGenerator: "wan-2-7",
     openBehavior: { kind: "video", querySlug: "wan-2-7" },
-    gradientClass:
-      "from-emerald-500/86 via-teal-600/84 to-cyan-700/87",
-  },
-  {
-    catalogSlug: "wan-2-7-image-to-video",
-    displayName: "Wan 2.7 · Изображение → видео",
-    providerLabel: "Alibaba",
-    descriptionFallback:
-      "Из первого/последнего кадра или продолжение клипа; driving audio. Kie: wan/2-7-image-to-video.",
-    tasks: ["image_to_video", "video_to_video"],
-    category: "video",
-    dbSlugCandidates: ["wan-2-7-image-to-video"],
-    urlSlugForGenerator: "wan-2-7-i2v",
-    openBehavior: { kind: "video", querySlug: "wan-2-7-i2v" },
-    gradientClass:
-      "from-emerald-500/86 via-teal-600/84 to-cyan-700/87",
-  },
-  {
-    catalogSlug: "wan-2-7-r2v",
-    displayName: "Wan 2.7 · Reference → видео",
-    providerLabel: "Alibaba",
-    descriptionFallback:
-      "Ссылки на референс-изображения и/или видео, опционально first frame и голос. Kie: wan/2-7-r2v.",
-    tasks: ["text_to_video", "image_to_video", "video_editing"],
-    category: "video",
-    dbSlugCandidates: ["wan-2-7-r2v"],
-    urlSlugForGenerator: "wan-2-7-r2v",
-    openBehavior: { kind: "video", querySlug: "wan-2-7-r2v" },
-    gradientClass:
-      "from-emerald-500/86 via-teal-600/84 to-cyan-700/87",
-  },
-  {
-    catalogSlug: "wan-2-7-videoedit",
-    displayName: "Wan 2.7 · Редактирование видео",
-    providerLabel: "Alibaba",
-    descriptionFallback:
-      "Изменение исходного ролика по промпту, опционально референс-изображение. Kie: wan/2-7-videoedit.",
-    tasks: ["video_editing"],
-    category: "video",
-    dbSlugCandidates: ["wan-2-7-videoedit"],
-    urlSlugForGenerator: "wan-2-7-edit",
-    openBehavior: { kind: "video", querySlug: "wan-2-7-edit" },
+    catalogOpenIsModelHub: true,
     gradientClass:
       "from-emerald-500/86 via-teal-600/84 to-cyan-700/87",
   },
   {
     catalogSlug: "wan-2-6",
-    displayName: "Wan 2.6 · Текст → видео",
+    displayName: "Wan 2.6",
     providerLabel: "Alibaba",
     descriptionFallback:
-      "Видео по тексту (Kie: wan/2-6-text-to-video). Поля как у Wan 2.7 T2V.",
-    tasks: ["text_to_video"],
+      "Wan 2.6: текст → видео, изображение → видео и видео → видео по Kie.",
+    tasks: ["text_to_video", "image_to_video", "video_to_video", "video_editing"],
     category: "video",
-    dbSlugCandidates: ["wan-2-6-text-to-video"],
+    dbSlugCandidates: [
+      "wan-2-6-text-to-video",
+      "wan-2-6-image-to-video",
+      "wan-2-6-video-to-video",
+    ],
+    familyDbSlugCandidates: [
+      "wan-2-6-text-to-video",
+      "wan-2-6-image-to-video",
+      "wan-2-6-video-to-video",
+    ],
     urlSlugForGenerator: "wan-2-6",
     openBehavior: { kind: "video", querySlug: "wan-2-6" },
+    catalogOpenIsModelHub: true,
     gradientClass:
       "from-teal-500/85 via-cyan-600/82 to-emerald-800/85",
   },
   {
-    catalogSlug: "wan-2-6-image-to-video",
-    displayName: "Wan 2.6 · Изображение → видео",
-    providerLabel: "Alibaba",
-    descriptionFallback:
-      "First/last frame, продолжение клипа (Kie: wan/2-6-image-to-video).",
-    tasks: ["image_to_video", "video_to_video"],
-    category: "video",
-    dbSlugCandidates: ["wan-2-6-image-to-video"],
-    urlSlugForGenerator: "wan-2-6-i2v",
-    openBehavior: { kind: "video", querySlug: "wan-2-6-i2v" },
-    gradientClass:
-      "from-teal-500/85 via-cyan-600/82 to-emerald-800/85",
-  },
-  {
-    catalogSlug: "wan-2-6-video-to-video",
-    displayName: "Wan 2.6 · Видео → видео",
-    providerLabel: "Alibaba",
-    descriptionFallback:
-      "Исходный ролик и промпт (Kie: wan/2-6-video-to-video). Поля как у Video Edit 2.7.",
-    tasks: ["video_editing", "video_to_video"],
-    category: "video",
-    dbSlugCandidates: ["wan-2-6-video-to-video"],
-    urlSlugForGenerator: "wan-2-6-v2v",
-    openBehavior: { kind: "video", querySlug: "wan-2-6-v2v" },
-    gradientClass:
-      "from-teal-500/85 via-cyan-600/82 to-emerald-800/85",
-  },
-  {
-    catalogSlug: "grok-imagine-text-to-image",
-    displayName: "Grok Imagine · Текст → изображение",
+    catalogSlug: "grok-imagine",
+    displayName: "Grok Imagine",
     providerLabel: "xAI",
     descriptionFallback:
-      "Текст → изображение (Kie: grok-imagine/text-to-image).",
-    tasks: ["text_to_image"],
+      "Grok Imagine: генерация и редактирование изображений, текст → видео и изображение → видео через Kie.",
+    tasks: ["text_to_image", "image_to_image", "image_editing", "text_to_video", "image_to_video"],
     category: "image",
-    dbSlugCandidates: ["grok-imagine-text-to-image"],
-    urlSlugForGenerator: "grok-imagine-t2i",
-    openBehavior: { kind: "image", querySlug: "grok-imagine-t2i" },
+    dbSlugCandidates: [
+      "grok-imagine-text-to-image",
+      "grok-imagine-image-to-image",
+      "grok-imagine-text-to-video",
+      "grok-imagine-image-to-video",
+    ],
+    familyDbSlugCandidates: [
+      "grok-imagine-text-to-image",
+      "grok-imagine-image-to-image",
+      "grok-imagine-text-to-video",
+      "grok-imagine-image-to-video",
+    ],
+    urlSlugForGenerator: "grok-imagine",
+    openBehavior: { kind: "image", querySlug: "grok-imagine" },
+    catalogOpenIsModelHub: true,
     gradientClass:
       "from-slate-600/85 via-zinc-700/82 to-neutral-900/88",
   },
   {
-    catalogSlug: "grok-imagine-image-to-image",
-    displayName: "Grok Imagine · Изображение → изображение",
-    providerLabel: "xAI",
-    descriptionFallback:
-      "Референс в imageUrls (Kie: grok-imagine/image-to-image).",
-    tasks: ["image_to_image", "image_editing"],
-    category: "image",
-    dbSlugCandidates: ["grok-imagine-image-to-image"],
-    urlSlugForGenerator: "grok-imagine-i2i",
-    openBehavior: { kind: "image", querySlug: "grok-imagine-i2i" },
-    gradientClass:
-      "from-slate-600/85 via-zinc-700/82 to-neutral-900/88",
-  },
-  {
-    catalogSlug: "grok-imagine-text-to-video",
-    displayName: "Grok Imagine · Текст → видео",
-    providerLabel: "xAI",
-    descriptionFallback:
-      "Текст → видео (Kie: grok-imagine/text-to-video).",
-    tasks: ["text_to_video"],
-    category: "video",
-    dbSlugCandidates: ["grok-imagine-text-to-video"],
-    urlSlugForGenerator: "grok-imagine-t2v",
-    openBehavior: { kind: "video", querySlug: "grok-imagine-t2v" },
-    gradientClass:
-      "from-slate-600/85 via-zinc-700/82 to-neutral-900/88",
-  },
-  {
-    catalogSlug: "grok-imagine-image-to-video",
-    displayName: "Grok Imagine · Изображение → видео",
-    providerLabel: "xAI",
-    descriptionFallback:
-      "Изображение → видео (Kie: grok-imagine/image-to-video).",
-    tasks: ["image_to_video", "text_to_video"],
-    category: "video",
-    dbSlugCandidates: ["grok-imagine-image-to-video"],
-    urlSlugForGenerator: "grok-imagine-i2v",
-    openBehavior: { kind: "video", querySlug: "grok-imagine-i2v" },
-    gradientClass:
-      "from-slate-600/85 via-zinc-700/82 to-neutral-900/88",
-  },
-  {
-    catalogSlug: "hailuo-2-3-i2v-standard",
-    displayName: "Hailuo 2.3 · Image→Video (Standard)",
+    catalogSlug: "hailuo-2-3",
+    displayName: "Hailuo 2.3",
     providerLabel: "MiniMax",
     descriptionFallback:
-      "Анимация кадра (Kie: hailuo/2-3-image-to-video-standard). 768P/1080P, 6–10 с.",
+      "Hailuo 2.3 Image→Video: Standard и Pro режимы Kie для анимации изображения.",
     tasks: ["image_to_video"],
     category: "video",
-    dbSlugCandidates: ["hailuo-2-3-image-to-video-standard"],
-    urlSlugForGenerator: "hailuo-2-3-standard",
-    openBehavior: { kind: "video", querySlug: "hailuo-2-3-standard" },
-    gradientClass:
-      "from-blue-600/86 via-indigo-600/84 to-violet-800/88",
-  },
-  {
-    catalogSlug: "hailuo-2-3-i2v-pro",
-    displayName: "Hailuo 2.3 · Image→Video (Pro)",
-    providerLabel: "MiniMax",
-    descriptionFallback:
-      "Анимация кадра, режим Pro (Kie: hailuo/2-3-image-to-video-pro).",
-    tasks: ["image_to_video"],
-    category: "video",
-    dbSlugCandidates: ["hailuo-2-3-image-to-video-pro"],
-    urlSlugForGenerator: "hailuo-2-3-pro",
-    openBehavior: { kind: "video", querySlug: "hailuo-2-3-pro" },
+    dbSlugCandidates: [
+      "hailuo-2-3-image-to-video-standard",
+      "hailuo-2-3-image-to-video-pro",
+    ],
+    familyDbSlugCandidates: [
+      "hailuo-2-3-image-to-video-standard",
+      "hailuo-2-3-image-to-video-pro",
+    ],
+    urlSlugForGenerator: "hailuo-2-3",
+    openBehavior: { kind: "video", querySlug: "hailuo-2-3" },
+    catalogOpenIsModelHub: true,
     gradientClass:
       "from-indigo-600/87 via-violet-600/85 to-purple-900/88",
   },
@@ -475,56 +387,26 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     displayName: "Google Veo 3.1",
     providerLabel: "Google (Kie)",
     descriptionFallback:
-      "Генерация видео Veo 3.1 через Kie `/api/v1/veo/generate`: veoModel, aspect_ratio, resolution, generationType, до 3 imageUrls.",
-    tasks: ["text_to_video", "image_to_video"],
+      "Google Veo 3.1: генерация видео, extend и получение 4K/1080p результата через Kie.",
+    tasks: ["text_to_video", "image_to_video", "video_to_video", "video_editing"],
     category: "video",
-    dbSlugCandidates: ["veo-3-1"],
+    dbSlugCandidates: [
+      "veo-3-1",
+      "veo-extend",
+      "veo-get-4k-video",
+      "veo-get-1080p-video",
+    ],
+    familyDbSlugCandidates: [
+      "veo-3-1",
+      "veo-extend",
+      "veo-get-4k-video",
+      "veo-get-1080p-video",
+    ],
     urlSlugForGenerator: "veo-3-1",
     openBehavior: { kind: "video", querySlug: "veo-3-1" },
+    catalogOpenIsModelHub: true,
     gradientClass:
       "from-emerald-500/86 via-teal-600/84 to-cyan-800/88",
-  },
-  {
-    catalogSlug: "veo-3-1-extend",
-    displayName: "Google Veo 3.1 · Extend",
-    providerLabel: "Google (Kie)",
-    descriptionFallback:
-      "Продолжение ролика Veo (`/api/v1/veo/extend`): sourceTaskId и промпт; модель fast | quality | lite.",
-    tasks: ["video_to_video", "video_editing"],
-    category: "video",
-    dbSlugCandidates: ["veo-extend"],
-    urlSlugForGenerator: "veo-extend",
-    openBehavior: { kind: "video", querySlug: "veo-extend" },
-    gradientClass:
-      "from-teal-500/85 via-emerald-600/83 to-slate-800/86",
-  },
-  {
-    catalogSlug: "veo-3-1-get-4k",
-    displayName: "Google Veo 3.1 · Get 4K",
-    providerLabel: "Google (Kie)",
-    descriptionFallback:
-      "Получить 4K-версию по taskId готового Veo (`/api/v1/veo/get-4k-video`), опционально videoIndex.",
-    tasks: ["video_editing"],
-    category: "video",
-    dbSlugCandidates: ["veo-get-4k-video"],
-    urlSlugForGenerator: "veo-get-4k",
-    openBehavior: { kind: "video", querySlug: "veo-get-4k" },
-    gradientClass:
-      "from-cyan-500/84 via-blue-700/82 to-indigo-900/88",
-  },
-  {
-    catalogSlug: "veo-3-1-get-1080p",
-    displayName: "Google Veo 3.1 · Get 1080p",
-    providerLabel: "Google (Kie)",
-    descriptionFallback:
-      "Получить 1080p по taskId Veo (GET `/api/v1/veo/get-1080p-video?taskId=…`).",
-    tasks: ["video_editing"],
-    category: "video",
-    dbSlugCandidates: ["veo-get-1080p-video"],
-    urlSlugForGenerator: "veo-get-1080p",
-    openBehavior: { kind: "video", querySlug: "veo-get-1080p" },
-    gradientClass:
-      "from-sky-500/82 via-blue-600/80 to-slate-900/85",
   },
   {
     catalogSlug: "happyhorse-1-0",
@@ -566,6 +448,7 @@ export function buildModelSlugAliasMap(): Record<string, string> {
   }
   // Явные алиасы без отдельного catalog entry (например motion control)
   map["kling-motion"] = "kling-3-0-motion-control";
+  map["kling-3-video"] = "kling-3-0-video";
   map["kling-2.6"] = "kling-2-6-text-to-video";
   map["kling-2-6-t2v"] = "kling-2-6-text-to-video";
   map["kling-2-6-i2v"] = "kling-2-6-image-to-video";
@@ -573,12 +456,26 @@ export function buildModelSlugAliasMap(): Record<string, string> {
   map["seedance-fast"] = "seedance-2-0-fast";
   map["seedance-1.5"] = "seedance-1-5-pro";
   map.wan = "wan-2-7-text-to-video";
+  map["wan-2-7-i2v"] = "wan-2-7-image-to-video";
+  map["wan-2-7-r2v"] = "wan-2-7-r2v";
+  map["wan-2-7-edit"] = "wan-2-7-videoedit";
   map["wan-2-6"] = "wan-2-6-text-to-video";
+  map["wan-2-6-i2v"] = "wan-2-6-image-to-video";
+  map["wan-2-6-v2v"] = "wan-2-6-video-to-video";
   map["happyhorse-1"] = "happyhorse-1-0";
   map["grok-imagine"] = "grok-imagine-text-to-image";
+  map["grok-imagine-t2i"] = "grok-imagine-text-to-image";
+  map["grok-imagine-i2i"] = "grok-imagine-image-to-image";
+  map["grok-imagine-t2v"] = "grok-imagine-text-to-video";
+  map["grok-imagine-i2v"] = "grok-imagine-image-to-video";
   map["hailuo-2-3"] = "hailuo-2-3-image-to-video-standard";
+  map["hailuo-2-3-standard"] = "hailuo-2-3-image-to-video-standard";
+  map["hailuo-2-3-pro"] = "hailuo-2-3-image-to-video-pro";
   map["sora-storyboard"] = "sora-2-pro-storyboard";
   map.veo = "veo-3-1";
+  map["veo-extend"] = "veo-extend";
+  map["veo-get-4k"] = "veo-get-4k-video";
+  map["veo-get-1080p"] = "veo-get-1080p-video";
   map["gpt-image-2-text-to-image"] = "gpt-image-2-text-to-image-general";
   return map;
 }

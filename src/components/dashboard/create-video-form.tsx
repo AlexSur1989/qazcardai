@@ -38,6 +38,8 @@ export type CreateVideoFormModel = {
 type Props = {
   models: CreateVideoFormModel[];
   balanceCredits: number;
+  /** Для хаба семейства: режим выбран снаружи, селект модели не нужен. */
+  hideModelSelect?: boolean;
   /**
    * Режим «семейство на странице модели»: без выпадающего списка, только переключение режимов.
    * Длина labels совпадает с models.
@@ -57,7 +59,12 @@ const TERMINAL: GenerationStatus[] = [
   "BLOCKED",
 ];
 
-export function CreateVideoForm({ models, balanceCredits, familyHub }: Props) {
+export function CreateVideoForm({
+  models,
+  balanceCredits,
+  hideModelSelect = false,
+  familyHub,
+}: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [modelId, setModelId] = useState(() => {
@@ -522,7 +529,7 @@ export function CreateVideoForm({ models, balanceCredits, familyHub }: Props) {
           </Alert>
         )}
 
-        {familyHub ? (
+        {!hideModelSelect && familyHub ? (
           <div className="space-y-2">
             <Label>Режим</Label>
             <div className="flex flex-wrap gap-2">
@@ -553,7 +560,7 @@ export function CreateVideoForm({ models, balanceCredits, familyHub }: Props) {
               <p className="text-muted-foreground text-xs">{selected.description}</p>
             )}
           </div>
-        ) : (
+        ) : !hideModelSelect ? (
           <div className="space-y-2">
             <Label htmlFor="vmodel">Модель</Label>
             <select
@@ -585,7 +592,7 @@ export function CreateVideoForm({ models, balanceCredits, familyHub }: Props) {
               <p className="text-muted-foreground text-xs">{selected.description}</p>
             )}
           </div>
-        )}
+        ) : null}
 
         {hasDynamicSettings && (
           <DynamicModelSettingsFields

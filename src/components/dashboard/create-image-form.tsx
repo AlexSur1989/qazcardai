@@ -45,6 +45,8 @@ type Props = {
   soloModels: CreateImageFormModel[];
   modelGroups: CreateImageModelGroup[];
   balanceCredits: number;
+  /** Для хаба семейства: режим выбран снаружи, селект модели не нужен. */
+  hideModelSelect?: boolean;
 };
 
 function formatModelOptionLabel(m: CreateImageFormModel): string {
@@ -64,6 +66,7 @@ export function CreateImageForm({
   soloModels,
   modelGroups,
   balanceCredits,
+  hideModelSelect = false,
 }: Props) {
   const searchParams = useSearchParams();
   const allModels = useMemo(
@@ -411,43 +414,45 @@ export function CreateImageForm({
           </Alert>
         )}
 
-        <div className="space-y-2">
-          <Label htmlFor="modelId">Модель</Label>
-          <select
-            id="modelId"
-            name="modelId"
-            value={modelId}
-            onChange={(e) => {
-              const id = e.target.value;
-              setModelId(id);
-              const m = allModels.find((x) => x.id === id);
-              setDynSettings(defaultsFromSchema(m?.settingsSchema));
-            }}
-            className={cn(
-              "border-input file:text-foreground placeholder:text-muted-foreground",
-              "focus-visible:ring-ring flex h-9 w-full min-w-0 rounded-md border bg-transparent",
-              "px-3 py-1 text-sm shadow-sm outline-none focus-visible:ring-2",
+        {!hideModelSelect && (
+          <div className="space-y-2">
+            <Label htmlFor="modelId">Модель</Label>
+            <select
+              id="modelId"
+              name="modelId"
+              value={modelId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setModelId(id);
+                const m = allModels.find((x) => x.id === id);
+                setDynSettings(defaultsFromSchema(m?.settingsSchema));
+              }}
+              className={cn(
+                "border-input file:text-foreground placeholder:text-muted-foreground",
+                "focus-visible:ring-ring flex h-9 w-full min-w-0 rounded-md border bg-transparent",
+                "px-3 py-1 text-sm shadow-sm outline-none focus-visible:ring-2",
+              )}
+            >
+              {soloModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {formatModelOptionLabel(m)}
+                </option>
+              ))}
+              {modelGroups.map((g) => (
+                <optgroup key={g.label} label={g.label}>
+                  {g.members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {formatModelOptionLabel(m)}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            {selected?.description && (
+              <p className="text-muted-foreground text-xs">{selected.description}</p>
             )}
-          >
-            {soloModels.map((m) => (
-              <option key={m.id} value={m.id}>
-                {formatModelOptionLabel(m)}
-              </option>
-            ))}
-            {modelGroups.map((g) => (
-              <optgroup key={g.label} label={g.label}>
-                {g.members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {formatModelOptionLabel(m)}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          {selected?.description && (
-            <p className="text-muted-foreground text-xs">{selected.description}</p>
-          )}
-        </div>
+          </div>
+        )}
 
         {hasDynamicSettings && (
           <DynamicModelSettingsFields

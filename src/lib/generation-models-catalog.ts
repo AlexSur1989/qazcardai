@@ -227,7 +227,9 @@ export function mergeGenerationCatalog(params: {
       isActiveInDb,
       openHref: resolveOpenHref(def, row, String(urlSlugEffective)),
       catalogListOpenHref:
-        def.catalogOpenIsModelHub === true ? detailPath : undefined,
+        def.openBehavior.kind === "image" || def.openBehavior.kind === "video"
+          ? detailPath
+          : undefined,
       detailHref: detailPath,
       status,
       gradientClass: def.gradientClass,

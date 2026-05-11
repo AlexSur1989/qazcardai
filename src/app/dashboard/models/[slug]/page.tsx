@@ -12,6 +12,11 @@ import {
   type CreateVideoFormModel,
 } from "@/components/dashboard/create-video-form";
 import { GptImage2Playground } from "@/components/dashboard/model-playgrounds/gpt-image-2-playground";
+import {
+  ModelFamilyGenerationHub,
+  type FamilyImageMode,
+  type FamilyVideoMode,
+} from "@/components/dashboard/model-family-generation-hub";
 import { prismaWhereForDashboardModelsCatalog } from "@/lib/ai-models-catalog-db";
 import {
   mergeGenerationCatalog,
@@ -36,11 +41,26 @@ const KLING_26_I2V_SLUG = "kling-2-6-image-to-video";
 
 /** Старые URL карточек до объединения семейств */
 const LEGACY_CATALOG_SLUG_REDIRECTS: Record<string, string> = {
+  "kling-3-0-video": "/dashboard/models/kling-3?mode=kling-3-0-video",
   "kling-2-6-text-to-video": "/dashboard/models/kling-2-6?mode=t2v",
   "kling-2-6-image-to-video": "/dashboard/models/kling-2-6?mode=i2v",
+  "wan-2-7-image-to-video": "/dashboard/models/wan-2-7?mode=wan-2-7-image-to-video",
+  "wan-2-7-r2v": "/dashboard/models/wan-2-7?mode=wan-2-7-r2v",
+  "wan-2-7-videoedit": "/dashboard/models/wan-2-7?mode=wan-2-7-videoedit",
+  "wan-2-6-image-to-video": "/dashboard/models/wan-2-6?mode=wan-2-6-image-to-video",
+  "wan-2-6-video-to-video": "/dashboard/models/wan-2-6?mode=wan-2-6-video-to-video",
+  "grok-imagine-text-to-image": "/dashboard/models/grok-imagine?mode=grok-imagine-text-to-image",
+  "grok-imagine-image-to-image": "/dashboard/models/grok-imagine?mode=grok-imagine-image-to-image",
+  "grok-imagine-text-to-video": "/dashboard/models/grok-imagine?mode=grok-imagine-text-to-video",
+  "grok-imagine-image-to-video": "/dashboard/models/grok-imagine?mode=grok-imagine-image-to-video",
+  "hailuo-2-3-i2v-standard": "/dashboard/models/hailuo-2-3?mode=hailuo-2-3-image-to-video-standard",
+  "hailuo-2-3-i2v-pro": "/dashboard/models/hailuo-2-3?mode=hailuo-2-3-image-to-video-pro",
+  "veo-3-1-extend": "/dashboard/models/veo-3-1?mode=veo-extend",
+  "veo-3-1-get-4k": "/dashboard/models/veo-3-1?mode=veo-get-4k-video",
+  "veo-3-1-get-1080p": "/dashboard/models/veo-3-1?mode=veo-get-1080p-video",
 };
 
-const FAMILY_HUB_SLUGS = new Set(["gpt-image-2", "kling-2-6"]);
+const FAMILY_HUB_SLUGS = new Set(GENERATION_MODEL_CATALOG.map((c) => c.catalogSlug));
 
 const KLING_VIDEO_SELECT = {
   id: true,
@@ -56,6 +76,42 @@ const KLING_VIDEO_SELECT = {
   supportsSeed: true,
   maxDuration: true,
 } as const;
+
+const FAMILY_MODEL_SELECT = {
+  id: true,
+  name: true,
+  slug: true,
+  type: true,
+  costCredits: true,
+  pricingSchema: true,
+  description: true,
+  settingsSchema: true,
+  supportsNegativePrompt: true,
+  supportsImageInput: true,
+  supportsVideoInput: true,
+  supportsSeed: true,
+  maxDuration: true,
+} as const;
+
+function modeLabelFromModel(slug: string, name: string): string {
+  const lower = slug.toLowerCase();
+  if (lower.includes("text-to-image")) return "Текст → изображение";
+  if (lower.includes("image-to-image")) return "Изображение → изображение";
+  if (lower.includes("text-to-video")) return "Текст → видео";
+  if (lower.includes("image-to-video")) return "Изображение → видео";
+  if (lower.includes("video-to-video")) return "Видео → видео";
+  if (lower.includes("videoedit") || lower.includes("video-edit")) {
+    return "Редактирование видео";
+  }
+  if (lower.includes("motion-control")) return "Motion Control";
+  if (lower.includes("r2v")) return "Reference → видео";
+  if (lower.includes("extend")) return "Extend";
+  if (lower.includes("get-4k")) return "Get 4K";
+  if (lower.includes("get-1080p")) return "Get 1080p";
+  if (lower.includes("standard")) return "Standard";
+  if (lower.includes("pro")) return "Pro";
+  return name;
+}
 
 function resolveKling26InitialSlug(
   raw: string | string[] | undefined,
@@ -293,15 +349,6 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
     }
   }
 
-  const showGptPlayground = slug === "gpt-image-2" && gptImage2Playground !== null;
-  const showKlingPlayground = slug === "kling-2-6" && kling26Playground !== null;
-  const showAnyPlayground = showGptPlayground || showKlingPlayground;
-
-  const playgroundAnchor =
-    showGptPlayground ? "#gpt-image-2-playground"
-    : showKlingPlayground ? "#kling-2-6-playground"
-    : null;
-
   const dbModels = dbRows.map((m) => {
     const { pricingSchema: _p, ...rest } = m;
     return {
@@ -320,13 +367,98 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
     notFound();
   }
 
+  const def = GENERATION_MODEL_CATALOG.find((c) => c.catalogSlug === slug);
+
+  let genericFamilyPlayground: ReactNode = null;
+  const canRenderGenericHub =
+    !gptImage2Playground &&
+    !kling26Playground &&
+    def != null &&
+    (def.openBehavior.kind === "image" || def.openBehavior.kind === "video") &&
+    def.dbSlugCandidates.length > 0;
+
+  if (canRenderGenericHub && def) {
+    const familySlugs =
+      def.familyDbSlugCandidates && def.familyDbSlugCandidates.length > 0
+        ? def.familyDbSlugCandidates
+        : def.dbSlugCandidates;
+    const rows = await prisma.aiModel.findMany({
+      where: {
+        slug: { in: familySlugs },
+        isActive: true,
+        scope: "GENERAL",
+      },
+      select: FAMILY_MODEL_SELECT,
+    });
+    const sortedRows = rows.sort(
+      (a, b) => familySlugs.indexOf(a.slug) - familySlugs.indexOf(b.slug),
+    );
+    const imageModes: FamilyImageMode[] = sortedRows
+      .filter((row) => row.type === "IMAGE")
+      .map((row) => ({
+        kind: "IMAGE" as const,
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        modeLabel: modeLabelFromModel(row.slug, row.name),
+        costCredits: row.costCredits,
+        creditsUiMin: getCreditsUiFloor(row),
+        description: row.description,
+        settingsSchema: row.settingsSchema,
+        supportsNegativePrompt: row.supportsNegativePrompt,
+        supportsImageInput: row.supportsImageInput,
+        supportsSeed: row.supportsSeed,
+      }));
+    const videoModes: FamilyVideoMode[] = sortedRows
+      .filter((row) => row.type === "VIDEO")
+      .map((row) => ({
+        kind: "VIDEO" as const,
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        modeLabel: modeLabelFromModel(row.slug, row.name),
+        creditsUiMin: getCreditsUiFloor(row),
+        description: row.description,
+        settingsSchema: row.settingsSchema,
+        supportsNegativePrompt: row.supportsNegativePrompt,
+        supportsImageInput: row.supportsImageInput,
+        supportsVideoInput: row.supportsVideoInput,
+        supportsSeed: row.supportsSeed,
+        maxDuration: row.maxDuration,
+      }));
+    const modes = [...imageModes, ...videoModes].sort(
+      (a, b) => familySlugs.indexOf(a.slug) - familySlugs.indexOf(b.slug),
+    );
+    if (modes.length > 0) {
+      genericFamilyPlayground = (
+        <ModelFamilyGenerationHub
+          title={def.displayName}
+          description="Выберите режим модели. Поля формы берутся из settingsSchema, который сиды заполняют по документации Kie; списание идёт в токенах QazCard."
+          modes={modes}
+          balanceCredits={balanceCredits}
+          initialSlug={firstSearchParam(sp.mode)}
+        />
+      );
+    }
+  }
+
+  const showGptPlayground = slug === "gpt-image-2" && gptImage2Playground !== null;
+  const showKlingPlayground = slug === "kling-2-6" && kling26Playground !== null;
+  const showGenericPlayground = genericFamilyPlayground !== null;
+  const showAnyPlayground =
+    showGptPlayground || showKlingPlayground || showGenericPlayground;
+
+  const playgroundAnchor =
+    showGptPlayground ? "#gpt-image-2-playground"
+    : showKlingPlayground ? "#kling-2-6-playground"
+    : showGenericPlayground ? "#model-family-playground"
+    : null;
+
   const { href: primaryHref, label: primaryLabel } = resolvePrimaryCta(card);
   const sidebarPrimaryHref =
     card.status === "active" && playgroundAnchor ? playgroundAnchor : primaryHref;
   const sidebarPrimaryLabel =
     card.status === "active" && playgroundAnchor ? "К генерации" : primaryLabel;
-
-  const def = GENERATION_MODEL_CATALOG.find((c) => c.catalogSlug === slug);
 
   const hubTitle =
     def && FAMILY_HUB_SLUGS.has(slug) ? def.displayName : card.displayName;
@@ -394,6 +526,7 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
           ) : null}
           {gptImage2Playground}
           {kling26Playground}
+          {genericFamilyPlayground}
           {showAnyPlayground ?
             <p className="text-muted-foreground text-sm">
               Результат и историю запросов можно посмотреть в разделе{" "}
