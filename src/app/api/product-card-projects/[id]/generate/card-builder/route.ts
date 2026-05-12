@@ -1,15 +1,25 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
-import { cardBuilderGenerateGalleryBodySchema } from "@/server/api/product-card-card-builder-validation";
-import { generateCardBuilderFullGallery } from "@/server/services/productCardCardBuilder";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
+import {
+  assertCardBuilderScenarioEnabled,
+  generateCardBuilderAllSlides,
+} from "@/server/services/productCardCardBuilderGeneration";
+import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+const bodySchema = z.object({
+  clientEstimateCredits: z.number().finite().optional().nullable(),
+});
+
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request, ctx: Ctx) {
   const current = await getFreshSessionUser();
@@ -19,22 +29,30 @@ export async function POST(req: Request, ctx: Ctx) {
     }
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
+  const gate = await assertCardBuilderScenarioEnabled();
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error, code: gate.code }, { status: gate.status });
+  }
   const userId = current.user.id;
   const rate = await enforceGenerationRateLimit(userId);
   if (rate) return rate;
 
+  const { id } = await ctx.params;
+  const project = await getOwnedProjectOrNull(userId, id);
+  if (!project) {
+    return NextResponse.json({ error: "Проект не найден" }, { status: 404 });
+  }
+
   const tooLarge = rejectOversizedBody(req, getMaxJsonBodyBytes());
   if (tooLarge) return tooLarge;
-
-  const { id } = await ctx.params;
 
   let json: unknown;
   try {
     json = await req.json();
   } catch {
-    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+    json = {};
   }
-  const parsed = cardBuilderGenerateGalleryBodySchema.safeParse(json);
+  const parsed = bodySchema.safeParse(json ?? {});
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Некорректные данные" },
@@ -42,19 +60,19 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
-  const result = await generateCardBuilderFullGallery({
+  const res = await generateCardBuilderAllSlides(
     userId,
-    projectId: id,
-    clientEstimateCredits: parsed.data.clientEstimateCredits ?? null,
-  });
-  if (!result.ok) {
-    if (result.code === "PRICE_CHANGED") {
-      return NextResponse.json({ error: result.error, code: "PRICE_CHANGED" }, { status: result.status });
-    }
-    return NextResponse.json({ error: result.error }, { status: result.status });
+    id,
+    parsed.data.clientEstimateCredits ?? null,
+  );
+  if (!res.ok) {
+    return NextResponse.json(
+      { error: res.error, code: res.code },
+      { status: res.status },
+    );
   }
   return NextResponse.json({
-    generationIds: result.generationIds,
-    costCredits: result.costCredits,
+    totalCredits: res.totalCredits,
+    results: res.results,
   });
 }

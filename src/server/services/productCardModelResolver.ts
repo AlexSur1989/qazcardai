@@ -34,6 +34,32 @@ async function resolveStrictProductCardModel(
   productCardModelType: ProductCardModelType,
 ): Promise<AiModel | null> {
   const settings = await getProductCardSettings();
+
+  /** Для билдера: явный slug в настройках может указывать на любую PRODUCT_CARD IMAGE для fallback */
+  const bypassStrictType =
+    productCardModelType === "PRODUCT_CARD_BUILDER" &&
+    settings.cardBuilderModelSlug.trim().length > 0;
+
+  if (bypassStrictType) {
+    const slug = settings.cardBuilderModelSlug.trim();
+    const wrongScope = await prisma.aiModel.findFirst({
+      where: { slug, isActive: true, scope: "GENERAL" },
+      select: { id: true },
+    });
+    if (wrongScope) {
+      throw new ProductCardModelMisconfiguredError(slug);
+    }
+    const bySlug = await prisma.aiModel.findFirst({
+      where: {
+        slug,
+        scope: "PRODUCT_CARD",
+        isActive: true,
+        type: "IMAGE",
+      },
+    });
+    return bySlug;
+  }
+
   const slug = defaultSlugForProductCardType(settings, productCardModelType);
   if (!slug) return null;
 
@@ -65,6 +91,44 @@ export async function requireProductCardModel(
 }
 
 /**
+ * Модель сценария «Создать карточку»: PRODUCT_CARD_BUILDER или явный slug;
+ * затем безопасный fallback на маркетплейс (metadata фиксирует fallbackFromMarketplaceCard).
+ */
+export async function resolveCardBuilderImageModel(): Promise<{
+  model: AiModel;
+  fallbackFromMarketplaceCard: boolean;
+} | null> {
+  const settings = await getProductCardSettings();
+  if (settings.cardBuilderModelSlug.trim()) {
+    try {
+      const m = await resolveStrictProductCardModel("PRODUCT_CARD_BUILDER");
+      if (m && m.productCardModelType === "PRODUCT_CARD_BUILDER") {
+        return { model: m, fallbackFromMarketplaceCard: false };
+      }
+      if (m) {
+        return {
+          model: m,
+          fallbackFromMarketplaceCard: m.productCardModelType !== "PRODUCT_CARD_BUILDER",
+        };
+      }
+    } catch {
+      /* misconfig */
+    }
+  }
+
+  const dedicated = await resolveStrictProductCardModel("PRODUCT_CARD_BUILDER");
+  if (dedicated && dedicated.productCardModelType === "PRODUCT_CARD_BUILDER") {
+    return { model: dedicated, fallbackFromMarketplaceCard: false };
+  }
+
+  const mp = await resolveStrictProductCardModel("PRODUCT_MARKETPLACE_CARD");
+  if (mp) {
+    return { model: mp, fallbackFromMarketplaceCard: true };
+  }
+  return null;
+}
+
+/**
  * Default image model для «Фото с концепциями».
  */
 export async function resolveDefaultProductConceptImageModel(): Promise<AiModel | null> {
@@ -76,26 +140,6 @@ export async function resolveDefaultProductConceptImageModel(): Promise<AiModel 
  */
 export async function resolveDefaultMarketplaceCardModel(): Promise<AiModel | null> {
   return resolveStrictProductCardModel("PRODUCT_MARKETPLACE_CARD");
-}
-
-export type ResolvedCardBuilderImageModel =
-  | { model: AiModel; usedFallbackMarketplaceCard: false }
-  | { model: AiModel; usedFallbackMarketplaceCard: true };
-
-/**
- * Модель для «Создать карточку»: сначала PRODUCT_CARD_BUILDER, иначе — карточка витрины
- * (fallback разрешён спецификацией; флаг уходит в метаданные).
- */
-export async function resolveCardBuilderImageModel(): Promise<ResolvedCardBuilderImageModel | null> {
-  const primary = await resolveStrictProductCardModel("PRODUCT_CARD_BUILDER");
-  if (primary) {
-    return { model: primary, usedFallbackMarketplaceCard: false };
-  }
-  const fb = await resolveStrictProductCardModel("PRODUCT_MARKETPLACE_CARD");
-  if (fb) {
-    return { model: fb, usedFallbackMarketplaceCard: true };
-  }
-  return null;
 }
 
 /**

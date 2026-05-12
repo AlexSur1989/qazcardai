@@ -1,174 +1,217 @@
-import type { ProductCategoryId } from "@/config/product-card-categories";
-import {
-  CARD_BUILDER_GOALS,
-  CARD_BUILDER_GALLERY_6_ROLES,
-  CARD_BUILDER_GALLERY_8_ROLES,
-  type CardBuilderGoalId,
-  type CardBuilderImageRole,
-} from "@/config/card-builder-presets";
+export type CardBuilderSlideRole =
+  | "main_photo"
+  | "benefits_infographic"
+  | "dimensions"
+  | "materials"
+  | "lifestyle"
+  | "detail_closeup"
+  | "packaging"
+  | "premium_poster"
+  | "ad_banner";
 
-export type CardBuilderRecommendedTextMode = "none" | "title_only" | "medium" | "heavy" | "infographic";
-
-export type CardBuilderSlidePlan = {
+export type CardBuilderGallerySlide = {
   slideId: string;
   title: string;
   purpose: string;
-  imageRole: CardBuilderImageRole;
-  recommendedTextMode: CardBuilderRecommendedTextMode;
+  imageRole: CardBuilderSlideRole;
+  recommendedTextMode: "none" | "minimal" | "medium" | "heavy" | "infographic";
   promptIntent: string;
-  sourceImageMode: "original";
+  sourceImageMode: "original" | "variant";
 };
 
-const SLIDE_BLUEPRINT: Record<
-  Exclude<CardBuilderImageRole, "gallery_6" | "gallery_8">,
-  { title: string; purpose: string; promptIntent: string; fallbackTextMode: CardBuilderRecommendedTextMode }
+export type CardBuilderPlanInput = {
+  selectedCategory: string;
+  marketplace: string;
+  goal: string;
+  preserveProduct: boolean;
+  preserveAspects: string[];
+  allowCreativeStylization?: boolean;
+  benefits: string[];
+  benefitsExtra?: string;
+  mustShow: string[];
+  audience: string;
+  priceSegment: string;
+  salesStyle: string;
+  textDensity: string;
+};
+
+const BASE_SLIDES: Record<
+  CardBuilderSlideRole,
+  Omit<CardBuilderGallerySlide, "slideId">
 > = {
   main_photo: {
     title: "Главное фото",
-    purpose: "Показать товар на спокойном фоне, как для витрины",
+    purpose: "Показать товар на чистом читаемом фоне как герой кадра",
+    imageRole: "main_photo",
+    recommendedTextMode: "none",
     promptIntent: "clean catalog hero image",
-    fallbackTextMode: "none",
+    sourceImageMode: "original",
   },
   benefits_infographic: {
     title: "Преимущества",
-    purpose: "Собрать 3 ключевых УТП в ясную подачу",
-    promptIntent: "benefits infographic tiles",
-    fallbackTextMode: "medium",
-  },
-  materials: {
-    title: "Материалы",
-    purpose: "Показать фактуру, состав и качество материала",
-    promptIntent: "materials-focused product detail",
-    fallbackTextMode: "medium",
+    purpose: "Визуально выделить 2–4 ключевых УТП в продающей композиции",
+    imageRole: "benefits_infographic",
+    recommendedTextMode: "medium",
+    promptIntent: "benefit-led selling layout without readable bitmap text",
+    sourceImageMode: "original",
   },
   dimensions: {
     title: "Размеры",
-    purpose: "Передать габариты и масштаб без искажений товара",
-    promptIntent: "dimensions and scale infographic",
-    fallbackTextMode: "medium",
+    purpose: "Показать габариты и масштаб товара наглядно",
+    imageRole: "dimensions",
+    recommendedTextMode: "minimal",
+    promptIntent: "scale and dimension readability",
+    sourceImageMode: "original",
+  },
+  materials: {
+    title: "Материалы",
+    purpose: "Раскрыть фактуру, материал и качество изготовления",
+    imageRole: "materials",
+    recommendedTextMode: "minimal",
+    promptIntent: "material macro and tactile premium cues",
+    sourceImageMode: "original",
   },
   lifestyle: {
     title: "Lifestyle",
-    purpose: "Показать товар естественно в использовании",
-    promptIntent: "lifestyle contextual scene",
-    fallbackTextMode: "title_only",
-  },
-  detail_closeup: {
-    title: "Детали",
-    purpose: "Крупным планом подчеркнуть швы, текстуру, фурнитуру",
-    promptIntent: "detail macro close-up",
-    fallbackTextMode: "title_only",
-  },
-  packaging: {
-    title: "Упаковка / комплект",
-    purpose: "Показать комплектацию и упаковку премиально",
-    promptIntent: "premium packaging showcase",
-    fallbackTextMode: "medium",
+    purpose: "Показать товар в естественном сценарии использования",
+    imageRole: "lifestyle",
+    recommendedTextMode: "minimal",
+    promptIntent: "aspirational in-context lifestyle commerce",
+    sourceImageMode: "original",
   },
   premium_poster: {
     title: "Постер",
-    purpose: "Сильная рекламная подача, готовность к промо-баннеру",
-    promptIntent: "premium advertising poster composition",
-    fallbackTextMode: "heavy",
+    purpose: "Сильный рекламный кадр с премиальной подачёй",
+    imageRole: "premium_poster",
+    recommendedTextMode: "minimal",
+    promptIntent: "premium retail poster hero",
+    sourceImageMode: "original",
+  },
+  detail_closeup: {
+    title: "Детали",
+    purpose: "Крупный план якорной детали или фактуры",
+    imageRole: "detail_closeup",
+    recommendedTextMode: "none",
+    promptIntent: "macro hero detail fidelity",
+    sourceImageMode: "original",
+  },
+  packaging: {
+    title: "Упаковка / комплект",
+    purpose: "Показать комплектацию, упаковку и содержимое",
+    imageRole: "packaging",
+    recommendedTextMode: "minimal",
+    promptIntent: "kit and packaging storytelling",
+    sourceImageMode: "original",
   },
   ad_banner: {
     title: "Рекламный баннер",
-    purpose: "Широкоформатный рекламный кадр с акцентом на оффер",
-    promptIntent: "wide ecommerce ad banner hero",
-    fallbackTextMode: "heavy",
+    purpose: "Яркая рекламная подача с чистым негативным пространством под оверлей",
+    imageRole: "ad_banner",
+    recommendedTextMode: "minimal",
+    promptIntent: "bold ecommerce banner framing",
+    sourceImageMode: "original",
   },
 };
 
-function coerceTextMode(
-  globalDensity: CardBuilderRecommendedTextMode,
-  role: Exclude<CardBuilderImageRole, "gallery_6" | "gallery_8">,
-): CardBuilderRecommendedTextMode {
-  if (globalDensity === "none") return "none";
-  const fb = SLIDE_BLUEPRINT[role].fallbackTextMode;
-  const order = ["none", "title_only", "medium", "heavy", "infographic"] as const;
-  const gi = order.indexOf(globalDensity);
-  const bi = order.indexOf(fb);
-  if (gi < 0 || bi < 0) return fb;
-  return order[Math.max(gi, bi)];
-}
-
-function slideFromRole(
-  role: Exclude<CardBuilderImageRole, "gallery_6" | "gallery_8">,
-  index: number,
-  textDensity: CardBuilderRecommendedTextMode,
-): CardBuilderSlidePlan {
-  const b = SLIDE_BLUEPRINT[role];
+function withCategoryHint(
+  category: string,
+  slide: Omit<CardBuilderGallerySlide, "slideId">,
+): Omit<CardBuilderGallerySlide, "slideId"> {
+  const hint = category.trim().toLowerCase();
   return {
-    slideId: `${String(index).padStart(2, "0")}_${role}`,
-    title: b.title,
-    purpose: b.purpose,
-    imageRole: role,
-    recommendedTextMode: coerceTextMode(textDensity, role),
-    promptIntent: b.promptIntent,
-    sourceImageMode: "original",
+    ...slide,
+    purpose:
+      `${slide.purpose} (category context: ${hint || "general"}; keep true product identity).`,
   };
 }
 
-export type CardBuilderPlanInput = {
-  selectedCategory: ProductCategoryId;
-  marketplace: string;
-  goal: CardBuilderGoalId;
-  preserveProduct: boolean;
-  preserveAspects: readonly string[];
-  allowCreativeStyle: boolean;
-  benefitsTags: readonly string[];
-  benefitsExtra?: string;
-  mustShow: readonly string[];
-  audience?: string | null;
-  priceSegment?: string | null;
-  salesStyle: string;
-  textDensity: CardBuilderRecommendedTextMode;
-};
+function pickTextMode(
+  userMode: string,
+  recommended: CardBuilderGallerySlide["recommendedTextMode"],
+): CardBuilderGallerySlide["recommendedTextMode"] {
+  const u = userMode.trim().toLowerCase();
+  if (u === "none" || u === "minimal" || u === "medium" || u === "heavy" || u === "infographic") {
+    return u;
+  }
+  return recommended;
+}
 
-/**
- * Эвристика (rule-based): на первом этапе без LLM-планировщика.
- * Категория пробрасывается для будущих правил порядка/акцентов.
- */
+/** Rule-based галерея: зависимость от goal и категории (без LLM-планировщика). */
 export function buildCardBuilderGalleryPlan(input: CardBuilderPlanInput): {
-  slides: CardBuilderSlidePlan[];
-  /** На будущее: сегменты маркетплейса могут переупорядочивать блоки */
-  categoryHint?: ProductCategoryId;
+  slides: CardBuilderGallerySlide[];
 } {
-  void input.marketplace;
-  void input.allowCreativeStyle;
-  void input.preserveAspects;
-  void input.benefitsExtra;
-  void input.mustShow;
-  void input.audience;
-  void input.priceSegment;
-  void input.benefitsTags;
-  void input.preserveProduct;
-  void input.salesStyle;
-  const textDensity = input.textDensity;
+  let roles: CardBuilderSlideRole[];
 
-  let roles: Exclude<CardBuilderImageRole, "gallery_6" | "gallery_8">[] = [];
-
-  if (input.goal === "full_gallery_6") {
-    roles = [...CARD_BUILDER_GALLERY_6_ROLES] as Exclude<
-      CardBuilderImageRole,
-      "gallery_6" | "gallery_8"
-    >[];
-  } else if (input.goal === "full_gallery_8") {
-    roles = [...CARD_BUILDER_GALLERY_8_ROLES] as Exclude<
-      CardBuilderImageRole,
-      "gallery_6" | "gallery_8"
-    >[];
-  } else {
-    const g = CARD_BUILDER_GOALS.find((x) => x.id === input.goal);
-    const r = g?.imageRole;
-    if (r && r !== "gallery_6" && r !== "gallery_8") {
-      roles = [r];
-    } else {
+  switch (input.goal) {
+    case "main_photo":
       roles = ["main_photo"];
-    }
+      break;
+    case "benefits_info":
+      roles = ["benefits_infographic"];
+      break;
+    case "dimensions_slide":
+      roles = ["dimensions"];
+      break;
+    case "materials_slide":
+      roles = ["materials"];
+      break;
+    case "lifestyle":
+      roles = ["lifestyle"];
+      break;
+    case "detail_closeup":
+      roles = ["detail_closeup"];
+      break;
+    case "packaging_kit":
+      roles = ["packaging"];
+      break;
+    case "premium_poster":
+      roles = ["premium_poster"];
+      break;
+    case "full_gallery_8":
+      roles = [
+        "main_photo",
+        "benefits_infographic",
+        "materials",
+        "dimensions",
+        "lifestyle",
+        "detail_closeup",
+        "packaging",
+        "premium_poster",
+      ];
+      break;
+    case "full_gallery_6":
+      roles = [
+        "main_photo",
+        "benefits_infographic",
+        "materials",
+        "dimensions",
+        "lifestyle",
+        "premium_poster",
+      ];
+      break;
+    default:
+      roles = ["main_photo"];
+      break;
   }
 
-  const slides = roles.map((role, i) => slideFromRole(role, i + 1, textDensity));
+  if (input.marketplace === "instagram_vk" || input.salesStyle === "bold_ad") {
+    roles = roles.map((r) =>
+      r === "premium_poster" && input.goal.startsWith("full_gallery") ? "ad_banner" : r,
+    );
+  }
 
-  return { slides, categoryHint: input.selectedCategory };
+  const slides: CardBuilderGallerySlide[] = roles.map((role, idx) => {
+    const base = BASE_SLIDES[role];
+    const adapted = withCategoryHint(input.selectedCategory, base);
+    const slideId = `${String(idx + 1).padStart(2, "0")}_${role}`;
+    return {
+      slideId,
+      ...adapted,
+      recommendedTextMode: pickTextMode(input.textDensity, adapted.recommendedTextMode),
+      sourceImageMode:
+        input.allowCreativeStylization ? "variant" : adapted.sourceImageMode,
+    };
+  });
+
+  return { slides };
 }

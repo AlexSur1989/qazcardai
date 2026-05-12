@@ -7,7 +7,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { canAccessAdminPanel } from "@/lib/auth";
 import { getBalance } from "@/server/services/credits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
-import { getProductCardScenarios } from "@/server/services/productCardScenarios";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
 
 export const metadata = {
@@ -20,10 +19,9 @@ export default async function ProductCardCreatePage() {
     redirect("/login?next=/dashboard/create/product-card");
   }
 
-  const [balanceCredits, productCardSettings, scenarios] = await Promise.all([
+  const [balanceCredits, productCardSettings] = await Promise.all([
     getBalance(current.user.id),
     getProductCardSettings(),
-    getProductCardScenarios(),
   ]);
 
   return (
@@ -40,10 +38,10 @@ export default async function ProductCardCreatePage() {
       <Suspense fallback={<CreateFormSkeleton />}>
         <ProductCardPage
           balanceCredits={balanceCredits}
+          scenarios={productCardSettings.scenarios}
           conceptImageSizes={productCardSettings.conceptImageSizes}
           marketplaceCardSizes={productCardSettings.marketplaceCardSizes}
           videoPresets={productCardSettings.videoPresets}
-          scenarios={scenarios}
           canMarketplaceLayoutDebug={canAccessAdminPanel(current.user.role)}
         />
       </Suspense>

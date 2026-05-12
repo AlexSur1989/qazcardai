@@ -174,7 +174,7 @@ export function AiModelForm({ mode, modelId, initialData }: AiModelFormProps) {
                   <option value="">—</option>
                   <option value="PRODUCT_CLASSIFIER">PRODUCT_CLASSIFIER</option>
                   <option value="PRODUCT_CONCEPT_IMAGE">PRODUCT_CONCEPT_IMAGE</option>
-                  <option value="PRODUCT_MARKETPLACE_CARD">PRODUCT_MARKETPLACE_CARD</option>
+                  <option value="PRODUCT_CARD_BUILDER">PRODUCT_CARD_BUILDER</option>
                   <option value="PRODUCT_VIDEO">PRODUCT_VIDEO</option>
                 </select>
                 {state?.fieldErrors?.productCardModelType ? (

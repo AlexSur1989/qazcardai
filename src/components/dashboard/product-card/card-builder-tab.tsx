@@ -1,14 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, ImageIcon, Loader2, RefreshCw } from "lucide-react";
-import { toast } from "sonner";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   CARD_BUILDER_AUDIENCES,
   CARD_BUILDER_BENEFIT_TAGS,
@@ -19,128 +13,116 @@ import {
   CARD_BUILDER_PRICE_SEGMENTS,
   CARD_BUILDER_SALES_STYLES,
   CARD_BUILDER_TEXT_DENSITY,
-} from "@/config/card-builder-presets";
+} from "@/config/card-builder-options";
 import type { ProductCategoryId } from "@/config/product-card-categories";
 import { readJsonSafe } from "@/lib/fetch-json-safe";
-import { getFirstOutputUrlFromJson } from "@/lib/product-card-output";
 import {
   IMAGE_GENERATION_POLL_INTERVAL_MS,
   IMAGE_GENERATION_POLL_MAX_ITERATIONS,
 } from "@/lib/generation-client-polling";
+import { getFirstOutputUrlFromJson } from "@/lib/product-card-output";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-const SELECT_BASE =
-  "border-input w-full max-w-md rounded-xl border bg-card px-3 py-2.5 text-sm text-foreground shadow-sm";
+const nativeFieldClass =
+  "h-10 w-full min-w-0 rounded-xl border border-input bg-card px-2.5 text-sm text-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
 
-const PREVIEW_PLACEHOLDER = [
-  { title: "Главное фото", purpose: "Первый экран галереи" },
-  { title: "Преимущества", purpose: "Ключевые УТП" },
-  { title: "Материалы", purpose: "Фактура и состав" },
-  { title: "Размеры", purpose: "Масштаб и пропорции" },
-  { title: "Lifestyle", purpose: "Товар в контексте" },
-  { title: "Постер", purpose: "Премиальный кадр" },
-] as const;
-
-type SlideRow = {
-  slideId?: string;
+type GallerySlide = {
+  slideId: string;
   title: string;
-  purpose?: string;
+  purpose: string;
+  imageRole: string;
+};
+
+type CardBuilderGenHistoryRow = {
+  generationId: string;
+  slideId: string;
   imageRole?: string;
+  createdAt?: string;
+  status?: string;
 };
-
-type GenPeek = {
-  generationId?: string | null;
-  status: string;
-  outputUrl: string | null;
-};
-
-function terminal(status: string): boolean {
-  return ["COMPLETED", "FAILED", "REFUNDED", "CANCELLED", "BLOCKED"].includes(status);
-}
-
-function coerceCredits(v: unknown): number | null {
-  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
-  return Number.isFinite(n) ? Math.round(n) : null;
-}
 
 type Props = {
-  selectedCategory: ProductCategoryId | null;
   hasImage: boolean;
   canUseBackend: boolean;
   projectId: string | null;
+  selectedCategory: ProductCategoryId | null;
   balanceCredits: number;
-  reloadProject?: () => Promise<boolean>;
 };
 
 export function CardBuilderTab({
-  selectedCategory,
   hasImage,
   canUseBackend,
   projectId,
+  selectedCategory,
   balanceCredits,
-  reloadProject,
 }: Props) {
-  const [marketplace, setMarketplace] = useState<string>(CARD_BUILDER_MARKETPLACES[5]!.id);
-  const [goal, setGoal] = useState<string>(CARD_BUILDER_GOALS[8]!.id);
+  const [marketplace, setMarketplace] = useState("ozon");
+  const [goal, setGoal] = useState("full_gallery_6");
   const [preserveProduct, setPreserveProduct] = useState(true);
-  const [preserveAspects, setPreserveAspects] = useState<
-    Partial<Record<(typeof CARD_BUILDER_PRESERVE_ASPECTS)[number], boolean>>
-  >({
-    shape: true,
-    color: true,
-    proportions: true,
-  });
-  const [allowCreativeStyle, setAllowCreativeStyle] = useState(false);
-  const [benefitTagsSelected, setBenefitTagsSelected] = useState<Record<string, boolean>>({});
+  const [preserveAspects, setPreserveAspects] = useState<string[]>([
+    "shape",
+    "color",
+    "logo",
+    "proportions",
+  ]);
+  const [creativeStyle, setCreativeStyle] = useState(false);
+  const [benefitsSel, setBenefitsSel] = useState<string[]>([]);
   const [benefitsExtra, setBenefitsExtra] = useState("");
-  const [mustShowSelected, setMustShowSelected] = useState<Record<string, boolean>>({});
-  const [audience, setAudience] = useState<string>("");
-  const [priceSegment, setPriceSegment] = useState<string>("");
-  const [salesStyle, setSalesStyle] = useState<string>("light_marketplace");
-  const [textDensity, setTextDensity] = useState<string>("medium");
+  const [mustSel, setMustSel] = useState<string[]>(["texture", "details"]);
+  const [audience, setAudience] = useState("mass_market");
+  const [priceSegment, setPriceSegment] = useState("middle");
+  const [salesStyle, setSalesStyle] = useState("light_marketplace");
+  const [textDensity, setTextDensity] = useState("medium");
 
-  const [structureSlides, setStructureSlides] = useState<SlideRow[]>(() => [...PREVIEW_PLACEHOLDER]);
-  const [genBySlide, setGenBySlide] = useState<Record<string, GenPeek>>({});
-  const [planSaving, setPlanSaving] = useState(false);
-  const [galleryEst, setGalleryEst] = useState<number | null>(null);
-  const [slideEst, setSlideEst] = useState<number | null>(null);
+  const [slides, setSlides] = useState<GallerySlide[]>([]);
+  const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+
+  const [estimateSingle, setEstimateSingle] = useState<number | null>(null);
+  const [estimateGallery, setEstimateGallery] = useState<number | null>(null);
   const [estimating, setEstimating] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [genBusy, setGenBusy] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
 
-  const balanceNum = coerceCredits(balanceCredits) ?? 0;
-  const isFullGalleryGoal = goal === "full_gallery_6" || goal === "full_gallery_8";
+  const [slideGen, setSlideGen] = useState<Record<string, { status: string; url: string | null }>>(
+    {},
+  );
+  const [genHistory, setGenHistory] = useState<CardBuilderGenHistoryRow[]>([]);
 
-  const bodyBase = useMemo(
+  const canWork = Boolean(hasImage && canUseBackend && projectId && selectedCategory);
+
+  const planPayload = useMemo(
     () => ({
-      marketplace,
-      goal,
-      preserveProduct,
-      preserveAspects: (CARD_BUILDER_PRESERVE_ASPECTS as readonly string[]).filter((k) =>
-        Boolean(preserveAspects[k as keyof typeof preserveAspects]),
-      ),
-      allowCreativeStyle,
-      benefitsTags: Object.entries(benefitTagsSelected)
-        .filter(([, v]) => v)
-        .map(([k]) => k),
-      benefitsExtra: benefitsExtra.trim(),
-      mustShow: Object.entries(mustShowSelected)
-        .filter(([, v]) => v)
-        .map(([k]) => k),
-      audience: audience || null,
-      priceSegment: priceSegment || null,
-      salesStyle,
-      textDensity,
-    }),
-    [
+      selectedCategory: selectedCategory ?? "other",
       marketplace,
       goal,
       preserveProduct,
       preserveAspects,
-      allowCreativeStyle,
-      benefitTagsSelected,
+      allowCreativeStylization: creativeStyle,
+      benefits: benefitsSel,
+      benefitsExtra: benefitsExtra.trim() || undefined,
+      mustShow: mustSel,
+      audience,
+      priceSegment,
+      salesStyle,
+      textDensity,
+    }),
+    [
+      selectedCategory,
+      marketplace,
+      goal,
+      preserveProduct,
+      preserveAspects,
+      creativeStyle,
+      benefitsSel,
       benefitsExtra,
-      mustShowSelected,
+      mustSel,
       audience,
       priceSegment,
       salesStyle,
@@ -148,671 +130,632 @@ export function CardBuilderTab({
     ],
   );
 
-  const loadCardBuilderStructure = useCallback(async () => {
-    if (!projectId) return;
-    const res = await fetch(`/api/product-card-projects/${projectId}`);
-    const parsed = await readJsonSafe<{
-      project?: { metadata?: { cardBuilder?: { galleryPlan?: unknown } } };
-    }>(res);
-    if (!parsed.ok || !res.ok) return;
-    const plan = parsed.data.project?.metadata?.cardBuilder?.galleryPlan;
-    if (!Array.isArray(plan) || plan.length === 0) {
-      setStructureSlides([...PREVIEW_PLACEHOLDER]);
-      return;
-    }
-    const rows = plan.flatMap((x): SlideRow[] => {
-      if (!x || typeof x !== "object") return [];
-      const o = x as Record<string, unknown>;
-      const title = typeof o.title === "string" ? o.title : "";
-      const purpose = typeof o.purpose === "string" ? o.purpose : "";
-      const slideId = typeof o.slideId === "string" ? o.slideId : undefined;
-      const imageRole = typeof o.imageRole === "string" ? o.imageRole : undefined;
-      if (!title && !slideId) return [];
-      return [{ slideId, title: title || slideId || "Слайд", purpose, imageRole }];
-    });
-    setStructureSlides(rows.length > 0 ? rows : [...PREVIEW_PLACEHOLDER]);
-  }, [projectId]);
-
-  useEffect(() => {
-    if (!projectId || !canUseBackend) return;
-    void loadCardBuilderStructure();
-  }, [canUseBackend, loadCardBuilderStructure, projectId]);
-
-  const refresh = useCallback(async () => {
-    await loadCardBuilderStructure();
-    if (reloadProject) await reloadProject();
-  }, [loadCardBuilderStructure, reloadProject]);
-
-  const fetchGenerationPeek = useCallback(async (generationId: string): Promise<GenPeek> => {
-    const res = await fetch(`/api/generations/${generationId}`);
-    const parsed = await readJsonSafe<{ status?: string; outputFiles?: unknown }>(res);
-    if (!parsed.ok || !res.ok) {
-      return { status: "UNKNOWN", outputUrl: null };
-    }
-    const status = typeof parsed.data.status === "string" ? parsed.data.status : "UNKNOWN";
-    const outputUrl = getFirstOutputUrlFromJson(parsed.data.outputFiles);
-    return { status, outputUrl };
-  }, []);
-
-  const pollUntilDone = useCallback(
-    async (generationId: string, slideKey: string) => {
-      for (let i = 0; i < IMAGE_GENERATION_POLL_MAX_ITERATIONS; i++) {
-        const peek = await fetchGenerationPeek(generationId);
-        setGenBySlide((prev) => ({
-          ...prev,
-          [slideKey]: { generationId, status: peek.status, outputUrl: peek.outputUrl },
-        }));
-        if (terminal(peek.status) && (peek.status !== "COMPLETED" || peek.outputUrl)) break;
-        if (i < IMAGE_GENERATION_POLL_MAX_ITERATIONS - 1) {
-          await new Promise((r) => setTimeout(r, IMAGE_GENERATION_POLL_INTERVAL_MS));
-        }
-      }
-    },
-    [fetchGenerationPeek],
-  );
-
-  const runEstimateHints = useCallback(async () => {
-    if (!projectId) return;
-    setEstimating(true);
-    setMessage(null);
-    try {
-      const slideRes = await fetch(`/api/product-card-projects/${projectId}/estimate/card-builder`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          operation: "slide",
-          salesStyle,
-          textDensity,
-        }),
-      });
-
-      const sParsed = await readJsonSafe<{ credits?: unknown; error?: string }>(slideRes);
-      if (!slideRes.ok || !sParsed.ok) {
-        setSlideEst(null);
-      } else {
-        setSlideEst(coerceCredits(sParsed.data.credits));
-      }
-
-      if (isFullGalleryGoal) {
-        const gallRes = await fetch(`/api/product-card-projects/${projectId}/estimate/card-builder`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            operation: goal === "full_gallery_8" ? "gallery_8" : "gallery_6",
-            salesStyle,
-            textDensity,
-          }),
-        });
-        const gParsed = await readJsonSafe<{ credits?: unknown }>(gallRes);
-        if (!gallRes.ok || !gParsed.ok) {
-          setGalleryEst(null);
-        } else {
-          setGalleryEst(coerceCredits(gParsed.data.credits));
-        }
-      } else {
-        setGalleryEst(null);
-      }
-    } finally {
-      setEstimating(false);
-    }
-  }, [goal, isFullGalleryGoal, projectId, salesStyle, textDensity]);
-
-  useEffect(() => {
-    if (!projectId || !canUseBackend) return;
-    void runEstimateHints();
-  }, [canUseBackend, projectId, runEstimateHints]);
-
-  async function saveStructure() {
-    if (!projectId || !selectedCategory) {
-      setMessage("Нужно фото и выбранная категория.");
-      return;
-    }
-    setPlanSaving(true);
-    setMessage(null);
+  const runPlan = useCallback(async () => {
+    if (!projectId || !selectedCategory) return;
+    setPlanLoading(true);
+    setPlanError(null);
     try {
       const res = await fetch(`/api/product-card-projects/${projectId}/card-builder/plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bodyBase),
+        body: JSON.stringify(planPayload),
       });
-      const parsed = await readJsonSafe<{ slides?: unknown[]; error?: string }>(res);
+      const parsed = await readJsonSafe<{ slides?: GallerySlide[]; error?: string }>(res);
       if (!parsed.ok) {
-        setMessage(parsed.message);
+        setPlanError(parsed.message);
         return;
       }
       if (!res.ok) {
-        setMessage(parsed.data.error ?? "Не удалось сохранить структуру");
+        setPlanError(parsed.data.error ?? "Не удалось сохранить структуру");
         return;
       }
-      const next = parsed.data.slides;
-      if (Array.isArray(next) && next.length > 0) {
-        setStructureSlides(
-          next.map((s) =>
-            typeof s === "object" && s !== null
-              ? {
-                  slideId: typeof (s as { slideId?: string }).slideId === "string"
-                    ? (s as { slideId: string }).slideId
-                    : undefined,
-                  title:
-                    typeof (s as { title?: string }).title === "string"
-                      ? (s as { title: string }).title
-                      : "",
-                  purpose:
-                    typeof (s as { purpose?: string }).purpose === "string"
-                      ? (s as { purpose: string }).purpose
-                      : "",
-                  imageRole:
-                    typeof (s as { imageRole?: string }).imageRole === "string"
-                      ? (s as { imageRole: string }).imageRole
-                      : "",
-                }
-              : { title: "Слайд" },
-          ),
-        );
-      }
-      toast.success("Структура карточки сохранена");
-      await runEstimateHints();
-      await refresh();
+      const list = parsed.data.slides ?? [];
+      setSlides(list);
+      setActiveSlideId(list[0]?.slideId ?? null);
     } finally {
-      setPlanSaving(false);
+      setPlanLoading(false);
     }
-  }
+  }, [projectId, selectedCategory, planPayload]);
 
-  async function generateSlide(slide: SlideRow) {
-    const key = slide.slideId ?? slide.title;
-    if (!projectId || !slide.slideId) {
-      setMessage("Обновите структуру — у слайда нет номера.");
-      return;
-    }
-    setBusy(key);
-    setMessage(null);
-    try {
-      if (slideEst == null) await runEstimateHints();
-      const res = await fetch(`/api/product-card-projects/${projectId}/generate/card-builder-slide`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slideId: slide.slideId, clientEstimateCredits: slideEst }),
-      });
-      const parsed = await readJsonSafe<{
-        generationId?: string;
-        code?: string;
-        error?: string;
-      }>(res);
-      if (!parsed.ok) {
-        setMessage(parsed.message);
-        return;
-      }
-      if (!res.ok) {
-        if (parsed.data.code === "PRICE_CHANGED") {
-          await runEstimateHints();
+  const runEstimate = useCallback(
+    async (mode: "single_slide" | "full_gallery") => {
+      if (!projectId) return;
+      setEstimating(true);
+      try {
+        const res = await fetch(`/api/product-card-projects/${projectId}/estimate/card-builder`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source: slides.length ? "saved" : "payload",
+            payload: slides.length ? undefined : planPayload,
+            mode,
+          }),
+        });
+        const parsed = await readJsonSafe<{ credits?: number; error?: string }>(res);
+        if (!parsed.ok) {
+          setPlanError(parsed.message);
+          return;
         }
-        setMessage(parsed.data.error ?? "Не удалось запустить генерацию");
-        return;
+        if (!res.ok) {
+          setPlanError(parsed.data.error ?? "Оценка недоступна");
+          return;
+        }
+        const c = parsed.data.credits ?? null;
+        if (mode === "single_slide") setEstimateSingle(c);
+        else setEstimateGallery(c);
+      } finally {
+        setEstimating(false);
       }
-      const gid = parsed.data.generationId;
-      if (gid) {
-        setGenBySlide((prev) => ({
-          ...prev,
-          [key]: { generationId: gid, status: "QUEUED", outputUrl: null },
-        }));
-        void pollUntilDone(gid, key);
-      }
-    } finally {
-      setBusy(null);
-    }
-  }
+    },
+    [projectId, planPayload, slides.length],
+  );
 
-  async function generateWholeGallery() {
-    if (!projectId || !isFullGalleryGoal) return;
-    setBusy("gallery");
-    setMessage(null);
+  const pollGen = useCallback(async (generationId: string) => {
+    for (let i = 0; i < IMAGE_GENERATION_POLL_MAX_ITERATIONS; i++) {
+      const res = await fetch(`/api/generations/${generationId}`);
+      const parsed = await readJsonSafe<{ status: string; outputFiles?: unknown }>(res);
+      if (!parsed.ok || !res.ok) break;
+      const st = parsed.data.status;
+      if (st === "SUCCEEDED") {
+        return getFirstOutputUrlFromJson(parsed.data.outputFiles) ?? null;
+      }
+      if (st === "FAILED" || st === "CANCELLED") break;
+      await new Promise((r) => setTimeout(r, IMAGE_GENERATION_POLL_INTERVAL_MS));
+    }
+    return null;
+  }, []);
+
+  const syncPlanAndHistoryFromServer = useCallback(async () => {
+    if (!projectId || !canUseBackend) return;
+    const res = await fetch(`/api/product-card-projects/${projectId}`);
+    const parsed = await readJsonSafe<{
+      project?: {
+        metadata?: { cardBuilder?: { galleryPlan?: GallerySlide[]; generations?: unknown } };
+      };
+    }>(res);
+    if (!parsed.ok || !res.ok) return;
+    const list = parsed.data.project?.metadata?.cardBuilder?.galleryPlan;
+    if (Array.isArray(list) && list.length) {
+      setSlides(list as GallerySlide[]);
+      setActiveSlideId((prev) => {
+        if (prev && list.some((s: GallerySlide) => s.slideId === prev)) return prev;
+        return (list[0] as GallerySlide).slideId;
+      });
+    }
+    const rawGens = parsed.data.project?.metadata?.cardBuilder?.generations;
+    if (Array.isArray(rawGens)) {
+      const rows: CardBuilderGenHistoryRow[] = [];
+      for (const x of rawGens) {
+        if (!x || typeof x !== "object") continue;
+        const r = x as Record<string, unknown>;
+        const id = typeof r.generationId === "string" ? r.generationId.trim() : "";
+        const slideId = typeof r.slideId === "string" ? r.slideId.trim() : "";
+        if (!id || !slideId) continue;
+        const row: CardBuilderGenHistoryRow = {
+          generationId: id,
+          slideId,
+        };
+        if (typeof r.imageRole === "string") row.imageRole = r.imageRole;
+        if (typeof r.createdAt === "string") row.createdAt = r.createdAt;
+        if (typeof r.status === "string") row.status = r.status;
+        rows.push(row);
+      }
+      setGenHistory(rows);
+    } else {
+      setGenHistory([]);
+    }
+  }, [projectId, canUseBackend]);
+
+  const generateOne = useCallback(
+    async (slideId: string) => {
+      if (!projectId) return;
+      setGenBusy(true);
+      try {
+        const res = await fetch(
+          `/api/product-card-projects/${projectId}/generate/card-builder-slide`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              slideId,
+              useSavedPlan: true,
+            }),
+          },
+        );
+        const parsed = await readJsonSafe<{
+          generationId?: string;
+          error?: string;
+          code?: string;
+        }>(res);
+        if (!parsed.ok) {
+          setPlanError(parsed.message);
+          return;
+        }
+        if (!res.ok) {
+          setPlanError(parsed.data.error ?? "Не удалось запустить генерацию");
+          return;
+        }
+        const gid = parsed.data.generationId;
+        if (!gid) return;
+        setSlideGen((prev) => ({
+          ...prev,
+          [slideId]: { status: "generating", url: prev[slideId]?.url ?? null },
+        }));
+        const url = await pollGen(gid);
+        setSlideGen((prev) => ({
+          ...prev,
+          [slideId]: { status: url ? "done" : "error", url },
+        }));
+        await syncPlanAndHistoryFromServer();
+      } finally {
+        setGenBusy(false);
+      }
+    },
+    [projectId, pollGen, syncPlanAndHistoryFromServer],
+  );
+
+  const generateAll = useCallback(async () => {
+    if (!projectId) return;
+    setBatchBusy(true);
+    await runEstimate("full_gallery");
     try {
-      if (galleryEst == null) await runEstimateHints();
       const res = await fetch(`/api/product-card-projects/${projectId}/generate/card-builder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientEstimateCredits: galleryEst }),
+        body: JSON.stringify({}),
       });
       const parsed = await readJsonSafe<{
-        generationIds?: string[];
-        code?: string;
+        totalCredits?: number;
+        results?: { slideId?: string; generationId?: string; error?: string }[];
         error?: string;
+        code?: string;
       }>(res);
       if (!parsed.ok) {
-        setMessage(parsed.message);
+        setPlanError(parsed.message);
         return;
       }
       if (!res.ok) {
-        if (parsed.data.code === "PRICE_CHANGED") {
-          await runEstimateHints();
-        }
-        setMessage(parsed.data.error ?? "Не удалось запустить галерею");
+        setPlanError(parsed.data.error ?? "Пакетная генерация недоступна");
         return;
       }
-      const ids = parsed.data.generationIds ?? [];
-      const keyedSlides = structureSlides.filter((s) => s.slideId);
-      ids.forEach((gid, idx) => {
-        const slide = keyedSlides[idx];
-        if (!slide?.slideId) return;
-        const key = slide.slideId;
-        setGenBySlide((prev) => ({
-          ...prev,
-          [key]: { generationId: gid, status: "QUEUED", outputUrl: null },
-        }));
-        void pollUntilDone(gid, key);
-      });
+      const rows = parsed.data.results ?? [];
+      for (const row of rows) {
+        if (!row.slideId) continue;
+        if (row.generationId) {
+          setSlideGen((p) => ({
+            ...p,
+            [row.slideId!]: { status: "generating", url: p[row.slideId!]?.url ?? null },
+          }));
+          const url = await pollGen(row.generationId);
+          setSlideGen((p) => ({
+            ...p,
+            [row.slideId!]: { status: url ? "done" : "error", url },
+          }));
+        } else {
+          setSlideGen((p) => ({
+            ...p,
+            [row.slideId!]: { status: "error", url: p[row.slideId!]?.url ?? null },
+          }));
+        }
+      }
     } finally {
-      setBusy(null);
+      setBatchBusy(false);
+      await syncPlanAndHistoryFromServer();
     }
-  }
+  }, [projectId, pollGen, runEstimate, syncPlanAndHistoryFromServer]);
 
-  const canPlan = Boolean(projectId && canUseBackend && hasImage && selectedCategory);
+  useEffect(() => {
+    void Promise.resolve().then(() => syncPlanAndHistoryFromServer());
+  }, [syncPlanAndHistoryFromServer]);
 
-  const ruAspect: Record<string, string> = {
-    shape: "форма",
-    color: "цвет",
-    logo: "логотип",
-    proportions: "пропорции",
-    material: "материал",
-    packaging: "упаковка",
-    details: "детали",
-  };
+  if (!hasImage) return null;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.42fr)]">
-      <div className="space-y-6">
-        {!hasImage ? (
-          <Alert>
-            <AlertTitle>Сначала фото товара</AlertTitle>
-            <AlertDescription>Загрузите изображение, чтобы открыть мастер галереи.</AlertDescription>
-          </Alert>
-        ) : null}
-        {!selectedCategory && hasImage ? (
+    <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+      <div className="space-y-4">
+        {!selectedCategory && (
           <Alert>
             <AlertTitle>Категория</AlertTitle>
-            <AlertDescription>Уточните категорию товара — по ней строится подсказка для визуала.</AlertDescription>
+            <AlertDescription>Сначала определите категорию товара выше.</AlertDescription>
           </Alert>
-        ) : null}
+        )}
 
-        <section className="space-y-3">
-          <Label className="text-base font-medium">Где будет размещаться витрина</Label>
-          <select
-            className={SELECT_BASE}
-            value={marketplace}
-            onChange={(e) => setMarketplace(e.target.value)}
-          >
-            {CARD_BUILDER_MARKETPLACES.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </section>
+        {planError && (
+          <Alert variant="destructive">
+            <AlertTitle>Ошибка</AlertTitle>
+            <AlertDescription>{planError}</AlertDescription>
+          </Alert>
+        )}
 
-        <section className="space-y-3">
-          <Label className="text-base font-medium">Что нужно создать</Label>
-          <select className={SELECT_BASE} value={goal} onChange={(e) => setGoal(e.target.value)}>
-            {CARD_BUILDER_GOALS.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.label}
-              </option>
-            ))}
-          </select>
-        </section>
+        <Card className="rounded-2xl border-border">
+          <CardHeader>
+            <CardTitle className="text-base">Маркетплейс и задача</CardTitle>
+            <CardDescription>Канал размещения и что нужно получить</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="pc-marketplace">Маркетплейс / канал</Label>
+              <select
+                id="pc-marketplace"
+                className={nativeFieldClass}
+                value={marketplace}
+                onChange={(e) => setMarketplace(e.target.value)}
+              >
+                {CARD_BUILDER_MARKETPLACES.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pc-goal">Что создать</Label>
+              <select
+                id="pc-goal"
+                className={nativeFieldClass}
+                value={goal}
+                onChange={(e) => setGoal(e.target.value)}
+              >
+                {CARD_BUILDER_GOALS.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </CardContent>
+        </Card>
 
-        <section className="space-y-3 rounded-xl border border-border bg-white p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Label className="text-base font-medium">Сохранять товар 1:1</Label>
-            <Button
-              type="button"
-              variant={preserveProduct ? "default" : "outline"}
-              size="sm"
-              onClick={() => setPreserveProduct((v) => !v)}
-            >
-              {preserveProduct ? "Да — без искажений" : "Выключено"}
-            </Button>
-          </div>
-          <p className="text-muted-foreground text-xs">
-            Дополнительно уточните, что сохранять. При включении «разрешить креатив» допускается лёгкая
-            стилизация.
-          </p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(CARD_BUILDER_PRESERVE_ASPECTS as readonly string[]).map((idRaw) => {
-              const key = idRaw as keyof typeof preserveAspects;
-              return (
-                <label key={idRaw} className="flex cursor-pointer items-center gap-2 text-sm">
+        <Card className="rounded-2xl border-border">
+          <CardHeader>
+            <CardTitle className="text-base">Товар 1:1</CardTitle>
+            <CardDescription>Сохранять исходный товар без искажений</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-2">
+              <input
+                id="pc-preserve"
+                type="checkbox"
+                checked={preserveProduct}
+                onChange={(e) => setPreserveProduct(e.target.checked)}
+                className="border-input accent-primary size-4 shrink-0 rounded border"
+              />
+              <Label htmlFor="pc-preserve">Сохранять товар без изменений</Label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {CARD_BUILDER_PRESERVE_ASPECTS.map((a) => (
+                <label
+                  key={a.id}
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs"
+                >
                   <input
                     type="checkbox"
-                    className="border-input size-4 rounded border"
-                    checked={Boolean(preserveAspects[key])}
-                    disabled={!preserveProduct}
-                    onChange={(e) =>
-                      setPreserveAspects((p) => ({ ...p, [key]: e.target.checked }))
-                    }
+                    checked={preserveAspects.includes(a.id)}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setPreserveAspects((prev) =>
+                        on ? [...prev, a.id] : prev.filter((x) => x !== a.id),
+                      );
+                    }}
+                    className="border-input accent-primary size-4 shrink-0 rounded border"
                   />
-                  {ruAspect[idRaw] ?? idRaw}
-                </label>
-              );
-            })}
-          </div>
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="border-input size-4 rounded border"
-              checked={allowCreativeStyle}
-              onChange={(e) => setAllowCreativeStyle(e.target.checked)}
-            />
-            Разрешить креативную стилизацию
-          </label>
-        </section>
-
-        <section className="space-y-2 rounded-xl border border-border bg-white p-4">
-          <Label className="text-base font-medium">Ключевые преимущества</Label>
-          <div className="flex flex-wrap gap-2">
-            {CARD_BUILDER_BENEFIT_TAGS.map((b) => (
-              <Button
-                key={b.id}
-                type="button"
-                variant={benefitTagsSelected[b.id] ? "default" : "outline"}
-                size="sm"
-                className="rounded-full text-xs"
-                onClick={() =>
-                  setBenefitTagsSelected((p) => ({ ...p, [b.id]: !p[b.id] }))
-                }
-              >
-                {b.label}
-              </Button>
-            ))}
-          </div>
-          <Textarea
-            value={benefitsExtra}
-            onChange={(e) => setBenefitsExtra(e.target.value)}
-            placeholder="Дополнительные преимущества"
-            rows={3}
-          />
-        </section>
-
-        <section className="space-y-2 rounded-xl border border-border bg-white p-4">
-          <Label className="text-base font-medium">Что обязательно показать</Label>
-          <div className="flex flex-wrap gap-2">
-            {CARD_BUILDER_MUST_SHOW.map((x) => (
-              <Button
-                key={x.id}
-                type="button"
-                variant={mustShowSelected[x.id] ? "default" : "outline"}
-                size="sm"
-                className="rounded-full text-xs"
-                onClick={() =>
-                  setMustShowSelected((p) => ({ ...p, [x.id]: !p[x.id] }))
-                }
-              >
-                {x.label}
-              </Button>
-            ))}
-          </div>
-        </section>
-
-        <section className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Для кого товар</Label>
-            <select
-              className={SELECT_BASE}
-              value={audience}
-              onChange={(e) => setAudience(e.target.value)}
-            >
-              <option value="">Не задано</option>
-              {CARD_BUILDER_AUDIENCES.map((a) => (
-                <option key={a.id} value={a.id}>
                   {a.label}
-                </option>
+                </label>
               ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label>Ценовой сегмент</Label>
-            <select
-              className={SELECT_BASE}
-              value={priceSegment}
-              onChange={(e) => setPriceSegment(e.target.value)}
-            >
-              <option value="">Не задано</option>
-              {CARD_BUILDER_PRICE_SEGMENTS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </section>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="pc-creative"
+                type="checkbox"
+                checked={creativeStyle}
+                onChange={(e) => setCreativeStyle(e.target.checked)}
+                className="border-input accent-primary size-4 shrink-0 rounded border"
+              />
+              <Label htmlFor="pc-creative">Разрешить креативную стилизацию</Label>
+            </div>
+          </CardContent>
+        </Card>
 
-        <section className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Стиль продаж</Label>
-            <select
-              className={SELECT_BASE}
-              value={salesStyle}
-              onChange={(e) => setSalesStyle(e.target.value)}
-            >
-              {CARD_BUILDER_SALES_STYLES.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
+        <Card className="rounded-2xl border-border">
+          <CardHeader>
+            <CardTitle className="text-base">Преимущества и акценты</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {CARD_BUILDER_BENEFIT_TAGS.map((b) => (
+                <label
+                  key={b.id}
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs"
+                >
+                  <input
+                    type="checkbox"
+                    checked={benefitsSel.includes(b.id)}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setBenefitsSel((prev) =>
+                        on ? [...prev, b.id] : prev.filter((x) => x !== b.id),
+                      );
+                    }}
+                    className="border-input accent-primary size-4 shrink-0 rounded border"
+                  />
+                  {b.label}
+                </label>
               ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label>Текст на изображении</Label>
-            <select
-              className={SELECT_BASE}
-              value={textDensity}
-              onChange={(e) => setTextDensity(e.target.value)}
-            >
-              {CARD_BUILDER_TEXT_DENSITY.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </section>
+            </div>
+            <div className="space-y-2">
+              <Label>Дополнительные преимущества</Label>
+              <Textarea
+                value={benefitsExtra}
+                onChange={(e) => setBenefitsExtra(e.target.value)}
+                rows={2}
+                className="rounded-xl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Что обязательно показать</Label>
+              <div className="flex flex-wrap gap-2">
+                {CARD_BUILDER_MUST_SHOW.map((m) => (
+                  <label
+                    key={m.id}
+                    className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={mustSel.includes(m.id)}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setMustSel((prev) =>
+                          on ? [...prev, m.id] : prev.filter((x) => x !== m.id),
+                        );
+                      }}
+                      className="border-input accent-primary size-4 shrink-0 rounded border"
+                    />
+                    {m.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-        {message ? (
-          <Alert variant="destructive">
-            <AlertTitle>Внимание</AlertTitle>
-            <AlertDescription>{message}</AlertDescription>
-          </Alert>
-        ) : null}
+        <Card className="rounded-2xl border-border">
+          <CardHeader>
+            <CardTitle className="text-base">Аудитория и стиль</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="pc-audience">Для кого товар</Label>
+              <select
+                id="pc-audience"
+                className={nativeFieldClass}
+                value={audience}
+                onChange={(e) => setAudience(e.target.value)}
+              >
+                {CARD_BUILDER_AUDIENCES.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pc-price-segment">Ценовой сегмент</Label>
+              <select
+                id="pc-price-segment"
+                className={nativeFieldClass}
+                value={priceSegment}
+                onChange={(e) => setPriceSegment(e.target.value)}
+              >
+                {CARD_BUILDER_PRICE_SEGMENTS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pc-sales-style">Стиль продаж</Label>
+              <select
+                id="pc-sales-style"
+                className={nativeFieldClass}
+                value={salesStyle}
+                onChange={(e) => setSalesStyle(e.target.value)}
+              >
+                {CARD_BUILDER_SALES_STYLES.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pc-text-density">Текст на изображении</Label>
+              <select
+                id="pc-text-density"
+                className={nativeFieldClass}
+                value={textDensity}
+                onChange={(e) => setTextDensity(e.target.value)}
+              >
+                {CARD_BUILDER_TEXT_DENSITY.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
-            variant="outline"
-            disabled={!canPlan || planSaving || !selectedCategory}
-            onClick={() => void saveStructure()}
+            className="rounded-xl"
+            disabled={!canWork || planLoading}
+            onClick={() => void runPlan()}
           >
-            {planSaving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Сохранение…
-              </>
-            ) : (
-              <>Сгенерировать структуру карточки</>
-            )}
+            {planLoading ? "Сохранение…" : "Сгенерировать структуру карточки"}
           </Button>
-          {isFullGalleryGoal ? (
-            <Button
-              type="button"
-              disabled={
-                !canPlan ||
-                busy === "gallery" ||
-                galleryEst == null ||
-                estimating ||
-                !structureSlides.some((s) => s.slideId)
-              }
-              onClick={() => void generateWholeGallery()}
-            >
-              {busy === "gallery" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Сгенерировать все слайды
-              {galleryEst != null ? (
-                <span className="text-muted-foreground ml-2 text-xs">({galleryEst} ток.)</span>
-              ) : estimating ? (
-                <span className="text-muted-foreground ml-2 text-xs">…оценка</span>
-              ) : null}
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-xl"
+            disabled={!canWork || estimating}
+            onClick={() => void runEstimate("single_slide")}
+          >
+            Оценить один слайд
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-xl"
+            disabled={!canWork || estimating || slides.length === 0}
+            onClick={() => void runEstimate("full_gallery")}
+          >
+            Оценить всю галерею
+          </Button>
         </div>
-        <p className="text-muted-foreground text-xs">
-          Баланс: <span className="text-foreground font-medium">{balanceNum}</span> · отдельные слайды:{" "}
-          {slideEst != null ? (
-            <>
-              около <span className="font-medium">{slideEst}</span> ток.
-            </>
-          ) : estimating ? (
-            "оцениваем…"
-          ) : (
-            "нажмите «структура» после выбора настроек"
+
+        <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+          {estimateSingle != null && (
+            <span className="tabular-nums">Один слайд ≈ {estimateSingle} ток.</span>
           )}
-          .
-        </p>
-      </div>
+          {estimateGallery != null && slides.length > 1 && (
+            <span className="tabular-nums">Вся галерея ≈ {estimateGallery} ток.</span>
+          )}
+          <span className="tabular-nums text-foreground">
+            Баланс: {balanceCredits}
+          </span>
+        </div>
 
-      <aside className="space-y-3 lg:sticky lg:top-6 lg:self-start">
-        <Card>
-          <CardContent className="space-y-3 p-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <ImageIcon className="size-4" aria-hidden />
-              Предпросмотр структуры
-            </div>
-            <ul className="space-y-3">
-              {structureSlides.map((slide, idx) => {
-                const sk = slide.slideId ?? `${idx}`;
-                const g = slide.slideId ? genBySlide[slide.slideId] : genBySlide[sk];
-                const statusHuman = !slide.slideId
-                  ? "черновик"
-                  : g == null
-                    ? "не сгенерировано"
-                    : g.status === "QUEUED" || g.status === "PROCESSING"
-                      ? "генерируется"
-                      : g.status === "COMPLETED"
-                        ? "готово"
-                        : g.status === "FAILED"
-                          ? "ошибка"
-                          : "в работе";
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            className="rounded-xl"
+            disabled={!canWork || !activeSlideId || batchBusy || genBusy}
+            onClick={() => activeSlideId && void generateOne(activeSlideId)}
+          >
+            {genBusy ? "Запуск…" : "Сгенерировать выбранный слайд"}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            className="rounded-xl"
+            disabled={!canWork || slides.length === 0 || batchBusy || genBusy}
+            onClick={() => void generateAll()}
+          >
+            {batchBusy ? "Генерация галереи…" : "Сгенерировать все слайды"}
+          </Button>
+        </div>
 
+        {genHistory.length ? (
+          <Card className="rounded-2xl border-border">
+            <CardHeader>
+              <CardTitle className="text-base">Создать карточку — ранее в проекте</CardTitle>
+              <CardDescription>Отдельно от карточки маркетплейса и других сценариев</CardDescription>
+            </CardHeader>
+            <CardContent className="max-h-64 space-y-2 overflow-y-auto text-sm">
+              {[...genHistory].reverse().map((g) => {
+                const title =
+                  slides.find((s) => s.slideId === g.slideId)?.title ?? g.slideId.replace(/_/g, " ");
                 return (
-                  <li
-                    key={`${slide.title}-${idx}`}
-                    className="rounded-lg border border-border bg-muted/30 p-3 text-sm"
+                  <div
+                    key={`${g.generationId}-${g.createdAt ?? ""}`}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="bg-primary/15 text-primary flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold tabular-nums">
-                        {(idx + 1).toString().padStart(2, "0")}
-                      </div>
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <p className="font-medium leading-snug">{slide.title}</p>
-                        {slide.purpose ? (
-                          <p className="text-muted-foreground text-xs">{slide.purpose}</p>
-                        ) : null}
-                        <div className="text-muted-foreground flex flex-wrap gap-2 text-xs">
-                          <span className={cn("rounded-full border px-2 py-0.5")}>{statusHuman}</span>
-                          {slideEst != null && slide.slideId ? (
-                            <span className="tabular-nums">{slideEst} ток.</span>
-                          ) : null}
-                        </div>
+                    <div>
+                      <div className="font-medium">{title}</div>
+                      <div className="text-muted-foreground text-xs">
+                        {g.createdAt
+                          ? new Date(g.createdAt).toLocaleString("ru-RU", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            })
+                          : "—"}
+                        {g.status ? ` · ${g.status}` : ""}
                       </div>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {slide.slideId ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          className="h-8 text-xs"
-                          disabled={!canPlan || busy === slide.slideId || !selectedCategory}
-                          onClick={() => void generateSlide(slide)}
-                        >
-                          Сгенерировать
-                        </Button>
-                      ) : null}
+                    <Link
+                      href={`/dashboard/history/${g.generationId}`}
+                      className="text-primary text-xs font-medium underline"
+                    >
+                      Открыть
+                    </Link>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
+
+      <div className="lg:sticky lg:top-24 space-y-3">
+        <Card className="rounded-2xl border-primary/30 bg-gradient-to-b from-[#e8f8fb] to-white">
+          <CardHeader>
+            <CardTitle className="text-base">Предпросмотр галереи</CardTitle>
+            <CardDescription>Порядок и статус слайдов</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {slides.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                После нажатия «Сгенерировать структуру карточки» здесь появится план из 6–8 кадров.
+              </p>
+            ) : (
+              slides.map((s) => {
+                const st = slideGen[s.slideId]?.status ?? "не сгенерировано";
+                const url = slideGen[s.slideId]?.url;
+                const active = activeSlideId === s.slideId;
+                return (
+                  <div
+                    key={s.slideId}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setActiveSlideId(s.slideId)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") setActiveSlideId(s.slideId);
+                    }}
+                    className={cn(
+                      "cursor-pointer rounded-xl border p-3 transition-colors",
+                      active ? "border-primary bg-primary/5" : "border-border bg-white",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-medium text-sm">{s.title}</div>
+                        <div className="text-muted-foreground text-xs leading-snug">{s.purpose}</div>
+                        <div className="text-muted-foreground mt-1 text-[11px] capitalize">
+                          Статус: {st}
+                        </div>
+                      </div>
                       <Button
                         type="button"
                         size="sm"
-                        variant="ghost"
-                        className="h-8 text-xs"
-                        disabled={!canPlan || planSaving || !selectedCategory}
-                        onClick={() => void saveStructure()}
+                        variant="outline"
+                        className="rounded-lg shrink-0 text-xs"
+                        disabled={!canWork || genBusy || batchBusy}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void generateOne(s.slideId);
+                        }}
                       >
-                        Изменить
-                      </Button>
-                      {g?.generationId ? (
-                        <a
-                          className="border-border text-foreground hover:bg-muted inline-flex h-8 items-center rounded-lg border px-2 text-xs"
-                          href={`/dashboard/history/${g.generationId}`}
-                        >
-                          История
-                        </a>
-                      ) : null}
-                      {g?.outputUrl ? (
-                        <a
-                          className="border-border text-foreground hover:bg-muted inline-flex h-8 items-center gap-1 rounded-lg border px-2 text-xs"
-                          href={g.outputUrl}
-                          download
-                        >
-                          <Download className="size-3.5" aria-hidden /> Скачать
-                        </a>
-                      ) : null}
-                      {slide.slideId ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 px-2 text-xs"
-                          disabled={busy === slide.slideId || !canPlan || !slide.slideId || !selectedCategory}
-                          onClick={() => void generateSlide(slide)}
-                        >
-                          <RefreshCw className="mr-1 size-3.5" aria-hidden />
-                          Ещё раз
-                        </Button>
-                      ) : null}
-                      <Button type="button" size="sm" variant="outline" disabled className="h-8 text-xs">
-                        Вариант B — скоро
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" disabled className="h-8 text-xs">
-                        Убрать текст — скоро
+                        Сгенерировать
                       </Button>
                     </div>
-                    {g?.outputUrl ? (
-                      <div className="mt-3 overflow-hidden rounded-md border">
+                    {url ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={g.outputUrl}
-                          alt=""
-                          className="h-40 w-full object-cover sm:h-48"
-                          loading="lazy"
-                        />
+                        <img src={url} alt="" className="max-h-40 rounded-lg border object-contain" />
+                        <a href={url} download className="text-primary text-xs underline">
+                          Скачать
+                        </a>
                       </div>
                     ) : null}
-                  </li>
+                  </div>
                 );
-              })}
-            </ul>
-            {!isFullGalleryGoal ? (
-              <p className="text-muted-foreground text-[11px] leading-snug">
-                Для массового запуска выберите цель «Полная галерея 6/8», затем кнопка «Сгенерировать все» появится
-                слева.
-              </p>
-            ) : (
-              <p className="text-muted-foreground text-[11px] leading-snug">
-                Полная галерея запускается после сохранённой структуры из 6 или 8 кадров.
-              </p>
+              })
             )}
           </CardContent>
         </Card>
-
-        <div className="rounded-xl border border-dashed border-border p-4 text-xs text-muted-foreground">
-          <p>Вариант B, правки текста и подготовка к ролику появятся в следующих версиях.</p>
-        </div>
-      </aside>
+      </div>
     </div>
   );
 }

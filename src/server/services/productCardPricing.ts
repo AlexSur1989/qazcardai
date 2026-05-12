@@ -4,13 +4,14 @@ import { isAdminPricingPinned } from "@/lib/admin-pricing-pinned";
 import {
   getProductCardSettings,
   type ProductCardSettings,
+  type ProductCardCardBuilderPricing,
 } from "@/server/services/productCardSettings";
 
 export type ProductCardPricingScenario =
   | "concept_image"
   | "marketplace_card"
-  | "video"
-  | "card_builder";
+  | "card_builder"
+  | "video";
 
 export type ProductCardPriceBreakdown = {
   v?: 2;
@@ -46,11 +47,6 @@ export type ProductCardPriceBreakdown = {
   /** Итоговые списания (= credits при estimate бандла) */
   totalCredits?: number;
   variantAllocations?: number[] | null;
-  /** Дублирует `scenario` там, где нужен явный ключ для отчётов (card_builder). */
-  scenarioKey?: string;
-  slideRole?: string;
-  /** Итог после множителей; обычно совпадает с `credits`. */
-  finalCredits?: number;
 };
 
 type PricingSchema = {
@@ -462,4 +458,120 @@ export function calculateProductCardVideoCredits(
     scenario: "video",
     settings,
   });
+}
+
+export function computeCardBuilderCreditsBeforeMargin(
+  kind: "slide" | "gallery6" | "gallery8",
+  cardBuilderPricing: ProductCardCardBuilderPricing,
+  opts: { premiumStyle?: boolean; heavyText?: boolean },
+): number {
+  let n =
+    kind === "slide"
+      ? cardBuilderPricing.cardBuilderSingleSlideCredits
+      : kind === "gallery6"
+        ? cardBuilderPricing.cardBuilderGallery6Credits
+        : cardBuilderPricing.cardBuilderGallery8Credits;
+  if (opts.premiumStyle) {
+    n = Math.ceil(n * cardBuilderPricing.multipliers.premiumStyle);
+  }
+  if (opts.heavyText) {
+    n = Math.ceil(n * cardBuilderPricing.multipliers.heavyTextInfographic);
+  }
+  return Math.max(1, Math.round(n));
+}
+
+function isPremiumSalesStyle(id: string): boolean {
+  const s = id.trim().toLowerCase();
+  return s === "premium" || s === "editorial" || s === "luxury" || s.includes("premium");
+}
+
+function isHeavyTextDensity(id: string): boolean {
+  const s = id.trim().toLowerCase();
+  return s === "heavy" || s === "infographic";
+}
+
+/** Оценка карточки-билдера: фиксированные кредиты + множители, провайдер — пропорционально референсу marketplace. */
+export async function buildCardBuilderPriceBreakdown(params: {
+  model: AiModel;
+  finalCredits: number;
+  slideRole: string;
+  gallerySlideCount?: number | null;
+}): Promise<ProductCardPriceBreakdown> {
+  const settings = await getProductCardSettings();
+  const ref = await calculateProductCardMarketplaceCardCredits(params.model, {
+    cardSize: "square",
+  });
+  const scale = ref.credits > 0 ? params.finalCredits / ref.credits : 1;
+  const providerCostUsd =
+    Math.round(ref.providerCostUsd * scale * 100_000) / 100_000;
+  const revenueKzt =
+    Math.round(params.finalCredits * settings.tokenValueKzt * 100) / 100;
+  const providerCostKzt =
+    Math.round(providerCostUsd * settings.usdToKzt * 100) / 100;
+  const marginKzt = Math.round((revenueKzt - providerCostKzt) * 100) / 100;
+  const marginPercent = revenueKzt > 0 ? (marginKzt / revenueKzt) * 100 : null;
+
+  const warnings: string[] = [...ref.warnings.filter((w) => !w.includes("matrix"))];
+  if (!settings.allowNegativeMargin && marginKzt < 0) {
+    warnings.push("Negative margin is not allowed for Product Card pricing.");
+  }
+
+  const galleryCount = params.gallerySlideCount ?? undefined;
+  const formula = `card_builder fixed credits=${params.finalCredits}${galleryCount ? `; gallerySlides=${galleryCount}` : ""}; scaled provider from marketplace ref`;
+
+  return {
+    v: 2,
+    pricingScope: "PRODUCT_CARD",
+    scenario: "card_builder",
+    productCardModelType: params.model.productCardModelType,
+    modelId: params.model.id,
+    modelSlug: params.model.slug,
+    modelName: params.model.name,
+    credits: params.finalCredits,
+    tokens: params.finalCredits,
+    providerCostUsd,
+    providerCostKzt,
+    revenueKzt,
+    marginKzt,
+    marginPercent,
+    priceSource: "manual_override",
+    formula,
+    warnings,
+    manualOverrideKey: `card_builder:${params.slideRole}`,
+    variantCount: galleryCount ?? 1,
+    singleVariantCredits: params.finalCredits,
+    bundleCredits: galleryCount && galleryCount > 1 ? params.finalCredits : null,
+    totalCredits: params.finalCredits,
+    variantAllocations: galleryCount && galleryCount > 1 ? [params.finalCredits] : undefined,
+  };
+}
+
+export async function estimateCardBuilderCharge(
+  kind: "slide" | "gallery6" | "gallery8",
+  model: AiModel,
+  cardBuilderPricing: ProductCardCardBuilderPricing,
+  salesStyleId: string,
+  textDensityId: string,
+  slideRole: string,
+  gallerySlideCount?: number | null,
+): Promise<ProductCardPriceBreakdown> {
+  const premiumStyle = isPremiumSalesStyle(salesStyleId);
+  const heavyText = isHeavyTextDensity(textDensityId);
+  const credits = computeCardBuilderCreditsBeforeMargin(kind, cardBuilderPricing, {
+    premiumStyle,
+    heavyText,
+  });
+  return buildCardBuilderPriceBreakdown({
+    model,
+    finalCredits: credits,
+    slideRole,
+    gallerySlideCount: gallerySlideCount ?? null,
+  });
+}
+
+export function cardBuilderMultiplierFlags(salesStyleId: string, textDensityId: string) {
+  return {
+    premiumStyle: isPremiumSalesStyle(salesStyleId),
+    heavyText: isHeavyTextDensity(textDensityId),
+  };
 }

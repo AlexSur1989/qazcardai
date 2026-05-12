@@ -108,7 +108,7 @@ export type ProductCardGenMeta = {
   flow: "product_card";
   productCard: {
     projectId: string;
-    tab: "concept_photo" | "marketplace_card" | "card_builder" | "video";
+    tab: "concept_photo" | "marketplace_card" | "video" | "card_builder";
     category?: string;
     conceptId?: string;
     sourceType?:
@@ -421,17 +421,17 @@ export async function queueProductCardImage(
     : normalizedSettings;
   let price = pricingBreakdown ?? null;
   if (!price) {
-    if (productMeta.productCard.tab === "card_builder") {
+    if (productMeta.productCard.tab === "marketplace_card") {
+      price = await calculateProductCardMarketplaceCardCredits(model, mergedForCredits);
+    } else if (productMeta.productCard.tab === "card_builder") {
       return {
         ok: false,
-        error: "Не задана цена для сценария «Создать карточку»",
-        status: 400,
+        error: "Сценарий «Создать карточку» требует расчёт цены на сервере",
+        status: 500,
       };
+    } else {
+      price = await calculateProductCardConceptImageCredits(model, mergedForCredits);
     }
-    price =
-      productMeta.productCard.tab === "marketplace_card"
-        ? await calculateProductCardMarketplaceCardCredits(model, mergedForCredits)
-        : await calculateProductCardConceptImageCredits(model, mergedForCredits);
   }
   try {
     assertProductCardPriceAllowed(price);

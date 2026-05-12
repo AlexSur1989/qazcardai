@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getPublicProductCategories } from "@/config/product-card-categories";
+import type {
+  ProductCardScenarioKey,
+  ProductCardScenarioToggles,
+} from "@/server/services/productCardSettings";
 
 import { CardBuilderTab } from "./card-builder-tab";
 import { CategorySelector } from "./category-selector";
@@ -16,25 +20,27 @@ import { ProductVideoTab } from "./product-video-tab";
 import { SourceImagesUpload, type UploadFlowState } from "./source-images-upload";
 import { useProductCardProject } from "./use-product-card-project";
 
-const TAB_DEFS = [
-  { id: "concepts" as const, scenarioKey: "conceptPhoto" as const, defaultLabel: "Фото с концепциями" },
-  { id: "card" as const, scenarioKey: "marketplaceCard" as const, defaultLabel: "Карточка товара" },
-  {
-    id: "card_builder" as const,
-    scenarioKey: "cardBuilder" as const,
-    defaultLabel: "Создать карточку",
-  },
-  { id: "video" as const, scenarioKey: "productVideo" as const, defaultLabel: "Видео" },
+const SCENARIO_TAB: Array<{
+  id: "concepts" | "card" | "cardBuilder" | "video";
+  scenario: ProductCardScenarioKey;
+}> = [
+  { id: "concepts", scenario: "conceptPhoto" },
+  { id: "card", scenario: "marketplaceCard" },
+  { id: "cardBuilder", scenario: "cardBuilder" },
+  { id: "video", scenario: "productVideo" },
 ];
 
+/** Подписи по умолчанию, если в настройках пустая строка */
+const FALLBACK_LABELS: Record<ProductCardScenarioKey, string> = {
+  conceptPhoto: "Фото с концепциями",
+  marketplaceCard: "Карточка товара",
+  cardBuilder: "Создать карточку",
+  productVideo: "Видео",
+};
+
+type TabId = (typeof SCENARIO_TAB)[number]["id"];
+
 const CATEGORIES = [...getPublicProductCategories()];
-
-export type ScenarioTogglesUi = Record<
-  (typeof TAB_DEFS)[number]["scenarioKey"],
-  { enabled: boolean; label: string }
->;
-
-type TabId = (typeof TAB_DEFS)[number]["id"];
 
 type SizePreset = {
   id: string;
@@ -52,20 +58,20 @@ type VideoPreset = {
 
 type Props = {
   balanceCredits: number;
+  scenarios: ProductCardScenarioToggles;
   conceptImageSizes: SizePreset[];
   marketplaceCardSizes: SizePreset[];
   videoPresets: VideoPreset[];
-  scenarios: ScenarioTogglesUi;
   /** Показать режим разметки оверлея (админ) */
   canMarketplaceLayoutDebug?: boolean;
 };
 
 export function ProductCardPage({
   balanceCredits,
+  scenarios,
   conceptImageSizes,
   marketplaceCardSizes,
   videoPresets,
-  scenarios,
   canMarketplaceLayoutDebug = false,
 }: Props) {
   const {
@@ -86,27 +92,27 @@ export function ProductCardPage({
     runClassify,
     runMockCategory,
     setManualCategory,
-    reloadProject,
   } = useProductCardProject();
 
-  const [tab, setTab] = useState<TabId>("concepts");
+  const visibleTabs = useMemo(
+    () =>
+      SCENARIO_TAB.filter((t) => {
+        const row = scenarios[t.scenario];
+        return row?.enabled !== false;
+      }),
+    [scenarios],
+  );
 
-  const visibleTabs = useMemo(() => {
-    return TAB_DEFS.filter((def) => scenarios[def.scenarioKey].enabled).map((def) => ({
-      id: def.id,
-      label: scenarios[def.scenarioKey].label?.trim() || def.defaultLabel,
-    }));
-  }, [scenarios]);
+  const defaultTab = visibleTabs[0]?.id ?? "concepts";
 
-  useEffect(() => {
-    if (!visibleTabs.some((x) => x.id === tab)) {
-      const first = visibleTabs[0]?.id;
-      if (first) setTab(first);
-    }
-  }, [visibleTabs, tab]);
-
+  const [tab, setTab] = useState<TabId>(defaultTab);
   const [uploadFlow, setUploadFlow] = useState<UploadFlowState>("idle");
   const hasImage = Boolean(source?.url);
+
+  const resolvedTab = useMemo((): TabId => {
+    if (visibleTabs.length === 0) return tab;
+    return visibleTabs.some((t) => t.id === tab) ? tab : visibleTabs[0]!.id;
+  }, [visibleTabs, tab]);
 
   if (!initDone) {
     return (
@@ -118,6 +124,11 @@ export function ProductCardPage({
   }
 
   const balanceDisplay = Number.isFinite(Number(balanceCredits)) ? Math.round(Number(balanceCredits)) : 0;
+
+  const tabLabel = (scenario: ProductCardScenarioKey): string => {
+    const lbl = scenarios[scenario]?.label?.trim();
+    return lbl ? lbl : FALLBACK_LABELS[scenario];
+  };
 
   return (
     <div className="space-y-10">
@@ -185,22 +196,22 @@ export function ProductCardPage({
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Нет исходного фото</AlertTitle>
             <AlertDescription>
-              Загрузите фото товара — тогда станут доступны выбранные сценарии (настраиваются в админке).
+              Загрузите фото товара — тогда откроются сценарии генерации для витрин и промо.
             </AlertDescription>
           </Alert>
         )}
 
-        {visibleTabs.length === 0 ? (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
+        {visibleTabs.length === 0 && hasImage ? (
+          <Alert>
             <AlertTitle>Нет доступных сценариев</AlertTitle>
             <AlertDescription>
-              Включите хотя бы один сценарий в админке: Product Card → вкладка «Сценарии».
+              Все сценарии отключены администратором. Обратитесь в поддержку.
             </AlertDescription>
           </Alert>
-        ) : (
+        ) : null}
+
         <Tabs
-          value={tab}
+          value={resolvedTab}
           onValueChange={(v) => {
             if (hasImage) setTab(v as TabId);
           }}
@@ -208,7 +219,7 @@ export function ProductCardPage({
         >
           <TabsList
             variant="line"
-            className="h-auto w-full max-w-4xl flex-wrap justify-start gap-1.5 rounded-xl border border-border bg-white p-1.5"
+            className="h-auto w-full max-w-3xl flex-wrap justify-start gap-1.5 rounded-xl border border-border bg-white p-1.5"
           >
             {visibleTabs.map((t) => (
               <TabsTrigger
@@ -217,12 +228,11 @@ export function ProductCardPage({
                 disabled={!hasImage}
                 className="rounded-lg border border-transparent px-4 py-2.5 text-sm data-active:border-primary data-active:bg-primary/10 data-active:shadow-sm"
               >
-                {t.label}
+                {tabLabel(t.scenario)}
               </TabsTrigger>
             ))}
           </TabsList>
 
-          {scenarios.conceptPhoto.enabled ? (
           <TabsContent value="concepts" className="mt-4">
             <ConceptPhotoTab
               selectedCategory={selectedCategory}
@@ -233,8 +243,6 @@ export function ProductCardPage({
               sizePresets={conceptImageSizes}
             />
           </TabsContent>
-          ) : null}
-          {scenarios.marketplaceCard.enabled ? (
           <TabsContent value="card" className="mt-4">
             <MarketplaceCardTab
               hasImage={hasImage}
@@ -245,20 +253,15 @@ export function ProductCardPage({
               canLayoutDebug={canMarketplaceLayoutDebug}
             />
           </TabsContent>
-          ) : null}
-          {scenarios.cardBuilder.enabled ? (
-          <TabsContent value="card_builder" className="mt-4">
+          <TabsContent value="cardBuilder" className="mt-4">
             <CardBuilderTab
-              selectedCategory={selectedCategory}
               hasImage={hasImage}
               canUseBackend={canUseBackend}
               projectId={projectId}
+              selectedCategory={selectedCategory}
               balanceCredits={balanceDisplay}
-              reloadProject={reloadProject}
             />
           </TabsContent>
-          ) : null}
-          {scenarios.productVideo.enabled ? (
           <TabsContent value="video" className="mt-4">
             <ProductVideoTab
               hasImage={hasImage}
@@ -268,9 +271,7 @@ export function ProductCardPage({
               videoPresets={videoPresets}
             />
           </TabsContent>
-          ) : null}
         </Tabs>
-        )}
       </section>
     </div>
   );

@@ -168,6 +168,7 @@ async function main() {
     PRODUCT_CARD_DEFAULT_CONCEPT_IMAGE_MODEL_SLUG: "seedream-4-0-product-concept",
     PRODUCT_CARD_DEFAULT_MARKETPLACE_CARD_MODEL_SLUG: "gpt-image-2-product-card",
     PRODUCT_CARD_DEFAULT_VIDEO_MODEL_SLUG: "seedance-2-0-fast-product-video",
+    PRODUCT_CARD_DEFAULT_CARD_BUILDER_MODEL_SLUG: "",
   };
   for (const [key, value] of Object.entries(defaults)) {
     await prisma.appSetting.upsert({

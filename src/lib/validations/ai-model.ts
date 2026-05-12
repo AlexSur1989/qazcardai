@@ -31,6 +31,7 @@ const coreSchema = z.object({
       "PRODUCT_CLASSIFIER",
       "PRODUCT_CONCEPT_IMAGE",
       "PRODUCT_MARKETPLACE_CARD",
+      "PRODUCT_CARD_BUILDER",
       "PRODUCT_VIDEO",
     ])
     .nullable(),
@@ -192,6 +193,7 @@ export function parseAiModelFormData(
             | "PRODUCT_CLASSIFIER"
             | "PRODUCT_CONCEPT_IMAGE"
             | "PRODUCT_MARKETPLACE_CARD"
+            | "PRODUCT_CARD_BUILDER"
             | "PRODUCT_VIDEO")
         : null,
     apiModelId: get("apiModelId") ?? "",

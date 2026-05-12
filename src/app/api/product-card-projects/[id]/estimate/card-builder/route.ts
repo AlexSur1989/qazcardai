@@ -1,14 +1,47 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
+import { cardBuilderPlanFieldsSchema } from "@/lib/validations/card-builder-plan";
 import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
-import { cardBuilderEstimateBodySchema } from "@/server/api/product-card-card-builder-validation";
-import { estimateCardBuilderOperation } from "@/server/services/productCardCardBuilder";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
+import {
+  allocateCreditsAcrossVariants,
+  estimateCardBuilderCharge,
+} from "@/server/services/productCardPricing";
+import { resolveCardBuilderImageModel } from "@/server/services/productCardModelResolver";
+import { readCardBuilderBlock } from "@/server/services/productCardCardBuilderMeta";
+import {
+  assertCardBuilderScenarioEnabled,
+} from "@/server/services/productCardCardBuilderGeneration";
+import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
+import {
+  PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE,
+  getProductCardSettings,
+} from "@/server/services/productCardSettings";
+import { buildCardBuilderGalleryPlan } from "@/server/services/productCardBuilderPlan";
+import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+const estimateSchema = z.object({
+  source: z.enum(["payload", "saved"]).default("payload"),
+  payload: cardBuilderPlanFieldsSchema.optional(),
+  mode: z.enum(["single_slide", "full_gallery"]),
+});
+
+export const dynamic = "force-dynamic";
+
+function galleryBundleKind(
+  goal: string,
+  slideCount: number,
+): "gallery6" | "gallery8" | null {
+  if (goal === "full_gallery_6" && slideCount === 6) return "gallery6";
+  if (goal === "full_gallery_8" && slideCount === 8) return "gallery8";
+  return null;
+}
 
 export async function POST(req: Request, ctx: Ctx) {
   const current = await getFreshSessionUser();
@@ -18,12 +51,18 @@ export async function POST(req: Request, ctx: Ctx) {
     }
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
+
+  const gate = await assertCardBuilderScenarioEnabled();
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error, code: gate.code }, { status: gate.status });
+  }
+
   const userId = current.user.id;
+  const rate = await enforceGenerationRateLimit(userId);
+  if (rate) return rate;
 
   const tooLarge = rejectOversizedBody(req, getMaxJsonBodyBytes());
   if (tooLarge) return tooLarge;
-
-  const { id } = await ctx.params;
 
   let json: unknown;
   try {
@@ -31,7 +70,8 @@ export async function POST(req: Request, ctx: Ctx) {
   } catch {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
-  const parsed = cardBuilderEstimateBodySchema.safeParse(json);
+
+  const parsed = estimateSchema.safeParse(json ?? {});
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Некорректные данные" },
@@ -39,13 +79,96 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
-  const result = await estimateCardBuilderOperation(userId, id, parsed.data);
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
+  const { id } = await ctx.params;
+
+  const project = await getOwnedProjectOrNull(userId, id);
+  if (!project) {
+    return NextResponse.json({ error: "Проект не найден" }, { status: 404 });
   }
+
+  const blk = parsed.data.source === "saved" ? await readCardBuilderBlock(id) : null;
+
+  let plan = parsed.data.payload;
+  if (parsed.data.source === "saved") {
+    if (!blk?.settings) {
+      return NextResponse.json(
+        { error: "Нет сохранённых параметров — сначала сохраните структуру" },
+        { status: 400 },
+      );
+    }
+    const { updatedAt: _u, ...rest } = blk.settings;
+    void _u;
+    plan = rest;
+  }
+
+  if (!plan) {
+    return NextResponse.json({ error: "Нужны параметры структуры" }, { status: 400 });
+  }
+
+  const model = (await resolveCardBuilderImageModel())?.model ?? null;
+  if (!model) {
+    return NextResponse.json({ error: PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE }, { status: 400 });
+  }
+  const settings = await getProductCardSettings();
+
+  if (parsed.data.mode === "single_slide") {
+    const br = await estimateCardBuilderCharge(
+      "slide",
+      model,
+      settings.cardBuilderPricing,
+      plan.salesStyle,
+      plan.textDensity,
+      "estimate",
+      null,
+    );
+    return NextResponse.json({
+      credits: br.credits,
+      priceBreakdown: br,
+      model: { id: model.id, slug: model.slug, name: model.name },
+    });
+  }
+
+  const { slides } = buildCardBuilderGalleryPlan(plan);
+  const bundle = galleryBundleKind(plan.goal, slides.length);
+  let totalCredits: number;
+
+  if (bundle) {
+    const br = await estimateCardBuilderCharge(
+      bundle,
+      model,
+      settings.cardBuilderPricing,
+      plan.salesStyle,
+      plan.textDensity,
+      "gallery_bundle",
+      slides.length,
+    );
+    totalCredits = br.credits;
+  } else {
+    let sum = 0;
+    for (const s of slides) {
+      const br = await estimateCardBuilderCharge(
+        "slide",
+        model,
+        settings.cardBuilderPricing,
+        plan.salesStyle,
+        plan.textDensity,
+        s.imageRole,
+        null,
+      );
+      sum += br.credits;
+    }
+    totalCredits = sum;
+  }
+
+  const alloc =
+    slides.length <= 1
+      ? [totalCredits]
+      : allocateCreditsAcrossVariants(totalCredits, slides.length);
+
   return NextResponse.json({
-    credits: result.credits,
-    priceHint: result.priceHint,
-    appliedMultipliers: result.appliedMultipliers ?? [],
+    credits: totalCredits,
+    slideCount: slides.length,
+    allocations: alloc,
+    model: { id: model.id, slug: model.slug, name: model.name },
   });
 }

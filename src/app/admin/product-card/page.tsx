@@ -18,6 +18,7 @@ import {
   calculateProductCardConceptImageCredits,
   calculateProductCardMarketplaceCardCredits,
   calculateProductCardVideoCredits,
+  type ProductCardPriceBreakdown,
 } from "@/server/services/productCardPricing";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ProductCardScenariosPanel } from "@/components/admin/product-card-scenarios-panel";
 import { cn } from "@/lib/utils";
 
 export const metadata = {
@@ -42,6 +44,7 @@ type Props = {
 
 const TABS = [
   ["overview", "Overview"],
+  ["scenarios", "Сценарии"],
   ["settings", "Settings"],
   ["models", "Models"],
   ["pricing", "Pricing"],
@@ -76,7 +79,7 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
   const conceptModel = activeModels.find((m) => m.productCardModelType === "PRODUCT_CONCEPT_IMAGE");
   const marketplaceModel = activeModels.find((m) => m.productCardModelType === "PRODUCT_MARKETPLACE_CARD");
   const videoModel = activeModels.find((m) => m.productCardModelType === "PRODUCT_VIDEO");
-  const calculatorPromises = [];
+  const calculatorPromises: Promise<ProductCardPriceBreakdown>[] = [];
   if (conceptModel) {
     calculatorPromises.push(calculateProductCardConceptImageCredits(conceptModel, { size: "1x1" }));
   }
@@ -120,6 +123,17 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
           </Link>
         ))}
       </div>
+
+      {active === "scenarios" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Сценарии Product Card</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ProductCardScenariosPanel initial={productSettings.scenarios} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       {active === "overview" ? (
         <div className="grid gap-4 md:grid-cols-3">

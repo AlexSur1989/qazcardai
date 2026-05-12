@@ -601,6 +601,50 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
     sensitive: false,
   },
   {
+    key: "PRODUCT_CARD_SCENARIOS",
+    group: "productCard",
+    label: "PRODUCT_CARD_SCENARIOS / Включённые сценарии Product Card",
+    description:
+      "JSON { conceptPhoto, marketplaceCard, cardBuilder, productVideo } → { enabled, label }.",
+    type: "json",
+    defaultValue: {
+      conceptPhoto: { enabled: true, label: "Фото с концепциями" },
+      marketplaceCard: { enabled: true, label: "Карточка товара" },
+      cardBuilder: { enabled: true, label: "Создать карточку" },
+      productVideo: { enabled: true, label: "Видео" },
+    },
+    editable: true,
+    sensitive: false,
+  },
+  {
+    key: "PRODUCT_CARD_DEFAULT_CARD_BUILDER_MODEL_SLUG",
+    group: "productCard",
+    label: "PRODUCT_CARD_DEFAULT_CARD_BUILDER_MODEL_SLUG / Модель «Создать карточку»",
+    description:
+      "IMAGE-модель scope PRODUCT_CARD с типом PRODUCT_CARD_BUILDER (или пусто — fallback на карточку маркетплейса).",
+    type: "string",
+    defaultValue: "",
+    editable: true,
+    sensitive: false,
+  },
+  {
+    key: "PRODUCT_CARD_CARD_BUILDER_PRICING",
+    group: "productCard",
+    label: "PRODUCT_CARD_CARD_BUILDER_PRICING / Тарифы «Создать карточку»",
+    description:
+      "Фиксированные кредиты: plan, слайд, галерея 6/8, множители premiumStyle и heavyTextInfographic.",
+    type: "json",
+    defaultValue: {
+      cardBuilderPlanCredits: 0,
+      cardBuilderSingleSlideCredits: 150,
+      cardBuilderGallery6Credits: 750,
+      cardBuilderGallery8Credits: 950,
+      multipliers: { premiumStyle: 1.2, heavyTextInfographic: 1.1 },
+    },
+    editable: true,
+    sensitive: false,
+  },
+  {
     key: "PRODUCT_CLASSIFIER_PROVIDER",
     group: "classifier",
     label: "PRODUCT_CLASSIFIER_PROVIDER / Провайдер классификатора товара",

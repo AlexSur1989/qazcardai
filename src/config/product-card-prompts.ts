@@ -399,115 +399,93 @@ export function buildProductVideoPrompt(
   return buildProductVideoPrompt({ motionStyle: a, userPrompt: b });
 }
 
-export type CardBuilderSlidePromptInput = {
-  marketplaceLabel: string;
-  categoryLabel: string;
-  imageRole:
-    | "main_photo"
-    | "benefits_infographic"
-    | "dimensions"
-    | "materials"
-    | "lifestyle"
-    | "detail_closeup"
-    | "packaging"
-    | "premium_poster"
-    | "ad_banner";
+// --- Card builder (product_card / card_builder) — отдельно от marketplace_card ---
+
+export type CardBuilderPromptInput = {
+  categoryId: string;
+  marketplace: string;
+  imageRole: string;
   slideTitle: string;
-  purpose: string;
-  promptIntent: string;
-  recommendedTextMode: "none" | "title_only" | "medium" | "heavy" | "infographic";
-  preserveProductStrict: boolean;
-  preserveHints: readonly string[];
-  allowCreativeStyle: boolean;
-  benefitsSummary: string;
-  mustShowSummary: string;
-  audienceLabel?: string | null;
-  priceSegmentLabel?: string | null;
-  salesStyleLabel: string;
-  futureHints?: string;
+  slidePurpose: string;
+  recommendedTextMode: string;
+  benefits: string[];
+  benefitsExtra?: string;
+  mustShow: string[];
+  audience: string;
+  priceSegment: string;
+  salesStyle: string;
+  textDensity: string;
+  preserveProduct: boolean;
+  preserveAspects: string[];
+  allowCreativeStylization?: boolean;
 };
 
-function textModeInstruction(mode: CardBuilderSlidePromptInput["recommendedTextMode"]): string {
-  switch (mode) {
-    case "none":
-      return "On-image typography: minimal to none — avoid clutter; keep headline space visually clean.";
-    case "title_only":
-      return "Allow a single concise headline placement area only; avoid dense body copy.";
-    case "medium":
-      return "Headline + ~3 concise benefit bullets; clear hierarchy.";
-    case "heavy":
-      return "Benefits plus short factual specs blocks; tidy grid.";
-    case "infographic":
-      return "Infographic layout with callouts, pictograms cues, concise numerals (no hallucinated certifications).";
-    default:
-      return "";
-  }
-}
-
-const ROLE_TAIL: Partial<Record<CardBuilderSlidePromptInput["imageRole"], string>> = {
+const CARD_BUILDER_ROLE_DIRECTIVE: Record<string, string> = {
   main_photo:
-    "Single hero framing, calibrated lighting, truthful materials, readable edges. Leave safe margins.",
-  benefits_infographic:
-    "Diagram-friendly negative space with three strong benefit motifs; readable composition.",
-  materials:
-    "Highlight honest material realism and texture without inventing embellishments.",
-  dimensions:
-    "Scale clarity and proportion references (no fabricated measurements).",
+    "Scene: flagship hero catalog frame. Neutral or soft gradient backdrop, pristine lighting, razor-sharp product edges, truthful scale.",
   lifestyle:
-    "Natural believable everyday context matching audience; hero product stays unmistakable.",
+    "Scene: credible lifestyle context aligned with audience; tidy background, daylight or soft studio mix, hero product unmistakable.",
+  benefits_infographic:
+    "Scene: structured selling layout ready for overlays — quiet bands, grids, badges zones; NEVER bake readable letters/numbers in pixels.",
+  dimensions:
+    "Scene: dimensional storytelling — ruler hints, proportional comparison props (without fake measurements), truthful geometry.",
+  materials:
+    "Scene: material fidelity — weave, gloss, brushed metal, glass; honest macro cues without swapping the SKU.",
   detail_closeup:
-    "Controlled macro fidelity; truthful edges; avoid fake labels.",
+    "Scene: macro hero emphasizing anchor detail; razor micro-contrast without inventing logos or text.",
   packaging:
-    "Accurate packaging and bundle presentation; tidy studio.",
+    "Scene: packaging/kit completeness; labels legible shapes only — no counterfeit or invented brand marks.",
   premium_poster:
-    "High-end campaign poster balance; restrained luxury cues matching price segment.",
+    "Scene: premium cinematic still with bold negative space, luxe tonal grade, restrained flares.",
   ad_banner:
-    "Strong commercial banner readability; deliberate negative zones for overlays.",
+    "Scene: high-energy retail banner composition; strong silhouette separation, saturated but clean palette.",
 };
 
-/** Скрытый промпт для IMAGE в сценарии «Создать карточку» (внутренний ключ card_builder). */
-export function buildCardBuilderSlidePrompt(input: CardBuilderSlidePromptInput): string {
-  const tail = ROLE_TAIL[input.imageRole] ?? "Professional ecommerce creative matching the marketplace.";
-  const strict = input.preserveProductStrict
-    ? [
-        BASE_PRODUCT_PHOTO_PROMPT,
-        "Keep the uploaded product truthful: no invented SKU, barcode, certifications, logos, packaging claims, measurements, ingredient lists, promo codes, QR codes, URLs, or phone numbers on the artwork.",
-      ].join("\n")
-    : [
-        BASE_PRODUCT_PHOTO_PROMPT,
-        "Allow tasteful stylistic polishing while preserving core product silhouette, colors and identity.",
-      ].join("\n");
-  const aspects =
-    input.preserveHints.length > 0
-      ? `Preserve aspects called out by operator: ${input.preserveHints.join(", ")}.`
+export function buildCardBuilderSlidePrompt(input: CardBuilderPromptInput): string {
+  const roleLine =
+    CARD_BUILDER_ROLE_DIRECTIVE[input.imageRole] ??
+    CARD_BUILDER_ROLE_DIRECTIVE.main_photo!;
+  const benefitLine =
+    input.benefits.length > 0
+      ? `Highlight benefits visually (no readable text baked in): ${input.benefits.join(", ")}.`
       : "";
-  const creative = input.allowCreativeStyle
-    ? "Controlled creative grading and background allowed if product stays accurate."
-    : "Stay conservative with background and grading.";
-  return [
-    `Marketplace/channel vibe: ${input.marketplaceLabel}.`,
-    `Product vertical: ${input.categoryLabel}.`,
-    `Slide objective: «${input.slideTitle}» — ${input.purpose}.`,
-    `Visual intent keywords: ${input.promptIntent}.`,
-    tail,
-    `Sales stylistic direction (visual only): ${input.salesStyleLabel}.`,
-    input.audienceLabel ? `Target audience mood: ${input.audienceLabel}.` : "",
-    input.priceSegmentLabel ? `Tier positioning: ${input.priceSegmentLabel}.` : "",
-    textModeInstruction(input.recommendedTextMode),
-    strict,
-    aspects,
-    creative,
-    input.benefitsSummary ? `Emphasized benefits/themes: ${input.benefitsSummary}.` : "",
-    input.mustShowSummary ? `Operator must-see checklist: ${input.mustShowSummary}.` : "",
-    input.futureHints ? `Future QA hooks: reserve space for compliance review metadata elsewhere.` : "",
-    "Deliver a polished still image layout the model can execute with the provided product photos.",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-}
+  const extraBen = input.benefitsExtra?.trim()
+    ? `Extra selling angle: ${input.benefitsExtra.trim()}.`
+    : "";
+  const must = input.mustShow.length
+    ? `Must visually communicate: ${input.mustShow.join(", ")}.`
+    : "";
+  const audience = `Target audience vibe: ${input.audience}.`;
+  const price = `Price positioning: ${input.priceSegment}.`;
+  const motion = `Sales visual language: ${input.salesStyle}.`;
+  const textMode = `Text-on-image expectation (respect without rendering glyphs): ${input.recommendedTextMode} — user prefers ${input.textDensity}. Absolutely NO readable typography or fake UI stickers in raster.`;
+  const preserve = input.preserveProduct
+    ? `Preserve product geometry, SKU identity${input.preserveAspects?.length ? `, focus fidelity on: ${input.preserveAspects.join(", ")}` : ""}.`
+    : "Keep product recognizable but allow refined restyling of background and grading.";
+  const creative =
+    input.allowCreativeStylization === true && input.preserveProduct
+      ? "Allow tasteful cinematic grade and staging while keeping SKU identity untouched."
+      : "";
+  const market = `Market/channel cues: ${input.marketplace.replaceAll("_", " ")} optimized composition.`;
 
-/** Группировка для сценария «Создать карточку» (внутренний ключ card_builder). */
-export const productCardPromptsCardBuilder = {
-  buildSlide: buildCardBuilderSlidePrompt,
-  roleHints: ROLE_TAIL,
-} as const;
+  const parts = [
+    BASE_PRODUCT_PHOTO_PROMPT,
+    roleLine,
+    `Goal title: ${input.slideTitle}`,
+    `Intent: ${input.slidePurpose}`,
+    market,
+    `Category hint: ${input.categoryId}.`,
+    benefitLine,
+    extraBen,
+    must,
+    audience,
+    price,
+    motion,
+    textMode,
+    preserve,
+    creative,
+    "Professional commercial ecommerce photography.",
+  ].filter(Boolean);
+
+  return parts.join("\n\n");
+}
