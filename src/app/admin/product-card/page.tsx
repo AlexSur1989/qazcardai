@@ -51,7 +51,6 @@ const TABS = [
   ["categories", "Categories"],
   ["concepts", "Concepts"],
   ["prompts", "Prompts"],
-  ["scenarios", "Сценарии"],
   ["video", "Video"],
   ["calculator", "Price Calculator"],
 ] as const;
@@ -125,14 +124,22 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
       </div>
 
       {active === "scenarios" ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Сценарии Product Card</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ProductCardScenariosPanel initial={productSettings.scenarios} />
-          </CardContent>
-        </Card>
+        canPatchScenarios ? (
+          <ProductCardScenariosForm initialJson={scenariosSetting} canPatch={canPatchScenarios} />
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>Сценарии Product Card</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-muted-foreground text-sm">
+                Редактирование подписей вкладок доступно с правом «Настройки — изменение». Ниже можно
+                включать и выключать сценарии без этого права.
+              </p>
+              <ProductCardScenariosPanel initial={productSettings.scenarios} />
+            </CardContent>
+          </Card>
+        )
       ) : null}
 
       {active === "overview" ? (
@@ -265,10 +272,6 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
             <pre className="bg-muted overflow-x-auto rounded-lg p-3 text-xs">{MARKETPLACE_CARD_BASE_PROMPT}</pre>
           </CardContent>
         </Card>
-      ) : null}
-
-      {active === "scenarios" ? (
-        <ProductCardScenariosForm initialJson={scenariosSetting} canPatch={canPatchScenarios} />
       ) : null}
 
       {active === "video" ? (
