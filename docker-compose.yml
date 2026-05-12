@@ -35,6 +35,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # Приоритет над env_file: в Compose Redis — сервис `redis`, не localhost из .env
+      REDIS_URL: redis://redis:6379
     ports:
       - "${APP_PUBLISH_PORT:-3000}:3000"
     healthcheck:
@@ -62,6 +65,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
         condition: service_healthy
