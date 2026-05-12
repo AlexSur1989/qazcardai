@@ -25,6 +25,9 @@ import { formatAdminDateTime } from "@/lib/admin-format";
 import { creditTypeLabel } from "@/lib/credit-labels";
 import { paymentStatusLabel } from "@/lib/payment-labels";
 import { cn } from "@/lib/utils";
+import { KASPI_MANUAL_PAYMENT_PROVIDER } from "@/lib/kaspi-manual-config";
+import { hasPermission } from "@/lib/permissions";
+import { AdminKaspiManualPaymentActions } from "@/components/admin/admin-kaspi-manual-payment-actions";
 import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = { title: "Платёж — QazCard AI" };
@@ -32,7 +35,8 @@ export const metadata = { title: "Платёж — QazCard AI" };
 type Props = { params: Promise<{ id: string }> };
 
 export default async function AdminPaymentDetailPage({ params }: Props) {
-  await requireAdminPagePermission("payments.view");
+  const adminUser = await requireAdminPagePermission("payments.view");
+  const canManagePayments = hasPermission(adminUser.role, "payments.manage");
   const { id } = await params;
   const res = await getAdminPaymentById(id);
 
@@ -102,6 +106,74 @@ export default async function AdminPaymentDetailPage({ params }: Props) {
             {formatAdminDateTime(p.createdAt)}
           </p>
         </div>
+
+        {p.provider === KASPI_MANUAL_PAYMENT_PROVIDER ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Ручной Kaspi перевод</CardTitle>
+              <CardDescription>
+                Код для комментария к переводу и данные от пользователя.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              {(() => {
+                const meta =
+                  p.metadata &&
+                  typeof p.metadata === "object" &&
+                  !Array.isArray(p.metadata)
+                    ? (p.metadata as Record<string, unknown>)
+                    : {};
+                const userComment =
+                  typeof meta.userComment === "string" ? meta.userComment : null;
+                const userReceiptUrl =
+                  typeof meta.userReceiptUrl === "string" ? meta.userReceiptUrl : null;
+                const instructionCode =
+                  typeof meta.instructionCode === "string"
+                    ? meta.instructionCode
+                    : p.providerPaymentId;
+                return (
+                  <>
+                    <p>
+                      <span className="text-muted-foreground">Код платежа: </span>
+                      <code className="rounded bg-muted px-1 font-mono text-xs">
+                        {instructionCode ?? "—"}
+                      </code>
+                    </p>
+                    {userComment ? (
+                      <p>
+                        <span className="text-muted-foreground">Комментарий пользователя: </span>
+                        {userComment}
+                      </p>
+                    ) : (
+                      <p className="text-muted-foreground">Комментарий пользователя: —</p>
+                    )}
+                    {userReceiptUrl ? (
+                      <p>
+                        <span className="text-muted-foreground">Чек / скрин: </span>
+                        <a
+                          className="text-primary font-medium underline"
+                          href={userReceiptUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Открыть
+                        </a>
+                      </p>
+                    ) : (
+                      <p className="text-muted-foreground">Чек / скрин: —</p>
+                    )}
+                  </>
+                );
+              })()}
+              <AdminKaspiManualPaymentActions
+                paymentId={p.id}
+                provider={p.provider}
+                status={p.status}
+                canManagePayments={canManagePayments}
+              />
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card>
           <CardHeader>

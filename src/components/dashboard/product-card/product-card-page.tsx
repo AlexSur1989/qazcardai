@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getPublicProductCategories } from "@/config/product-card-categories";
 
+import { CardBuilderTab } from "./card-builder-tab";
 import { CategorySelector } from "./category-selector";
 import { ConceptPhotoTab } from "./concept-photo-tab";
 import { MarketplaceCardTab } from "./marketplace-card-tab";
@@ -15,15 +16,25 @@ import { ProductVideoTab } from "./product-video-tab";
 import { SourceImagesUpload, type UploadFlowState } from "./source-images-upload";
 import { useProductCardProject } from "./use-product-card-project";
 
-const TABS = [
-  { id: "concepts" as const, label: "Фото с концепциями" },
-  { id: "card" as const, label: "Карточка товара" },
-  { id: "video" as const, label: "Видео" },
+const TAB_DEFS = [
+  { id: "concepts" as const, scenarioKey: "conceptPhoto" as const, defaultLabel: "Фото с концепциями" },
+  { id: "card" as const, scenarioKey: "marketplaceCard" as const, defaultLabel: "Карточка товара" },
+  {
+    id: "card_builder" as const,
+    scenarioKey: "cardBuilder" as const,
+    defaultLabel: "Создать карточку",
+  },
+  { id: "video" as const, scenarioKey: "productVideo" as const, defaultLabel: "Видео" },
 ];
 
 const CATEGORIES = [...getPublicProductCategories()];
 
-type TabId = (typeof TABS)[number]["id"];
+export type ScenarioTogglesUi = Record<
+  (typeof TAB_DEFS)[number]["scenarioKey"],
+  { enabled: boolean; label: string }
+>;
+
+type TabId = (typeof TAB_DEFS)[number]["id"];
 
 type SizePreset = {
   id: string;
@@ -44,6 +55,7 @@ type Props = {
   conceptImageSizes: SizePreset[];
   marketplaceCardSizes: SizePreset[];
   videoPresets: VideoPreset[];
+  scenarios: ScenarioTogglesUi;
   /** Показать режим разметки оверлея (админ) */
   canMarketplaceLayoutDebug?: boolean;
 };
@@ -53,6 +65,7 @@ export function ProductCardPage({
   conceptImageSizes,
   marketplaceCardSizes,
   videoPresets,
+  scenarios,
   canMarketplaceLayoutDebug = false,
 }: Props) {
   const {
@@ -73,9 +86,25 @@ export function ProductCardPage({
     runClassify,
     runMockCategory,
     setManualCategory,
+    reloadProject,
   } = useProductCardProject();
 
   const [tab, setTab] = useState<TabId>("concepts");
+
+  const visibleTabs = useMemo(() => {
+    return TAB_DEFS.filter((def) => scenarios[def.scenarioKey].enabled).map((def) => ({
+      id: def.id,
+      label: scenarios[def.scenarioKey].label?.trim() || def.defaultLabel,
+    }));
+  }, [scenarios]);
+
+  useEffect(() => {
+    if (!visibleTabs.some((x) => x.id === tab)) {
+      const first = visibleTabs[0]?.id;
+      if (first) setTab(first);
+    }
+  }, [visibleTabs, tab]);
+
   const [uploadFlow, setUploadFlow] = useState<UploadFlowState>("idle");
   const hasImage = Boolean(source?.url);
 
@@ -156,12 +185,20 @@ export function ProductCardPage({
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Нет исходного фото</AlertTitle>
             <AlertDescription>
-              Загрузите фото товара — тогда откроются сценарии. «Фото с концепциями» доступно после
-              загрузки; карточка маркетплейса и видео — в следующих этапах.
+              Загрузите фото товара — тогда станут доступны выбранные сценарии (настраиваются в админке).
             </AlertDescription>
           </Alert>
         )}
 
+        {visibleTabs.length === 0 ? (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Нет доступных сценариев</AlertTitle>
+            <AlertDescription>
+              Включите хотя бы один сценарий в админке: Product Card → вкладка «Сценарии».
+            </AlertDescription>
+          </Alert>
+        ) : (
         <Tabs
           value={tab}
           onValueChange={(v) => {
@@ -171,9 +208,9 @@ export function ProductCardPage({
         >
           <TabsList
             variant="line"
-            className="h-auto w-full max-w-2xl flex-wrap justify-start gap-1.5 rounded-xl border border-border bg-white p-1.5"
+            className="h-auto w-full max-w-4xl flex-wrap justify-start gap-1.5 rounded-xl border border-border bg-white p-1.5"
           >
-            {TABS.map((t) => (
+            {visibleTabs.map((t) => (
               <TabsTrigger
                 key={t.id}
                 value={t.id}
@@ -185,6 +222,7 @@ export function ProductCardPage({
             ))}
           </TabsList>
 
+          {scenarios.conceptPhoto.enabled ? (
           <TabsContent value="concepts" className="mt-4">
             <ConceptPhotoTab
               selectedCategory={selectedCategory}
@@ -195,6 +233,8 @@ export function ProductCardPage({
               sizePresets={conceptImageSizes}
             />
           </TabsContent>
+          ) : null}
+          {scenarios.marketplaceCard.enabled ? (
           <TabsContent value="card" className="mt-4">
             <MarketplaceCardTab
               hasImage={hasImage}
@@ -205,6 +245,20 @@ export function ProductCardPage({
               canLayoutDebug={canMarketplaceLayoutDebug}
             />
           </TabsContent>
+          ) : null}
+          {scenarios.cardBuilder.enabled ? (
+          <TabsContent value="card_builder" className="mt-4">
+            <CardBuilderTab
+              selectedCategory={selectedCategory}
+              hasImage={hasImage}
+              canUseBackend={canUseBackend}
+              projectId={projectId}
+              balanceCredits={balanceDisplay}
+              reloadProject={reloadProject}
+            />
+          </TabsContent>
+          ) : null}
+          {scenarios.productVideo.enabled ? (
           <TabsContent value="video" className="mt-4">
             <ProductVideoTab
               hasImage={hasImage}
@@ -214,7 +268,9 @@ export function ProductCardPage({
               videoPresets={videoPresets}
             />
           </TabsContent>
+          ) : null}
         </Tabs>
+        )}
       </section>
     </div>
   );

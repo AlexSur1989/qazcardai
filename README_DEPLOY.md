@@ -95,6 +95,25 @@ docker compose run --rm --env-file .env -v "$(pwd)":/work -w /work node:20-alpin
 
 После этого вход: `https://YOUR_DOMAIN/login`, панель админа: путь `/admin` (роли см. `PROJECT_SPEC.md`).
 
+## Вход через Telegram (OIDC)
+
+Сервер использует **Telegram OpenID** (`oauth.telegram.org`); проверка `id_token` выполняется на стороне Auth.js, не в браузере.
+
+1. Откройте [@BotFather](https://t.me/BotFather) в Telegram.
+2. Создайте бота или выберите существующего (`/mybots`).
+3. **Bot Settings** → **Web Login**.
+4. В **Allowed URLs** добавьте ваш домен и страницы (подставьте свой `YOUR_DOMAIN`):
+
+   - `https://YOUR_DOMAIN`
+   - `https://YOUR_DOMAIN/login`
+   - `https://YOUR_DOMAIN/api/auth/callback/telegram`
+
+5. Сохраните **Client ID** и **Client Secret** в `.env` как `TELEGRAM_CLIENT_ID` и `TELEGRAM_CLIENT_SECRET`.
+6. Включите флаг `TELEGRAM_AUTH_ENABLED=true`. Задайте `TELEGRAM_ALLOWED_ORIGIN` тем же origin, что и `APP_URL` / `AUTH_URL` / `NEXTAUTH_URL` (например `https://YOUR_DOMAIN`).
+7. Убедитесь, что `APP_URL`, `AUTH_URL`, `NEXTAUTH_URL` совпадают с тем, как пользователи открывают сайт в браузере (включая `www` / без `www`).
+
+После выкладки примените миграции Prisma (таблицы `user_identities`, `auth_event_logs`).
+
 ## Настройка Nginx
 
 - Пример **без** захардкоженного домена: `nginx.conf.example` — подставьте `YOUR_HOSTNAME_HERE` (ваш `YOUR_DOMAIN` или поддомен) и пути к сертификатам.

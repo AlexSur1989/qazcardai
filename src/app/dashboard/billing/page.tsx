@@ -24,6 +24,7 @@ import { creditTypeLabel } from "@/lib/credit-labels";
 import { formatAdminDateTime } from "@/lib/admin-format";
 import { isStripeSecretConfigured } from "@/lib/payment-config";
 import { isKaspiBillingEnabled } from "@/lib/kaspi-config";
+import { getKaspiManualBillingPublic } from "@/server/services/kaspiManualSettings";
 import { formatKzt, formatRuDate } from "@/lib/format-kzt";
 import { userTokenPackageStatusLabel } from "@/lib/user-token-package-labels";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
@@ -55,12 +56,14 @@ export default async function BillingPage({ searchParams }: PageProps) {
   const sp = (await searchParams) ?? {};
   const checkout = first(sp.checkout);
 
-  const [balance, txs, packRows, lastBought, packHistory] = await Promise.all([
+  const [balance, txs, packRows, lastBought, packHistory, kaspiManual] =
+    await Promise.all([
     getBalance(current.user.id),
     listTransactions(current.user.id, { take: 50 }),
     listActiveTokenPackagesForBilling(),
     getUserLastTokenPackage(current.user.id),
     getUserTokenPackageHistory(current.user.id, 100),
+    getKaspiManualBillingPublic(),
   ]);
   const stripeReady = isStripeSecretConfigured();
   const kaspiReady = isKaspiBillingEnabled();
@@ -143,6 +146,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
         packages={packageCards}
         stripeReady={stripeReady}
         kaspiReady={kaspiReady}
+        kaspiManual={kaspiManual}
       />
 
       <Card className="border-border/80 shadow-sm">

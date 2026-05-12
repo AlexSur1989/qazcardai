@@ -113,6 +113,8 @@ model User {
   /// Throttle: не дублировать LOW_BALANCE слишком часто
   lastLowBalanceEmailAt DateTime?
   passwordResetTokens PasswordResetToken[]
+  identities          UserIdentity[]
+  authEventLogs       AuthEventLog[]
 
   @@index([status])
   @@index([role])
@@ -136,6 +138,42 @@ model PasswordResetToken {
   @@index([expiresAt])
   @@index([usedAt])
   @@map("password_reset_tokens")
+}
+
+model UserIdentity {
+  id             String   @id @default(cuid())
+  userId         String
+  provider       String   @db.VarChar(64)
+  providerUserId String   @db.VarChar(255)
+  username       String?  @db.VarChar(255)
+  displayName    String?  @db.VarChar(255)
+  avatarUrl      String?  @db.VarChar(2048)
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("user_identities")
+}
+
+model AuthEventLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String   @db.VarChar(128)
+  provider   String   @db.VarChar(32)
+  metadata   Json?
+  ipAddress  String?  @db.VarChar(128)
+  userAgent  String?  @db.VarChar(512)
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([provider, createdAt])
+  @@map("auth_event_logs")
 }
 
 model Plan {

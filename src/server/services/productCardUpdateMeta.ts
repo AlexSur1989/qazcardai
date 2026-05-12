@@ -128,3 +128,78 @@ export async function appendVideoGenerationEntry(
     data: { metadata: next as object },
   });
 }
+
+/** Состояние карточки-конструктора: отдельное дерево, не смешивать с marketplaceCard. */
+export type CardBuilderSlideState = {
+  slideId: string;
+  generationId?: string | null;
+  status?: string;
+  errorMessage?: string | null;
+};
+
+export type CardBuilderProjectBucket = {
+  settings?: Record<string, unknown>;
+  galleryPlan?: unknown[];
+  generations?: unknown[];
+  slides?: Record<string, CardBuilderSlideState>;
+  future?: {
+    qualityScore?: number | null;
+    marketplaceCompliance?: Record<string, unknown> | null;
+    improvementSuggestions?: string[] | null;
+  };
+};
+
+function getCardBuilderBucket(meta: Record<string, unknown>): CardBuilderProjectBucket {
+  const raw = meta.cardBuilder;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return { ...(raw as CardBuilderProjectBucket) };
+  }
+  return {};
+}
+
+export async function persistCardBuilderDraft(
+  projectId: string,
+  mutator: (prev: CardBuilderProjectBucket) => CardBuilderProjectBucket,
+): Promise<void> {
+  const p = await prisma.productCardProject.findUnique({ where: { id: projectId } });
+  if (!p) return;
+  const meta = (p.metadata as Record<string, unknown> | null) ?? {};
+  const prev = getCardBuilderBucket(meta);
+  const nextBucket = mutator(prev);
+  const nextMeta = { ...meta, cardBuilder: nextBucket };
+  await prisma.productCardProject.update({
+    where: { id: projectId },
+    data: { metadata: nextMeta as object },
+  });
+}
+
+export async function recordCardBuilderSlideJob(
+  projectId: string,
+  slideId: string,
+  patch: CardBuilderSlideState,
+): Promise<void> {
+  await persistCardBuilderDraft(projectId, (prev) => {
+    const slides = { ...(prev.slides ?? {}) };
+    slides[slideId] = { ...slides[slideId], ...patch, slideId };
+    return { ...prev, slides };
+  });
+}
+
+export async function appendCardBuilderGenerationRecord(
+  projectId: string,
+  row: {
+    generationId: string;
+    slideId: string;
+    imageRole: string;
+    mode: "single" | "gallery_bundle";
+  },
+): Promise<void> {
+  await persistCardBuilderDraft(projectId, (prev) => {
+    const list = Array.isArray(prev.generations) ? [...prev.generations] : [];
+    list.push({
+      ...row,
+      createdAt: new Date().toISOString(),
+    });
+    return { ...prev, generations: list };
+  });
+}

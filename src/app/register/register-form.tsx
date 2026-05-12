@@ -1,20 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getSession, signIn } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
-import { postAuthLandingPath } from "@/lib/auth";
+import {
+  pickLoginRedirectParam,
+  postAuthLandingPath,
+} from "@/lib/auth";
 
-export function RegisterForm() {
+function RegisterFormInner({
+  telegramAuthEnabled,
+}: {
+  telegramAuthEnabled: boolean;
+}) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawRedirect = pickLoginRedirectParam(
+    searchParams.get("next"),
+    searchParams.get("callbackUrl"),
+  );
+  const oauthErr = searchParams.get("error");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [telegramLoading, setTelegramLoading] = useState(false);
+
+  async function loginTelegram() {
+    setError(null);
+    setTelegramLoading(true);
+    try {
+      const target = postAuthLandingPath(rawRedirect, undefined);
+      await signIn("telegram", { callbackUrl: target });
+    } catch {
+      setError("Не удалось войти через Telegram. Попробуйте снова.");
+      setTelegramLoading(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,6 +100,12 @@ export function RegisterForm() {
         </Link>
       </p>
 
+      {oauthErr ? (
+        <p className="text-destructive mt-4 text-sm" role="alert">
+          Не удалось войти через Telegram. Попробуйте снова.
+        </p>
+      ) : null}
+
       <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="name" className="text-sm font-medium">
@@ -124,10 +157,34 @@ export function RegisterForm() {
             {error}
           </p>
         ) : null}
-        <Button type="submit" disabled={loading}>
+        <Button type="submit" disabled={loading || telegramLoading}>
           {loading ? "Регистрация…" : "Зарегистрироваться"}
         </Button>
       </form>
+
+      {telegramAuthEnabled ? (
+        <div className="mt-6 space-y-3">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background text-muted-foreground px-2">или</span>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={loading || telegramLoading}
+            onClick={() => void loginTelegram()}
+          >
+            {telegramLoading
+              ? "Переход в Telegram…"
+              : "Зарегистрироваться через Telegram"}
+          </Button>
+        </div>
+      ) : null}
 
       <p className="mt-8 text-center text-sm text-muted-foreground">
         <Link href="/" className="underline-offset-4 hover:underline">
@@ -135,5 +192,23 @@ export function RegisterForm() {
         </Link>
       </p>
     </main>
+  );
+}
+
+export function RegisterForm({
+  telegramAuthEnabled,
+}: {
+  telegramAuthEnabled: boolean;
+}) {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto flex w-full max-w-md flex-1 items-center justify-center px-4 py-12 text-sm text-muted-foreground">
+          Загрузка…
+        </main>
+      }
+    >
+      <RegisterFormInner telegramAuthEnabled={telegramAuthEnabled} />
+    </Suspense>
   );
 }

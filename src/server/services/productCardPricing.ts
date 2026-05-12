@@ -9,7 +9,8 @@ import {
 export type ProductCardPricingScenario =
   | "concept_image"
   | "marketplace_card"
-  | "video";
+  | "video"
+  | "card_builder";
 
 export type ProductCardPriceBreakdown = {
   v?: 2;
@@ -45,6 +46,11 @@ export type ProductCardPriceBreakdown = {
   /** Итоговые списания (= credits при estimate бандла) */
   totalCredits?: number;
   variantAllocations?: number[] | null;
+  /** Дублирует `scenario` там, где нужен явный ключ для отчётов (card_builder). */
+  scenarioKey?: string;
+  slideRole?: string;
+  /** Итог после множителей; обычно совпадает с `credits`. */
+  finalCredits?: number;
 };
 
 type PricingSchema = {
@@ -94,6 +100,11 @@ function scenarioMinTokens(
     return Math.round(asNumber(schema?.minConceptImageTokens, settings.minConceptImageTokens));
   }
   if (scenario === "marketplace_card") {
+    return Math.round(
+      asNumber(schema?.minMarketplaceCardTokens, settings.minMarketplaceCardTokens),
+    );
+  }
+  if (scenario === "card_builder") {
     return Math.round(
       asNumber(schema?.minMarketplaceCardTokens, settings.minMarketplaceCardTokens),
     );

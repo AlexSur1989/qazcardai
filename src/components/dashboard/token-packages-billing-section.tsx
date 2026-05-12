@@ -15,6 +15,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { formatKzt } from "@/lib/format-kzt";
 import { cn } from "@/lib/utils";
+import type { KaspiManualBillingPublic } from "@/lib/kaspi-manual-config";
+import { KaspiManualBillingPanel } from "@/components/dashboard/kaspi-manual-billing-panel";
 
 export type BillingTokenPackage = {
   id: string;
@@ -30,6 +32,7 @@ type Props = {
   packages: BillingTokenPackage[];
   stripeReady: boolean;
   kaspiReady: boolean;
+  kaspiManual: KaspiManualBillingPublic;
 };
 
 function bonusPercent(base: number, bonus: number) {
@@ -45,6 +48,7 @@ export function TokenPackagesBillingSection({
   packages,
   stripeReady,
   kaspiReady,
+  kaspiManual,
 }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const [loadingKaspi, setLoadingKaspi] = useState<string | null>(null);
@@ -102,14 +106,15 @@ export function TokenPackagesBillingSection({
     }
   }
 
-  if (!stripeReady && !kaspiReady) {
+  if (!stripeReady && !kaspiReady && !kaspiManual.enabled) {
     return (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Пакеты токенов</CardTitle>
           <CardDescription>
             Для приёма платежей настройте Stripe или Kaspi Pay (см.{" "}
-            <code className="text-xs">.env.example</code>).
+            <code className="text-xs">.env.example</code>), либо включите ручной перевод Kaspi в
+            админке (KASPI_MANUAL_SETTINGS).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -159,12 +164,18 @@ export function TokenPackagesBillingSection({
           {kaspiReady
             ? "Kaspi Pay: токены только после подтверждения на сервере (webhook), а не со страницы «успех» в браузере."
             : null}
+          {kaspiManual.enabled
+            ? " Kaspi перевод: токены только после ручной проверки администратором."
+            : null}
           {!stripeReady && kaspiReady
             ? "Сейчас доступна тестовая оплата Kaspi Pay (mock)."
             : null}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {kaspiManual.enabled ? (
+          <KaspiManualBillingPanel packages={packages} publicSettings={kaspiManual} />
+        ) : null}
         {error && (
           <Alert variant="destructive">
             <AlertTitle>Не удалось перейти к оплате</AlertTitle>

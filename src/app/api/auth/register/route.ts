@@ -49,6 +49,13 @@ export async function POST(req: Request) {
   }
 
   const email = emailIn.toLowerCase().trim();
+  if (email.endsWith("@telegram.local")) {
+    return NextResponse.json(
+      { error: "Этот адрес зарезервирован для входа через Telegram" },
+      { status: 400 },
+    );
+  }
+
   const nameStr =
     typeof name === "string" && name.trim() ? name.trim().slice(0, 120) : null;
 

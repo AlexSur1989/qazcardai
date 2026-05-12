@@ -9,6 +9,8 @@ import {
   BASE_PRODUCT_PHOTO_PROMPT,
   MARKETPLACE_CARD_BASE_PROMPT,
 } from "@/config/product-card-prompts";
+import { ProductCardScenariosForm } from "@/components/admin/product-card-scenarios-form";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getAppSettingsByGroup } from "@/server/services/appSettings";
 import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
@@ -46,6 +48,7 @@ const TABS = [
   ["categories", "Categories"],
   ["concepts", "Concepts"],
   ["prompts", "Prompts"],
+  ["scenarios", "Сценарии"],
   ["video", "Video"],
   ["calculator", "Price Calculator"],
 ] as const;
@@ -56,7 +59,7 @@ function jsonPreview(value: unknown): string {
 }
 
 export default async function AdminProductCardPage({ searchParams }: Props) {
-  await requireAdminPagePermission("models.product_card.manage");
+  const adminUser = await requireAdminPagePermission("models.product_card.manage");
 
   const params = await searchParams;
   const active = TABS.some(([id]) => id === params?.tab) ? params?.tab ?? "overview" : "overview";
@@ -88,6 +91,9 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
     );
   }
   const calculatorRows = await Promise.all(calculatorPromises);
+
+  const scenariosSetting = settingsRows.find((row) => row.key === "PRODUCT_CARD_SCENARIOS")?.value;
+  const canPatchScenarios = hasPermission(adminUser.role, "settings.manage");
 
   return (
     <div className="space-y-6">
@@ -245,6 +251,10 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
             <pre className="bg-muted overflow-x-auto rounded-lg p-3 text-xs">{MARKETPLACE_CARD_BASE_PROMPT}</pre>
           </CardContent>
         </Card>
+      ) : null}
+
+      {active === "scenarios" ? (
+        <ProductCardScenariosForm initialJson={scenariosSetting} canPatch={canPatchScenarios} />
       ) : null}
 
       {active === "video" ? (

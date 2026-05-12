@@ -398,3 +398,116 @@ export function buildProductVideoPrompt(
   }
   return buildProductVideoPrompt({ motionStyle: a, userPrompt: b });
 }
+
+export type CardBuilderSlidePromptInput = {
+  marketplaceLabel: string;
+  categoryLabel: string;
+  imageRole:
+    | "main_photo"
+    | "benefits_infographic"
+    | "dimensions"
+    | "materials"
+    | "lifestyle"
+    | "detail_closeup"
+    | "packaging"
+    | "premium_poster"
+    | "ad_banner";
+  slideTitle: string;
+  purpose: string;
+  promptIntent: string;
+  recommendedTextMode: "none" | "title_only" | "medium" | "heavy" | "infographic";
+  preserveProductStrict: boolean;
+  preserveHints: readonly string[];
+  allowCreativeStyle: boolean;
+  benefitsSummary: string;
+  mustShowSummary: string;
+  audienceLabel?: string | null;
+  priceSegmentLabel?: string | null;
+  salesStyleLabel: string;
+  futureHints?: string;
+};
+
+function textModeInstruction(mode: CardBuilderSlidePromptInput["recommendedTextMode"]): string {
+  switch (mode) {
+    case "none":
+      return "On-image typography: minimal to none — avoid clutter; keep headline space visually clean.";
+    case "title_only":
+      return "Allow a single concise headline placement area only; avoid dense body copy.";
+    case "medium":
+      return "Headline + ~3 concise benefit bullets; clear hierarchy.";
+    case "heavy":
+      return "Benefits plus short factual specs blocks; tidy grid.";
+    case "infographic":
+      return "Infographic layout with callouts, pictograms cues, concise numerals (no hallucinated certifications).";
+    default:
+      return "";
+  }
+}
+
+const ROLE_TAIL: Partial<Record<CardBuilderSlidePromptInput["imageRole"], string>> = {
+  main_photo:
+    "Single hero framing, calibrated lighting, truthful materials, readable edges. Leave safe margins.",
+  benefits_infographic:
+    "Diagram-friendly negative space with three strong benefit motifs; readable composition.",
+  materials:
+    "Highlight honest material realism and texture without inventing embellishments.",
+  dimensions:
+    "Scale clarity and proportion references (no fabricated measurements).",
+  lifestyle:
+    "Natural believable everyday context matching audience; hero product stays unmistakable.",
+  detail_closeup:
+    "Controlled macro fidelity; truthful edges; avoid fake labels.",
+  packaging:
+    "Accurate packaging and bundle presentation; tidy studio.",
+  premium_poster:
+    "High-end campaign poster balance; restrained luxury cues matching price segment.",
+  ad_banner:
+    "Strong commercial banner readability; deliberate negative zones for overlays.",
+};
+
+/** Скрытый промпт для IMAGE в сценарии «Создать карточку» (внутренний ключ card_builder). */
+export function buildCardBuilderSlidePrompt(input: CardBuilderSlidePromptInput): string {
+  const tail = ROLE_TAIL[input.imageRole] ?? "Professional ecommerce creative matching the marketplace.";
+  const strict = input.preserveProductStrict
+    ? [
+        BASE_PRODUCT_PHOTO_PROMPT,
+        "Keep the uploaded product truthful: no invented SKU, barcode, certifications, logos, packaging claims, measurements, ingredient lists, promo codes, QR codes, URLs, or phone numbers on the artwork.",
+      ].join("\n")
+    : [
+        BASE_PRODUCT_PHOTO_PROMPT,
+        "Allow tasteful stylistic polishing while preserving core product silhouette, colors and identity.",
+      ].join("\n");
+  const aspects =
+    input.preserveHints.length > 0
+      ? `Preserve aspects called out by operator: ${input.preserveHints.join(", ")}.`
+      : "";
+  const creative = input.allowCreativeStyle
+    ? "Controlled creative grading and background allowed if product stays accurate."
+    : "Stay conservative with background and grading.";
+  return [
+    `Marketplace/channel vibe: ${input.marketplaceLabel}.`,
+    `Product vertical: ${input.categoryLabel}.`,
+    `Slide objective: «${input.slideTitle}» — ${input.purpose}.`,
+    `Visual intent keywords: ${input.promptIntent}.`,
+    tail,
+    `Sales stylistic direction (visual only): ${input.salesStyleLabel}.`,
+    input.audienceLabel ? `Target audience mood: ${input.audienceLabel}.` : "",
+    input.priceSegmentLabel ? `Tier positioning: ${input.priceSegmentLabel}.` : "",
+    textModeInstruction(input.recommendedTextMode),
+    strict,
+    aspects,
+    creative,
+    input.benefitsSummary ? `Emphasized benefits/themes: ${input.benefitsSummary}.` : "",
+    input.mustShowSummary ? `Operator must-see checklist: ${input.mustShowSummary}.` : "",
+    input.futureHints ? `Future QA hooks: reserve space for compliance review metadata elsewhere.` : "",
+    "Deliver a polished still image layout the model can execute with the provided product photos.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+/** Группировка для сценария «Создать карточку» (внутренний ключ card_builder). */
+export const productCardPromptsCardBuilder = {
+  buildSlide: buildCardBuilderSlidePrompt,
+  roleHints: ROLE_TAIL,
+} as const;

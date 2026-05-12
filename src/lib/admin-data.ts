@@ -121,9 +121,48 @@ export async function getAdminOverview(): Promise<
   }
 }
 
-export async function getAdminUsersList() {
+export type AdminUserSummary = {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  status: string;
+  balanceCredits: number;
+  createdAt: Date;
+  /** Способ входа для фильтра: есть ли привязка Telegram. */
+  hasTelegramIdentity?: boolean;
+};
+
+export type AdminUserIdentityRow = {
+  id: string;
+  provider: string;
+  providerUserId: string;
+  username: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  createdAt: Date;
+};
+
+export type AdminUserDetail = AdminUserSummary & {
+  identities: AdminUserIdentityRow[];
+};
+
+export type AdminUsersListFilters = {
+  /** credentials — нет identity telegram; telegram — есть. */
+  loginProvider?: "credentials" | "telegram";
+};
+
+export async function getAdminUsersList(filters?: AdminUsersListFilters) {
   try {
+    const where =
+      filters?.loginProvider === "telegram"
+        ? { identities: { some: { provider: "telegram" } } }
+        : filters?.loginProvider === "credentials"
+          ? { identities: { none: { provider: "telegram" } } }
+          : undefined;
+
     const rows = await prisma.user.findMany({
+      where,
       take: LIST_LIMIT,
       orderBy: { createdAt: "desc" },
       select: {
@@ -134,26 +173,28 @@ export async function getAdminUsersList() {
         status: true,
         balanceCredits: true,
         createdAt: true,
+        identities: {
+          where: { provider: "telegram" },
+          select: { id: true },
+          take: 1,
+        },
       },
     });
-    return { ok: true as const, rows };
+    const mapped = rows.map((r) => {
+      const { identities, ...rest } = r;
+      return {
+        ...rest,
+        hasTelegramIdentity: identities.length > 0,
+      };
+    });
+    return { ok: true as const, rows: mapped };
   } catch {
     return { ok: false as const, error: "database" as const };
   }
 }
 
-export type AdminUserSummary = {
-  id: string;
-  email: string;
-  name: string | null;
-  role: string;
-  status: string;
-  balanceCredits: number;
-  createdAt: Date;
-};
-
 export type AdminUserByIdResult =
-  | { ok: true; user: AdminUserSummary }
+  | { ok: true; user: AdminUserDetail }
   | { ok: false; error: "not_found" | "database" };
 
 export async function getAdminUserById(
@@ -170,12 +211,33 @@ export async function getAdminUserById(
         status: true,
         balanceCredits: true,
         createdAt: true,
+        identities: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            provider: true,
+            providerUserId: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+            createdAt: true,
+          },
+        },
       },
     });
     if (!user) {
       return { ok: false, error: "not_found" };
     }
-    return { ok: true, user };
+    const { identities, ...rest } = user;
+    const hasTelegramIdentity = identities.some((i) => i.provider === "telegram");
+    return {
+      ok: true,
+      user: {
+        ...rest,
+        hasTelegramIdentity,
+        identities,
+      },
+    };
   } catch {
     return { ok: false, error: "database" };
   }

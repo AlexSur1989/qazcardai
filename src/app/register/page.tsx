@@ -6,6 +6,7 @@ import {
   pickLoginRedirectParam,
   postAuthLandingPath,
 } from "@/lib/auth";
+import { telegramAuthEnabledForUi } from "@/lib/telegram-auth-config";
 
 import { RegisterForm } from "./register-form";
 
@@ -27,5 +28,7 @@ export default async function RegisterPage({ searchParams }: Props) {
     redirect(postAuthLandingPath(p, session.user.role));
   }
 
-  return <RegisterForm />;
+  const showTelegram = telegramAuthEnabledForUi();
+
+  return <RegisterForm telegramAuthEnabled={showTelegram} />;
 }

@@ -8,7 +8,8 @@ export type ProductCardModelType =
   | "PRODUCT_CLASSIFIER"
   | "PRODUCT_CONCEPT_IMAGE"
   | "PRODUCT_MARKETPLACE_CARD"
-  | "PRODUCT_VIDEO";
+  | "PRODUCT_VIDEO"
+  | "PRODUCT_CARD_BUILDER";
 
 export type ProductCardSizePreset = {
   id: string;
@@ -32,6 +33,7 @@ export type ProductCardSettings = {
   classifierModelSlug: string;
   conceptImageModelSlug: string;
   marketplaceCardModelSlug: string;
+  cardBuilderModelSlug: string;
   videoModelSlug: string;
   usdToKzt: number;
   tokenValueKzt: number;
@@ -96,6 +98,7 @@ export async function getProductCardSettings(): Promise<ProductCardSettings> {
     getAppSetting("PRODUCT_CARD_DEFAULT_CLASSIFIER_MODEL_SLUG"),
     getAppSetting("PRODUCT_CARD_DEFAULT_CONCEPT_IMAGE_MODEL_SLUG"),
     getAppSetting("PRODUCT_CARD_DEFAULT_MARKETPLACE_CARD_MODEL_SLUG"),
+    getAppSetting("PRODUCT_CARD_DEFAULT_CARD_BUILDER_MODEL_SLUG"),
     getAppSetting("PRODUCT_CARD_DEFAULT_VIDEO_MODEL_SLUG"),
     getAppSetting("PRODUCT_CARD_DEFAULT_USD_TO_KZT"),
     getAppSetting("PRODUCT_CARD_DEFAULT_TOKEN_VALUE_KZT"),
@@ -118,18 +121,19 @@ export async function getProductCardSettings(): Promise<ProductCardSettings> {
     classifierModelSlug: asString(entries[4], "gemini-2-5-flash-classifier"),
     conceptImageModelSlug: asString(entries[5], "seedream-4-0-product-concept"),
     marketplaceCardModelSlug: asString(entries[6], "gpt-image-2-product-card"),
-    videoModelSlug: asString(entries[7], "seedance-2-0-fast-product-video"),
-    usdToKzt: asNumber(entries[8], 500, 1),
-    tokenValueKzt: asNumber(entries[9], 10, 0.0001),
-    markupPercent: asNumber(entries[10], 100, 0),
-    allowNegativeMargin: asBool(entries[11], false),
-    lowMarginWarningPercent: asNumber(entries[12], 30, 0),
-    minConceptImageTokens: Math.round(asNumber(entries[13], 15, 0)),
-    minMarketplaceCardTokens: Math.round(asNumber(entries[14], 25, 0)),
-    minVideoTokens: Math.round(asNumber(entries[15], 40, 0)),
-    conceptImageSizes: normalizeSizePresets(entries[16]),
-    marketplaceCardSizes: normalizeSizePresets(entries[17]),
-    videoPresets: normalizeVideoPresets(entries[18]),
+    cardBuilderModelSlug: asString(entries[7], "gpt-image-2-product-card"),
+    videoModelSlug: asString(entries[8], "seedance-2-0-fast-product-video"),
+    usdToKzt: asNumber(entries[9], 500, 1),
+    tokenValueKzt: asNumber(entries[10], 10, 0.0001),
+    markupPercent: asNumber(entries[11], 100, 0),
+    allowNegativeMargin: asBool(entries[12], false),
+    lowMarginWarningPercent: asNumber(entries[13], 30, 0),
+    minConceptImageTokens: Math.round(asNumber(entries[14], 15, 0)),
+    minMarketplaceCardTokens: Math.round(asNumber(entries[15], 25, 0)),
+    minVideoTokens: Math.round(asNumber(entries[16], 40, 0)),
+    conceptImageSizes: normalizeSizePresets(entries[17]),
+    marketplaceCardSizes: normalizeSizePresets(entries[18]),
+    videoPresets: normalizeVideoPresets(entries[19]),
   };
 }
 
@@ -140,5 +144,6 @@ export function defaultSlugForProductCardType(
   if (type === "PRODUCT_CLASSIFIER") return settings.classifierModelSlug;
   if (type === "PRODUCT_CONCEPT_IMAGE") return settings.conceptImageModelSlug;
   if (type === "PRODUCT_MARKETPLACE_CARD") return settings.marketplaceCardModelSlug;
+  if (type === "PRODUCT_CARD_BUILDER") return settings.cardBuilderModelSlug;
   return settings.videoModelSlug;
 }

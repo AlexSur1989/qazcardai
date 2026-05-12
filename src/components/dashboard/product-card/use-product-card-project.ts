@@ -514,6 +514,11 @@ export function useProductCardProject() {
     [patchProject, projectId],
   );
 
+  const reloadProject = useCallback(async () => {
+    if (!projectId) return false;
+    return loadProject(projectId);
+  }, [loadProject, projectId]);
+
   return {
     initDone,
     projectId,
@@ -533,5 +538,6 @@ export function useProductCardProject() {
     runClassify,
     runMockCategory,
     setManualCategory,
+    reloadProject,
   };
 }

@@ -78,6 +78,26 @@ export async function resolveDefaultMarketplaceCardModel(): Promise<AiModel | nu
   return resolveStrictProductCardModel("PRODUCT_MARKETPLACE_CARD");
 }
 
+export type ResolvedCardBuilderImageModel =
+  | { model: AiModel; usedFallbackMarketplaceCard: false }
+  | { model: AiModel; usedFallbackMarketplaceCard: true };
+
+/**
+ * Модель для «Создать карточку»: сначала PRODUCT_CARD_BUILDER, иначе — карточка витрины
+ * (fallback разрешён спецификацией; флаг уходит в метаданные).
+ */
+export async function resolveCardBuilderImageModel(): Promise<ResolvedCardBuilderImageModel | null> {
+  const primary = await resolveStrictProductCardModel("PRODUCT_CARD_BUILDER");
+  if (primary) {
+    return { model: primary, usedFallbackMarketplaceCard: false };
+  }
+  const fb = await resolveStrictProductCardModel("PRODUCT_MARKETPLACE_CARD");
+  if (fb) {
+    return { model: fb, usedFallbackMarketplaceCard: true };
+  }
+  return null;
+}
+
 /**
  * Видео «карточка товара» (image-to-video).
  */

@@ -257,6 +257,15 @@ export function AdminSettingsCenter({
                       </p>
                     ) : null}
                   </div>
+                  {s.key === "KASPI_MANUAL_SETTINGS" ? (
+                    <Alert variant="default" className="border-amber-200/80 bg-amber-50/50">
+                      <AlertTitle className="text-sm">Бухгалтерия и фискализация</AlertTitle>
+                      <AlertDescription className="text-xs">
+                        Ручной перевод требует корректного бухгалтерского и фискального
+                        оформления. Проверьте порядок выдачи фискального чека с бухгалтером.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
                   <div className="grid gap-2 sm:max-w-2xl">
                     {s.type === "string" ? (
                       <Input

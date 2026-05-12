@@ -32,6 +32,21 @@ export async function getTokenPackageByIdForCheckout(
   });
 }
 
+export async function getTokenPackageBySlugForCheckout(
+  slug: string,
+  options?: { requireActive?: boolean },
+) {
+  const normalized = slug.trim().toLowerCase();
+  if (!normalized) return null;
+  const requireActive = options?.requireActive ?? true;
+  return prisma.tokenPackage.findFirst({
+    where: {
+      slug: normalized,
+      ...(requireActive ? { isActive: true } : {}),
+    },
+  });
+}
+
 export async function listAllTokenPackagesForAdmin() {
   return prisma.tokenPackage.findMany({
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],

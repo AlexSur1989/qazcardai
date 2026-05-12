@@ -130,6 +130,49 @@ export default async function AdminUserDetailPage({ params }: Props) {
         </p>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Привязанные входы</CardTitle>
+          <CardDescription>
+            Внешние провайдеры (Telegram OIDC). Дата привязки = первая запись identity.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {user.identities.length === 0 ? (
+            <p className="text-muted-foreground text-sm">Нет записей.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Провайдер</TableHead>
+                    <TableHead>ID у провайдера</TableHead>
+                    <TableHead>Username</TableHead>
+                    <TableHead>Привязано</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {user.identities.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="text-xs font-mono">{row.provider}</TableCell>
+                      <TableCell className="max-w-[10rem] break-all font-mono text-xs">
+                        {row.providerUserId}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {row.username ?? row.displayName ?? "—"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {formatAdminDateTime(row.createdAt)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {canFinance && finance ? (
         <Card className="rounded-2xl border border-[#b8dce6] bg-white shadow-sm">
           <CardHeader>

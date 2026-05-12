@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AdminEmpty } from "@/components/admin/admin-empty";
+import { AdminUsersFiltersForm } from "@/components/admin/admin-users-filters-form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Table,
@@ -17,9 +18,25 @@ import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 export const metadata = { title: "Пользователи — QazCard AI" };
 
-export default async function AdminUsersPage() {
+function first(v: string | string[] | undefined): string {
+  if (Array.isArray(v)) return v[0] ?? "";
+  return v ?? "";
+}
+
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function AdminUsersPage({ searchParams }: PageProps) {
   await requireAdminPagePermission("users.view");
-  const res = await getAdminUsersList();
+  const sp = (await searchParams) ?? {};
+  const lpRaw = first(sp.loginProvider).trim();
+  const loginProvider =
+    lpRaw === "telegram" || lpRaw === "credentials" ? lpRaw : undefined;
+
+  const res = await getAdminUsersList(
+    loginProvider ? { loginProvider } : undefined,
+  );
   if (!res.ok) {
     return (
       <div>
@@ -54,11 +71,15 @@ export default async function AdminUsersPage() {
       <p className="text-muted-foreground mt-1 text-sm">
         До 50 записей, новые сверху. Кредиты: откройте карточку пользователя.
       </p>
+      <div className="mt-4 rounded-lg border border-border bg-card p-4 shadow-sm">
+        <AdminUsersFiltersForm loginProviderValue={lpRaw} />
+      </div>
       <div className="mt-6 overflow-x-auto rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Email</TableHead>
+              <TableHead>Вход</TableHead>
               <TableHead>Имя</TableHead>
               <TableHead>Роль</TableHead>
               <TableHead>Статус</TableHead>
@@ -77,6 +98,9 @@ export default async function AdminUsersPage() {
                   >
                     {u.email}
                   </Link>
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-xs">
+                  {u.hasTelegramIdentity ? "Telegram" : "Email / пароль"}
                 </TableCell>
                 <TableCell className="text-xs">
                   {u.name?.trim() || "—"}
