@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { getToken, type JWT } from "next-auth/jwt";
 
 import type { UserRole } from "@/generated/prisma/enums";
 import {
@@ -24,17 +24,41 @@ function getMiddlewareJwtSecret(): string | null {
 }
 
 /**
- * Имя cookie сессии Auth.js зависит от secure-режима (defaultCookies в @auth/core).
- * Без secureCookie: true на HTTPS getToken ищет не тот cookie → token всегда null.
+ * HTTPS «как видит браузер» за reverse proxy: иначе getToken ставит secureCookie=false
+ * и не находит __Secure-* cookie → ложный гость и петля /dashboard ↔ /login.
  */
 function shouldUseSecureSessionCookie(req: NextRequest): boolean {
-  const forwardedProto = req.headers.get("x-forwarded-proto");
-  if (forwardedProto === "https") return true;
+  const forwardedProtoRaw = req.headers.get("x-forwarded-proto");
+  if (forwardedProtoRaw) {
+    const first = forwardedProtoRaw.split(",")[0]?.trim()?.toLowerCase();
+    if (first === "https") return true;
+  }
+  if (req.headers.get("x-forwarded-ssl")?.toLowerCase() === "on") return true;
   if (req.nextUrl.protocol === "https:") return true;
   const authBase =
     process.env.AUTH_URL?.trim() || process.env.NEXTAUTH_URL?.trim();
   if (authBase?.startsWith("https:")) return true;
   return false;
+}
+
+/**
+ * Два режима имени/decrypt cookie; при несовпадении с прокси срабатывает fallback.
+ */
+async function getMiddlewareToken(
+  req: NextRequest,
+  secret: string,
+): Promise<JWT | null> {
+  const primary = shouldUseSecureSessionCookie(req);
+  let tok = await getToken({ req, secret, secureCookie: primary });
+  if (
+    typeof tok === "string" ||
+    tok == null ||
+    !tok.sub
+  ) {
+    tok = await getToken({ req, secret, secureCookie: !primary });
+  }
+  if (typeof tok === "string" || tok == null || !tok.sub) return null;
+  return tok;
 }
 
 function isAdminDashboardRole(role: unknown): role is UserRole {
@@ -73,16 +97,11 @@ async function applyMaintenanceGate(
   }
 
   const secret = getMiddlewareJwtSecret();
-  const secureCookie = shouldUseSecureSessionCookie(req);
   const allowAdmin = isMaintenanceAllowAdminEnv();
 
-  let token: Awaited<ReturnType<typeof getToken>> = null;
+  let token: JWT | null = null;
   if (secret) {
-    token = await getToken({
-      req,
-      secret,
-      secureCookie,
-    });
+    token = await getMiddlewareToken(req, secret);
   }
 
   const isStaff = isStaffMaintenanceRole(token?.role);
@@ -150,7 +169,6 @@ export async function middleware(req: NextRequest) {
   const isAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
 
   const secret = getMiddlewareJwtSecret();
-  const secureCookie = shouldUseSecureSessionCookie(req);
 
   if (isAuthPage) {
     if (!secret) {
@@ -159,11 +177,7 @@ export async function middleware(req: NextRequest) {
         { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } },
       );
     }
-    const token = await getToken({
-      req,
-      secret,
-      secureCookie,
-    });
+    const token = await getMiddlewareToken(req, secret);
     if (token?.sub) {
       const role = token.role as UserRole | undefined;
       const p = pickLoginRedirectParam(
@@ -187,11 +201,7 @@ export async function middleware(req: NextRequest) {
     );
   }
 
-  const token = await getToken({
-    req,
-    secret,
-    secureCookie,
-  });
+  const token = await getMiddlewareToken(req, secret);
 
   if (!token?.sub) {
     const url = new URL("/login", nextUrl.origin);
