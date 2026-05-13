@@ -418,6 +418,9 @@ export type CardBuilderPromptInput = {
   preserveProduct: boolean;
   preserveAspects: string[];
   allowCreativeStylization?: boolean;
+  /** После Kie текст накладывается сервером — усиливаем запрет читаемого текста в растре */
+  overlayRequired?: boolean;
+  templateId?: string;
 };
 
 const CARD_BUILDER_ROLE_DIRECTIVE: Record<string, string> = {
@@ -446,19 +449,40 @@ export function buildCardBuilderSlidePrompt(input: CardBuilderPromptInput): stri
     CARD_BUILDER_ROLE_DIRECTIVE[input.imageRole] ??
     CARD_BUILDER_ROLE_DIRECTIVE.main_photo!;
   const benefitLine =
-    input.benefits.length > 0
-      ? `Highlight benefits visually (no readable text baked in): ${input.benefits.join(", ")}.`
-      : "";
-  const extraBen = input.benefitsExtra?.trim()
-    ? `Extra selling angle: ${input.benefitsExtra.trim()}.`
-    : "";
+    input.overlayRequired === true
+      ? ""
+      : input.benefits.length > 0
+        ? `Highlight benefits visually (no readable text baked in): ${input.benefits.join(", ")}.`
+        : "";
+  const extraBen =
+    input.overlayRequired === true
+      ? ""
+      : input.benefitsExtra?.trim()
+        ? `Extra selling angle: ${input.benefitsExtra.trim()}.`
+        : "";
   const must = input.mustShow.length
     ? `Must visually communicate: ${input.mustShow.join(", ")}.`
     : "";
   const audience = `Target audience vibe: ${input.audience}.`;
   const price = `Price positioning: ${input.priceSegment}.`;
   const motion = `Sales visual language: ${input.salesStyle}.`;
-  const textMode = `Text-on-image expectation (respect without rendering glyphs): ${input.recommendedTextMode} — user prefers ${input.textDensity}. Absolutely NO readable typography or fake UI stickers in raster.`;
+  const overlayRasterRules =
+    input.overlayRequired === true
+      ? [
+          "OVERLAY PIPELINE: Readable Russian headlines, bullets, badges with icons, dimensions and titles will be composited server-side after this render.",
+          "Raster MUST stay clean: no legible Cyrillic or Latin letters, no numeric spec tables, SKU codes, QR codes, marketplace stamps, watermark typography, or sticker labels painted by the model.",
+          "Infographic zones may only use abstract shapes, soft gradients, solids and negative space — never semantic lettering.",
+          input.templateId?.trim()
+            ? `Visual zoning hint only (scene/light/composition): template "${input.templateId.trim()}".`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : "";
+  const textMode =
+    input.overlayRequired === true
+      ? overlayRasterRules
+      : `Text-on-image expectation (respect without rendering glyphs): ${input.recommendedTextMode} — user prefers ${input.textDensity}. Absolutely NO readable typography or fake UI stickers in raster.`;
   const preserve = input.preserveProduct
     ? `Preserve product geometry, SKU identity${input.preserveAspects?.length ? `, focus fidelity on: ${input.preserveAspects.join(", ")}` : ""}.`
     : "Keep product recognizable but allow refined restyling of background and grading.";

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
-import { cardBuilderPlanFieldsSchema } from "@/lib/validations/card-builder-plan";
+import {
+  cardBuilderEstimateRequestSchema,
+  cardBuilderPlanFieldsSchema,
+} from "@/lib/validations/card-builder-plan";
 import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
@@ -25,12 +27,6 @@ import { buildCardBuilderGalleryPlan } from "@/server/services/productCardBuilde
 import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 
 type Ctx = { params: Promise<{ id: string }> };
-
-const estimateSchema = z.object({
-  source: z.enum(["payload", "saved"]).default("payload"),
-  payload: cardBuilderPlanFieldsSchema.optional(),
-  mode: z.enum(["single_slide", "full_gallery"]),
-});
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +67,7 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
 
-  const parsed = estimateSchema.safeParse(json ?? {});
+  const parsed = cardBuilderEstimateRequestSchema.safeParse(json ?? {});
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Некорректные данные" },
@@ -98,7 +94,14 @@ export async function POST(req: Request, ctx: Ctx) {
     }
     const { updatedAt: _u, ...rest } = blk.settings;
     void _u;
-    plan = rest;
+    const pv = cardBuilderPlanFieldsSchema.safeParse(rest);
+    if (!pv.success) {
+      return NextResponse.json(
+        { error: "Сохранённые параметры устарели — сгенерируйте структуру заново" },
+        { status: 400 },
+      );
+    }
+    plan = pv.data;
   }
 
   if (!plan) {
@@ -123,8 +126,6 @@ export async function POST(req: Request, ctx: Ctx) {
     );
     return NextResponse.json({
       credits: br.credits,
-      priceBreakdown: br,
-      model: { id: model.id, slug: model.slug, name: model.name },
     });
   }
 
@@ -169,6 +170,5 @@ export async function POST(req: Request, ctx: Ctx) {
     credits: totalCredits,
     slideCount: slides.length,
     allocations: alloc,
-    model: { id: model.id, slug: model.slug, name: model.name },
   });
 }

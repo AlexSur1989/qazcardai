@@ -49,6 +49,8 @@ export type ProductCardOverlayInput = {
   overlayRenderMode?: "production" | "preview";
   /** Только для админов: запретная зона и safe zones */
   layoutDebug?: boolean;
+  /** Явные иконки для строк преимуществ (параллельно benefits); иначе эвристика по тексту */
+  benefitIconIds?: string[];
 };
 
 type OverlayTemplate = "bottom_panel" | "left_panel" | "badges_callouts";
@@ -719,6 +721,9 @@ function iconPath(id: string): string {
     skin: '<path d="M7.5 17c0-3.5 2-6 4.5-6s4.5 2.5 4.5 6"/><circle cx="12" cy="7" r="3"/>',
     eye: '<path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5z"/><circle cx="12" cy="12" r="2.5"/>',
     lightning: '<path d="M13 3L5 14h6l-1 7 8-11h-6l1-7z"/>',
+    gift:
+      '<path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M9 7a3 3 0 1 1 6 0"/><path d="M15 7a3 3 0 1 1-6 0"/>',
+    tool: '<path d="M14.7 6.3a2 2 0 0 1 2.8 2.8l-7 7-4 1 1-4 7-7z"/><path d="M11 14l3 3"/>',
   };
   return paths[id] ?? paths.check!;
 }
@@ -752,6 +757,7 @@ function renderV2BenefitCard(
   useIcons: boolean,
   useShadows: boolean,
   templateId: string,
+  iconHint?: string | null,
 ): string {
   // Увеличиваем скругление и размер иконки для большей схожести с референсом
   const r = Math.max(24, Math.round(Math.min(zone.width, zone.height) * 0.28));
@@ -770,7 +776,7 @@ function renderV2BenefitCard(
 
   return [
     bg,
-    useIcons ? iconCircle(iconIdForBenefit(label), iconX, iconY, iconR, profile) : circle(iconX, iconY, Math.max(5, iconR * 0.25), profile.markerFill),
+    useIcons ? iconCircle(iconHint?.trim() || iconIdForBenefit(label), iconX, iconY, iconR, profile) : circle(iconX, iconY, Math.max(5, iconR * 0.25), profile.markerFill),
     textEl(label, {
       x: textX,
       y: zone.y + Math.round(zone.height * 0.55),
@@ -916,6 +922,7 @@ function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): stri
     .map((zone, idx) => {
       const label = text.benefits[idx];
       if (!label) return "";
+      const iconHint = input.benefitIconIds?.[idx];
       return renderV2BenefitCard(
         label,
         zone,
@@ -927,6 +934,7 @@ function renderMarketplaceCardOverlaySvgV2(input: ProductCardOverlayInput): stri
           templatePreset.id !== "clean_catalog_compact",
         useShadows,
         templatePreset.id,
+        iconHint?.trim() || null,
       );
     });
   const badgeTexts = [text.extraText, text.statsText, text.sizeText].map((x) => (x ?? "").trim()).filter(Boolean);

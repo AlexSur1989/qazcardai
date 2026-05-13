@@ -14,6 +14,10 @@ export type CardBuilderGenerationEntry = {
   generationId: string;
   slideId: string;
   imageRole: string;
+  templateId?: string;
+  layoutPreset?: string;
+  overlayApplied?: boolean;
+  finalUrl?: string;
   createdAt: string;
   status?: "queued" | "done" | "error";
 };
@@ -70,6 +74,33 @@ export async function saveCardBuilderSettingsAndPlan(
   await mergeCardBuilderBlock(projectId, {
     settings: { ...settings, updatedAt: new Date().toISOString() },
     galleryPlan,
+  });
+}
+
+export async function patchCardBuilderGenerationEntry(
+  projectId: string,
+  generationId: string,
+  patch: Partial<
+    Pick<
+      CardBuilderGenerationEntry,
+      "templateId" | "layoutPreset" | "overlayApplied" | "finalUrl" | "status"
+    >
+  >,
+): Promise<void> {
+  const p = await prisma.productCardProject.findUnique({ where: { id: projectId } });
+  if (!p) return;
+  const meta = (isRecord(p.metadata) ? { ...p.metadata } : {}) as Record<string, unknown>;
+  const block: CardBuilderProjectBlock = isRecord(meta.cardBuilder)
+    ? ({ ...(meta.cardBuilder as object) } as CardBuilderProjectBlock)
+    : {};
+  const gens = Array.isArray(block.generations) ? [...block.generations] : [];
+  const idx = gens.findIndex((g) => g.generationId === generationId);
+  if (idx < 0) return;
+  gens[idx] = { ...gens[idx]!, ...patch };
+  meta.cardBuilder = { ...block, generations: gens };
+  await prisma.productCardProject.update({
+    where: { id: projectId },
+    data: { metadata: meta as Prisma.InputJsonValue },
   });
 }
 

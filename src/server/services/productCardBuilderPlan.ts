@@ -1,22 +1,32 @@
-export type CardBuilderSlideRole =
-  | "main_photo"
-  | "benefits_infographic"
-  | "dimensions"
-  | "materials"
-  | "lifestyle"
-  | "detail_closeup"
-  | "packaging"
-  | "premium_poster"
-  | "ad_banner";
+import {
+  defaultTemplateForSlideRole,
+  getCardBuilderTemplate,
+  pickGalleryTemplateSequence,
+  type CardBuilderTemplateSlideRole,
+} from "@/config/card-builder-templates";
+import { getPublicProductCategories } from "@/config/product-card-categories";
+
+export type CardBuilderSlideRole = CardBuilderTemplateSlideRole;
 
 export type CardBuilderGallerySlide = {
   slideId: string;
   title: string;
   purpose: string;
+  /** Короткое описание для пользователя в превью */
+  previewCaption: string;
   imageRole: CardBuilderSlideRole;
+  templateId: string;
+  templateLabel: string;
+  layoutPreset: string;
+  overlayRequired: boolean;
+  textSlots: string[];
+  iconSlots: string[];
+  sourceImageMode: "original" | "variant";
   recommendedTextMode: "none" | "minimal" | "medium" | "heavy" | "infographic";
   promptIntent: string;
-  sourceImageMode: "original" | "variant";
+  overlayTexts?: Record<string, string>;
+  overlayBenefitIcons?: string[];
+  needsMoreBenefits?: boolean;
 };
 
 export type CardBuilderPlanInput = {
@@ -28,6 +38,9 @@ export type CardBuilderPlanInput = {
   allowCreativeStylization?: boolean;
   benefits: string[];
   benefitsExtra?: string;
+  subtitle?: string;
+  dimensions?: string;
+  languageMode?: string;
   mustShow: string[];
   audience: string;
   priceSegment: string;
@@ -37,7 +50,20 @@ export type CardBuilderPlanInput = {
 
 const BASE_SLIDES: Record<
   CardBuilderSlideRole,
-  Omit<CardBuilderGallerySlide, "slideId">
+  Omit<
+    CardBuilderGallerySlide,
+    | "slideId"
+    | "previewCaption"
+    | "templateId"
+    | "templateLabel"
+    | "layoutPreset"
+    | "overlayRequired"
+    | "textSlots"
+    | "iconSlots"
+    | "overlayTexts"
+    | "overlayBenefitIcons"
+    | "needsMoreBenefits"
+  >
 > = {
   main_photo: {
     title: "Главное фото",
@@ -49,7 +75,7 @@ const BASE_SLIDES: Record<
   },
   benefits_infographic: {
     title: "Преимущества",
-    purpose: "Визуально выделить 2–4 ключевых УТП в продающей композиции",
+    purpose: "Визуально выделить ключевые УТП; текст задаётся серверным overlay",
     imageRole: "benefits_infographic",
     recommendedTextMode: "medium",
     promptIntent: "benefit-led selling layout without readable bitmap text",
@@ -57,7 +83,7 @@ const BASE_SLIDES: Record<
   },
   dimensions: {
     title: "Размеры",
-    purpose: "Показать габариты и масштаб товара наглядно",
+    purpose: "Показать габариты и масштаб наглядно",
     imageRole: "dimensions",
     recommendedTextMode: "minimal",
     promptIntent: "scale and dimension readability",
@@ -65,7 +91,7 @@ const BASE_SLIDES: Record<
   },
   materials: {
     title: "Материалы",
-    purpose: "Раскрыть фактуру, материал и качество изготовления",
+    purpose: "Раскрыть фактуру и качество материала",
     imageRole: "materials",
     recommendedTextMode: "minimal",
     promptIntent: "material macro and tactile premium cues",
@@ -73,7 +99,7 @@ const BASE_SLIDES: Record<
   },
   lifestyle: {
     title: "Lifestyle",
-    purpose: "Показать товар в естественном сценарии использования",
+    purpose: "Товар в естественном сценарии использования",
     imageRole: "lifestyle",
     recommendedTextMode: "minimal",
     promptIntent: "aspirational in-context lifestyle commerce",
@@ -97,7 +123,7 @@ const BASE_SLIDES: Record<
   },
   packaging: {
     title: "Упаковка / комплект",
-    purpose: "Показать комплектацию, упаковку и содержимое",
+    purpose: "Комплектация и упаковка",
     imageRole: "packaging",
     recommendedTextMode: "minimal",
     promptIntent: "kit and packaging storytelling",
@@ -105,7 +131,7 @@ const BASE_SLIDES: Record<
   },
   ad_banner: {
     title: "Рекламный баннер",
-    purpose: "Яркая рекламная подача с чистым негативным пространством под оверлей",
+    purpose: "Яркая рекламная подача с местом под текст overlay",
     imageRole: "ad_banner",
     recommendedTextMode: "minimal",
     promptIntent: "bold ecommerce banner framing",
@@ -113,16 +139,9 @@ const BASE_SLIDES: Record<
   },
 };
 
-function withCategoryHint(
-  category: string,
-  slide: Omit<CardBuilderGallerySlide, "slideId">,
-): Omit<CardBuilderGallerySlide, "slideId"> {
-  const hint = category.trim().toLowerCase();
-  return {
-    ...slide,
-    purpose:
-      `${slide.purpose} (category context: ${hint || "general"}; keep true product identity).`,
-  };
+function categoryLabelRu(categoryId: string): string {
+  const cat = getPublicProductCategories().find((c) => c.id === categoryId);
+  return cat?.label?.trim() || categoryId;
 }
 
 function pickTextMode(
@@ -136,81 +155,100 @@ function pickTextMode(
   return recommended;
 }
 
-/** Rule-based галерея: зависимость от goal и категории (без LLM-планировщика). */
+function buildSlideFromTemplate(
+  templateId: string,
+  idx: number,
+  input: CardBuilderPlanInput,
+  categoryRu: string,
+): CardBuilderGallerySlide | null {
+  const def = getCardBuilderTemplate(templateId);
+  if (!def) return null;
+  const base = BASE_SLIDES[def.slideRole];
+  const slideId = `${String(idx + 1).padStart(2, "0")}_${def.slideRole}`;
+  const adaptedPurpose = `${base.purpose} (${categoryRu}).`;
+  const tm = pickTextMode(input.textDensity, def.defaultTextDensity);
+
+  return {
+    slideId,
+    title: base.title,
+    purpose: adaptedPurpose,
+    previewCaption: "",
+    imageRole: def.slideRole,
+    templateId: def.templateId,
+    templateLabel: def.label,
+    layoutPreset: def.layoutPreset,
+    overlayRequired: def.overlayRequired,
+    textSlots: [...def.textSlots],
+    iconSlots: [...def.iconSlots],
+    recommendedTextMode: tm,
+    promptIntent: base.promptIntent,
+    sourceImageMode: input.allowCreativeStylization ? "variant" : base.sourceImageMode,
+  };
+}
+
+function maybeSwapPosterForBanner(templateIds: string[], input: CardBuilderPlanInput): string[] {
+  if (input.marketplace !== "instagram_vk" && input.salesStyle !== "bold_ad") {
+    return templateIds;
+  }
+  const copy = [...templateIds];
+  const lastIdx = copy.length - 1;
+  const lastId = copy[lastIdx];
+  const lastTpl = lastId ? getCardBuilderTemplate(lastId) : undefined;
+  if (lastTpl?.slideRole === "premium_poster") {
+    copy[lastIdx] = "ad_banner";
+  }
+  return copy;
+}
+
+/** Rule-based галерея: категория → шаблоны слайдов; goal задаёт число кадров. */
 export function buildCardBuilderGalleryPlan(input: CardBuilderPlanInput): {
   slides: CardBuilderGallerySlide[];
 } {
-  let roles: CardBuilderSlideRole[];
+  const catRu = categoryLabelRu(input.selectedCategory);
+
+  let templateIds: string[];
 
   switch (input.goal) {
-    case "main_photo":
-      roles = ["main_photo"];
-      break;
-    case "benefits_info":
-      roles = ["benefits_infographic"];
-      break;
-    case "dimensions_slide":
-      roles = ["dimensions"];
-      break;
-    case "materials_slide":
-      roles = ["materials"];
-      break;
-    case "lifestyle":
-      roles = ["lifestyle"];
-      break;
-    case "detail_closeup":
-      roles = ["detail_closeup"];
-      break;
-    case "packaging_kit":
-      roles = ["packaging"];
-      break;
-    case "premium_poster":
-      roles = ["premium_poster"];
-      break;
     case "full_gallery_8":
-      roles = [
-        "main_photo",
-        "benefits_infographic",
-        "materials",
-        "dimensions",
-        "lifestyle",
-        "detail_closeup",
-        "packaging",
-        "premium_poster",
-      ];
+      templateIds = pickGalleryTemplateSequence(input.selectedCategory, 8);
+      templateIds = maybeSwapPosterForBanner(templateIds, input);
       break;
     case "full_gallery_6":
-      roles = [
-        "main_photo",
-        "benefits_infographic",
-        "materials",
-        "dimensions",
-        "lifestyle",
-        "premium_poster",
-      ];
+      templateIds = pickGalleryTemplateSequence(input.selectedCategory, 6);
+      templateIds = maybeSwapPosterForBanner(templateIds, input);
+      break;
+    case "main_photo":
+      templateIds = [defaultTemplateForSlideRole("main_photo")];
+      break;
+    case "benefits_info":
+      templateIds = [defaultTemplateForSlideRole("benefits_infographic")];
+      break;
+    case "dimensions_slide":
+      templateIds = [defaultTemplateForSlideRole("dimensions")];
+      break;
+    case "materials_slide":
+      templateIds = [defaultTemplateForSlideRole("materials")];
+      break;
+    case "lifestyle":
+      templateIds = [defaultTemplateForSlideRole("lifestyle")];
+      break;
+    case "detail_closeup":
+      templateIds = [defaultTemplateForSlideRole("detail_closeup")];
+      break;
+    case "packaging_kit":
+      templateIds = [defaultTemplateForSlideRole("packaging")];
+      break;
+    case "premium_poster":
+      templateIds = [defaultTemplateForSlideRole("premium_poster")];
       break;
     default:
-      roles = ["main_photo"];
-      break;
+      templateIds = [defaultTemplateForSlideRole("main_photo")];
   }
 
-  if (input.marketplace === "instagram_vk" || input.salesStyle === "bold_ad") {
-    roles = roles.map((r) =>
-      r === "premium_poster" && input.goal.startsWith("full_gallery") ? "ad_banner" : r,
-    );
-  }
-
-  const slides: CardBuilderGallerySlide[] = roles.map((role, idx) => {
-    const base = BASE_SLIDES[role];
-    const adapted = withCategoryHint(input.selectedCategory, base);
-    const slideId = `${String(idx + 1).padStart(2, "0")}_${role}`;
-    return {
-      slideId,
-      ...adapted,
-      recommendedTextMode: pickTextMode(input.textDensity, adapted.recommendedTextMode),
-      sourceImageMode:
-        input.allowCreativeStylization ? "variant" : adapted.sourceImageMode,
-    };
+  const slides: CardBuilderGallerySlide[] = [];
+  templateIds.forEach((tid, idx) => {
+    const s = buildSlideFromTemplate(tid, idx, input, catRu);
+    if (s) slides.push(s);
   });
 
   return { slides };

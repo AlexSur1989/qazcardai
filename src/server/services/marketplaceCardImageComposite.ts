@@ -40,8 +40,10 @@ export function shouldApplyProductCardMarketplaceOverlay(
   void outputIndex;
   if (type !== "IMAGE") return false;
   const m = asMeta(gen.metadata);
-  if (m.flow !== "product_card" || m.tab !== "marketplace_card") return false;
-  return overlayHasRenderableText(m);
+  if (m.flow !== "product_card") return false;
+  if (m.tab === "marketplace_card") return overlayHasRenderableText(m);
+  if (m.tab === "card_builder") return false;
+  return false;
 }
 
 function buildOverlayInputFromMeta(meta: Record<string, unknown>): ProductCardOverlayInput | null {
@@ -95,6 +97,9 @@ function buildOverlayInputFromMeta(meta: Record<string, unknown>): ProductCardOv
         : typeof meta.aspectRatio === "string"
           ? meta.aspectRatio
           : undefined;
+  const benefitIconIds = Array.isArray(meta.cardBuilderBenefitIconIds)
+    ? (meta.cardBuilderBenefitIconIds as unknown[]).filter((x): x is string => typeof x === "string")
+    : undefined;
   return {
     template,
     cardSize,
@@ -115,6 +120,7 @@ function buildOverlayInputFromMeta(meta: Record<string, unknown>): ProductCardOv
     useArrows: meta.useArrows !== false && overlay.useArrows !== false,
     useShadows: meta.useShadows !== false && overlay.useShadows !== false,
     preserveProductLabel: meta.preserveProductLabel === true || overlay.preserveProductLabel === true,
+    benefitIconIds,
   };
 }
 

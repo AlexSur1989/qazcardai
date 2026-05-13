@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
+import { cardBuilderGenerateSlideBodySchema } from "@/lib/validations/card-builder-plan";
 import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
@@ -14,12 +14,6 @@ import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAcces
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 
 type Ctx = { params: Promise<{ id: string }> };
-
-const bodySchema = z.object({
-  slideId: z.string().trim().min(1).max(96),
-  clientEstimateCredits: z.number().finite().optional().nullable(),
-  useSavedPlan: z.boolean().optional().default(true),
-});
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +48,7 @@ export async function POST(req: Request, ctx: Ctx) {
   } catch {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
-  const parsed = bodySchema.safeParse(json);
+  const parsed = cardBuilderGenerateSlideBodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Некорректные данные" },

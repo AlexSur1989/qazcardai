@@ -7,14 +7,19 @@ import {
   CARD_BUILDER_AUDIENCES,
   CARD_BUILDER_BENEFIT_TAGS,
   CARD_BUILDER_GOALS,
+  CARD_BUILDER_LANGUAGE_MODES,
   CARD_BUILDER_MARKETPLACES,
   CARD_BUILDER_MUST_SHOW,
   CARD_BUILDER_PRESERVE_ASPECTS,
   CARD_BUILDER_PRICE_SEGMENTS,
   CARD_BUILDER_SALES_STYLES,
   CARD_BUILDER_TEXT_DENSITY,
-} from "@/config/card-builder-options";
+} from "@/config/card-builder-config";
 import type { ProductCategoryId } from "@/config/product-card-categories";
+import {
+  listTemplatesForSlideRole,
+  type CardBuilderTemplateSlideRole,
+} from "@/config/card-builder-templates";
 import { readJsonSafe } from "@/lib/fetch-json-safe";
 import {
   IMAGE_GENERATION_POLL_INTERVAL_MS,
@@ -24,6 +29,7 @@ import { getFirstOutputUrlFromJson } from "@/lib/product-card-output";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -34,8 +40,12 @@ const nativeFieldClass =
 type GallerySlide = {
   slideId: string;
   title: string;
-  purpose: string;
+  purpose?: string;
   imageRole: string;
+  templateId?: string;
+  templateLabel?: string;
+  layoutPreset?: string;
+  previewCaption?: string;
 };
 
 type CardBuilderGenHistoryRow = {
@@ -73,6 +83,9 @@ export function CardBuilderTab({
   const [creativeStyle, setCreativeStyle] = useState(false);
   const [benefitsSel, setBenefitsSel] = useState<string[]>([]);
   const [benefitsExtra, setBenefitsExtra] = useState("");
+  const [subtitle, setSubtitle] = useState("");
+  const [dimensionsUser, setDimensionsUser] = useState("");
+  const [languageMode, setLanguageMode] = useState("auto");
   const [mustSel, setMustSel] = useState<string[]>(["texture", "details"]);
   const [audience, setAudience] = useState("mass_market");
   const [priceSegment, setPriceSegment] = useState("middle");
@@ -94,6 +107,7 @@ export function CardBuilderTab({
     {},
   );
   const [genHistory, setGenHistory] = useState<CardBuilderGenHistoryRow[]>([]);
+  const [tplBusySlideId, setTplBusySlideId] = useState<string | null>(null);
 
   const canWork = Boolean(hasImage && canUseBackend && projectId && selectedCategory);
 
@@ -107,6 +121,9 @@ export function CardBuilderTab({
       allowCreativeStylization: creativeStyle,
       benefits: benefitsSel,
       benefitsExtra: benefitsExtra.trim() || undefined,
+      subtitle: subtitle.trim() || undefined,
+      dimensions: dimensionsUser.trim() || undefined,
+      languageMode,
       mustShow: mustSel,
       audience,
       priceSegment,
@@ -122,6 +139,9 @@ export function CardBuilderTab({
       creativeStyle,
       benefitsSel,
       benefitsExtra,
+      subtitle,
+      dimensionsUser,
+      languageMode,
       mustSel,
       audience,
       priceSegment,
@@ -210,11 +230,18 @@ export function CardBuilderTab({
     const res = await fetch(`/api/product-card-projects/${projectId}`);
     const parsed = await readJsonSafe<{
       project?: {
-        metadata?: { cardBuilder?: { galleryPlan?: GallerySlide[]; generations?: unknown } };
+        metadata?: {
+          cardBuilder?: {
+            galleryPlan?: GallerySlide[];
+            generations?: unknown;
+            settings?: Record<string, unknown>;
+          };
+        };
       };
     }>(res);
     if (!parsed.ok || !res.ok) return;
-    const list = parsed.data.project?.metadata?.cardBuilder?.galleryPlan;
+    const blk = parsed.data.project?.metadata?.cardBuilder;
+    const list = blk?.galleryPlan;
     if (Array.isArray(list) && list.length) {
       setSlides(list as GallerySlide[]);
       setActiveSlideId((prev) => {
@@ -222,7 +249,7 @@ export function CardBuilderTab({
         return (list[0] as GallerySlide).slideId;
       });
     }
-    const rawGens = parsed.data.project?.metadata?.cardBuilder?.generations;
+    const rawGens = blk?.generations;
     if (Array.isArray(rawGens)) {
       const rows: CardBuilderGenHistoryRow[] = [];
       for (const x of rawGens) {
@@ -244,7 +271,53 @@ export function CardBuilderTab({
     } else {
       setGenHistory([]);
     }
+
+    const saved = blk?.settings;
+    if (saved && typeof saved === "object") {
+      const lm = saved.languageMode;
+      if (typeof lm === "string" && lm.trim()) setLanguageMode(lm.trim());
+      if (typeof saved.subtitle === "string") setSubtitle(saved.subtitle);
+      if (typeof saved.dimensions === "string") setDimensionsUser(saved.dimensions);
+    }
   }, [projectId, canUseBackend]);
+
+  const changeSlideTemplate = useCallback(
+    async (slideId: string, templateId: string) => {
+      if (!projectId) return;
+      setTplBusySlideId(slideId);
+      setPlanError(null);
+      try {
+        const res = await fetch(
+          `/api/product-card-projects/${projectId}/card-builder/slide-template`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ slideId, templateId }),
+          },
+        );
+        const parsed = await readJsonSafe<{
+          galleryPlan?: GallerySlide[];
+          error?: string;
+          code?: string;
+        }>(res);
+        if (!parsed.ok) {
+          setPlanError(parsed.message);
+          return;
+        }
+        if (!res.ok) {
+          setPlanError(parsed.data.error ?? "Не удалось сменить шаблон");
+          return;
+        }
+        const list = parsed.data.galleryPlan;
+        if (Array.isArray(list) && list.length) {
+          setSlides(list);
+        }
+      } finally {
+        setTplBusySlideId(null);
+      }
+    },
+    [projectId],
+  );
 
   const generateOne = useCallback(
     async (slideId: string) => {
@@ -366,6 +439,16 @@ export function CardBuilderTab({
             <AlertDescription>{planError}</AlertDescription>
           </Alert>
         )}
+
+        <Alert>
+          <AlertTitle>Текст на изображении</AlertTitle>
+          <AlertDescription>
+            AI встроит текст в дизайн. Мы просим AI сохранить русский и казахский текст точно, но иногда
+            модель может исказить буквы. Проверяйте итог перед публикацией. Одна строка текста для слайда —
+            не длиннее 60 символов; всего не больше 7 фраз (название, подзаголовок, теги, строки из поля
+            дополнительного текста, размеры).
+          </AlertDescription>
+        </Alert>
 
         <Card className="rounded-2xl border-border">
           <CardHeader>
@@ -492,6 +575,44 @@ export function CardBuilderTab({
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="pc-subtitle">Подзаголовок на карточке (необязательно)</Label>
+              <Input
+                id="pc-subtitle"
+                value={subtitle}
+                onChange={(e) => setSubtitle(e.target.value)}
+                maxLength={300}
+                className="rounded-xl"
+                placeholder="Короткая подпись"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pc-dimensions">Размеры / характеристики для слайда (необязательно)</Label>
+              <Textarea
+                id="pc-dimensions"
+                value={dimensionsUser}
+                onChange={(e) => setDimensionsUser(e.target.value)}
+                rows={2}
+                maxLength={500}
+                className="rounded-xl"
+                placeholder="Только то, что можно показать; не выдумывайте цифры"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pc-lang">Язык текста для подсказок модели</Label>
+              <select
+                id="pc-lang"
+                className={nativeFieldClass}
+                value={languageMode}
+                onChange={(e) => setLanguageMode(e.target.value)}
+              >
+                {CARD_BUILDER_LANGUAGE_MODES.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
               <Label>Что обязательно показать</Label>
               <div className="flex flex-wrap gap-2">
                 {CARD_BUILDER_MUST_SHOW.map((m) => (
@@ -593,7 +714,7 @@ export function CardBuilderTab({
             disabled={!canWork || planLoading}
             onClick={() => void runPlan()}
           >
-            {planLoading ? "Сохранение…" : "Сгенерировать структуру карточки"}
+            {planLoading ? "Сохранение…" : "Сгенерировать структуру"}
           </Button>
           <Button
             type="button"
@@ -697,13 +818,15 @@ export function CardBuilderTab({
           <CardContent className="space-y-2">
             {slides.length === 0 ? (
               <p className="text-muted-foreground text-sm">
-                После нажатия «Сгенерировать структуру карточки» здесь появится план из 6–8 кадров.
+                После нажатия «Сгенерировать структуру» здесь появится план из 6–8 кадров.
               </p>
             ) : (
               slides.map((s) => {
                 const st = slideGen[s.slideId]?.status ?? "не сгенерировано";
                 const url = slideGen[s.slideId]?.url;
                 const active = activeSlideId === s.slideId;
+                const tplOptions = listTemplatesForSlideRole(s.imageRole as CardBuilderTemplateSlideRole);
+                const tplBusy = tplBusySlideId === s.slideId;
                 return (
                   <div
                     key={s.slideId}
@@ -719,11 +842,37 @@ export function CardBuilderTab({
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <div className="font-medium text-sm">{s.title}</div>
-                        <div className="text-muted-foreground text-xs leading-snug">{s.purpose}</div>
+                        {s.previewCaption ? (
+                          <div className="text-muted-foreground mt-0.5 text-xs leading-snug">
+                            {s.previewCaption}
+                          </div>
+                        ) : null}
                         <div className="text-muted-foreground mt-1 text-[11px] capitalize">
                           Статус: {st}
+                        </div>
+                        <div className="mt-2 space-y-1">
+                          <Label className="text-[11px] text-muted-foreground">Изменить шаблон</Label>
+                          <select
+                            className={`${nativeFieldClass} h-9 max-w-full text-xs`}
+                            value={s.templateId ?? tplOptions[0]?.templateId ?? ""}
+                            disabled={!canWork || tplBusy || tplOptions.length < 2}
+                            aria-busy={tplBusy}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (!v || v === s.templateId) return;
+                              void changeSlideTemplate(s.slideId, v);
+                            }}
+                          >
+                            {tplOptions.map((t) => (
+                              <option key={t.templateId} value={t.templateId}>
+                                {t.label}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       </div>
                       <Button

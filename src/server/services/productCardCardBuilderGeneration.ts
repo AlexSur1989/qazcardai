@@ -1,7 +1,13 @@
-import { buildCardBuilderSlidePrompt } from "@/config/product-card-prompts";
+import { getCardBuilderTemplate } from "@/config/card-builder-templates";
+import { cardBuilderPlanFieldsSchema } from "@/lib/validations/card-builder-plan";
 
 import { assertUserOwnsFileUrl, getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 import { normalizeProductSourceImages } from "@/server/services/productCardProjects";
+import { buildCardBuilderSuperPrompt } from "@/server/services/cardBuilderPromptBuilder";
+import {
+  enrichCardBuilderGallerySlides,
+  enrichSingleSlideAfterTemplateChange,
+} from "@/server/services/cardBuilderTextSlots";
 import {
   buildCardBuilderGalleryPlan,
   type CardBuilderGallerySlide,
@@ -9,8 +15,10 @@ import {
 } from "@/server/services/productCardBuilderPlan";
 import {
   appendCardBuilderGeneration,
+  mergeCardBuilderBlock,
   readCardBuilderBlock,
   saveCardBuilderSettingsAndPlan,
+  type CardBuilderStoredSettings,
 } from "@/server/services/productCardCardBuilderMeta";
 import {
   allocateCreditsAcrossVariants,
@@ -53,6 +61,30 @@ export async function assertCardBuilderScenarioEnabled(): Promise<
     };
   }
   return { ok: true, settings };
+}
+
+export function parseStoredCardBuilderPlan(
+  raw: CardBuilderStoredSettings,
+): { ok: true; plan: CardBuilderPlanInput } | ServiceErr {
+  const { updatedAt: _u, ...rest } = raw;
+  void _u;
+  const parsed = cardBuilderPlanFieldsSchema.safeParse(rest);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "Параметры структуры устарели — сгенерируйте структуру заново",
+      status: 400,
+    };
+  }
+  return { ok: true, plan: parsed.data };
+}
+
+function ensureSlidePlanEnrichment(
+  slide: CardBuilderGallerySlide,
+  planInput: CardBuilderPlanInput,
+  productTitle: string | null | undefined,
+): CardBuilderGallerySlide {
+  return enrichCardBuilderGallerySlides([slide], planInput, productTitle)[0]!;
 }
 
 async function assertProjectBasics(
@@ -103,8 +135,56 @@ export async function planCardBuilderGallery(
   if (!base.ok) return base;
 
   const { slides } = buildCardBuilderGalleryPlan(input);
-  await saveCardBuilderSettingsAndPlan(projectId, { ...input }, slides);
-  return { ok: true, slides };
+  const enriched = enrichCardBuilderGallerySlides(slides, input, base.project.title ?? undefined);
+  await saveCardBuilderSettingsAndPlan(projectId, { ...input }, enriched);
+  return { ok: true, slides: enriched };
+}
+
+export async function updateCardBuilderSlideTemplate(
+  userId: string,
+  projectId: string,
+  slideId: string,
+  templateId: string,
+): Promise<
+  | { ok: true; slide: CardBuilderGallerySlide; galleryPlan: CardBuilderGallerySlide[] }
+  | ServiceErr
+> {
+  const base = await assertProjectBasics(userId, projectId);
+  if (!base.ok) return base;
+
+  const blk = await readCardBuilderBlock(projectId);
+  if (!blk?.galleryPlan?.length || !blk.settings) {
+    return { ok: false, error: "Сначала сгенерируйте структуру карточки", status: 400 };
+  }
+
+  const planParsed = parseStoredCardBuilderPlan(blk.settings);
+  if (!planParsed.ok) return planParsed;
+
+  const idx = blk.galleryPlan.findIndex((s) => s.slideId === slideId);
+  if (idx < 0) {
+    return { ok: false, error: "Слайд не найден в плане", status: 404 };
+  }
+
+  const slide = blk.galleryPlan[idx]!;
+  const tpl = getCardBuilderTemplate(templateId);
+  if (!tpl || tpl.slideRole !== slide.imageRole) {
+    return {
+      ok: false,
+      error: "Этот шаблон недоступен для данного типа слайда",
+      status: 400,
+      code: "TEMPLATE_ROLE_MISMATCH",
+    };
+  }
+
+  const merged = enrichSingleSlideAfterTemplateChange(
+    { ...slide, templateId },
+    planParsed.plan,
+    base.project.title ?? undefined,
+  );
+  const galleryPlan = [...blk.galleryPlan];
+  galleryPlan[idx] = merged;
+  await mergeCardBuilderBlock(projectId, { galleryPlan });
+  return { ok: true, slide: merged, galleryPlan };
 }
 
 export async function generateCardBuilderSlide(
@@ -152,24 +232,52 @@ export async function generateCardBuilderSlide(
     };
   }
 
-  const finalPrompt = buildCardBuilderSlidePrompt({
-    categoryId: planInput.selectedCategory,
+  const normalizedPlan = parseStoredCardBuilderPlan(planInput as CardBuilderStoredSettings);
+  if (!normalizedPlan.ok) return normalizedPlan;
+  planInput = normalizedPlan.plan;
+
+  slide = ensureSlidePlanEnrichment(slide, planInput, base.project.title ?? undefined);
+
+  const superPrompt = buildCardBuilderSuperPrompt({
+    productTitle: base.project.title ?? undefined,
+    subtitle: planInput.subtitle,
+    selectedCategory: planInput.selectedCategory,
     marketplace: planInput.marketplace,
-    imageRole: slide.imageRole,
-    slideTitle: slide.title,
-    slidePurpose: slide.purpose,
-    recommendedTextMode: slide.recommendedTextMode,
+    slideRole: slide.imageRole,
+    templateId: slide.templateId,
+    layoutPreset: slide.layoutPreset,
+    goal: planInput.goal,
     benefits: planInput.benefits ?? [],
-    benefitsExtra: planInput.benefitsExtra,
+    additionalBenefits: planInput.benefitsExtra,
     mustShow: planInput.mustShow ?? [],
     audience: planInput.audience,
     priceSegment: planInput.priceSegment,
     salesStyle: planInput.salesStyle,
     textDensity: planInput.textDensity,
     preserveProduct: planInput.preserveProduct,
-    preserveAspects: planInput.preserveAspects ?? [],
-    allowCreativeStylization: planInput.allowCreativeStylization,
+    preserveProductOptions: planInput.preserveAspects ?? [],
+    sourceImageMode: slide.sourceImageMode,
+    languageMode:
+      (planInput.languageMode === "ru" ||
+        planInput.languageMode === "kk" ||
+        planInput.languageMode === "mixed" ||
+        planInput.languageMode === "auto") &&
+      planInput.languageMode
+        ? planInput.languageMode
+        : "auto",
+    dimensions: planInput.dimensions,
   });
+
+  if (!superPrompt.ok) {
+    return {
+      ok: false,
+      error: superPrompt.validationErrors.join("\n"),
+      status: 400,
+      code: "CARD_BUILDER_PROMPT_VALIDATION",
+    };
+  }
+
+  const finalPrompt = superPrompt.data.prompt;
 
   const breakdown: ProductCardPriceBreakdown =
     body.forcedBreakdown ??
@@ -236,6 +344,13 @@ export async function generateCardBuilderSlide(
       slideRole: slide.imageRole,
       finalCredits: breakdown.credits,
     },
+    cardBuilderTemplateId: slide.templateId,
+    cardBuilderLayoutPreset: slide.layoutPreset,
+    cardBuilderOverlayRequired: false,
+    promptVersion: superPrompt.data.promptVersion,
+    textRenderMode: superPrompt.data.textRenderMode,
+    exactTextRequested: true,
+    exactTextPhrases: superPrompt.data.exactTextPhrases,
   };
 
   const result = await queueProductCardImage(
@@ -264,6 +379,8 @@ export async function generateCardBuilderSlide(
     generationId: result.generationId,
     slideId: slide.slideId,
     imageRole: slide.imageRole,
+    templateId: slide.templateId,
+    layoutPreset: slide.layoutPreset,
     status: "queued",
   });
 
@@ -301,8 +418,9 @@ export async function generateCardBuilderAllSlides(
     return { ok: false, error: "Сначала сгенерируйте структуру карточки", status: 400 };
   }
 
-  const { updatedAt: _u, ...planInput } = blk.settings;
-  void _u;
+  const planParsed = parseStoredCardBuilderPlan(blk.settings);
+  if (!planParsed.ok) return planParsed;
+  const planInput = planParsed.plan;
 
   const slides = blk.galleryPlan;
   const resolved = await resolveCardBuilderImageModel();

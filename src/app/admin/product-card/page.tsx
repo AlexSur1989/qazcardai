@@ -15,11 +15,15 @@ import { prisma } from "@/lib/prisma";
 import { getAppSettingsByGroup } from "@/server/services/appSettings";
 import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 import {
+  buildCardBuilderPriceBreakdown,
   calculateProductCardConceptImageCredits,
   calculateProductCardMarketplaceCardCredits,
   calculateProductCardVideoCredits,
+  estimateCardBuilderCharge,
   type ProductCardPriceBreakdown,
 } from "@/server/services/productCardPricing";
+import { resolveCardBuilderImageModel } from "@/server/services/productCardModelResolver";
+import { buildCardBuilderSuperPrompt } from "@/server/services/cardBuilderPromptBuilder";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -78,21 +82,131 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
   const conceptModel = activeModels.find((m) => m.productCardModelType === "PRODUCT_CONCEPT_IMAGE");
   const marketplaceModel = activeModels.find((m) => m.productCardModelType === "PRODUCT_MARKETPLACE_CARD");
   const videoModel = activeModels.find((m) => m.productCardModelType === "PRODUCT_VIDEO");
-  const calculatorPromises: Promise<ProductCardPriceBreakdown>[] = [];
+  type CalculatorRow = { label: string; breakdown: ProductCardPriceBreakdown };
+
+  const calculatorPromises: Promise<CalculatorRow>[] = [];
   if (conceptModel) {
-    calculatorPromises.push(calculateProductCardConceptImageCredits(conceptModel, { size: "1x1" }));
+    calculatorPromises.push(
+      calculateProductCardConceptImageCredits(conceptModel, { size: "1x1" }).then((breakdown) => ({
+        label: "Concept image · базовый пресет",
+        breakdown,
+      })),
+    );
   }
   if (marketplaceModel) {
     calculatorPromises.push(
-      calculateProductCardMarketplaceCardCredits(marketplaceModel, { cardSize: "square" }),
+      calculateProductCardMarketplaceCardCredits(marketplaceModel, { cardSize: "square" }).then(
+        (breakdown) => ({
+          label: "Marketplace card · квадрат",
+          breakdown,
+        }),
+      ),
     );
   }
   if (videoModel) {
     calculatorPromises.push(
-      calculateProductCardVideoCredits(videoModel, { duration: 5, resolution: "720p" }),
+      calculateProductCardVideoCredits(videoModel, { duration: 5, resolution: "720p" }).then(
+        (breakdown) => ({
+          label: "Video · 5s 720p",
+          breakdown,
+        }),
+      ),
     );
   }
+
+  const resolvedCb = await resolveCardBuilderImageModel();
+  const cbModel = resolvedCb?.model ?? null;
+  if (cbModel) {
+    const pricing = productSettings.cardBuilderPricing;
+    calculatorPromises.push(
+      buildCardBuilderPriceBreakdown({
+        model: cbModel,
+        finalCredits: pricing.cardBuilderPlanCredits,
+        slideRole: "plan",
+      }).then((breakdown) => ({
+        label: "Создать карточку · план структуры (cardBuilderPlanCredits)",
+        breakdown,
+      })),
+    );
+    calculatorPromises.push(
+      estimateCardBuilderCharge(
+        "slide",
+        cbModel,
+        pricing,
+        "light_marketplace",
+        "medium",
+        "main_photo",
+        null,
+      ).then((breakdown) => ({
+        label: "Создать карточку · один слайд (без премиум-множителей)",
+        breakdown,
+      })),
+    );
+    calculatorPromises.push(
+      estimateCardBuilderCharge(
+        "slide",
+        cbModel,
+        pricing,
+        "premium",
+        "infographic",
+        "benefits_infographic",
+        null,
+      ).then((breakdown) => ({
+        label: "Создать карточку · один слайд (премиум + тяжёлый текст)",
+        breakdown,
+      })),
+    );
+    calculatorPromises.push(
+      estimateCardBuilderCharge(
+        "gallery6",
+        cbModel,
+        pricing,
+        "light_marketplace",
+        "medium",
+        "gallery_bundle",
+        6,
+      ).then((breakdown) => ({
+        label: "Создать карточку · галерея 6",
+        breakdown,
+      })),
+    );
+    calculatorPromises.push(
+      estimateCardBuilderCharge(
+        "gallery8",
+        cbModel,
+        pricing,
+        "light_marketplace",
+        "medium",
+        "gallery_bundle",
+        8,
+      ).then((breakdown) => ({
+        label: "Создать карточку · галерея 8",
+        breakdown,
+      })),
+    );
+  }
+
   const calculatorRows = await Promise.all(calculatorPromises);
+
+  const cardBuilderSuperPromptSample = buildCardBuilderSuperPrompt({
+    productTitle: "Қысқы балақлава",
+    subtitle: "Жаңа топтама",
+    selectedCategory: "apparel",
+    marketplace: "ozon",
+    slideRole: "benefits_infographic",
+    templateId: "benefits_grid",
+    layoutPreset: "product_right_text_left",
+    benefits: ["comfort", "material"],
+    additionalBenefits: "Жеңіл материал",
+    mustShow: ["texture"],
+    audience: "mass_market",
+    priceSegment: "middle",
+    salesStyle: "infographic",
+    textDensity: "medium",
+    preserveProduct: true,
+    preserveProductOptions: ["shape", "color"],
+    languageMode: "auto",
+  });
 
   const scenariosSetting = settingsRows.find((row) => row.key === "PRODUCT_CARD_SCENARIOS")?.value;
   const canPatchScenarios = hasPermission(adminUser.role, "settings.manage");
@@ -225,18 +339,28 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
           <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow><TableHead>Scenario</TableHead><TableHead>Model</TableHead><TableHead>Tokens</TableHead><TableHead>Revenue</TableHead><TableHead>Cost</TableHead><TableHead>Margin</TableHead><TableHead>Source</TableHead></TableRow>
+                <TableRow>
+                  <TableHead>Сценарий / пресет</TableHead>
+                  <TableHead>scenario</TableHead>
+                  <TableHead>Model</TableHead>
+                  <TableHead>Tokens</TableHead>
+                  <TableHead>Revenue</TableHead>
+                  <TableHead>Cost</TableHead>
+                  <TableHead>Margin</TableHead>
+                  <TableHead>Source</TableHead>
+                </TableRow>
               </TableHeader>
               <TableBody>
-                {calculatorRows.map((row) => (
-                  <TableRow key={`${row.scenario}-${row.modelSlug}`}>
-                    <TableCell>{row.scenario}</TableCell>
-                    <TableCell className="font-mono text-xs">{row.modelSlug}</TableCell>
-                    <TableCell>{row.tokens}</TableCell>
-                    <TableCell>{row.revenueKzt.toFixed(0)} KZT</TableCell>
-                    <TableCell>{row.providerCostKzt.toFixed(0)} KZT</TableCell>
-                    <TableCell>{row.marginKzt.toFixed(0)} KZT</TableCell>
-                    <TableCell>{row.priceSource}</TableCell>
+                {calculatorRows.map(({ label, breakdown }) => (
+                  <TableRow key={`${label}-${breakdown.modelSlug}`}>
+                    <TableCell className="max-w-[min(28rem,55vw)] whitespace-normal text-sm">{label}</TableCell>
+                    <TableCell className="font-mono text-xs">{breakdown.scenario}</TableCell>
+                    <TableCell className="font-mono text-xs">{breakdown.modelSlug}</TableCell>
+                    <TableCell>{breakdown.tokens}</TableCell>
+                    <TableCell>{breakdown.revenueKzt.toFixed(0)} KZT</TableCell>
+                    <TableCell>{breakdown.providerCostKzt.toFixed(0)} KZT</TableCell>
+                    <TableCell>{breakdown.marginKzt.toFixed(0)} KZT</TableCell>
+                    <TableCell>{breakdown.priceSource}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -265,13 +389,43 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
       ) : null}
 
       {active === "prompts" ? (
-        <Card>
-          <CardHeader><CardTitle>Server-Only Prompts</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <pre className="bg-muted overflow-x-auto rounded-lg p-3 text-xs">{BASE_PRODUCT_PHOTO_PROMPT}</pre>
-            <pre className="bg-muted overflow-x-auto rounded-lg p-3 text-xs">{MARKETPLACE_CARD_BASE_PROMPT}</pre>
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Server-Only Prompts</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <pre className="bg-muted overflow-x-auto rounded-lg p-3 text-xs">{BASE_PRODUCT_PHOTO_PROMPT}</pre>
+              <pre className="bg-muted overflow-x-auto rounded-lg p-3 text-xs">{MARKETPLACE_CARD_BASE_PROMPT}</pre>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Создать карточку — супер-промпт (отладка)</CardTitle>
+              <p className="text-muted-foreground text-sm">
+                Пример сборки для Kie; на дашборде пользователю не показывается.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {cardBuilderSuperPromptSample.ok ? (
+                <>
+                  <div className="text-muted-foreground text-xs">
+                    {cardBuilderSuperPromptSample.data.promptVersion} ·{" "}
+                    {cardBuilderSuperPromptSample.data.textRenderMode} · фразы:{" "}
+                    {cardBuilderSuperPromptSample.data.exactTextPhrases.join(" | ")}
+                  </div>
+                  <pre className="bg-muted max-h-[28rem] overflow-auto rounded-lg p-3 text-xs whitespace-pre-wrap">
+                    {cardBuilderSuperPromptSample.data.prompt}
+                  </pre>
+                </>
+              ) : (
+                <pre className="bg-destructive/10 rounded-lg p-3 text-xs">
+                  {cardBuilderSuperPromptSample.validationErrors.join("\n")}
+                </pre>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       ) : null}
 
       {active === "video" ? (

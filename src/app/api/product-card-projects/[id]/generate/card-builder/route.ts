@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
+import { cardBuilderGenerateGalleryBodySchema } from "@/lib/validations/card-builder-plan";
 import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
@@ -14,10 +14,6 @@ import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAcces
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 
 type Ctx = { params: Promise<{ id: string }> };
-
-const bodySchema = z.object({
-  clientEstimateCredits: z.number().finite().optional().nullable(),
-});
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +48,7 @@ export async function POST(req: Request, ctx: Ctx) {
   } catch {
     json = {};
   }
-  const parsed = bodySchema.safeParse(json ?? {});
+  const parsed = cardBuilderGenerateGalleryBodySchema.safeParse(json ?? {});
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Некорректные данные" },

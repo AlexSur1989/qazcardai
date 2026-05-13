@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { cardBuilderPlanFieldsSchema } from "@/lib/validations/card-builder-plan";
+import { cardBuilderSlideTemplateBodySchema } from "@/lib/validations/card-builder-plan";
 import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
@@ -9,13 +9,11 @@ import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 import {
   assertCardBuilderScenarioEnabled,
-  planCardBuilderGallery,
+  updateCardBuilderSlideTemplate,
 } from "@/server/services/productCardCardBuilderGeneration";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 
 type Ctx = { params: Promise<{ id: string }> };
-
-const bodySchema = cardBuilderPlanFieldsSchema;
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +49,7 @@ export async function POST(req: Request, ctx: Ctx) {
   } catch {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
-  const parsed = bodySchema.safeParse(json);
+  const parsed = cardBuilderSlideTemplateBodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Некорректные данные" },
@@ -59,9 +57,12 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
-  const res = await planCardBuilderGallery(userId, id, parsed.data);
+  const res = await updateCardBuilderSlideTemplate(userId, id, parsed.data.slideId, parsed.data.templateId);
   if (!res.ok) {
-    return NextResponse.json({ error: res.error }, { status: res.status });
+    return NextResponse.json(
+      { error: res.error, ...(res.code ? { code: res.code } : {}) },
+      { status: res.status },
+    );
   }
-  return NextResponse.json({ slides: res.slides });
+  return NextResponse.json({ slide: res.slide, galleryPlan: res.galleryPlan });
 }
