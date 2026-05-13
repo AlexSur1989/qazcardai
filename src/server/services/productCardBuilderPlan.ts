@@ -95,6 +95,10 @@ export type CardBuilderPlanInput = {
   allowCreativeStylization?: boolean;
   benefits: string[];
   benefitsExtra?: string;
+  /** Зеркало `benefits` в сохранённом metadata (семантические акценты). */
+  semanticBenefits?: string[];
+  /** Зеркало `benefitsExtra` — дословный текст клиента («Дополнительные преимущества»). */
+  additionalBenefits?: string;
   subtitle?: string;
   dimensions?: string;
   languageMode?: string;

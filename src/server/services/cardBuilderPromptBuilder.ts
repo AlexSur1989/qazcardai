@@ -2,9 +2,8 @@ import "server-only";
 
 import {
   CARD_BUILDER_AUDIENCES,
-  CARD_BUILDER_BENEFIT_TAGS,
   CARD_BUILDER_MARKETPLACES,
-  CARD_BUILDER_MUST_SHOW,
+  CARD_BUILDER_PRESERVE_ASPECTS,
   CARD_BUILDER_PRICE_SEGMENTS,
   CARD_BUILDER_SALES_STYLES,
   CARD_BUILDER_TEXT_DENSITY,
@@ -33,6 +32,7 @@ export type CardBuilderSuperPromptInput = {
   templateId?: string;
   layoutPreset?: string;
   goal?: string;
+  /** id чекбоксов «Преимущества» — только семантические акценты промпта, не exact text. */
   benefits: string[];
   additionalBenefits?: string;
   mustShow: string[];
@@ -41,7 +41,9 @@ export type CardBuilderSuperPromptInput = {
   salesStyle?: string;
   textDensity?: string;
   preserveProduct: boolean;
-  preserveProductOptions?: string[];
+  /** Аспекты идентичности товара (id из CARD_BUILDER_PRESERVE_ASPECTS); только при preserveProduct=true. */
+  preserveAspects?: string[];
+  allowCreativeStylization?: boolean;
   sourceImageMode?: string;
   languageMode?: CardBuilderSuperPromptLanguageMode;
   dimensions?: string;
@@ -83,87 +85,87 @@ export function detectTextLanguageMode(phrases: string[]): {
   };
 }
 
-function benefitLabelsFromIds(ids: string[]): string[] {
-  const out: string[] = [];
-  for (const id of ids) {
-    const row = CARD_BUILDER_BENEFIT_TAGS.find((b) => b.id === id);
-    if (row?.label?.trim()) out.push(row.label.trim());
-  }
-  return out;
+/** Смысловой акцент для промпта (НЕ клиентский exact text и не текст плашек). */
+export function semanticBenefitAccentRu(benefitId: string): string | null {
+  const accents: Record<string, string> = {
+    design: "Сделай акцент на дизайне и внешнем виде товара.",
+    material: "Сделай акцент на материале товара.",
+    size: "Сделай акцент на размере и габарите товара.",
+    comfort: "Сделай акцент на комфорте использования.",
+    reliability: "Сделай акцент на надёжности товара.",
+    premium_feel: "Подчеркни премиальность товара.",
+    gift: "Подчеркни пригодность в подарок.",
+    home: "Покажи уместность товара в домашней сцене.",
+    office: "Покажи уместность товара в офисном контексте.",
+    sport: "Покажи уместность товара в спортивном сценарии.",
+    kitchen: "Покажи уместность товара для кухни.",
+  };
+  return accents[benefitId] ?? null;
 }
 
-function mustShowLabelsFromIds(ids: string[]): string[] {
-  const out: string[] = [];
-  for (const id of ids) {
-    const row = CARD_BUILDER_MUST_SHOW.find((m) => m.id === id);
-    if (row?.label?.trim()) out.push(row.label.trim());
-  }
-  return out;
+/** Инструкция «что должно быть видимо» (визуал, необязательно отдельные подписи). */
+export function mustShowVisualAccentRu(id: string): string | null {
+  const map: Record<string, string> = {
+    texture: "Обязательно визуально покажи фактуру и текстуру поверхности.",
+    scale: "Обязательно визуально покажи масштаб товара (реалистичный размер относительно сцены/руки/реквизита).",
+    usage: "Обязательно визуально покажи типичное использование товара в сцене.",
+    packaging: "Обязательно визуально покажи упаковку / комплект, если это видно по референсу; не выдумывай состав.",
+    details: "Обязательно визуально подчеркни важные детали товара.",
+    color: "Визуально подчеркни цвет материала; не искажай относительно референса.",
+    brand_style:
+      "Придерживайся брендовой визуальной подачи, опирайся на исходник; не придумывай новые логотипы и марки.",
+  };
+  return map[id] ?? null;
 }
 
-/** Строки для блока точного текста + проверки длины и числа фраз. */
+/** Строки для блока точного текста + проверки длины и числа фраз. Без семантических чекбоксов и must-show. */
 export function collectExactTextPhrases(input: {
   productTitle?: string | null;
   subtitle?: string | null;
-  benefitTagIds: string[];
   additionalBenefits?: string | null;
-  mustShowTagIds: string[];
   dimensions?: string | null;
   slideRole: string;
+  /** Глобальная плотность текста (после оверрайда площадки для main_photo уже учтён во входе). */
+  textDensity: string;
   /** Если true — не включаем пользовательские фразы для bitmap-текста (главное фото без текста по правилам площадки). */
   omitUserLockedText?: boolean;
-  /** Максимум тегов-акцентов (инфографика); лишнее обрезается с понятным уведомлением. */
-  maxBenefitTags?: number;
 }): {
   phrases: string[];
   validationErrors: string[];
-  benefitTagsTrimNotice?: string;
 } {
-  let benefitTagsTrimNotice: string | undefined;
-  let benefitIds = input.benefitTagIds.slice();
-  if (
-    input.maxBenefitTags != null &&
-    input.maxBenefitTags >= 0 &&
-    benefitIds.length > input.maxBenefitTags
-  ) {
-    benefitIds = benefitIds.slice(0, input.maxBenefitTags);
-    benefitTagsTrimNotice =
-      input.maxBenefitTags === 0
-        ? "Для этой площадки блок преимуществ на инфографике не используется; пользовательские акценты не переносятся в locked-текст слайда."
-        : `Для этой площадки в locked-текст слайда перенесены только первые ${input.maxBenefitTags} акцентов из выбранного списка.`;
-  }
-
   const errors: string[] = [];
   const raw: string[] = [];
+  const density = input.textDensity.trim();
+  const showCardTextLayer = density !== "none";
+
+  /** Размеры — locked только когда пользователь дал текст; на слайде «размеры» переносим даже при иной плотности. */
+  const includeDimensions =
+    !input.omitUserLockedText &&
+    Boolean(stripHtmlFragments(input.dimensions?.trim() ?? "")) &&
+    (showCardTextLayer || input.slideRole === "dimensions");
 
   if (!input.omitUserLockedText) {
-    const t = stripHtmlFragments(input.productTitle?.trim() ?? "");
-    if (t) raw.push(t);
+    if (showCardTextLayer) {
+      const t = stripHtmlFragments(input.productTitle?.trim() ?? "");
+      if (t) raw.push(t);
 
-    const st = stripHtmlFragments(input.subtitle?.trim() ?? "");
-    if (st) raw.push(st);
-
-    for (const line of benefitLabelsFromIds(benefitIds)) {
-      raw.push(stripHtmlFragments(line));
+      const st = stripHtmlFragments(input.subtitle?.trim() ?? "");
+      if (st) raw.push(st);
     }
 
     const extra = input.additionalBenefits?.trim() ?? "";
-    if (extra) {
+    if (showCardTextLayer && extra) {
       for (const part of extra.split(/\r?\n/)) {
         const x = stripHtmlFragments(part);
         if (x) raw.push(x);
       }
     }
 
-    for (const line of mustShowLabelsFromIds(input.mustShowTagIds)) {
-      raw.push(stripHtmlFragments(line));
+    if (includeDimensions) {
+      const dim = stripHtmlFragments(input.dimensions?.trim() ?? "");
+      if (dim) raw.push(dim);
     }
-
-    const dim = stripHtmlFragments(input.dimensions?.trim() ?? "");
-    if (dim) raw.push(dim);
   }
-
-  void input.slideRole;
 
   const seen = new Set<string>();
   const phrases: string[] = [];
@@ -178,7 +180,7 @@ export function collectExactTextPhrases(input: {
 
   if (phrases.length > MAX_PHRASES) {
     errors.push(
-      `Слишком много текстовых фраз для одного слайда (максимум ${MAX_PHRASES}). Сократите подзаголовок, дополнительный текст или число акцентов.`,
+      `Слишком много текстовых фраз для одного слайда (максимум ${MAX_PHRASES}). Сократите название, подзаголовок, «Дополнительные преимущества», размеры или характеристики.`,
     );
   }
 
@@ -193,7 +195,6 @@ export function collectExactTextPhrases(input: {
   return {
     phrases,
     validationErrors: errors,
-    ...(benefitTagsTrimNotice ? { benefitTagsTrimNotice } : {}),
   };
 }
 
@@ -201,9 +202,9 @@ export function collectExactTextPhrases(input: {
 export function joinUserDerivedTextForCardBuilderModeration(input: {
   productTitle?: string | null;
   subtitle?: string | null;
-  benefitTagIds: string[];
+  semanticBenefitIds: string[];
   additionalBenefits?: string | null;
-  mustShowTagIds: string[];
+  mustShowIds: string[];
   dimensions?: string | null;
 }): string {
   const parts: string[] = [];
@@ -211,10 +212,6 @@ export function joinUserDerivedTextForCardBuilderModeration(input: {
   if (t) parts.push(t);
   const st = stripHtmlFragments(input.subtitle?.trim() ?? "");
   if (st) parts.push(st);
-  for (const line of benefitLabelsFromIds(input.benefitTagIds)) {
-    const x = stripHtmlFragments(line);
-    if (x) parts.push(x);
-  }
   const extra = input.additionalBenefits?.trim() ?? "";
   if (extra) {
     for (const part of extra.split(/\r?\n/)) {
@@ -222,13 +219,58 @@ export function joinUserDerivedTextForCardBuilderModeration(input: {
       if (x) parts.push(x);
     }
   }
-  for (const line of mustShowLabelsFromIds(input.mustShowTagIds)) {
-    const x = stripHtmlFragments(line);
-    if (x) parts.push(x);
-  }
   const dim = stripHtmlFragments(input.dimensions?.trim() ?? "");
   if (dim) parts.push(dim);
+
+  const accentLines = input.semanticBenefitIds
+    .map((id) => semanticBenefitAccentRu(id))
+    .filter((x): x is string => Boolean(x));
+  if (accentLines.length) {
+    parts.push(`Смысловые акценты мастера (не дословный текст карточки):\n${accentLines.join("\n")}`);
+  }
+
+  const showLines = input.mustShowIds
+    .map((id) => mustShowVisualAccentRu(id))
+    .filter((x): x is string => Boolean(x));
+  if (showLines.length) {
+    parts.push(`Визуальные требования мастера:\n${showLines.join("\n")}`);
+  }
+
   return parts.join("\n\n").trim();
+}
+
+/** Тексты для режима языка при `auto`: заголовок, подзаголовок, строки клиента из textarea, размеры. */
+export function collectLanguageProbePhrases(input: {
+  productTitle?: string | null;
+  subtitle?: string | null;
+  additionalBenefits?: string | null;
+  dimensions?: string | null;
+}): string[] {
+  const raw: string[] = [];
+  const t = stripHtmlFragments(input.productTitle?.trim() ?? "");
+  if (t) raw.push(t);
+  const st = stripHtmlFragments(input.subtitle?.trim() ?? "");
+  if (st) raw.push(st);
+  const extra = input.additionalBenefits?.trim() ?? "";
+  if (extra) {
+    for (const part of extra.split(/\r?\n/)) {
+      const x = stripHtmlFragments(part);
+      if (x) raw.push(x);
+    }
+  }
+  const dim = stripHtmlFragments(input.dimensions?.trim() ?? "");
+  if (dim) raw.push(dim);
+  const seen = new Set<string>();
+  const phrases: string[] = [];
+  for (const x of raw) {
+    const p = x.trim();
+    if (!p) continue;
+    const key = p.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    phrases.push(p);
+  }
+  return phrases;
 }
 
 export function getSlideRoleInstruction(slideRole: string, templateId?: string): string {
@@ -407,8 +449,8 @@ export function getTextDensityInstruction(textDensity: string): string {
   const body: Record<string, string> = {
     none: `Плотность текста: без текста — не добавляй заголовков и плашек. ${lock}`,
     minimal: `Плотность текста: минимум — не больше одной короткой строки из locked phrases. ${lock}`,
-    medium: `Плотность текста: средне — несколько блоков только из locked phrases (например заголовок и преимущества). ${lock}`,
-    heavy: `Плотность текста: высокая — несколько блоков только из locked phrases, без новых формулировок. ${lock}`,
+    medium: `Плотность текста: средне — заголовок и несколько ключевых тезисов только из locked phrases (ориентир: несколько плашек). ${lock}`,
+    heavy: `Плотность текста: высокая — заголовок, 3–5 преимуществ и характеристики только из locked phrases («много текста», без собственных формулировок). ${lock}`,
     infographic: `Плотность текста: инфографика — плашки, иконки, выноски; текст только из locked phrases. ${lock}`,
   };
   return body[id] ?? `Плотность текста: ${label}. ${lock}`;
@@ -586,30 +628,42 @@ function lockedTextPhrasesSection(phrases: string[]): string {
 }
 
 function languagePreservationSection(
-  phrases: string[],
+  probePhrases: string[],
   mode: CardBuilderSuperPromptLanguageMode,
 ): string {
-  const det = detectTextLanguageMode(phrases);
+  const det = detectTextLanguageMode(probePhrases);
   const chunks: string[] = ["=== 9) LANGUAGE_PRESERVATION (RU / KK) ==="];
-  if (det.hasKazakhLetters) {
-    chunks.push(kazakhPreservationBlock());
-  }
-  if (det.hasCyrillic) {
-    chunks.push(russianPreservationBlock());
-  }
-  const mixed =
-    mode === "mixed" ||
-    (det.hasLatin && det.hasCyrillic) ||
-    (det.hasLatin && det.hasKazakhLetters);
-  if (mixed) {
+
+  const mixedScripts =
+    (det.hasLatin && det.hasCyrillic) || (det.hasLatin && det.hasKazakhLetters);
+
+  const pushMixed = () =>
     chunks.push(
       "Mixed scripts / languages: keep each phrase exactly as the user wrote; do not translate or substitute letters.",
-      "Смесь языков и алфавитов: каждую фразу сохраняй в том виде, как задал пользователь, без перевода и без подмены букв.",
+      "Смесь языков и алфавитов: сохраняй каждую фразу как у пользователя, без перевода и без подмены букв.",
     );
+
+  if (mode === "kk") {
+    chunks.push(kazakhPreservationBlock());
+    if (det.hasCyrillic) chunks.push(russianPreservationBlock());
+  } else if (mode === "ru") {
+    chunks.push(russianPreservationBlock());
+    if (det.hasKazakhLetters) chunks.push(kazakhPreservationBlock());
+  } else if (mode === "mixed") {
+    pushMixed();
+    if (det.hasKazakhLetters) chunks.push(kazakhPreservationBlock());
+    if (det.hasCyrillic) chunks.push(russianPreservationBlock());
+  } else {
+    // auto — по тексту пользователя из названия, подзаголовка, строк из textarea и размеров
+    if (det.hasKazakhLetters) chunks.push(kazakhPreservationBlock());
+    if (det.hasCyrillic) chunks.push(russianPreservationBlock());
+    if (mixedScripts) pushMixed();
   }
+
   if (chunks.length === 1) {
     chunks.push(
-      "If any Cyrillic or Latin appears in locked phrases, preserve characters exactly; do not substitute homoglyphs.",
+      "If Cyrillic, Kazakh-specific Cyrillic letters, or Latin appear in locked phrases, preserve characters exactly; do not substitute homoglyphs.",
+      "При наличии букв в locked phrases сохраняй их ровно; не подменяй похожими символами.",
     );
   }
   return chunks.filter(Boolean).join("\n\n");
@@ -624,7 +678,7 @@ function negativeInstructionsBlock(
     "НЕ добавляй случайные чужие бренды.",
     "НЕ добавляй нечитаемый мелкий текст и псевдо-буквы.",
     "НЕ искажай товар и НЕ меняй логотип.",
-    "НЕ выдумывай размеры, сертификаты, скидки и характеристики, если их нет во фразах пользователя.",
+    "НЕ выдумывай размеры, цифры габаритов, сертификаты и характеристики: если пользователь их не указал в locked phrases / не передал текстом — не добавляй.",
     "НЕ добавляй медицинские или юридические заявления, если пользователь их не указывал.",
   ];
   const p = marketplaceProfile;
@@ -652,19 +706,42 @@ function categoryLabel(categoryId: string): string {
 }
 
 function productIdentityLockSection(input: CardBuilderSuperPromptInput): string {
-  const preserveBlock = input.preserveProduct
-    ? [
-        "PRODUCT_IDENTITY_LOCK:",
-        "Сохрани товар без изменений: форму, цвет, материал, логотип, пропорции, упаковку и важные детали.",
-        "Не меняй товар на похожий. Не добавляй новые детали товара.",
-        "Не искажай бренд, логотип, форму и цвет.",
-        input.preserveProductOptions?.length
-          ? `Особый фокус пользователя: ${input.preserveProductOptions.join(", ")}.`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n")
-    : "PRODUCT_IDENTITY: допускается мягкая стилизация фона и света при сохранении узнаваемости товара; сам товар не подменять.";
+  const aspects = [...(input.preserveAspects ?? [])].filter(Boolean);
+  const aspectLines = aspects
+    .map((id) => {
+      const row = CARD_BUILDER_PRESERVE_ASPECTS.find((a) => a.id === id);
+      if (!row) return null;
+      return `— ${row.label}: сохранить без искажений по референсу.`;
+    })
+    .filter((x): x is string => Boolean(x));
+
+  let preserveBlock: string;
+  if (!input.preserveProduct) {
+    preserveBlock =
+      "PRODUCT_IDENTITY_SOFT: держи SKU узнаваемым; можно мягко менять сцену и свет, но не подменяй товар на другой объект.";
+  } else if (aspectLines.length > 0) {
+    preserveBlock = [
+      "PRODUCT_IDENTITY_LOCK (фиксированные аспекты товара из настроек клиента):",
+      "Сохрани товар неизменным по перечисленным аспектам; не добавляй случайных новых деталей к самому продукту.",
+      ...aspectLines,
+      "Не искажай маркировку/бренд так, как он виден на исходном фото.",
+    ].join("\n");
+  } else {
+    preserveBlock = [
+      "PRODUCT_IDENTITY_LOCK:",
+      "Без отдельных чекбоксов аспектов: сохраняй товар целиком — форму, цвет, материал, логотип (если есть на референсе), пропорции, упаковку и важные детали.",
+      "Не заменяй на другой SKU.",
+    ].join("\n");
+  }
+
+  const creativeNote =
+    input.preserveProduct === true && input.allowCreativeStylization === true
+      ? [
+          "CREATIVE_SCENE_STYLIZATION:",
+          "Допускается свободная смена фона, общей стилистики сцены, света и композиции вокруг товара для сильной карточки.",
+          "Запрещено нарушать замки идентичности товара выше: закреплённые аспекты (и в целом сам продукт) не переиначивать.",
+        ].join("\n\n")
+      : "";
 
   const sourceNote =
     input.sourceImageMode === "variant"
@@ -675,17 +752,18 @@ function productIdentityLockSection(input: CardBuilderSuperPromptInput): string 
   const mp = input.marketplaceProfile ?? undefined;
   const mpStrict =
     mp?.preserveProductRequired && input.preserveProduct
-      ? "Требование площадки: строже сохранять идентичность товара (форму, цвет, упаковку, логотип), без замены SKU."
+      ? "Требование площадки: усиленно сохранять идентичность товара (форму, цвет, упаковку, логотип), без замены SKU."
       : "";
 
   const goalNote = input.goal?.trim()
-    ? `Задача галереи (контекст, не добавлять новый текст на кадр): ${input.goal}.`
+    ? `Задача галереи (контекст, не добавлять новый маркетинговый текст помимо locked phrases): ${input.goal}.`
     : "";
 
   return [
     "=== 2) PRODUCT_IDENTITY_LOCK ===",
-    `Категория товара (идентичность, не выдумывать другой продукт): ${cat}.`,
+    `Категория товара (не придумывать другой продукт): ${cat}.`,
     preserveBlock,
+    creativeNote,
     mpStrict,
     sourceNote,
     goalNote,
@@ -694,19 +772,54 @@ function productIdentityLockSection(input: CardBuilderSuperPromptInput): string 
     .join("\n\n");
 }
 
-function audienceLine(audience?: string): string {
+function audienceSceneMoodBlock(audience?: string): string {
   if (!audience?.trim()) return "";
   const label = CARD_BUILDER_AUDIENCES.find((a) => a.id === audience)?.label ?? audience;
-  return `Целевая аудитория (для настроения кадра, не как обязательный текст на карточке): ${label}.`;
+  return [
+    "Аудитория задаёт сцену и настроение (lifestyle, возрастная подача, настроение света).",
+    `Целевая аудитория для кадра: ${label}.`,
+    "Audience drives scene/mood; avoid inventing slogan text not present in locked phrases.",
+  ].join("\n");
 }
 
-function priceLine(segment?: string): string {
+function priceSegmentVisualBlock(segment?: string): string {
   if (!segment?.trim()) return "";
-  const label = CARD_BUILDER_PRICE_SEGMENTS.find((p) => p.id === segment)?.label ?? segment;
-  return `Ценовое позиционирование визуала: ${label}.`;
+  const id = segment.trim();
+  const label = CARD_BUILDER_PRICE_SEGMENTS.find((p) => p.id === id)?.label ?? segment;
+  const body: Record<string, string> = {
+    economy: "Ценовой сегмент: эконом — просто, честно и понятно, без перегруза «люксом».",
+    middle: "Ценовой сегмент: средний — чистый маркетплейс, доверительный и структурированный кадр.",
+    premium: "Ценовой сегмент: премиум — дорогой коммерческий визуал, выверенный свет и аккуратная графическая дисциплина.",
+    luxury: "Ценовой сегмент: люкс — editorial/журнальный уровень подачи при сохранении честной идентичности товара.",
+  };
+  return body[id] ?? `Ценовое позиционирование визуала: ${label}.`;
 }
 
+function semanticSellingAccentsSection(benefitIds: string[]): string {
+  const lines = benefitIds
+    .map((id) => semanticBenefitAccentRu(id))
+    .filter((x): x is string => Boolean(x));
+  if (!lines.length) return "";
+  return [
+    "=== 4b) SEMANTIC_SELLING_ACCENTS ===",
+    "Смысловые акценты мастера для визуальной иерархии. Это не текст плашек и не «locked copy».",
+    "Use as creative direction only; wording must not replace exact user phrases.",
+    ...lines.map((l) => `— ${l}`),
+  ].join("\n\n");
+}
 
+function mustShowVisualRequirementsSection(mustShowIds: string[]): string {
+  const lines = mustShowIds
+    .map((id) => mustShowVisualAccentRu(id))
+    .filter((x): x is string => Boolean(x));
+  if (!lines.length) return "";
+  return [
+    "=== 4c) MUST_SHOW_VISUAL ===",
+    "Визуальные must-show: что обязательно читабельно показать глазами (фактура, масштаб, сценарий и т.д.).",
+    "Это не синоним текста на карточке — читаемые строки только из locked phrases.",
+    ...lines.map((l) => `— ${l}`),
+  ].join("\n\n");
+}
 function marketplacePromptBody(
   marketplaceId: string,
   slideRole: string,
@@ -746,11 +859,10 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
   const { phrases, validationErrors } = collectExactTextPhrases({
     productTitle: input.productTitle,
     subtitle: input.subtitle,
-    benefitTagIds: input.benefits ?? [],
     additionalBenefits: input.additionalBenefits,
-    mustShowTagIds: input.mustShow ?? [],
     dimensions: input.dimensions,
     slideRole: input.slideRole,
+    textDensity: input.textDensity ?? "medium",
     omitUserLockedText: mainPhotoLocksText,
   });
 
@@ -759,6 +871,12 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
   }
 
   const languageMode: CardBuilderSuperPromptLanguageMode = input.languageMode ?? "auto";
+  const languageProbePhrases = collectLanguageProbePhrases({
+    productTitle: input.productTitle,
+    subtitle: input.subtitle,
+    additionalBenefits: input.additionalBenefits,
+    dimensions: input.dimensions,
+  });
 
   const layoutNote =
     input.templateId || input.layoutPreset
@@ -772,6 +890,9 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
     "=== 4) SLIDE_ROLE_INSTRUCTION ===",
     getSlideRoleInstruction(input.slideRole, input.templateId),
   ].join("\n\n");
+
+  const accentsBlock = semanticSellingAccentsSection(input.benefits ?? []);
+  const mustShowBlock = mustShowVisualRequirementsSection(input.mustShow ?? []);
 
   const salesStyleBlock = [
     "=== 5) SALES_STYLE_INSTRUCTION ===",
@@ -787,28 +908,32 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
     : "";
 
   const textDensityParts = [
-    "=== 6) TEXT_DENSITY_AND_CONTEXT ===",
+    "=== 6) TEXT_DENSITY_AUDIENCE_PRICE ===",
     getTextDensityInstruction(input.textDensity ?? "medium"),
     mainPhotoDensityNote,
     verificationNote,
-    audienceLine(input.audience),
-    priceLine(input.priceSegment),
+    audienceSceneMoodBlock(input.audience),
+    priceSegmentVisualBlock(input.priceSegment),
     layoutNote,
   ].filter((x) => x && String(x).trim() !== "");
 
-  const prompt = [
+  const promptPieces = [
     roleBlock(),
     productIdentityLockSection(input),
     marketplaceBlock,
     slideRoleBlock,
+    accentsBlock,
+    mustShowBlock,
     salesStyleBlock,
     textDensityParts.join("\n\n"),
     designFlexibilityWithTextLockBlock(),
     criticalExactTextLockBlock(),
-    languagePreservationSection(phrases, languageMode),
+    languagePreservationSection(languageProbePhrases, languageMode),
     lockedTextPhrasesSection(phrases),
     negativeInstructionsBlock(profile),
-  ].join("\n\n");
+  ].filter((x) => x && String(x).trim() !== "");
+
+  const prompt = promptPieces.join("\n\n");
 
   return {
     ok: true,

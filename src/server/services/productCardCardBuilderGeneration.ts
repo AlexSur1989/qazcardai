@@ -1,5 +1,5 @@
 import { getCardBuilderTemplate } from "@/config/card-builder-templates";
-import { cardBuilderPlanFieldsSchema } from "@/lib/validations/card-builder-plan";
+import { cardBuilderPlanFieldsSchema, coerceCardBuilderPlan } from "@/lib/validations/card-builder-plan";
 
 import { assertUserOwnsFileUrl, getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 import { normalizeProductSourceImages } from "@/server/services/productCardProjects";
@@ -94,7 +94,7 @@ export function parseStoredCardBuilderPlan(
       status: 400,
     };
   }
-  return { ok: true, plan: parsed.data };
+  return { ok: true, plan: coerceCardBuilderPlan(parsed.data) };
 }
 
 function ensureSlidePlanEnrichment(
@@ -155,7 +155,9 @@ export async function planCardBuilderGallery(
   const mpRes = await resolveProductCardMarketplaceProfile(input.marketplace);
   if (!mpRes.ok) return mpRes;
 
-  const benefitErr = marketplaceBenefitsOverLimitMessage(input.benefits, mpRes.profile);
+  const normalizedInput = coerceCardBuilderPlan(cardBuilderPlanFieldsSchema.parse(input));
+
+  const benefitErr = marketplaceBenefitsOverLimitMessage(normalizedInput.benefits, mpRes.profile);
   if (benefitErr) {
     return {
       ok: false,
@@ -165,16 +167,20 @@ export async function planCardBuilderGallery(
     };
   }
 
-  const goalFail = marketplaceGoalDisallowedReason(mpRes.profile, input.goal);
+  const goalFail = marketplaceGoalDisallowedReason(mpRes.profile, normalizedInput.goal);
   if (goalFail) {
     return { ok: false, error: goalFail, status: 400, code: "MARKETPLACE_GOAL_NOT_ALLOWED" };
   }
 
-  const { slides } = buildCardBuilderGalleryPlan(input, mpRes.profile);
-  const enriched = enrichCardBuilderGallerySlides(slides, input, base.project.title ?? undefined);
+  const { slides } = buildCardBuilderGalleryPlan(normalizedInput, mpRes.profile);
+  const enriched = enrichCardBuilderGallerySlides(
+    slides,
+    normalizedInput,
+    base.project.title ?? undefined,
+  );
   const snapshot = buildAppliedMarketplaceRulesSnapshot(mpRes.profile);
   const settingsOut: CardBuilderStoredSettings = {
-    ...input,
+    ...normalizedInput,
     marketplaceProfileId: mpRes.profile.id,
     marketplaceProfileVersion: PRODUCT_CARD_MARKETPLACE_PROFILE_VERSION,
     appliedMarketplaceRules: snapshot,
@@ -363,7 +369,8 @@ export async function generateCardBuilderSlide(
     salesStyle: planInput.salesStyle,
     textDensity: textDensityEffective,
     preserveProduct: planInput.preserveProduct,
-    preserveProductOptions: planInput.preserveAspects ?? [],
+    preserveAspects: planInput.preserveAspects ?? [],
+    allowCreativeStylization: planInput.allowCreativeStylization,
     sourceImageMode: slide.sourceImageMode,
     languageMode:
       (planInput.languageMode === "ru" ||
@@ -433,9 +440,9 @@ export async function generateCardBuilderSlide(
   const moderationUserEnvelope = joinUserDerivedTextForCardBuilderModeration({
     productTitle: base.project.title,
     subtitle: planInput.subtitle,
-    benefitTagIds: planInput.benefits ?? [],
+    semanticBenefitIds: planInput.benefits ?? [],
     additionalBenefits: planInput.benefitsExtra,
-    mustShowTagIds: planInput.mustShow ?? [],
+    mustShowIds: planInput.mustShow ?? [],
     dimensions: planInput.dimensions,
   });
 
@@ -486,6 +493,24 @@ export async function generateCardBuilderSlide(
     exactTextPhrases: superPrompt.data.exactTextPhrases,
     designFlexible: superPrompt.data.designFlexible,
     overlayApplied: superPrompt.data.overlayApplied,
+    /** Сводка настроек мастера для аудита и трассировки (дублирует ключевые поля metadata.cardBuilder.settings в проекте). */
+    cardBuilderSettingsSnapshot: {
+      preserveProduct: planInput.preserveProduct ?? true,
+      preserveAspects: [...(planInput.preserveAspects ?? [])],
+      allowCreativeStylization: Boolean(planInput.allowCreativeStylization),
+      semanticBenefits: [...(planInput.benefits ?? [])],
+      additionalBenefits:
+        typeof planInput.benefitsExtra === "string"
+          ? planInput.benefitsExtra.trim()
+          : (planInput.additionalBenefits ?? ""),
+      exactTextPhrases: superPrompt.data.exactTextPhrases,
+      mustShow: [...(planInput.mustShow ?? [])],
+      audience: planInput.audience,
+      priceSegment: planInput.priceSegment,
+      salesStyle: planInput.salesStyle,
+      textDensity: textDensityEffective,
+      languageMode: planInput.languageMode ?? "auto",
+    },
   };
 
   const result = await queueProductCardImage(

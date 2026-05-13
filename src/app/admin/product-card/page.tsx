@@ -215,7 +215,8 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
     salesStyle: "infographic",
     textDensity: "medium",
     preserveProduct: true,
-    preserveProductOptions: ["shape", "color"],
+    preserveAspects: ["shape", "color"],
+    allowCreativeStylization: false,
     languageMode: "auto",
   });
 

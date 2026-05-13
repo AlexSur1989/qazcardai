@@ -55,6 +55,10 @@ export const cardBuilderPlanFieldsSchema = z
     allowCreativeStylization: z.boolean().optional(),
     benefits: z.array(Z_TAG).default([]),
     benefitsExtra: z.string().max(2000).optional(),
+    /** Копия `benefits` для metadata (семантические акценты, не verbatim-текст). */
+    semanticBenefits: z.array(Z_TAG).optional(),
+    /** Копия `benefitsExtra` — текст из «Дополнительные преимущества». */
+    additionalBenefits: z.string().max(2000).optional(),
     subtitle: z.string().max(300).optional(),
     dimensions: z.string().max(500).optional(),
     languageMode: Z_LANG.optional().default("auto"),
@@ -72,6 +76,20 @@ export const cardBuilderPlanFieldsSchema = z
   .strict();
 
 export type CardBuilderPlanFields = z.infer<typeof cardBuilderPlanFieldsSchema>;
+
+/** Нормализует сохранённые зеркала `semanticBenefits` / `additionalBenefits` перед генерацией. */
+export function coerceCardBuilderPlan(fields: CardBuilderPlanFields): CardBuilderPlanFields {
+  const benefits = fields.benefits?.length ? fields.benefits : (fields.semanticBenefits ?? []);
+  const mergedExtra =
+    (fields.benefitsExtra?.trim() || fields.additionalBenefits?.trim() || "") || undefined;
+  return {
+    ...fields,
+    benefits,
+    benefitsExtra: mergedExtra,
+    semanticBenefits: [...benefits],
+    additionalBenefits: mergedExtra ?? "",
+  };
+}
 
 export const cardBuilderEstimateRequestSchema = z.object({
   source: z.enum(["payload", "saved"]).default("payload"),
