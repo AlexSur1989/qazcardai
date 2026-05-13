@@ -15,6 +15,8 @@ import {
   CARD_BUILDER_SALES_STYLES,
   CARD_BUILDER_TEXT_DENSITY,
 } from "@/config/card-builder-config";
+import type { ProductCardMarketplaceProfile } from "@/config/product-card-marketplace-profiles";
+import { cardBuilderGoalToSlideRole } from "@/server/services/productCardBuilderPlan";
 import type { ProductCategoryId } from "@/config/product-card-categories";
 import {
   listTemplatesForSlideRole,
@@ -26,6 +28,7 @@ import {
   IMAGE_GENERATION_POLL_MAX_ITERATIONS,
 } from "@/lib/generation-client-polling";
 import { getFirstOutputUrlFromJson } from "@/lib/product-card-output";
+import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,6 +65,7 @@ type Props = {
   projectId: string | null;
   selectedCategory: ProductCategoryId | null;
   balanceCredits: number;
+  marketplaceProfiles: ProductCardMarketplaceProfile[];
 };
 
 export function CardBuilderTab({
@@ -70,6 +74,7 @@ export function CardBuilderTab({
   projectId,
   selectedCategory,
   balanceCredits,
+  marketplaceProfiles,
 }: Props) {
   const [marketplace, setMarketplace] = useState("ozon");
   const [goal, setGoal] = useState("full_gallery_6");
@@ -90,7 +95,8 @@ export function CardBuilderTab({
   const [audience, setAudience] = useState("mass_market");
   const [priceSegment, setPriceSegment] = useState("middle");
   const [salesStyle, setSalesStyle] = useState("light_marketplace");
-  const [textDensity, setTextDensity] = useState("medium");
+  type DensityStash = { key: string; value: string };
+  const [densityStash, setDensityStash] = useState<DensityStash>({ key: "", value: "medium" });
 
   const [slides, setSlides] = useState<GallerySlide[]>([]);
   const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
@@ -109,13 +115,76 @@ export function CardBuilderTab({
   const [genHistory, setGenHistory] = useState<CardBuilderGenHistoryRow[]>([]);
   const [tplBusySlideId, setTplBusySlideId] = useState<string | null>(null);
 
+  const enabledMpIndex = useMemo(() => {
+    const m = new Map<string, ProductCardMarketplaceProfile>();
+    for (const p of marketplaceProfiles) m.set(p.id, p);
+    return m;
+  }, [marketplaceProfiles]);
+
+  const coercedMarketplace = useMemo(() => {
+    const p = enabledMpIndex.get(marketplace);
+    if (p && p.enabled !== false) return marketplace;
+    return (
+      CARD_BUILDER_MARKETPLACES.find((x) => enabledMpIndex.get(x.id)?.enabled !== false)?.id ?? "ozon"
+    );
+  }, [marketplace, enabledMpIndex]);
+
+  const goalChoices = useMemo(() => {
+    const profile = enabledMpIndex.get(coercedMarketplace);
+    if (!profile) return [...CARD_BUILDER_GOALS];
+    return CARD_BUILDER_GOALS.filter((g) => {
+      const role = cardBuilderGoalToSlideRole(g.id);
+      if (!role) return true;
+      return (profile.allowedSlideTypes as string[]).includes(role as string);
+    });
+  }, [enabledMpIndex, coercedMarketplace]);
+
+  const effectiveGoal = useMemo(() => {
+    if (goalChoices.some((g) => g.id === goal)) return goal;
+    return goalChoices[0]?.id ?? "full_gallery_6";
+  }, [goal, goalChoices]);
+
+  const densityChoices = useMemo(() => {
+    const profile = enabledMpIndex.get(coercedMarketplace);
+    if (!profile || effectiveGoal !== "main_photo" || profile.mainPhotoTextAllowed) {
+      return [...CARD_BUILDER_TEXT_DENSITY];
+    }
+    return CARD_BUILDER_TEXT_DENSITY.filter((t) => t.id === "none" || t.id === "minimal");
+  }, [enabledMpIndex, effectiveGoal, coercedMarketplace]);
+
+  const benefitLimit = enabledMpIndex.get(coercedMarketplace)?.maxBenefitBadges ?? 11;
+
+  const profileForDensity = enabledMpIndex.get(coercedMarketplace);
+  const recommendedTextDensity =
+    profileForDensity?.mainPhotoRules.recommendedTextDensity ?? "medium";
+  const densityRecoKey = `${coercedMarketplace}|${recommendedTextDensity}`;
+
+  const effectiveTextDensity = useMemo(() => {
+    const rawPick = densityStash.key === densityRecoKey ? densityStash.value : recommendedTextDensity;
+    let out = rawPick;
+    if (effectiveGoal === "main_photo" && profileForDensity && !profileForDensity.mainPhotoTextAllowed) {
+      if (out !== "none" && out !== "minimal") out = "none";
+    }
+    if (!densityChoices.some((c) => c.id === out)) {
+      out = densityChoices[0]?.id ?? recommendedTextDensity;
+    }
+    return out;
+  }, [
+    densityStash,
+    densityRecoKey,
+    recommendedTextDensity,
+    effectiveGoal,
+    profileForDensity,
+    densityChoices,
+  ]);
+
   const canWork = Boolean(hasImage && canUseBackend && projectId && selectedCategory);
 
   const planPayload = useMemo(
     () => ({
       selectedCategory: selectedCategory ?? "other",
-      marketplace,
-      goal,
+      marketplace: coercedMarketplace,
+      goal: effectiveGoal,
       preserveProduct,
       preserveAspects,
       allowCreativeStylization: creativeStyle,
@@ -128,12 +197,12 @@ export function CardBuilderTab({
       audience,
       priceSegment,
       salesStyle,
-      textDensity,
+      textDensity: effectiveTextDensity,
     }),
     [
       selectedCategory,
-      marketplace,
-      goal,
+      coercedMarketplace,
+      effectiveGoal,
       preserveProduct,
       preserveAspects,
       creativeStyle,
@@ -146,7 +215,7 @@ export function CardBuilderTab({
       audience,
       priceSegment,
       salesStyle,
-      textDensity,
+      effectiveTextDensity,
     ],
   );
 
@@ -280,8 +349,23 @@ export function CardBuilderTab({
       if (typeof lm === "string" && lm.trim()) setLanguageMode(lm.trim());
       if (typeof saved.subtitle === "string") setSubtitle(saved.subtitle);
       if (typeof saved.dimensions === "string") setDimensionsUser(saved.dimensions);
+      if (typeof saved.marketplace === "string" && saved.marketplace.trim())
+        setMarketplace(saved.marketplace.trim());
+      if (typeof saved.goal === "string" && saved.goal.trim()) setGoal(saved.goal.trim());
+      if (typeof saved.textDensity === "string" && saved.textDensity.trim()) {
+        const mpKey =
+          typeof saved.marketplace === "string" && saved.marketplace.trim()
+            ? saved.marketplace.trim()
+            : marketplace;
+        const prof = enabledMpIndex.get(mpKey);
+        const reco = prof?.mainPhotoRules.recommendedTextDensity ?? "medium";
+        setDensityStash({
+          key: `${mpKey}|${reco}`,
+          value: saved.textDensity.trim(),
+        });
+      }
     }
-  }, [projectId, canUseBackend]);
+  }, [projectId, canUseBackend, enabledMpIndex, marketplace]);
 
   const changeSlideTemplate = useCallback(
     async (slideId: string, templateId: string) => {
@@ -341,6 +425,7 @@ export function CardBuilderTab({
           generationId?: string;
           error?: string;
           code?: string;
+          marketplaceNotice?: string;
         }>(res);
         if (!parsed.ok) {
           setPlanError(parsed.message);
@@ -349,6 +434,10 @@ export function CardBuilderTab({
         if (!res.ok) {
           setPlanError(parsed.data.error ?? "Не удалось запустить генерацию");
           return;
+        }
+        const notice = parsed.data.marketplaceNotice?.trim();
+        if (notice) {
+          toast.message(notice);
         }
         const gid = parsed.data.generationId;
         if (!gid) return;
@@ -425,6 +514,8 @@ export function CardBuilderTab({
 
   if (!hasImage) return null;
 
+  const selProfile = enabledMpIndex.get(coercedMarketplace);
+
   return (
     <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
       <div className="space-y-4">
@@ -461,14 +552,16 @@ export function CardBuilderTab({
               <select
                 id="pc-marketplace"
                 className={nativeFieldClass}
-                value={marketplace}
+                value={coercedMarketplace}
                 onChange={(e) => setMarketplace(e.target.value)}
               >
-                {CARD_BUILDER_MARKETPLACES.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
+                {CARD_BUILDER_MARKETPLACES.filter((m) => enabledMpIndex.get(m.id)?.enabled !== false).map(
+                  (m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ),
+                )}
               </select>
             </div>
             <div className="space-y-2">
@@ -476,16 +569,39 @@ export function CardBuilderTab({
               <select
                 id="pc-goal"
                 className={nativeFieldClass}
-                value={goal}
+                value={effectiveGoal}
                 onChange={(e) => setGoal(e.target.value)}
               >
-                {CARD_BUILDER_GOALS.map((g) => (
+                {goalChoices.map((g) => (
                   <option key={g.id} value={g.id}>
                     {g.label}
                   </option>
                 ))}
               </select>
             </div>
+            {selProfile ? (
+              <div className="sm:col-span-2 space-y-3">
+                <Alert>
+                  <AlertTitle>Для выбранной площадки рекомендуем</AlertTitle>
+                  <AlertDescription className="space-y-2">
+                    <p>{selProfile.userHint}</p>
+                    <ul className="text-muted-foreground list-inside list-disc text-sm">
+                      {selProfile.complianceHints.slice(0, 5).map((h) => (
+                        <li key={h}>{h}</li>
+                      ))}
+                    </ul>
+                    {selProfile.needsVerification ? (
+                      <p className="text-xs">
+                        Для этой площадки профиль требует дополнительной проверки перед публикацией.
+                      </p>
+                    ) : null}
+                    <p className="text-muted-foreground text-xs">
+                      Целевой формат: {selProfile.defaultSize} · {selProfile.defaultAspectRatio}.
+                    </p>
+                  </AlertDescription>
+                </Alert>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -544,6 +660,16 @@ export function CardBuilderTab({
             <CardTitle className="text-base">Преимущества и акценты</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {benefitsSel.length > benefitLimit ? (
+              <Alert variant="destructive">
+                <AlertTitle>Слишком много акцентов</AlertTitle>
+                <AlertDescription>
+                  Для этой площадки можно перенести в текст слайда преимуществ не больше {benefitLimit}{" "}
+                  акцентов. При генерации будут использованы первые {benefitLimit} — добавьте самые важные
+                  в начало списка.
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               {CARD_BUILDER_BENEFIT_TAGS.map((b) => (
                 <label
@@ -698,16 +824,27 @@ export function CardBuilderTab({
               <select
                 id="pc-text-density"
                 className={nativeFieldClass}
-                value={textDensity}
-                onChange={(e) => setTextDensity(e.target.value)}
+                value={effectiveTextDensity}
+                onChange={(e) => setDensityStash({ key: densityRecoKey, value: e.target.value })}
               >
-                {CARD_BUILDER_TEXT_DENSITY.map((t) => (
+                {densityChoices.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.label}
                   </option>
                 ))}
               </select>
             </div>
+            {effectiveGoal === "main_photo" && selProfile && !selProfile.mainPhotoTextAllowed ? (
+              <div className="sm:col-span-2">
+                <Alert>
+                  <AlertTitle>Главное фото без текста</AlertTitle>
+                  <AlertDescription>
+                    Для главного фото этой площадки лучше не использовать текст на кадре. Подпись и акценты
+                    удобнее вынести на слайд «Преимущества».
+                  </AlertDescription>
+                </Alert>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

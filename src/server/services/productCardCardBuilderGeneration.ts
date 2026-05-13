@@ -10,9 +10,17 @@ import {
 } from "@/server/services/cardBuilderTextSlots";
 import {
   buildCardBuilderGalleryPlan,
+  cardBuilderProfileSlideErrorMessage,
+  marketplaceGoalDisallowedReason,
   type CardBuilderGallerySlide,
   type CardBuilderPlanInput,
 } from "@/server/services/productCardBuilderPlan";
+import {
+  buildAppliedMarketplaceRulesSnapshot,
+  buildCardBuilderGenerationMarketplaceRules,
+  PRODUCT_CARD_MARKETPLACE_PROFILE_VERSION,
+  resolveProductCardMarketplaceProfile,
+} from "@/server/services/productCardMarketplaceProfiles";
 import {
   appendCardBuilderGeneration,
   mergeCardBuilderBlock,
@@ -45,6 +53,8 @@ export type GenOk = {
   generationId: string;
   status: string;
   costCredits: number;
+  /** Пользовательская подсказка (не ошибка): обрезание списка акцентов под лимит площадки */
+  marketplaceNotice?: string;
 };
 
 export async function assertCardBuilderScenarioEnabled(): Promise<
@@ -134,9 +144,26 @@ export async function planCardBuilderGallery(
   const base = await assertProjectBasics(userId, projectId);
   if (!base.ok) return base;
 
-  const { slides } = buildCardBuilderGalleryPlan(input);
+  const mpRes = await resolveProductCardMarketplaceProfile(input.marketplace);
+  if (!mpRes.ok) return mpRes;
+
+  const goalFail = marketplaceGoalDisallowedReason(mpRes.profile, input.goal);
+  if (goalFail) {
+    return { ok: false, error: goalFail, status: 400, code: "MARKETPLACE_GOAL_NOT_ALLOWED" };
+  }
+
+  const { slides } = buildCardBuilderGalleryPlan(input, mpRes.profile);
   const enriched = enrichCardBuilderGallerySlides(slides, input, base.project.title ?? undefined);
-  await saveCardBuilderSettingsAndPlan(projectId, { ...input }, enriched);
+  const snapshot = buildAppliedMarketplaceRulesSnapshot(mpRes.profile);
+  const settingsOut: CardBuilderStoredSettings = {
+    ...input,
+    marketplaceProfileId: mpRes.profile.id,
+    marketplaceProfileVersion: PRODUCT_CARD_MARKETPLACE_PROFILE_VERSION,
+    appliedMarketplaceRules: snapshot,
+    cardBuilderTargetAspectRatio: mpRes.profile.defaultAspectRatio,
+    cardBuilderTargetSize: mpRes.profile.defaultSize,
+  };
+  await saveCardBuilderSettingsAndPlan(projectId, settingsOut, enriched);
   return { ok: true, slides: enriched };
 }
 
@@ -176,6 +203,13 @@ export async function updateCardBuilderSlideTemplate(
     };
   }
 
+  const mpRes = await resolveProductCardMarketplaceProfile(planParsed.plan.marketplace);
+  if (!mpRes.ok) return mpRes;
+  const slideErr = cardBuilderProfileSlideErrorMessage(mpRes.profile, slide.imageRole);
+  if (slideErr) {
+    return { ok: false, error: slideErr, status: 400, code: "MARKETPLACE_SLIDE_NOT_ALLOWED" };
+  }
+
   const merged = enrichSingleSlideAfterTemplateChange(
     { ...slide, templateId },
     planParsed.plan,
@@ -204,13 +238,6 @@ export async function generateCardBuilderSlide(
   const base = await assertProjectBasics(userId, projectId);
   if (!base.ok) return base;
 
-  const resolved = await resolveCardBuilderImageModel();
-  if (!resolved) {
-    return { ok: false, error: PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE, status: 400 };
-  }
-  const { model, fallbackFromMarketplaceCard } = resolved;
-  const settings = await getProductCardSettings();
-
   let slide: CardBuilderGallerySlide | undefined = body.slide;
   let planInput: CardBuilderPlanInput | undefined = body.planInput;
 
@@ -238,11 +265,37 @@ export async function generateCardBuilderSlide(
 
   slide = ensureSlidePlanEnrichment(slide, planInput, base.project.title ?? undefined);
 
+  const mpRes = await resolveProductCardMarketplaceProfile(planInput.marketplace);
+  if (!mpRes.ok) return mpRes;
+  const profile = mpRes.profile;
+  const slideRoleErr = cardBuilderProfileSlideErrorMessage(profile, slide.imageRole);
+  if (slideRoleErr) {
+    return {
+      ok: false,
+      error: slideRoleErr,
+      status: 400,
+      code: "MARKETPLACE_SLIDE_NOT_ALLOWED",
+    };
+  }
+
+  const resolved = await resolveCardBuilderImageModel();
+  if (!resolved) {
+    return { ok: false, error: PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE, status: 400 };
+  }
+  const { model, fallbackFromMarketplaceCard } = resolved;
+  const settings = await getProductCardSettings();
+
+  const textDensityEffective =
+    slide.imageRole === "main_photo" && !profile.mainPhotoTextAllowed
+      ? "none"
+      : planInput.textDensity;
+
   const superPrompt = buildCardBuilderSuperPrompt({
     productTitle: base.project.title ?? undefined,
     subtitle: planInput.subtitle,
     selectedCategory: planInput.selectedCategory,
     marketplace: planInput.marketplace,
+    marketplaceProfile: profile,
     slideRole: slide.imageRole,
     templateId: slide.templateId,
     layoutPreset: slide.layoutPreset,
@@ -253,7 +306,7 @@ export async function generateCardBuilderSlide(
     audience: planInput.audience,
     priceSegment: planInput.priceSegment,
     salesStyle: planInput.salesStyle,
-    textDensity: planInput.textDensity,
+    textDensity: textDensityEffective,
     preserveProduct: planInput.preserveProduct,
     preserveProductOptions: planInput.preserveAspects ?? [],
     sourceImageMode: slide.sourceImageMode,
@@ -286,7 +339,7 @@ export async function generateCardBuilderSlide(
       model,
       settings.cardBuilderPricing,
       planInput.salesStyle,
-      planInput.textDensity,
+      textDensityEffective,
       slide.imageRole,
       body.gallerySlideCount ?? null,
     ));
@@ -332,13 +385,19 @@ export async function generateCardBuilderSlide(
     overlayApplied: superPrompt.data.overlayApplied,
   };
 
+  const benefitTrimNotice = superPrompt.data.marketplaceBenefitTrimNotice ?? null;
+
   const metadataRoot: Record<string, unknown> = {
     flow: "product_card",
     scenarioKey: "card_builder",
     projectId: base.project.id,
     tab: "card_builder",
     cardBuilderSlideId: slide.slideId,
+    slideRole: slide.imageRole,
     cardBuilderSlideRole: slide.imageRole,
+    marketplaceProfileId: profile.id,
+    marketplaceProfileVersion: PRODUCT_CARD_MARKETPLACE_PROFILE_VERSION,
+    appliedMarketplaceRules: buildCardBuilderGenerationMarketplaceRules(profile),
     selectedCategory: planInput.selectedCategory,
     marketplace: planInput.marketplace,
     preserveProduct: planInput.preserveProduct,
@@ -366,6 +425,10 @@ export async function generateCardBuilderSlide(
     designFlexible: superPrompt.data.designFlexible,
     overlayApplied: superPrompt.data.overlayApplied,
   };
+
+  if (benefitTrimNotice) {
+    metadataRoot.cardBuilderMarketplaceBenefitTrimNotice = benefitTrimNotice;
+  }
 
   const result = await queueProductCardImage(
     userId,
@@ -403,6 +466,7 @@ export async function generateCardBuilderSlide(
     generationId: result.generationId,
     status: result.status,
     costCredits,
+    marketplaceNotice: benefitTrimNotice ?? undefined,
   };
 }
 

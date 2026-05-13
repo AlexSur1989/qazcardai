@@ -71,5 +71,6 @@ export async function POST(req: Request, ctx: Ctx) {
     generationId: res.generationId,
     status: res.status,
     costCredits: res.costCredits,
+    ...(res.marketplaceNotice ? { marketplaceNotice: res.marketplaceNotice } : {}),
   });
 }

@@ -31,6 +31,19 @@ const Z_STYLE = z.enum(enumFrom(CARD_BUILDER_SALES_STYLES.map((x) => x.id)));
 const Z_DENSITY = z.enum(enumFrom(CARD_BUILDER_TEXT_DENSITY.map((x) => x.id)));
 const Z_LANG = z.enum(enumFrom(CARD_BUILDER_LANGUAGE_MODES.map((x) => x.id)));
 
+const Z_APPLIED_MARKETPLACE_RULES = z
+  .object({
+    defaultAspectRatio: z.string(),
+    defaultSize: z.string(),
+    mainPhotoTextAllowed: z.boolean(),
+    maxBenefitBadges: z.number(),
+    sourceLevel: z.enum(["official", "secondary", "default", "mixed"]),
+    needsVerification: z.boolean().optional(),
+    infographicAllowed: z.boolean(),
+    lifestyleAllowed: z.boolean(),
+  })
+  .strict();
+
 /** Поля мастера «Создать карточку»: те же значения, что и в UI (card-builder-config). */
 export const cardBuilderPlanFieldsSchema = z
   .object({
@@ -50,6 +63,11 @@ export const cardBuilderPlanFieldsSchema = z
     priceSegment: Z_PRICE,
     salesStyle: Z_STYLE,
     textDensity: Z_DENSITY,
+    marketplaceProfileId: z.string().optional(),
+    marketplaceProfileVersion: z.string().optional(),
+    appliedMarketplaceRules: Z_APPLIED_MARKETPLACE_RULES.optional(),
+    cardBuilderTargetAspectRatio: z.string().optional(),
+    cardBuilderTargetSize: z.string().optional(),
   })
   .strict();
 

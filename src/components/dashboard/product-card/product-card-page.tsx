@@ -11,6 +11,7 @@ import type {
   ProductCardScenarioKey,
   ProductCardScenarioToggles,
 } from "@/server/services/productCardSettings";
+import type { ProductCardMarketplaceProfile } from "@/config/product-card-marketplace-profiles";
 
 import { CardBuilderTab } from "./card-builder-tab";
 import { CategorySelector } from "./category-selector";
@@ -64,6 +65,8 @@ type Props = {
   videoPresets: VideoPreset[];
   /** Показать режим разметки оверлея (админ) */
   canMarketplaceLayoutDebug?: boolean;
+  /** Профили маркетплейсов для мастера «Создать карточку» (server merge + AppSetting). */
+  cardBuilderMarketplaceProfiles: ProductCardMarketplaceProfile[];
 };
 
 export function ProductCardPage({
@@ -73,6 +76,7 @@ export function ProductCardPage({
   marketplaceCardSizes,
   videoPresets,
   canMarketplaceLayoutDebug = false,
+  cardBuilderMarketplaceProfiles,
 }: Props) {
   const {
     initDone,
@@ -260,6 +264,7 @@ export function ProductCardPage({
               projectId={projectId}
               selectedCategory={selectedCategory}
               balanceCredits={balanceDisplay}
+              marketplaceProfiles={cardBuilderMarketplaceProfiles}
             />
           </TabsContent>
           <TabsContent value="video" className="mt-4">

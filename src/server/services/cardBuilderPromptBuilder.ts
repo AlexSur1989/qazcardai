@@ -9,6 +9,7 @@ import {
   CARD_BUILDER_SALES_STYLES,
   CARD_BUILDER_TEXT_DENSITY,
 } from "@/config/card-builder-config";
+import type { ProductCardMarketplaceProfile } from "@/config/product-card-marketplace-profiles";
 import { PRODUCT_CATEGORY_GROUPS } from "@/config/product-card-categories";
 
 const PROMPT_VERSION = "card_builder_super_prompt_v2" as const;
@@ -44,6 +45,8 @@ export type CardBuilderSuperPromptInput = {
   sourceImageMode?: string;
   languageMode?: CardBuilderSuperPromptLanguageMode;
   dimensions?: string;
+  /** Профиль площадки: промпт и текстовые ограничения; если не задан — трактовать как универсальный режим. */
+  marketplaceProfile?: ProductCardMarketplaceProfile | null;
 };
 
 export type CardBuilderSuperPromptOk = {
@@ -55,6 +58,8 @@ export type CardBuilderSuperPromptOk = {
   designFlexible: true;
   overlayApplied: false;
   exactTextRequested: true;
+  /** Подсказка для UI/metadata: акценты обрезаны под max площадки */
+  marketplaceBenefitTrimNotice?: string;
 };
 
 export type CardBuilderSuperPromptResult =
@@ -105,35 +110,60 @@ export function collectExactTextPhrases(input: {
   mustShowTagIds: string[];
   dimensions?: string | null;
   slideRole: string;
-}): { phrases: string[]; validationErrors: string[] } {
-  void input.slideRole;
+  /** Если true — не включаем пользовательские фразы для bitmap-текста (главное фото без текста по правилам площадки). */
+  omitUserLockedText?: boolean;
+  /** Максимум тегов-акцентов (инфографика); лишнее обрезается с понятным уведомлением. */
+  maxBenefitTags?: number;
+}): {
+  phrases: string[];
+  validationErrors: string[];
+  benefitTagsTrimNotice?: string;
+} {
+  let benefitTagsTrimNotice: string | undefined;
+  let benefitIds = input.benefitTagIds.slice();
+  if (
+    input.maxBenefitTags != null &&
+    input.maxBenefitTags >= 0 &&
+    benefitIds.length > input.maxBenefitTags
+  ) {
+    benefitIds = benefitIds.slice(0, input.maxBenefitTags);
+    benefitTagsTrimNotice =
+      input.maxBenefitTags === 0
+        ? "Для этой площадки блок преимуществ на инфографике не используется; пользовательские акценты не переносятся в locked-текст слайда."
+        : `Для этой площадки в locked-текст слайда перенесены только первые ${input.maxBenefitTags} акцентов из выбранного списка.`;
+  }
+
   const errors: string[] = [];
   const raw: string[] = [];
 
-  const t = stripHtmlFragments(input.productTitle?.trim() ?? "");
-  if (t) raw.push(t);
+  if (!input.omitUserLockedText) {
+    const t = stripHtmlFragments(input.productTitle?.trim() ?? "");
+    if (t) raw.push(t);
 
-  const st = stripHtmlFragments(input.subtitle?.trim() ?? "");
-  if (st) raw.push(st);
+    const st = stripHtmlFragments(input.subtitle?.trim() ?? "");
+    if (st) raw.push(st);
 
-  for (const line of benefitLabelsFromIds(input.benefitTagIds)) {
-    raw.push(stripHtmlFragments(line));
-  }
-
-  const extra = input.additionalBenefits?.trim() ?? "";
-  if (extra) {
-    for (const part of extra.split(/\r?\n/)) {
-      const x = stripHtmlFragments(part);
-      if (x) raw.push(x);
+    for (const line of benefitLabelsFromIds(benefitIds)) {
+      raw.push(stripHtmlFragments(line));
     }
+
+    const extra = input.additionalBenefits?.trim() ?? "";
+    if (extra) {
+      for (const part of extra.split(/\r?\n/)) {
+        const x = stripHtmlFragments(part);
+        if (x) raw.push(x);
+      }
+    }
+
+    for (const line of mustShowLabelsFromIds(input.mustShowTagIds)) {
+      raw.push(stripHtmlFragments(line));
+    }
+
+    const dim = stripHtmlFragments(input.dimensions?.trim() ?? "");
+    if (dim) raw.push(dim);
   }
 
-  for (const line of mustShowLabelsFromIds(input.mustShowTagIds)) {
-    raw.push(stripHtmlFragments(line));
-  }
-
-  const dim = stripHtmlFragments(input.dimensions?.trim() ?? "");
-  if (dim) raw.push(dim);
+  void input.slideRole;
 
   const seen = new Set<string>();
   const phrases: string[] = [];
@@ -163,6 +193,7 @@ export function collectExactTextPhrases(input: {
   return {
     phrases,
     validationErrors: errors,
+    ...(benefitTagsTrimNotice ? { benefitTagsTrimNotice } : {}),
   };
 }
 
@@ -550,8 +581,10 @@ function languagePreservationSection(
   return chunks.filter(Boolean).join("\n\n");
 }
 
-function negativeInstructionsBlock(): string {
-  return [
+function negativeInstructionsBlock(
+  marketplaceProfile?: ProductCardMarketplaceProfile | null,
+): string {
+  const core = [
     "=== 11) NEGATIVE_INSTRUCTIONS ===",
     "НЕ добавляй водяные знаки.",
     "НЕ добавляй случайные чужие бренды.",
@@ -559,7 +592,24 @@ function negativeInstructionsBlock(): string {
     "НЕ искажай товар и НЕ меняй логотип.",
     "НЕ выдумывай размеры, сертификаты, скидки и характеристики, если их нет во фразах пользователя.",
     "НЕ добавляй медицинские или юридические заявления, если пользователь их не указывал.",
-  ].join("\n");
+  ];
+  const p = marketplaceProfile;
+  if (p?.avoidWatermarks) {
+    core.push("Строже для площадки: никаких водяных знаков.");
+  }
+  if (p?.avoidExtraObjects) {
+    core.push("Избегай лишних предметов в кадре, которых нет в комплекте товара.");
+  }
+  if (p?.avoidLogos) {
+    core.push("Не добавляй логотипы магазина, торговые марки кроме бренда товара, если это есть на исходнике от пользователя.");
+  }
+  if (p?.avoidPriceLabels) {
+    core.push("Не добавляй ценники, скидочные проценты и промо-бейджи с ценой.");
+  }
+  if (p?.avoidContacts) {
+    core.push("Не добавляй контакты, телефоны, мессенджеры, сайты или QR со ссылками.");
+  }
+  return core.join("\n");
 }
 
 function categoryLabel(categoryId: string): string {
@@ -588,6 +638,12 @@ function productIdentityLockSection(input: CardBuilderSuperPromptInput): string 
       : "Опирайся на загруженные фото товара как на референс идентичности SKU.";
 
   const cat = categoryLabel(input.selectedCategory);
+  const mp = input.marketplaceProfile ?? undefined;
+  const mpStrict =
+    mp?.preserveProductRequired && input.preserveProduct
+      ? "Требование площадки: строже сохранять идентичность товара (форму, цвет, упаковку, логотип), без замены SKU."
+      : "";
+
   const goalNote = input.goal?.trim()
     ? `Задача галереи (контекст, не добавлять новый текст на кадр): ${input.goal}.`
     : "";
@@ -596,6 +652,7 @@ function productIdentityLockSection(input: CardBuilderSuperPromptInput): string 
     "=== 2) PRODUCT_IDENTITY_LOCK ===",
     `Категория товара (идентичность, не выдумывать другой продукт): ${cat}.`,
     preserveBlock,
+    mpStrict,
     sourceNote,
     goalNote,
   ]
@@ -615,9 +672,49 @@ function priceLine(segment?: string): string {
   return `Ценовое позиционирование визуала: ${label}.`;
 }
 
+
+function marketplacePromptBody(
+  marketplaceId: string,
+  slideRole: string,
+  profile?: ProductCardMarketplaceProfile | null,
+): string {
+  const headline = profile?.promptInstruction?.trim()
+    ? profile.promptInstruction.trim()
+    : getMarketplaceInstruction(marketplaceId);
+
+  let focus = "";
+  if (profile) {
+    if (slideRole === "main_photo") focus = profile.mainPhotoRules.promptInstruction.trim();
+    else if (slideRole === "benefits_infographic") {
+      focus = profile.infographicRules.promptInstruction.trim();
+    } else if (slideRole === "lifestyle") {
+      focus = profile.lifestyleRules.promptInstruction.trim();
+    }
+  }
+
+  const hintLines =
+    profile?.complianceHints?.length && profile.complianceHints.length > 0
+      ? `\nОриентиры соответствия площадке:\n${profile.complianceHints
+          .slice(0, 7)
+          .map((x) => `— ${x}`)
+          .join("\n")}`
+      : "";
+
+  return [headline, focus ? `\nФокус этого слайда:\n${focus}` : "", hintLines].join("");
+}
+
 /** Собирает супер-промпт для Kie: card_builder, текст встроен в дизайн моделью. */
 export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput): CardBuilderSuperPromptResult {
-  const { phrases, validationErrors } = collectExactTextPhrases({
+  const profile = input.marketplaceProfile ?? null;
+  const mainPhotoLocksText =
+    input.slideRole === "main_photo" && profile ? !profile.mainPhotoTextAllowed : false;
+
+  let maxBenefitTags: number | undefined;
+  if (input.slideRole === "benefits_infographic" && profile) {
+    maxBenefitTags = Math.min(profile.maxBenefitBadges, profile.infographicRules.maxBenefitBadges);
+  }
+
+  const { phrases, validationErrors, benefitTagsTrimNotice } = collectExactTextPhrases({
     productTitle: input.productTitle,
     subtitle: input.subtitle,
     benefitTagIds: input.benefits ?? [],
@@ -625,6 +722,8 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
     mustShowTagIds: input.mustShow ?? [],
     dimensions: input.dimensions,
     slideRole: input.slideRole,
+    omitUserLockedText: mainPhotoLocksText,
+    maxBenefitTags,
   });
 
   if (validationErrors.length > 0) {
@@ -638,21 +737,32 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
       ? `Логическая схема слайда (только композиция; не выводить как отдельную этикетку): templateId=${input.templateId ?? "—"}, layoutPreset=${input.layoutPreset ?? "—"}.`
       : "";
 
-  const marketplaceBlock = ["=== 3) MARKETPLACE_INSTRUCTION ===", getMarketplaceInstruction(input.marketplace)].join(
-    "\n\n",
-  );
+  const marketplaceInner = marketplacePromptBody(input.marketplace, input.slideRole, profile);
+  const marketplaceBlock = ["=== 3) MARKETPLACE_INSTRUCTION ===", marketplaceInner].join("\n\n");
+
   const slideRoleBlock = [
     "=== 4) SLIDE_ROLE_INSTRUCTION ===",
     getSlideRoleInstruction(input.slideRole, input.templateId),
   ].join("\n\n");
+
   const salesStyleBlock = [
     "=== 5) SALES_STYLE_INSTRUCTION ===",
     getSalesStyleInstruction(input.salesStyle ?? "light_marketplace"),
   ].join("\n\n");
 
+  const mainPhotoDensityNote = mainPhotoLocksText
+    ? "\nЭта площадка предпочитает главное фото без пользовательских надписей. Не добавляй читаемый маркетинговый текст на кадре."
+    : "";
+
+  const verificationNote = profile?.needsVerification
+    ? "\nДля профиля площадки указано, что правила нужно дополнительно проверить по официальным источникам перед публикацией; не утверждай жёсткие требования, которых нет в задаче пользователя."
+    : "";
+
   const textDensityParts = [
     "=== 6) TEXT_DENSITY_AND_CONTEXT ===",
     getTextDensityInstruction(input.textDensity ?? "medium"),
+    mainPhotoDensityNote,
+    verificationNote,
     audienceLine(input.audience),
     priceLine(input.priceSegment),
     layoutNote,
@@ -669,7 +779,7 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
     criticalExactTextLockBlock(),
     languagePreservationSection(phrases, languageMode),
     lockedTextPhrasesSection(phrases),
-    negativeInstructionsBlock(),
+    negativeInstructionsBlock(profile),
   ].join("\n\n");
 
   return {
@@ -683,6 +793,7 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
       designFlexible: true,
       overlayApplied: false,
       exactTextRequested: true,
+      marketplaceBenefitTrimNotice: benefitTagsTrimNotice,
     },
   };
 }

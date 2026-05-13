@@ -4,9 +4,66 @@ import {
   pickGalleryTemplateSequence,
   type CardBuilderTemplateSlideRole,
 } from "@/config/card-builder-templates";
+import type {
+  AppliedMarketplaceRulesSnapshot,
+  ProductCardMarketplaceProfile,
+} from "@/config/product-card-marketplace-profiles";
 import { getPublicProductCategories } from "@/config/product-card-categories";
 
 export type CardBuilderSlideRole = CardBuilderTemplateSlideRole;
+
+/** Одиночная цель мастера → роль первого кадра (полная галерея — без проверки роли здесь). */
+export function cardBuilderGoalToSlideRole(goal: string): CardBuilderSlideRole | null {
+  const m: Partial<Record<string, CardBuilderSlideRole>> = {
+    main_photo: "main_photo",
+    benefits_info: "benefits_infographic",
+    dimensions_slide: "dimensions",
+    materials_slide: "materials",
+    lifestyle: "lifestyle",
+    detail_closeup: "detail_closeup",
+    packaging_kit: "packaging",
+    premium_poster: "premium_poster",
+  };
+  return m[goal] ?? null;
+}
+
+export function marketplaceProfileAllowsGalleryRole(
+  profile: ProductCardMarketplaceProfile,
+  role: CardBuilderSlideRole,
+): boolean {
+  const allowed = profile.allowedSlideTypes as readonly string[];
+  return allowed.includes(role);
+}
+
+/** Сообщение об ошибке, если тип кадра запрещён профилем; иначе `null`. */
+export function cardBuilderProfileSlideErrorMessage(
+  profile: ProductCardMarketplaceProfile,
+  role: CardBuilderSlideRole,
+): string | null {
+  if (!marketplaceProfileAllowsGalleryRole(profile, role)) {
+    return `Тип слайда недоступен для площадки «${profile.label}».`;
+  }
+  if (role === "benefits_infographic") {
+    const cap = Math.min(profile.maxBenefitBadges, profile.infographicRules.maxBenefitBadges);
+    if (!profile.infographicAllowed || cap <= 0) {
+      return `Инфографика преимуществ недоступна для площадки «${profile.label}».`;
+    }
+  }
+  if (role === "lifestyle" && !profile.lifestyleAllowed) {
+    return `Lifestyle недоступен для площадки «${profile.label}».`;
+  }
+  return null;
+}
+
+/** Проверка одиночной цели мастера (не для полной галереи целиком). */
+export function marketplaceGoalDisallowedReason(
+  profile: ProductCardMarketplaceProfile,
+  goal: string,
+): string | null {
+  const role = cardBuilderGoalToSlideRole(goal);
+  if (!role) return null;
+  return cardBuilderProfileSlideErrorMessage(profile, role);
+}
 
 export type CardBuilderGallerySlide = {
   slideId: string;
@@ -46,6 +103,12 @@ export type CardBuilderPlanInput = {
   priceSegment: string;
   salesStyle: string;
   textDensity: string;
+  marketplaceProfileId?: string;
+  marketplaceProfileVersion?: string;
+  appliedMarketplaceRules?: AppliedMarketplaceRulesSnapshot;
+  /** Рекомендуемые выходные пропорции под площадку (подсказка / metadata) */
+  cardBuilderTargetAspectRatio?: string;
+  cardBuilderTargetSize?: string;
 };
 
 const BASE_SLIDES: Record<
@@ -155,18 +218,104 @@ function pickTextMode(
   return recommended;
 }
 
+function roleOkInFullGallery(
+  profile: ProductCardMarketplaceProfile,
+  role: CardBuilderTemplateSlideRole,
+): boolean {
+  if (!marketplaceProfileAllowsGalleryRole(profile, role)) return false;
+  if (role === "benefits_infographic") {
+    const cap = Math.min(profile.maxBenefitBadges, profile.infographicRules.maxBenefitBadges);
+    return profile.infographicAllowed && cap > 0;
+  }
+  if (role === "lifestyle") {
+    return profile.lifestyleAllowed;
+  }
+  return true;
+}
+
+function rolesForFullGalleryFromProfile(
+  profile: ProductCardMarketplaceProfile,
+  slideCount: 6 | 8,
+  categoryId: string,
+): CardBuilderTemplateSlideRole[] {
+  const allowed = new Set<string>(
+    profile.allowedSlideTypes.filter((r) =>
+      roleOkInFullGallery(profile, r as CardBuilderTemplateSlideRole),
+    ),
+  );
+  const fromRec = profile.recommendedSlides.filter((r) => allowed.has(r));
+  const uniq: CardBuilderTemplateSlideRole[] = [];
+  const seen = new Set<string>();
+  for (const r of fromRec) {
+    if (!seen.has(r)) {
+      seen.add(r);
+      uniq.push(r as CardBuilderTemplateSlideRole);
+    }
+    if (uniq.length >= slideCount) return uniq.slice(0, slideCount);
+  }
+
+  const fallbackTplIds = pickGalleryTemplateSequence(categoryId, slideCount);
+  for (const tid of fallbackTplIds) {
+    const tpl = getCardBuilderTemplate(tid);
+    const r = tpl?.slideRole;
+    if (!r || !allowed.has(r)) continue;
+    if (!seen.has(r)) {
+      seen.add(r);
+      uniq.push(r);
+    }
+    if (uniq.length >= slideCount) return uniq.slice(0, slideCount);
+  }
+
+  for (const r of profile.allowedSlideTypes) {
+    if (!seen.has(r)) {
+      seen.add(r);
+      uniq.push(r as CardBuilderTemplateSlideRole);
+    }
+    if (uniq.length >= slideCount) return uniq.slice(0, slideCount);
+  }
+
+  const cycle = uniq.length ? uniq : (["main_photo"] as CardBuilderTemplateSlideRole[]);
+  const out = [...uniq];
+  let i = 0;
+  while (out.length < slideCount && cycle.length > 0) {
+    out.push(cycle[i % cycle.length]!);
+    i += 1;
+  }
+  return out.slice(0, slideCount);
+}
+
 function buildSlideFromTemplate(
   templateId: string,
   idx: number,
   input: CardBuilderPlanInput,
   categoryRu: string,
+  profile: ProductCardMarketplaceProfile,
 ): CardBuilderGallerySlide | null {
   const def = getCardBuilderTemplate(templateId);
   if (!def) return null;
   const base = BASE_SLIDES[def.slideRole];
   const slideId = `${String(idx + 1).padStart(2, "0")}_${def.slideRole}`;
   const adaptedPurpose = `${base.purpose} (${categoryRu}).`;
-  const tm = pickTextMode(input.textDensity, def.defaultTextDensity);
+  let tm: CardBuilderGallerySlide["recommendedTextMode"];
+
+  if (def.slideRole === "main_photo") {
+    tm = profile.mainPhotoTextAllowed
+      ? pickTextMode(input.textDensity, profile.mainPhotoRules.recommendedTextDensity)
+      : "none";
+  } else if (def.slideRole === "benefits_infographic") {
+    const cap = Math.min(profile.maxBenefitBadges, profile.infographicRules.maxBenefitBadges);
+    if (!profile.infographicAllowed || cap <= 0) {
+      tm = "none";
+    } else {
+      tm = pickTextMode(input.textDensity, def.defaultTextDensity);
+    }
+  } else if (def.slideRole === "lifestyle") {
+    tm = profile.lifestyleAllowed
+      ? pickTextMode(input.textDensity, def.defaultTextDensity)
+      : "none";
+  } else {
+    tm = pickTextMode(input.textDensity, def.defaultTextDensity);
+  }
 
   return {
     slideId,
@@ -201,7 +350,10 @@ function maybeSwapPosterForBanner(templateIds: string[], input: CardBuilderPlanI
 }
 
 /** Rule-based галерея: категория → шаблоны слайдов; goal задаёт число кадров. */
-export function buildCardBuilderGalleryPlan(input: CardBuilderPlanInput): {
+export function buildCardBuilderGalleryPlan(
+  input: CardBuilderPlanInput,
+  profile: ProductCardMarketplaceProfile,
+): {
   slides: CardBuilderGallerySlide[];
 } {
   const catRu = categoryLabelRu(input.selectedCategory);
@@ -210,11 +362,15 @@ export function buildCardBuilderGalleryPlan(input: CardBuilderPlanInput): {
 
   switch (input.goal) {
     case "full_gallery_8":
-      templateIds = pickGalleryTemplateSequence(input.selectedCategory, 8);
+      templateIds = rolesForFullGalleryFromProfile(profile, 8, input.selectedCategory).map((r) =>
+        defaultTemplateForSlideRole(r),
+      );
       templateIds = maybeSwapPosterForBanner(templateIds, input);
       break;
     case "full_gallery_6":
-      templateIds = pickGalleryTemplateSequence(input.selectedCategory, 6);
+      templateIds = rolesForFullGalleryFromProfile(profile, 6, input.selectedCategory).map((r) =>
+        defaultTemplateForSlideRole(r),
+      );
       templateIds = maybeSwapPosterForBanner(templateIds, input);
       break;
     case "main_photo":
@@ -247,7 +403,7 @@ export function buildCardBuilderGalleryPlan(input: CardBuilderPlanInput): {
 
   const slides: CardBuilderGallerySlide[] = [];
   templateIds.forEach((tid, idx) => {
-    const s = buildSlideFromTemplate(tid, idx, input, catRu);
+    const s = buildSlideFromTemplate(tid, idx, input, catRu, profile);
     if (s) slides.push(s);
   });
 

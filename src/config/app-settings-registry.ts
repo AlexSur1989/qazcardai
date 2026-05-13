@@ -645,6 +645,17 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
     sensitive: false,
   },
   {
+    key: "PRODUCT_CARD_MARKETPLACE_PROFILES",
+    group: "productCard",
+    label: "PRODUCT_CARD_MARKETPLACE_PROFILES / Маркетплейсы «Создать карточку»",
+    description:
+      "JSON-массив профилей (patch поверх кодовых defaults по полю id). Пустой [] или только дефолт из реестра — полный список из кода.",
+    type: "json",
+    defaultValue: [],
+    editable: true,
+    sensitive: false,
+  },
+  {
     key: "PRODUCT_CLASSIFIER_PROVIDER",
     group: "classifier",
     label: "PRODUCT_CLASSIFIER_PROVIDER / Провайдер классификатора товара",

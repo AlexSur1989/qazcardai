@@ -44,7 +44,8 @@
     "verify:kie-payloads": "npx tsx scripts/verify-kie-model-payloads.ts",
     "verify:kie-general-models": "npx tsx scripts/verify-kie-general-models.ts",
     "verify:product-card-overlay": "npx tsx scripts/verify-product-card-overlay-strict.ts",
-    "verify:product-card-card-builder": "npx tsx scripts/verify-product-card-card-builder.ts"
+    "verify:product-card-card-builder": "npx tsx scripts/verify-product-card-card-builder.ts",
+    "verify:product-card-marketplace-profiles": "npx tsx scripts/verify-product-card-marketplace-profiles.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1045.0",

@@ -24,6 +24,7 @@ import {
   getProductCardSettings,
 } from "@/server/services/productCardSettings";
 import { buildCardBuilderGalleryPlan } from "@/server/services/productCardBuilderPlan";
+import { resolveProductCardMarketplaceProfile } from "@/server/services/productCardMarketplaceProfiles";
 import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -108,6 +109,14 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Нужны параметры структуры" }, { status: 400 });
   }
 
+  const mpRes = await resolveProductCardMarketplaceProfile(plan.marketplace);
+  if (!mpRes.ok) {
+    return NextResponse.json(
+      { error: mpRes.error, code: mpRes.code },
+      { status: mpRes.status },
+    );
+  }
+
   const model = (await resolveCardBuilderImageModel())?.model ?? null;
   if (!model) {
     return NextResponse.json({ error: PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE }, { status: 400 });
@@ -129,7 +138,7 @@ export async function POST(req: Request, ctx: Ctx) {
     });
   }
 
-  const { slides } = buildCardBuilderGalleryPlan(plan);
+  const { slides } = buildCardBuilderGalleryPlan(plan, mpRes.profile);
   const bundle = galleryBundleKind(plan.goal, slides.length);
   let totalCredits: number;
 

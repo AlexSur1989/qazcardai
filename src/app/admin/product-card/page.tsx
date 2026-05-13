@@ -5,10 +5,12 @@ import {
   PRODUCT_CATEGORY_GROUPS,
   PRODUCT_VIDEO_MOTION_STYLES,
 } from "@/config/product-card-categories";
+import { ProductCardMarketplaceProfilesForm } from "@/components/admin/product-card-marketplace-profiles-form";
 import {
   BASE_PRODUCT_PHOTO_PROMPT,
   MARKETPLACE_CARD_BASE_PROMPT,
 } from "@/config/product-card-prompts";
+import { PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS } from "@/config/product-card-marketplace-profiles";
 import { ProductCardScenariosForm } from "@/components/admin/product-card-scenarios-form";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -24,6 +26,7 @@ import {
 } from "@/server/services/productCardPricing";
 import { resolveCardBuilderImageModel } from "@/server/services/productCardModelResolver";
 import { buildCardBuilderSuperPrompt } from "@/server/services/cardBuilderPromptBuilder";
+import { getMergedProductCardMarketplaceProfiles } from "@/server/services/productCardMarketplaceProfiles";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,6 +60,7 @@ const TABS = [
   ["prompts", "Prompts"],
   ["video", "Video"],
   ["calculator", "Price Calculator"],
+  ["marketplaces", "Маркетплейсы"],
 ] as const;
 
 function jsonPreview(value: unknown): string {
@@ -69,13 +73,14 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
 
   const params = await searchParams;
   const active = TABS.some(([id]) => id === params?.tab) ? params?.tab ?? "overview" : "overview";
-  const [settingsRows, productSettings, models] = await Promise.all([
+  const [settingsRows, productSettings, models, mergedMarketplaceProfiles] = await Promise.all([
     getAppSettingsByGroup("productCard"),
     getProductCardSettings(),
     prisma.aiModel.findMany({
       where: { scope: "PRODUCT_CARD" },
       orderBy: [{ productCardModelType: "asc" }, { name: "asc" }],
     }),
+    getMergedProductCardMarketplaceProfiles(),
   ]);
 
   const activeModels = models.filter((m) => m.isActive);
@@ -188,11 +193,17 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
 
   const calculatorRows = await Promise.all(calculatorPromises);
 
+  const ozonMarketplaceProfile =
+    mergedMarketplaceProfiles.find((p) => p.id === "ozon") ??
+    PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "ozon") ??
+    null;
+
   const cardBuilderSuperPromptSample = buildCardBuilderSuperPrompt({
     productTitle: "Қысқы балақлава",
     subtitle: "Жаңа топтама",
     selectedCategory: "apparel",
     marketplace: "ozon",
+    marketplaceProfile: ozonMarketplaceProfile,
     slideRole: "benefits_infographic",
     templateId: "benefits_grid",
     layoutPreset: "product_right_text_left",
@@ -209,7 +220,7 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
   });
 
   const scenariosSetting = settingsRows.find((row) => row.key === "PRODUCT_CARD_SCENARIOS")?.value;
-  const canPatchScenarios = hasPermission(adminUser.role, "settings.manage");
+  const canPatchSettings = hasPermission(adminUser.role, "settings.manage");
 
   return (
     <div className="space-y-6">
@@ -238,8 +249,8 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
       </div>
 
       {active === "scenarios" ? (
-        canPatchScenarios ? (
-          <ProductCardScenariosForm initialJson={scenariosSetting} canPatch={canPatchScenarios} />
+        canPatchSettings ? (
+          <ProductCardScenariosForm initialJson={scenariosSetting} canPatch={canPatchSettings} />
         ) : (
           <Card>
             <CardHeader>
@@ -300,6 +311,24 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
             </Table>
           </CardContent>
         </Card>
+      ) : null}
+
+      {active === "marketplaces" ? (
+        canPatchSettings ? (
+          <ProductCardMarketplaceProfilesForm
+            initialMergedProfiles={mergedMarketplaceProfiles}
+            canPatchSettings={canPatchSettings}
+          />
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>Маркетплейсы «Создать карточку»</CardTitle>
+            </CardHeader>
+            <CardContent className="text-muted-foreground text-sm">
+              Редактирование JSON профилей доступно с правом «Настройки — изменение» (settings.manage).
+            </CardContent>
+          </Card>
+        )
       ) : null}
 
       {active === "models" ? (

@@ -6,6 +6,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { APP_SETTINGS_REGISTRY } from "@/config/app-settings-registry";
+import {
+  PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS,
+} from "@/config/product-card-marketplace-profiles";
 import { buildCardBuilderGalleryPlan } from "@/server/services/productCardBuilderPlan";
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -24,6 +27,10 @@ assert(
     typeof (cardBuilderToggle as { enabled?: unknown }).enabled === "boolean",
   "В PRODUCT_CARD_SCENARIOS.cardBuilder есть поле enabled (переключатель)",
 );
+
+const mpProfilesEntry = APP_SETTINGS_REGISTRY.find((e) => e.key === "PRODUCT_CARD_MARKETPLACE_PROFILES");
+assert(mpProfilesEntry, "PRODUCT_CARD_MARKETPLACE_PROFILES должна быть в APP_SETTINGS_REGISTRY");
+assert(Array.isArray(mpProfilesEntry.defaultValue), "PRODUCT_CARD_MARKETPLACE_PROFILES.defaultValue — массив");
 
 const pricingEntry = APP_SETTINGS_REGISTRY.find((e) => e.key === "PRODUCT_CARD_CARD_BUILDER_PRICING");
 assert(pricingEntry, "PRODUCT_CARD_CARD_BUILDER_PRICING должна быть в APP_SETTINGS_REGISTRY");
@@ -49,7 +56,9 @@ const samplePlan = {
   salesStyle: "light_marketplace",
   textDensity: "medium",
 };
-const { slides } = buildCardBuilderGalleryPlan(samplePlan);
+const ozonProfile = PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "ozon");
+assert(ozonProfile, "В defaults есть профиль ozon для verify buildCardBuilderGalleryPlan");
+const { slides } = buildCardBuilderGalleryPlan(samplePlan, ozonProfile);
 assert(slides.length >= 6, "buildCardBuilderGalleryPlan(full_gallery_6): минимум 6 слайдов");
 for (const s of slides) {
   assert(
@@ -89,6 +98,8 @@ assert(
   genSrc.includes("cardBuilderPrompt") && genSrc.includes("textLockLevel"),
   "Metadata генерации card_builder должна включать cardBuilderPrompt с textLockLevel",
 );
+assert(genSrc.includes("marketplaceProfileId"), "generation metadata включает marketplaceProfileId");
+assert(genSrc.includes("appliedMarketplaceRules"), "generation metadata включает appliedMarketplaceRules");
 
 const metaPath = join(process.cwd(), "src/server/services/productCardCardBuilderMeta.ts");
 const metaSrc = readFileSync(metaPath, "utf8");
