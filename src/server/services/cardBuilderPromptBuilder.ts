@@ -9,11 +9,13 @@ import {
   CARD_BUILDER_SALES_STYLES,
   CARD_BUILDER_TEXT_DENSITY,
 } from "@/config/card-builder-config";
+import { PRODUCT_CATEGORY_GROUPS } from "@/config/product-card-categories";
 
-const PROMPT_VERSION = "card_builder_super_prompt_v1" as const;
+const PROMPT_VERSION = "card_builder_super_prompt_v2" as const;
 
 const MAX_PHRASES = 7;
-const MAX_PHRASE_LEN = 60;
+/** Одна фраза на кадр (строка из названия, бенефита, размеров и т.д.): длинные строки характеристик. */
+const MAX_PHRASE_LEN = 120;
 
 const KK_LETTERS_RE = /[әғқңөұүһіӘҒҚҢӨҰҮҺІ]/;
 const CYRILLIC_RE = /[а-яА-ЯёЁ]/;
@@ -49,6 +51,10 @@ export type CardBuilderSuperPromptOk = {
   promptVersion: typeof PROMPT_VERSION;
   exactTextPhrases: string[];
   textRenderMode: "ai_text_in_design";
+  textLockLevel: "strict";
+  designFlexible: true;
+  overlayApplied: false;
+  exactTextRequested: true;
 };
 
 export type CardBuilderSuperPromptResult =
@@ -163,64 +169,98 @@ export function collectExactTextPhrases(input: {
 export function getSlideRoleInstruction(slideRole: string, templateId?: string): string {
   const cmp =
     templateId === "comparison_card"
-      ? "\nВизуально: сравнение преимуществ; не придумывай ложных сравнений с конкурентами; только безопасные формулировки пользователя."
+      ? "\nСравнение преимуществ: не делай ложных сравнений с конкурентами; только безопасные формулировки из фраз пользователя."
       : "";
+
+  const flexRu =
+    "Главное: визуал (плашки, иконки, фон, композиция, цвет) можно менять; текст клиента — locked copy, не менять содержимое.";
+  const flexEn =
+    "You may change visual design (badges, icons, background, layout, colors); user text is locked copy — do not change text content.";
 
   switch (slideRole) {
     case "main_photo":
       return [
+        flexEn,
+        flexRu,
         "Слайд: главное фото товара.",
         "Товар крупно, читаемый силуэт, чистый фон.",
-        "Если плотность текста «без текста» — не добавляй подписи и плашки.",
+        "По умолчанию без текста на карточке; если в списке locked phrases есть заголовок/название — воспроизведи его буква в букву.",
+        "Если плотность текста «без текста» и нет пользовательских фраз — не добавляй подписи.",
       ].join("\n");
     case "benefits_infographic":
       return [
+        flexEn,
+        flexRu,
         "Слайд: инфографика с преимуществами.",
-        "Размести 3–5 преимуществ как читаемые плашки с аккуратными иконками.",
-        "Товар должен оставаться хорошо видимым; текст — крупный и читаемый.",
+        "Можно менять дизайн плашек, иконки, их расположение и стиль.",
+        "Нельзя менять текст преимуществ — только точные фразы пользователя из locked list.",
+        "Товар должен оставаться хорошо видимым; сами буквы в фразах — как у клиента.",
         cmp,
       ]
         .filter(Boolean)
         .join("\n");
     case "materials":
       return [
+        flexEn,
+        flexRu,
         "Слайд: материалы и качество.",
-        "Акцент на фактуру, тактильность, честный макро-кадр.",
-        "Допустимо 1–3 короткие текстовые плашки из пользовательских фраз.",
+        "Можно усиливать визуальный акцент на фактуру, свет, кадрирование; можно менять форму и стиль плашек.",
+        "Нельзя менять текст про материал — только locked phrases клиента.",
       ].join("\n");
     case "dimensions":
       return [
+        flexEn,
+        flexRu,
         "Слайд: размеры, масштаб и характеристики.",
-        "Не выдумывай точные размеры и цифры: используй только те, что дал пользователь в точных фразах.",
+        "Можно менять схему, композицию, визуальное оформление шкал и подписей-контейнеров.",
+        "Нельзя выдумывать размеры и цифры; нельзя менять числа и единицы, если пользователь указал их во фразах.",
       ].join("\n");
     case "lifestyle":
       return [
+        flexEn,
+        flexRu,
         "Слайд: товар в использовании.",
-        "Эмоциональная правдоподобная сцена; минимум текста на кадре; товар узнаваем.",
+        "Можно менять сцену, фон, освещение, настроение кадра.",
+        "Если есть пользовательский текст во фразах — сохрани его точно; не добавляй другой текст.",
       ].join("\n");
     case "premium_poster":
       return [
+        flexEn,
+        flexRu,
         "Слайд: премиальный рекламный постер.",
-        "Дорогой визуал и свет; короткий заголовок или слоган только из пользовательских фраз.",
-        "Товар — главный объект композиции.",
+        "Можно менять премиальный стиль, свет, декор, композицию.",
+        "Нельзя менять заголовок/слоган — только точные locked phrases; товар — главный объект.",
       ].join("\n");
     case "ad_banner":
       return [
+        flexEn,
+        flexRu,
         "Слайд: рекламный баннер.",
-        "Сильный визуальный акцент; короткий читаемый текст из пользовательских фраз.",
+        "Можно менять динамику, цветовую схему, акценты, композицию.",
+        "Текст на баннере — только locked phrases пользователя.",
       ].join("\n");
     case "packaging":
       return [
+        flexEn,
+        flexRu,
         "Слайд: упаковка, комплект, содержимое.",
-        "Не придумывай состав комплекта, если пользователь его не указал в фразах.",
+        "Можно менять подачу, фон, композицию кадра.",
+        "Не придумывай состав комплекта; текст — только locked phrases.",
       ].join("\n");
     case "detail_closeup":
       return [
-        "Слайд: крупный план важной детали или интерфейса.",
-        "Максимальная читаемость фактуры; текст только из пользовательских фраз и уместен по плотности.",
+        flexEn,
+        flexRu,
+        "Слайд: крупный план детали или интерфейса.",
+        "Можно менять свет, угол, визуальное оформление выносок и плашек.",
+        "Текст — только locked phrases; не подменяй символы.",
       ].join("\n");
     default:
-      return `Слайд (роль ${slideRole}): коммерческий кадр карточки товара; сохраняй товар узнаваемым.`;
+      return [
+        flexEn,
+        flexRu,
+        `Слайд (роль ${slideRole}): коммерческий кадр; товар узнаваем; дизайн гибкий, текст клиента неизменяем.`,
+      ].join("\n");
   }
 }
 
@@ -285,7 +325,7 @@ export function getSalesStyleInstruction(salesStyle: string): string {
     ].join("\n"),
     infographic: [
       "Стиль: инфографика.",
-      "Плашки, иконки, выноски, структурированный текст (только из пользовательских фраз).",
+      "Визуально: плашки, иконки, выноски, сетка — адаптируй под стиль; символы текста только из locked phrases пользователя.",
     ].join("\n"),
     editorial: [
       "Стиль: editorial.",
@@ -298,81 +338,221 @@ export function getSalesStyleInstruction(salesStyle: string): string {
 export function getTextDensityInstruction(textDensity: string): string {
   const id = textDensity.trim();
   const label = CARD_BUILDER_TEXT_DENSITY.find((t) => t.id === id)?.label ?? id;
+  const lock = "Все читаемые слова на кадре — только из locked phrases; не добавляй другой маркетинговый текст.";
   const body: Record<string, string> = {
-    none: "Плотность текста: без текста — не добавляй заголовков и плашек.",
-    minimal: "Плотность текста: минимум — максимум один короткий заголовок из пользовательских фраз.",
-    medium: "Плотность текста: средне — заголовок и около трёх преимуществ из пользовательских фраз.",
-    heavy:
-      "Плотность текста: высокая — заголовок, 3–5 преимуществ и короткие характеристики только из пользовательских фраз.",
-    infographic:
-      "Плотность текста: инфографика — плашки, иконки, выноски, несколько блоков текста из пользовательских фраз.",
+    none: `Плотность текста: без текста — не добавляй заголовков и плашек. ${lock}`,
+    minimal: `Плотность текста: минимум — не больше одной короткой строки из locked phrases. ${lock}`,
+    medium: `Плотность текста: средне — несколько блоков только из locked phrases (например заголовок и преимущества). ${lock}`,
+    heavy: `Плотность текста: высокая — несколько блоков только из locked phrases, без новых формулировок. ${lock}`,
+    infographic: `Плотность текста: инфографика — плашки, иконки, выноски; текст только из locked phrases. ${lock}`,
   };
-  return body[id] ?? `Плотность текста: ${label}.`;
+  return body[id] ?? `Плотность текста: ${label}. ${lock}`;
 }
 
-function resolveLanguageHints(
-  mode: CardBuilderSuperPromptLanguageMode,
+function roleBlock(): string {
+  return [
+    "=== 1) ROLE ===",
+    "You are a professional marketplace product-card designer.",
+    "Ты профессиональный дизайнер маркетплейсных карточек товара.",
+    "Создай коммерчески полезный слайд под выбранную площадку.",
+    "Изображение должно выглядеть как готовый дизайн карточки, а не случайная AI-картинка.",
+  ].join("\n\n");
+}
+
+function designFlexibilityWithTextLockBlock(): string {
+  return [
+    "=== 7) DESIGN_FLEXIBILITY_WITH_TEXT_LOCK ===",
+    `DESIGN_FLEXIBILITY_WITH_TEXT_LOCK:
+
+You may freely improve the visual design of the card:
+- change badge shapes;
+- choose better icons;
+- improve composition;
+- improve background;
+- improve colors;
+- improve lighting;
+- improve spacing;
+- improve typography style;
+- adapt the design to the selected marketplace and sales style.
+
+However, the written text provided by the user is LOCKED COPY.
+Do not modify the text content in any way.
+
+The design is flexible.
+The text content is immutable.`,
+    `Ты можешь менять визуальный дизайн карточки:
+- форму плашек;
+- иконки;
+- фон;
+- цвета;
+- композицию;
+- расположение блоков;
+- декоративные элементы;
+- стиль карточки;
+- освещение;
+- визуальную подачу под выбранный маркетплейс и стиль.
+
+Но текст клиента является неизменяемым.
+Нельзя менять содержимое текста ни при каких условиях.
+
+Дизайн можно адаптировать.
+Текст менять нельзя.`,
+  ].join("\n\n");
+}
+
+function criticalExactTextLockBlock(): string {
+  return [
+    "=== 8) CRITICAL_EXACT_TEXT_LOCK ===",
+    `CRITICAL EXACT TEXT RULE:
+The following phrases are immutable locked text.
+Render them exactly as written.
+Do not translate.
+Do not paraphrase.
+Do not summarize.
+Do not correct spelling.
+Do not improve grammar.
+Do not change capitalization.
+Do not change punctuation.
+Do not change word order.
+Do not remove words.
+Do not add words inside the phrases.
+Do not replace Cyrillic letters with similar-looking Latin letters.
+Do not replace Kazakh letters with Russian alternatives.
+Do not use pseudo-text, fake letters, gibberish, or decorative nonsense text.
+Do not create approximate text.
+Do not create visually similar text.
+Use the exact same characters.
+
+If you cannot render the exact phrase clearly, leave more space for it, but do not rewrite it.`,
+    `КРИТИЧЕСКОЕ ПРАВИЛО ТОЧНОГО ТЕКСТА:
+Следующие фразы — неизменяемый текст клиента.
+Размести их точно как написано.
+
+Нельзя переводить.
+Нельзя перефразировать.
+Нельзя сокращать.
+Нельзя исправлять орфографию.
+Нельзя улучшать грамматику.
+Нельзя менять регистр букв.
+Нельзя менять знаки препинания.
+Нельзя менять порядок слов.
+Нельзя удалять слова.
+Нельзя добавлять слова внутрь фраз.
+Нельзя заменять кириллицу похожими латинскими буквами.
+Нельзя заменять казахские буквы русскими аналогами.
+Нельзя использовать псевдотекст, бессмысленные буквы или декоративные надписи.
+Нельзя делать приблизительно похожий текст.
+Нужно использовать ровно те же символы.
+
+Если фразу трудно разместить, увеличь место под неё, но не переписывай её.`,
+  ].join("\n\n");
+}
+
+function kazakhPreservationBlock(): string {
+  return [
+    "Kazakh text preservation:",
+    `Kazakh Cyrillic letters must be preserved exactly:
+Ә ә, Ғ ғ, Қ қ, Ң ң, Ө ө, Ұ ұ, Ү ү, Һ һ, І і.
+
+Do not replace:
+Қ with К
+Ғ with Г
+Ң with Н
+Ө with О
+Ұ with У
+Ү with У
+І with И
+Ә with А
+Һ with Х
+
+Do not transliterate Kazakh text into Latin.
+Do not translate Kazakh text into Russian or English.
+Do not normalize Kazakh letters into Russian Cyrillic.`,
+    `Сохранение казахского текста:
+Казахские буквы должны быть сохранены точно:
+Ә ә, Ғ ғ, Қ қ, Ң ң, Ө ө, Ұ ұ, Ү ү, Һ һ, І і.
+
+Нельзя заменять:
+Қ на К
+Ғ на Г
+Ң на Н
+Ө на О
+Ұ на У
+Ү на У
+І на И
+Ә на А
+Һ на Х
+
+Нельзя транслитерировать казахский текст латиницей.
+Нельзя переводить казахский текст на русский или английский.
+Нельзя нормализовать казахские буквы в русскую кириллицу.`,
+  ].join("\n\n");
+}
+
+function russianPreservationBlock(): string {
+  return [
+    "Russian text preservation:",
+    `Preserve Russian Cyrillic exactly.
+Do not translate Russian text into English, Kazakh, or any other language.
+Do not rewrite Russian text.
+Do not replace Ё/ё unless the user wrote it that way.
+Do not replace Russian letters with Latin lookalikes.`,
+    `Сохранение русского текста:
+Сохраняй русскую кириллицу точно.
+Не переводи русский текст на английский, казахский или другие языки.
+Не переписывай русский текст.
+Не подменяй Ё/ё, если пользователь написал иначе.
+Не заменяй русские буквы похожими латинскими символами.`,
+  ].join("\n\n");
+}
+
+function lockedTextPhrasesSection(phrases: string[]): string {
+  if (phrases.length === 0) {
+    return [
+      "=== 10) LOCKED_TEXT_PHRASES ===",
+      "The user did not supply separate on-card text phrases for this slide.",
+      "Do not invent marketing copy, specs, or benefits as readable text.",
+      "Пользователь не передал отдельные фразы — не выдумывай читаемые подписи и характеристики.",
+    ].join("\n\n");
+  }
+  const enLines = ["LOCKED TEXT PHRASES TO PLACE ON THE CARD:", ...phrases.map((p, i) => `${i + 1}. "${p}"`)];
+  const ruLines = ["НЕИЗМЕНЯЕМЫЕ ФРАЗЫ ДЛЯ РАЗМЕЩЕНИЯ НА КАРТОЧКЕ:", ...phrases.map((p, i) => `${i + 1}. «${p}»`)];
+  return ["=== 10) LOCKED_TEXT_PHRASES ===", enLines.join("\n"), "", ruLines.join("\n")].join("\n\n");
+}
+
+function languagePreservationSection(
   phrases: string[],
+  mode: CardBuilderSuperPromptLanguageMode,
 ): string {
   const det = detectTextLanguageMode(phrases);
-  const effective: "ru" | "kk" | "mixed" =
-    mode === "ru" || mode === "kk" || mode === "mixed"
-      ? mode
-      : det.hasKazakhLetters && det.hasLatin
-        ? "mixed"
-        : det.hasKazakhLetters
-          ? "kk"
-          : det.hasCyrillic || det.hasLatin
-            ? "ru"
-            : "ru";
-
-  const lines: string[] = [];
-  if (effective === "kk" || det.hasKazakhLetters) {
-    lines.push(
-      "Текст может содержать казахские буквы кириллицы. Сохрани их дословно: ә, ғ, қ, ң, ө, ұ, ү, һ, і.",
-      "Не транслитерируй казахский текст. Не переводи казахский. Не подменяй казахские буквы русскими или латинскими аналогами.",
+  const chunks: string[] = ["=== 9) LANGUAGE_PRESERVATION (RU / KK) ==="];
+  if (det.hasKazakhLetters) {
+    chunks.push(kazakhPreservationBlock());
+  }
+  if (det.hasCyrillic) {
+    chunks.push(russianPreservationBlock());
+  }
+  const mixed =
+    mode === "mixed" ||
+    (det.hasLatin && det.hasCyrillic) ||
+    (det.hasLatin && det.hasKazakhLetters);
+  if (mixed) {
+    chunks.push(
+      "Mixed scripts / languages: keep each phrase exactly as the user wrote; do not translate or substitute letters.",
+      "Смесь языков и алфавитов: каждую фразу сохраняй в том виде, как задал пользователь, без перевода и без подмены букв.",
     );
   }
-  if (effective === "ru" || det.hasCyrillic) {
-    lines.push(
-      "Русский кириллический текст сохраняй дословно.",
-      "Не переводи русские фразы на английский. Не переписывай и не «исправляй» русские формулировки.",
+  if (chunks.length === 1) {
+    chunks.push(
+      "If any Cyrillic or Latin appears in locked phrases, preserve characters exactly; do not substitute homoglyphs.",
     );
   }
-  if (effective === "mixed" || (det.hasLatin && det.hasCyrillic)) {
-    lines.push(
-      "Допустима смесь языков: каждую фразу сохраняй в том виде, как задал пользователь, без перевода.",
-    );
-  }
-  return lines.join("\n");
+  return chunks.filter(Boolean).join("\n\n");
 }
 
-function exactTextLockBlock(phrases: string[]): string {
-  const core = [
-    "ВАЖНО: Весь текст ниже нужно сохранить ТОЧНО как задал пользователь.",
-    "Не переводи.",
-    "Не перефразируй.",
-    "Не исправляй орфографию.",
-    "Не меняй порядок слов.",
-    "Не меняй буквы.",
-    "Не заменяй кириллицу похожими символами.",
-    "Не добавляй новые слова внутрь этих фраз.",
-    "Не удаляй слова.",
-    "Не используй псевдотекст.",
-    "Не превращай русский или казахский текст в бессмысленные символы.",
-    "Текст должен быть читаемым, крупным и размещённым как реальные надписи на карточке.",
-  ].join("\n");
-
-  if (phrases.length === 0) {
-    return `${core}\n\nПользователь не передал отдельные фразы для надписей — не выдумывай торговые названия, характеристики и выгоды.`;
-  }
-
-  const numbered = phrases.map((p, i) => `${i + 1}. "${p}"`).join("\n");
-  return `${core}\n\nТочные фразы для размещения:\n${numbered}`;
-}
-
-function negativeTail(): string {
+function negativeInstructionsBlock(): string {
   return [
+    "=== 11) NEGATIVE_INSTRUCTIONS ===",
     "НЕ добавляй водяные знаки.",
     "НЕ добавляй случайные чужие бренды.",
     "НЕ добавляй нечитаемый мелкий текст и псевдо-буквы.",
@@ -380,6 +560,47 @@ function negativeTail(): string {
     "НЕ выдумывай размеры, сертификаты, скидки и характеристики, если их нет во фразах пользователя.",
     "НЕ добавляй медицинские или юридические заявления, если пользователь их не указывал.",
   ].join("\n");
+}
+
+function categoryLabel(categoryId: string): string {
+  const row = PRODUCT_CATEGORY_GROUPS.find((c) => c.id === categoryId.trim());
+  return row?.label?.trim() ? row.label.trim() : categoryId.trim();
+}
+
+function productIdentityLockSection(input: CardBuilderSuperPromptInput): string {
+  const preserveBlock = input.preserveProduct
+    ? [
+        "PRODUCT_IDENTITY_LOCK:",
+        "Сохрани товар без изменений: форму, цвет, материал, логотип, пропорции, упаковку и важные детали.",
+        "Не меняй товар на похожий. Не добавляй новые детали товара.",
+        "Не искажай бренд, логотип, форму и цвет.",
+        input.preserveProductOptions?.length
+          ? `Особый фокус пользователя: ${input.preserveProductOptions.join(", ")}.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "PRODUCT_IDENTITY: допускается мягкая стилизация фона и света при сохранении узнаваемости товара; сам товар не подменять.";
+
+  const sourceNote =
+    input.sourceImageMode === "variant"
+      ? "Исходное фото можно интерпретировать как референс сцены; товар не заменять."
+      : "Опирайся на загруженные фото товара как на референс идентичности SKU.";
+
+  const cat = categoryLabel(input.selectedCategory);
+  const goalNote = input.goal?.trim()
+    ? `Задача галереи (контекст, не добавлять новый текст на кадр): ${input.goal}.`
+    : "";
+
+  return [
+    "=== 2) PRODUCT_IDENTITY_LOCK ===",
+    `Категория товара (идентичность, не выдумывать другой продукт): ${cat}.`,
+    preserveBlock,
+    sourceNote,
+    goalNote,
+  ]
+    .filter((x) => x && String(x).trim() !== "")
+    .join("\n\n");
 }
 
 function audienceLine(audience?: string): string {
@@ -414,56 +635,42 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
 
   const layoutNote =
     input.templateId || input.layoutPreset
-      ? `Логическая схема слайда (для композиции, не выводить как отдельную этикетку): templateId=${input.templateId ?? "—"}, layoutPreset=${input.layoutPreset ?? "—"}.`
+      ? `Логическая схема слайда (только композиция; не выводить как отдельную этикетку): templateId=${input.templateId ?? "—"}, layoutPreset=${input.layoutPreset ?? "—"}.`
       : "";
 
-  const preserveBlock = input.preserveProduct
-    ? [
-        "СОХРАНЕНИЕ ТОВАРА (1:1):",
-        "Сохрани товар без изменений: форму, цвет, материал, логотип, пропорции, упаковку и важные детали.",
-        "Не меняй товар на похожий. Не добавляй новые детали товара.",
-        "Не искажай бренд, логотип, форму и цвет.",
-        input.preserveProductOptions?.length
-          ? `Особый фокус пользователя: ${input.preserveProductOptions.join(", ")}.`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n")
-    : "Допускается мягкая стилизация фона и света при сохранении узнаваемости товара.";
-
-  const sourceNote =
-    input.sourceImageMode === "variant"
-      ? "Исходное фото можно интерпретировать как референс сцены; товар не заменять."
-      : "Опирайся на загруженные фото товара как на референс идентичности SKU.";
-
-  const parts = [
-    "Ты профессиональный дизайнер маркетплейсных карточек товара.",
-    "Создай коммерчески полезный слайд карточки товара, подходящий для выбранной площадки.",
-    "Изображение должно выглядеть как готовый дизайн карточки товара, а не как случайная AI-картинка.",
-    "",
-    preserveBlock,
-    "",
-    getMarketplaceInstruction(input.marketplace),
-    "",
+  const marketplaceBlock = ["=== 3) MARKETPLACE_INSTRUCTION ===", getMarketplaceInstruction(input.marketplace)].join(
+    "\n\n",
+  );
+  const slideRoleBlock = [
+    "=== 4) SLIDE_ROLE_INSTRUCTION ===",
     getSlideRoleInstruction(input.slideRole, input.templateId),
-    "",
+  ].join("\n\n");
+  const salesStyleBlock = [
+    "=== 5) SALES_STYLE_INSTRUCTION ===",
     getSalesStyleInstruction(input.salesStyle ?? "light_marketplace"),
-    "",
+  ].join("\n\n");
+
+  const textDensityParts = [
+    "=== 6) TEXT_DENSITY_AND_CONTEXT ===",
     getTextDensityInstruction(input.textDensity ?? "medium"),
-    "",
     audienceLine(input.audience),
     priceLine(input.priceSegment),
     layoutNote,
-    sourceNote,
-    "",
-    exactTextLockBlock(phrases),
-    "",
-    resolveLanguageHints(languageMode, phrases),
-    "",
-    negativeTail(),
-  ];
+  ].filter((x) => x && String(x).trim() !== "");
 
-  const prompt = parts.filter((x) => x != null && String(x).trim() !== "").join("\n\n");
+  const prompt = [
+    roleBlock(),
+    productIdentityLockSection(input),
+    marketplaceBlock,
+    slideRoleBlock,
+    salesStyleBlock,
+    textDensityParts.join("\n\n"),
+    designFlexibilityWithTextLockBlock(),
+    criticalExactTextLockBlock(),
+    languagePreservationSection(phrases, languageMode),
+    lockedTextPhrasesSection(phrases),
+    negativeInstructionsBlock(),
+  ].join("\n\n");
 
   return {
     ok: true,
@@ -472,6 +679,10 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
       promptVersion: PROMPT_VERSION,
       exactTextPhrases: phrases,
       textRenderMode: "ai_text_in_design",
+      textLockLevel: "strict",
+      designFlexible: true,
+      overlayApplied: false,
+      exactTextRequested: true,
     },
   };
 }

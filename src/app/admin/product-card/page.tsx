@@ -411,7 +411,9 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
                 <>
                   <div className="text-muted-foreground text-xs">
                     {cardBuilderSuperPromptSample.data.promptVersion} ·{" "}
-                    {cardBuilderSuperPromptSample.data.textRenderMode} · фразы:{" "}
+                    {cardBuilderSuperPromptSample.data.textLockLevel} ·{" "}
+                    {cardBuilderSuperPromptSample.data.textRenderMode} · designFlexible:{" "}
+                    {String(cardBuilderSuperPromptSample.data.designFlexible)} · фразы:{" "}
                     {cardBuilderSuperPromptSample.data.exactTextPhrases.join(" | ")}
                   </div>
                   <pre className="bg-muted max-h-[28rem] overflow-auto rounded-lg p-3 text-xs whitespace-pre-wrap">

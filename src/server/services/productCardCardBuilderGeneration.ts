@@ -322,6 +322,16 @@ export async function generateCardBuilderSlide(
 
   const gc = body.gallerySlideCount ?? null;
 
+  const cardBuilderPromptSnapshot = {
+    promptVersion: superPrompt.data.promptVersion,
+    textLockLevel: superPrompt.data.textLockLevel,
+    textRenderMode: superPrompt.data.textRenderMode,
+    exactTextRequested: superPrompt.data.exactTextRequested,
+    exactTextPhrases: superPrompt.data.exactTextPhrases,
+    designFlexible: superPrompt.data.designFlexible,
+    overlayApplied: superPrompt.data.overlayApplied,
+  };
+
   const metadataRoot: Record<string, unknown> = {
     flow: "product_card",
     scenarioKey: "card_builder",
@@ -347,10 +357,14 @@ export async function generateCardBuilderSlide(
     cardBuilderTemplateId: slide.templateId,
     cardBuilderLayoutPreset: slide.layoutPreset,
     cardBuilderOverlayRequired: false,
+    cardBuilderPrompt: cardBuilderPromptSnapshot,
     promptVersion: superPrompt.data.promptVersion,
+    textLockLevel: superPrompt.data.textLockLevel,
     textRenderMode: superPrompt.data.textRenderMode,
-    exactTextRequested: true,
+    exactTextRequested: superPrompt.data.exactTextRequested,
     exactTextPhrases: superPrompt.data.exactTextPhrases,
+    designFlexible: superPrompt.data.designFlexible,
+    overlayApplied: superPrompt.data.overlayApplied,
   };
 
   const result = await queueProductCardImage(

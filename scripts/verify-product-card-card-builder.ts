@@ -85,6 +85,10 @@ assert(
   genSrc.includes("buildCardBuilderSuperPrompt") || genSrc.includes("card_builder_super_prompt"),
   "Генерация card_builder должна использовать супер-промпт",
 );
+assert(
+  genSrc.includes("cardBuilderPrompt") && genSrc.includes("textLockLevel"),
+  "Metadata генерации card_builder должна включать cardBuilderPrompt с textLockLevel",
+);
 
 const metaPath = join(process.cwd(), "src/server/services/productCardCardBuilderMeta.ts");
 const metaSrc = readFileSync(metaPath, "utf8");

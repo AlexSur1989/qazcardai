@@ -211,15 +211,17 @@ export function CardBuilderTab({
   );
 
   const pollGen = useCallback(async (generationId: string) => {
+    const done = new Set(["COMPLETED"]);
+    const terminalBad = new Set(["FAILED", "CANCELLED", "REFUNDED", "BLOCKED"]);
     for (let i = 0; i < IMAGE_GENERATION_POLL_MAX_ITERATIONS; i++) {
       const res = await fetch(`/api/generations/${generationId}`);
       const parsed = await readJsonSafe<{ status: string; outputFiles?: unknown }>(res);
       if (!parsed.ok || !res.ok) break;
       const st = parsed.data.status;
-      if (st === "SUCCEEDED") {
+      if (done.has(st)) {
         return getFirstOutputUrlFromJson(parsed.data.outputFiles) ?? null;
       }
-      if (st === "FAILED" || st === "CANCELLED") break;
+      if (terminalBad.has(st)) break;
       await new Promise((r) => setTimeout(r, IMAGE_GENERATION_POLL_INTERVAL_MS));
     }
     return null;
@@ -443,10 +445,8 @@ export function CardBuilderTab({
         <Alert>
           <AlertTitle>Текст на изображении</AlertTitle>
           <AlertDescription>
-            AI встроит текст в дизайн. Мы просим AI сохранить русский и казахский текст точно, но иногда
-            модель может исказить буквы. Проверяйте итог перед публикацией. Одна строка текста для слайда —
-            не длиннее 60 символов; всего не больше 7 фраз (название, подзаголовок, теги, строки из поля
-            дополнительного текста, размеры).
+            Лимиты для одного слайда: одна строка — не длиннее 120 символов; всего не больше 7 фраз (название,
+            подзаголовок, теги, строки из поля дополнительного текста, размеры).
           </AlertDescription>
         </Alert>
 
@@ -611,6 +611,10 @@ export function CardBuilderTab({
                   </option>
                 ))}
               </select>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                AI может менять дизайн, плашки, иконки и стиль карточки, но мы просим сохранить ваш
+                русский/казахский текст точно. После генерации обязательно проверьте текст перед публикацией.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Что обязательно показать</Label>
