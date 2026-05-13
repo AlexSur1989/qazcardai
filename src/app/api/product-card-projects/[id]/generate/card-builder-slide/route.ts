@@ -59,6 +59,7 @@ export async function POST(req: Request, ctx: Ctx) {
   const res = await generateCardBuilderSlide(userId, id, {
     slideId: parsed.data.slideId,
     clientEstimateCredits: parsed.data.clientEstimateCredits,
+    clientPlanHash: parsed.data.clientPlanHash,
     useSavedPlan: parsed.data.useSavedPlan,
   });
   if (!res.ok) {

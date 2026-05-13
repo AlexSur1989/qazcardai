@@ -130,6 +130,16 @@ export async function resolveProductCardMarketplaceProfile(
   return { ok: true, profile };
 }
 
+/** Превышение maxBenefitBadges — понятное сообщение; без молчаливого обрезания. */
+export function marketplaceBenefitsOverLimitMessage(
+  benefits: readonly string[] | undefined,
+  profile: ProductCardMarketplaceProfile,
+): string | null {
+  const n = benefits?.length ?? 0;
+  if (n <= profile.maxBenefitBadges) return null;
+  return `Слишком много акцентов преимуществ (${n}). Для площадки «${profile.label}» можно не более ${profile.maxBenefitBadges}. Уберите лишнее и сохраните структуру снова.`;
+}
+
 /** Узкий снимок для Generation.metadata (запись о списании / отладка промпта) */
 export function buildCardBuilderGenerationMarketplaceRules(
   profile: ProductCardMarketplaceProfile,

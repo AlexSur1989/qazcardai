@@ -55,6 +55,7 @@ import {
   type OverlayObjectLayoutMetaV2,
 } from "@/server/services/marketplaceCardImageComposite";
 import { patchCardBuilderGenerationEntry } from "@/server/services/productCardCardBuilderMeta";
+import { syncFailedCardBuilderProjectGenerationEntry } from "@/server/services/productCardCardBuilderGenerationFailure";
 import {
   StorageError,
   deleteFile,
@@ -329,6 +330,7 @@ export async function markFailed(
       completedAt: new Date(),
     },
   });
+  void syncFailedCardBuilderProjectGenerationEntry(genId, errorMessage.slice(0, 8000));
   void trySendGenerationFailedEmail(genId);
 }
 

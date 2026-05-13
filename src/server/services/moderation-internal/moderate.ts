@@ -116,6 +116,8 @@ export type ModerationInput = {
   prompt: string;
   negativePrompt?: string | null;
   extraTexts?: string[] | null;
+  /** Только пользовательские строки (card_builder и др.): длина и banned/NSFW не зависят от длинных системных инструкций. */
+  userDerivedTextForModeration?: string | null;
   userId?: string;
   modelId?: string;
   generationId?: string | null;
@@ -126,8 +128,12 @@ export type ModerationInput = {
 export async function moderateGenerationInput(
   input: ModerationInput,
 ): Promise<ModerationResult> {
+  const basis =
+    input.userDerivedTextForModeration != null
+      ? String(input.userDerivedTextForModeration)
+      : input.prompt;
   const { combined, forLength, full } = combineParts(
-    input.prompt,
+    basis,
     String(input.negativePrompt ?? ""),
     input.extraTexts,
   );

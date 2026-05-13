@@ -66,9 +66,14 @@ for (const p of defaults) {
   checkProfile(p, p.id);
 }
 
-const socialText = defaults.filter((p) => p.id === "instagram_vk" || p.id === "own_site");
-for (const p of socialText) {
-  assert(p.mainPhotoTextAllowed === true, `${p.id}: social/свой сайт допускает текст на главном`);
+const socialTextAllowed = defaults.filter((p) =>
+  ["instagram_vk", "own_site", "shopify"].includes(p.id),
+);
+for (const p of socialTextAllowed) {
+  assert(
+    p.mainPhotoTextAllowed === true && p.mainPhotoRules.textAllowed === true,
+    `${p.id}: витрина/соц-сети допускают текст на главном`,
+  );
 }
 
 console.log("[verify-product-card-marketplace-profiles] OK");

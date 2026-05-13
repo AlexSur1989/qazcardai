@@ -60,6 +60,7 @@ export async function POST(req: Request, ctx: Ctx) {
     userId,
     id,
     parsed.data.clientEstimateCredits ?? null,
+    parsed.data.clientPlanHash,
   );
   if (!res.ok) {
     return NextResponse.json(

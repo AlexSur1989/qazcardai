@@ -9,35 +9,61 @@ import {
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
-import {
-  allocateCreditsAcrossVariants,
-  estimateCardBuilderCharge,
-} from "@/server/services/productCardPricing";
+import { allocateCreditsAcrossVariants, estimateCardBuilderCharge } from "@/server/services/productCardPricing";
 import { resolveCardBuilderImageModel } from "@/server/services/productCardModelResolver";
 import { readCardBuilderBlock } from "@/server/services/productCardCardBuilderMeta";
-import {
-  assertCardBuilderScenarioEnabled,
-} from "@/server/services/productCardCardBuilderGeneration";
+import { assertCardBuilderScenarioEnabled } from "@/server/services/productCardCardBuilderGeneration";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 import {
   PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE,
   getProductCardSettings,
 } from "@/server/services/productCardSettings";
-import { buildCardBuilderGalleryPlan } from "@/server/services/productCardBuilderPlan";
-import { resolveProductCardMarketplaceProfile } from "@/server/services/productCardMarketplaceProfiles";
+import {
+  buildCardBuilderGalleryPlan,
+  cardBuilderGoalToSlideRole,
+} from "@/server/services/productCardBuilderPlan";
+import {
+  marketplaceBenefitsOverLimitMessage,
+  resolveProductCardMarketplaceProfile,
+} from "@/server/services/productCardMarketplaceProfiles";
+import {
+  cardBuilderLivePlanFingerprintInputs,
+  computeCardBuilderPlanFingerprint,
+} from "@/server/services/cardBuilderPlanFingerprint";
 import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
+
+import type { CardBuilderGallerySlide } from "@/server/services/productCardBuilderPlan";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export const dynamic = "force-dynamic";
 
-function galleryBundleKind(
-  goal: string,
-  slideCount: number,
-): "gallery6" | "gallery8" | null {
+function galleryBundleKind(goal: string, slideCount: number): "gallery6" | "gallery8" | null {
   if (goal === "full_gallery_6" && slideCount === 6) return "gallery6";
   if (goal === "full_gallery_8" && slideCount === 8) return "gallery8";
   return null;
+}
+
+/** Параметр textDensity совпадает с generate для pricing (главное фото без текста при правилах площадки). */
+function textDensityEffectiveForSlide(
+  profile: { mainPhotoTextAllowed: boolean },
+  slideRole: string,
+  savedTextDensity: string,
+): string {
+  if (slideRole === "main_photo" && !profile.mainPhotoTextAllowed) return "none";
+  return savedTextDensity;
+}
+
+function slidesForFingerprint(
+  source: "payload" | "saved",
+  plan: Parameters<typeof buildCardBuilderGalleryPlan>[0],
+  blk: Awaited<ReturnType<typeof readCardBuilderBlock>>,
+  profile: Parameters<typeof buildCardBuilderGalleryPlan>[1],
+): CardBuilderGallerySlide[] {
+  if (source === "saved" && blk?.galleryPlan?.length) {
+    return blk.galleryPlan as CardBuilderGallerySlide[];
+  }
+  return buildCardBuilderGalleryPlan(plan, profile).slides;
 }
 
 export async function POST(req: Request, ctx: Ctx) {
@@ -83,7 +109,8 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Проект не найден" }, { status: 404 });
   }
 
-  const blk = parsed.data.source === "saved" ? await readCardBuilderBlock(id) : null;
+  const blk =
+    parsed.data.source === "saved" ? await readCardBuilderBlock(id) : null;
 
   let plan = parsed.data.payload;
   if (parsed.data.source === "saved") {
@@ -111,9 +138,14 @@ export async function POST(req: Request, ctx: Ctx) {
 
   const mpRes = await resolveProductCardMarketplaceProfile(plan.marketplace);
   if (!mpRes.ok) {
+    return NextResponse.json({ error: mpRes.error, code: mpRes.code }, { status: mpRes.status });
+  }
+
+  const benefitErr = marketplaceBenefitsOverLimitMessage(plan.benefits, mpRes.profile);
+  if (benefitErr) {
     return NextResponse.json(
-      { error: mpRes.error, code: mpRes.code },
-      { status: mpRes.status },
+      { error: benefitErr, code: "CARD_BUILDER_TOO_MANY_BENEFITS" },
+      { status: 400 },
     );
   }
 
@@ -123,22 +155,45 @@ export async function POST(req: Request, ctx: Ctx) {
   }
   const settings = await getProductCardSettings();
 
+  const slides = slidesForFingerprint(parsed.data.source, plan, blk, mpRes.profile);
+  const planHash = computeCardBuilderPlanFingerprint(
+    cardBuilderLivePlanFingerprintInputs(plan, mpRes.profile.id),
+    slides,
+  );
+
   if (parsed.data.mode === "single_slide") {
+    let pricingRole =
+      cardBuilderGoalToSlideRole(plan.goal) ?? slides[0]?.imageRole ?? "main_photo";
+
+    const activeId = parsed.data.activeSlideId?.trim();
+    if (activeId) {
+      const found = slides.find((s) => s.slideId === activeId)?.imageRole;
+      if (found) pricingRole = found;
+    }
+
+    const textDensityEffective = textDensityEffectiveForSlide(
+      mpRes.profile,
+      pricingRole,
+      plan.textDensity,
+    );
+
     const br = await estimateCardBuilderCharge(
       "slide",
       model,
       settings.cardBuilderPricing,
       plan.salesStyle,
-      plan.textDensity,
-      "estimate",
+      textDensityEffective,
+      pricingRole,
       null,
     );
     return NextResponse.json({
       credits: br.credits,
+      planHash,
+      slideCount: slides.length,
+      slideRoleEstimated: pricingRole,
     });
   }
 
-  const { slides } = buildCardBuilderGalleryPlan(plan, mpRes.profile);
   const bundle = galleryBundleKind(plan.goal, slides.length);
   let totalCredits: number;
 
@@ -156,12 +211,13 @@ export async function POST(req: Request, ctx: Ctx) {
   } else {
     let sum = 0;
     for (const s of slides) {
+      const dens = textDensityEffectiveForSlide(mpRes.profile, s.imageRole, plan.textDensity);
       const br = await estimateCardBuilderCharge(
         "slide",
         model,
         settings.cardBuilderPricing,
         plan.salesStyle,
-        plan.textDensity,
+        dens,
         s.imageRole,
         null,
       );
@@ -171,13 +227,12 @@ export async function POST(req: Request, ctx: Ctx) {
   }
 
   const alloc =
-    slides.length <= 1
-      ? [totalCredits]
-      : allocateCreditsAcrossVariants(totalCredits, slides.length);
+    slides.length <= 1 ? [totalCredits] : allocateCreditsAcrossVariants(totalCredits, slides.length);
 
   return NextResponse.json({
     credits: totalCredits,
     slideCount: slides.length,
     allocations: alloc,
+    planHash,
   });
 }

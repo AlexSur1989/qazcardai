@@ -329,6 +329,8 @@ export async function queueProductCardImage(
   /** Для «Карточка товара»: merge в `metadata.settings` + тот же объект для Product Card pricing. */
   marketplaceCardSettings?: MarketplaceCardImageSettings | null,
   pricingBreakdown?: ProductCardPriceBreakdown | null,
+  /** Только пользовательский текст: модерация по длине/запретам без полного super prompt (card_builder). */
+  productCardUserModerationEnvelope?: string | null,
 ): Promise<QueueResult> {
   if (!model || model.type !== "IMAGE") {
     return { ok: false, error: "Модель изображения недоступна", status: 500 };
@@ -399,10 +401,19 @@ export async function queueProductCardImage(
     Object.assign(metadata, metadataRoot);
   }
 
+  const userEnv = typeof productCardUserModerationEnvelope === "string" ? productCardUserModerationEnvelope.trim() : "";
+
   const mod = await moderateGenerationInput({
     prompt,
     negativePrompt: negativePrompt ?? null,
-    extraTexts: productCardExtraTextsFromRoot(metadataRoot),
+    extraTexts:
+      userEnv.length > 0 && productMeta.productCard.tab === "card_builder"
+        ? []
+        : productCardExtraTextsFromRoot(metadataRoot),
+    userDerivedTextForModeration:
+      userEnv.length > 0 && productMeta.productCard.tab === "card_builder"
+        ? userEnv
+        : null,
     userId,
     modelId: model.id,
     flow: productMeta.productCard.tab,

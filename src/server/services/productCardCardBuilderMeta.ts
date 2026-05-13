@@ -20,6 +20,8 @@ export type CardBuilderGenerationEntry = {
   finalUrl?: string;
   createdAt: string;
   status?: "queued" | "done" | "error";
+  /** Краткая причина сбоя для пользователя UI */
+  errorMessage?: string;
 };
 
 export type CardBuilderProjectBlock = {
@@ -83,7 +85,12 @@ export async function patchCardBuilderGenerationEntry(
   patch: Partial<
     Pick<
       CardBuilderGenerationEntry,
-      "templateId" | "layoutPreset" | "overlayApplied" | "finalUrl" | "status"
+      | "templateId"
+      | "layoutPreset"
+      | "overlayApplied"
+      | "finalUrl"
+      | "status"
+      | "errorMessage"
     >
   >,
 ): Promise<void> {

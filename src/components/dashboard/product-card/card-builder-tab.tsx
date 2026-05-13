@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   CARD_BUILDER_AUDIENCES,
@@ -40,6 +40,16 @@ import { cn } from "@/lib/utils";
 const nativeFieldClass =
   "h-10 w-full min-w-0 rounded-xl border border-input bg-card px-2.5 text-sm text-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
 
+function slideProgressLabel(statusRaw: string): string {
+  const s = statusRaw.trim().toLowerCase();
+  if (s === "queued") return "в очереди";
+  if (s === "done" || s === "готово") return "готово";
+  if (s === "error" || s === "ошибка") return "ошибка";
+  if (s === "generating") return "генерация";
+  if (!s || s === "не сгенерировано") return "не сгенерировано";
+  return statusRaw;
+}
+
 type GallerySlide = {
   slideId: string;
   title: string;
@@ -57,6 +67,7 @@ type CardBuilderGenHistoryRow = {
   imageRole?: string;
   createdAt?: string;
   status?: string;
+  errorMessage?: string;
 };
 
 type Props = {
@@ -105,6 +116,15 @@ export function CardBuilderTab({
 
   const [estimateSingle, setEstimateSingle] = useState<number | null>(null);
   const [estimateGallery, setEstimateGallery] = useState<number | null>(null);
+  const cbPricingSnapRef = useRef<{
+    lastPlanHash: string | null;
+    singleCredits: number | null;
+    galleryCredits: number | null;
+  }>({
+    lastPlanHash: null,
+    singleCredits: null,
+    galleryCredits: null,
+  });
   const [estimating, setEstimating] = useState(false);
   const [genBusy, setGenBusy] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
@@ -241,6 +261,7 @@ export function CardBuilderTab({
       const list = parsed.data.slides ?? [];
       setSlides(list);
       setActiveSlideId(list[0]?.slideId ?? null);
+      cbPricingSnapRef.current.lastPlanHash = null;
     } finally {
       setPlanLoading(false);
     }
@@ -258,9 +279,18 @@ export function CardBuilderTab({
             source: slides.length ? "saved" : "payload",
             payload: slides.length ? undefined : planPayload,
             mode,
+            activeSlideId:
+              activeSlideId && slides.some((s) => s.slideId === activeSlideId)
+                ? activeSlideId
+                : undefined,
           }),
         });
-        const parsed = await readJsonSafe<{ credits?: number; error?: string }>(res);
+        const parsed = await readJsonSafe<{
+          credits?: number;
+          planHash?: string;
+          error?: string;
+          code?: string;
+        }>(res);
         if (!parsed.ok) {
           setPlanError(parsed.message);
           return;
@@ -270,13 +300,26 @@ export function CardBuilderTab({
           return;
         }
         const c = parsed.data.credits ?? null;
-        if (mode === "single_slide") setEstimateSingle(c);
-        else setEstimateGallery(c);
+        const ph = typeof parsed.data.planHash === "string" ? parsed.data.planHash : null;
+        if (ph) {
+          cbPricingSnapRef.current.lastPlanHash = ph;
+        }
+        if (mode === "single_slide") {
+          setEstimateSingle(c);
+          if (typeof c === "number" && Number.isFinite(c)) {
+            cbPricingSnapRef.current.singleCredits = c;
+          }
+        } else {
+          setEstimateGallery(c);
+          if (typeof c === "number" && Number.isFinite(c)) {
+            cbPricingSnapRef.current.galleryCredits = c;
+          }
+        }
       } finally {
         setEstimating(false);
       }
     },
-    [projectId, planPayload, slides.length],
+    [projectId, planPayload, slides, activeSlideId],
   );
 
   const pollGen = useCallback(async (generationId: string) => {
@@ -336,6 +379,9 @@ export function CardBuilderTab({
         if (typeof r.imageRole === "string") row.imageRole = r.imageRole;
         if (typeof r.createdAt === "string") row.createdAt = r.createdAt;
         if (typeof r.status === "string") row.status = r.status;
+        if (typeof r.errorMessage === "string" && r.errorMessage.trim()) {
+          row.errorMessage = r.errorMessage.trim().slice(0, 320);
+        }
         rows.push(row);
       }
       setGenHistory(rows);
@@ -397,6 +443,7 @@ export function CardBuilderTab({
         const list = parsed.data.galleryPlan;
         if (Array.isArray(list) && list.length) {
           setSlides(list);
+          cbPricingSnapRef.current.lastPlanHash = null;
         }
       } finally {
         setTplBusySlideId(null);
@@ -410,6 +457,12 @@ export function CardBuilderTab({
       if (!projectId) return;
       setGenBusy(true);
       try {
+        const hash = cbPricingSnapRef.current.lastPlanHash;
+        const cred = cbPricingSnapRef.current.singleCredits;
+        if (!hash || cred == null) {
+          toast.error("Сначала нажмите «Оценить один слайд».");
+          return;
+        }
         const res = await fetch(
           `/api/product-card-projects/${projectId}/generate/card-builder-slide`,
           {
@@ -417,6 +470,8 @@ export function CardBuilderTab({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               slideId,
+              clientEstimateCredits: cred,
+              clientPlanHash: hash,
               useSavedPlan: true,
             }),
           },
@@ -432,7 +487,11 @@ export function CardBuilderTab({
           return;
         }
         if (!res.ok) {
-          setPlanError(parsed.data.error ?? "Не удалось запустить генерацию");
+          const msg = parsed.data.error ?? "Не удалось запустить генерацию";
+          setPlanError(msg);
+          if (parsed.data.code === "PLAN_CHANGED" || parsed.data.code === "PRICE_CHANGED") {
+            toast.error(msg);
+          }
           return;
         }
         const notice = parsed.data.marketplaceNotice?.trim();
@@ -462,11 +521,21 @@ export function CardBuilderTab({
     if (!projectId) return;
     setBatchBusy(true);
     await runEstimate("full_gallery");
+    const gh = cbPricingSnapRef.current.lastPlanHash;
+    const ggc = cbPricingSnapRef.current.galleryCredits;
+    if (!gh || ggc == null) {
+      toast.error("Сначала дождитесь оценки всей галереи.");
+      setBatchBusy(false);
+      return;
+    }
     try {
       const res = await fetch(`/api/product-card-projects/${projectId}/generate/card-builder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          clientEstimateCredits: ggc,
+          clientPlanHash: gh,
+        }),
       });
       const parsed = await readJsonSafe<{
         totalCredits?: number;
@@ -479,7 +548,11 @@ export function CardBuilderTab({
         return;
       }
       if (!res.ok) {
-        setPlanError(parsed.data.error ?? "Пакетная генерация недоступна");
+        const msg = parsed.data.error ?? "Пакетная генерация недоступна";
+        setPlanError(msg);
+        if (parsed.data.code === "PLAN_CHANGED" || parsed.data.code === "PRICE_CHANGED") {
+          toast.error(msg);
+        }
         return;
       }
       const rows = parsed.data.results ?? [];
@@ -933,8 +1006,18 @@ export function CardBuilderTab({
                               timeStyle: "short",
                             })
                           : "—"}
-                        {g.status ? ` · ${g.status}` : ""}
+                        {g.status ? (
+                          <>
+                            {" "}
+                            · {slideProgressLabel(g.status)}
+                          </>
+                        ) : null}
                       </div>
+                      {g.errorMessage ? (
+                        <p className="text-destructive mt-1 max-w-[min(28rem,88vw)] text-[11px] leading-snug">
+                          {g.errorMessage}
+                        </p>
+                      ) : null}
                     </div>
                     <Link
                       href={`/dashboard/history/${g.generationId}`}
@@ -990,8 +1073,8 @@ export function CardBuilderTab({
                             {s.previewCaption}
                           </div>
                         ) : null}
-                        <div className="text-muted-foreground mt-1 text-[11px] capitalize">
-                          Статус: {st}
+                        <div className="text-muted-foreground mt-1 text-[11px]">
+                          Статус: {slideProgressLabel(st)}
                         </div>
                         <div className="mt-2 space-y-1">
                           <Label className="text-[11px] text-muted-foreground">Изменить шаблон</Label>

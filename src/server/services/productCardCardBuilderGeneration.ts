@@ -3,7 +3,10 @@ import { cardBuilderPlanFieldsSchema } from "@/lib/validations/card-builder-plan
 
 import { assertUserOwnsFileUrl, getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 import { normalizeProductSourceImages } from "@/server/services/productCardProjects";
-import { buildCardBuilderSuperPrompt } from "@/server/services/cardBuilderPromptBuilder";
+import {
+  buildCardBuilderSuperPrompt,
+  joinUserDerivedTextForCardBuilderModeration,
+} from "@/server/services/cardBuilderPromptBuilder";
 import {
   enrichCardBuilderGallerySlides,
   enrichSingleSlideAfterTemplateChange,
@@ -18,6 +21,7 @@ import {
 import {
   buildAppliedMarketplaceRulesSnapshot,
   buildCardBuilderGenerationMarketplaceRules,
+  marketplaceBenefitsOverLimitMessage,
   PRODUCT_CARD_MARKETPLACE_PROFILE_VERSION,
   resolveProductCardMarketplaceProfile,
 } from "@/server/services/productCardMarketplaceProfiles";
@@ -35,6 +39,10 @@ import {
   estimateCardBuilderCharge,
   type ProductCardPriceBreakdown,
 } from "@/server/services/productCardPricing";
+import {
+  computeCardBuilderPlanFingerprint,
+  cardBuilderLivePlanFingerprintInputs,
+} from "@/server/services/cardBuilderPlanFingerprint";
 import { resolveCardBuilderImageModel } from "@/server/services/productCardModelResolver";
 import {
   queueProductCardImage,
@@ -147,6 +155,16 @@ export async function planCardBuilderGallery(
   const mpRes = await resolveProductCardMarketplaceProfile(input.marketplace);
   if (!mpRes.ok) return mpRes;
 
+  const benefitErr = marketplaceBenefitsOverLimitMessage(input.benefits, mpRes.profile);
+  if (benefitErr) {
+    return {
+      ok: false,
+      error: benefitErr,
+      status: 400,
+      code: "CARD_BUILDER_TOO_MANY_BENEFITS",
+    };
+  }
+
   const goalFail = marketplaceGoalDisallowedReason(mpRes.profile, input.goal);
   if (goalFail) {
     return { ok: false, error: goalFail, status: 400, code: "MARKETPLACE_GOAL_NOT_ALLOWED" };
@@ -228,6 +246,8 @@ export async function generateCardBuilderSlide(
     slideId: string;
     clientEstimateCredits?: number | null;
     useSavedPlan?: boolean;
+    /** SHA-256 отпечаток плана; обязателен при сохранённой галерее до reserveCredits */
+    clientPlanHash?: string | null;
     planInput?: CardBuilderPlanInput;
     slide?: CardBuilderGallerySlide;
     /** Пакет галереи: заранее рассчитанное списание за этот слайд */
@@ -238,16 +258,17 @@ export async function generateCardBuilderSlide(
   const base = await assertProjectBasics(userId, projectId);
   if (!base.ok) return base;
 
+  const blk = await readCardBuilderBlock(projectId);
   let slide: CardBuilderGallerySlide | undefined = body.slide;
   let planInput: CardBuilderPlanInput | undefined = body.planInput;
+  const useSaved = body.useSavedPlan !== false;
 
-  if (!slide || body.useSavedPlan) {
-    const blk = await readCardBuilderBlock(projectId);
+  if (!slide || useSaved) {
     slide = blk?.galleryPlan?.find((s) => s.slideId === body.slideId);
     if (blk?.settings && !planInput) {
       const { updatedAt: _u, ...rest } = blk.settings;
       void _u;
-      planInput = rest;
+      planInput = rest as CardBuilderPlanInput;
     }
   }
 
@@ -276,6 +297,40 @@ export async function generateCardBuilderSlide(
       status: 400,
       code: "MARKETPLACE_SLIDE_NOT_ALLOWED",
     };
+  }
+
+  const benefitErr = marketplaceBenefitsOverLimitMessage(planInput.benefits, profile);
+  if (benefitErr) {
+    return {
+      ok: false,
+      error: benefitErr,
+      status: 400,
+      code: "CARD_BUILDER_TOO_MANY_BENEFITS",
+    };
+  }
+
+  const galleryPlan = blk?.galleryPlan;
+  if (useSaved && galleryPlan?.length) {
+    if (!body.clientPlanHash?.trim()) {
+      return {
+        ok: false,
+        error: "Обновите оценку («Оценить») и попробуйте снова",
+        status: 409,
+        code: "PLAN_CHANGED",
+      };
+    }
+    const expectedFp = computeCardBuilderPlanFingerprint(
+      cardBuilderLivePlanFingerprintInputs(planInput, profile.id),
+      galleryPlan,
+    );
+    if (body.clientPlanHash !== expectedFp) {
+      return {
+        ok: false,
+        error: "Структура галереи на сервере изменилась — нажмите «Оценить» ещё раз",
+        status: 409,
+        code: "PLAN_CHANGED",
+      };
+    }
   }
 
   const resolved = await resolveCardBuilderImageModel();
@@ -375,6 +430,15 @@ export async function generateCardBuilderSlide(
 
   const gc = body.gallerySlideCount ?? null;
 
+  const moderationUserEnvelope = joinUserDerivedTextForCardBuilderModeration({
+    productTitle: base.project.title,
+    subtitle: planInput.subtitle,
+    benefitTagIds: planInput.benefits ?? [],
+    additionalBenefits: planInput.benefitsExtra,
+    mustShowTagIds: planInput.mustShow ?? [],
+    dimensions: planInput.dimensions,
+  });
+
   const cardBuilderPromptSnapshot = {
     promptVersion: superPrompt.data.promptVersion,
     textLockLevel: superPrompt.data.textLockLevel,
@@ -384,8 +448,6 @@ export async function generateCardBuilderSlide(
     designFlexible: superPrompt.data.designFlexible,
     overlayApplied: superPrompt.data.overlayApplied,
   };
-
-  const benefitTrimNotice = superPrompt.data.marketplaceBenefitTrimNotice ?? null;
 
   const metadataRoot: Record<string, unknown> = {
     flow: "product_card",
@@ -426,10 +488,6 @@ export async function generateCardBuilderSlide(
     overlayApplied: superPrompt.data.overlayApplied,
   };
 
-  if (benefitTrimNotice) {
-    metadataRoot.cardBuilderMarketplaceBenefitTrimNotice = benefitTrimNotice;
-  }
-
   const result = await queueProductCardImage(
     userId,
     model,
@@ -440,6 +498,7 @@ export async function generateCardBuilderSlide(
     metadataRoot,
     null,
     breakdown,
+    moderationUserEnvelope || null,
   );
 
   if (!result.ok) {
@@ -461,12 +520,16 @@ export async function generateCardBuilderSlide(
     status: "queued",
   });
 
+  const marketplaceNotice = profile.needsVerification
+    ? "Перед публикацией проверьте актуальные правила этой площадки — профиль может требовать уточнения."
+    : undefined;
+
   return {
     ok: true,
     generationId: result.generationId,
     status: result.status,
     costCredits,
-    marketplaceNotice: benefitTrimNotice ?? undefined,
+    ...(marketplaceNotice ? { marketplaceNotice } : {}),
   };
 }
 
@@ -484,6 +547,7 @@ export async function generateCardBuilderAllSlides(
   userId: string,
   projectId: string,
   clientEstimateCredits: number | null,
+  clientPlanHash: string | null,
 ): Promise<
   | ServiceErr
   | { ok: true; totalCredits: number; results: ({ slideId: string } & (GenOk | { error: string }))[] }
@@ -500,7 +564,33 @@ export async function generateCardBuilderAllSlides(
   if (!planParsed.ok) return planParsed;
   const planInput = planParsed.plan;
 
+  const mpForGallery = await resolveProductCardMarketplaceProfile(planInput.marketplace);
+  if (!mpForGallery.ok) return mpForGallery;
+  const galBenefitErr = marketplaceBenefitsOverLimitMessage(planInput.benefits, mpForGallery.profile);
+  if (galBenefitErr) {
+    return {
+      ok: false,
+      error: galBenefitErr,
+      status: 400,
+      code: "CARD_BUILDER_TOO_MANY_BENEFITS",
+    };
+  }
+
   const slides = blk.galleryPlan;
+
+  const expectedFp = computeCardBuilderPlanFingerprint(
+    cardBuilderLivePlanFingerprintInputs(planInput, mpForGallery.profile.id),
+    slides,
+  );
+  if (!clientPlanHash || clientPlanHash !== expectedFp) {
+    return {
+      ok: false,
+      error: "Структура галереи на сервере изменилась — нажмите «Оценить всю галерею» ещё раз",
+      status: 409,
+      code: "PLAN_CHANGED",
+    };
+  }
+
   const resolved = await resolveCardBuilderImageModel();
   if (!resolved) {
     return { ok: false, error: PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE, status: 400 };
@@ -529,12 +619,16 @@ export async function generateCardBuilderAllSlides(
     allocations = [];
     let sum = 0;
     for (const s of slides) {
+      const dens =
+        s.imageRole === "main_photo" && !mpForGallery.profile.mainPhotoTextAllowed
+          ? "none"
+          : planInput.textDensity;
       const br = await estimateCardBuilderCharge(
         "slide",
         model,
         settings.cardBuilderPricing,
         planInput.salesStyle,
-        planInput.textDensity,
+        dens,
         s.imageRole,
         null,
       );

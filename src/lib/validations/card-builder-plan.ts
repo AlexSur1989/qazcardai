@@ -77,16 +77,25 @@ export const cardBuilderEstimateRequestSchema = z.object({
   source: z.enum(["payload", "saved"]).default("payload"),
   payload: cardBuilderPlanFieldsSchema.optional(),
   mode: z.enum(["single_slide", "full_gallery"]),
+  /** Для single_slide при полной галерее или multi — роль активного слайда для точной цены */
+  activeSlideId: z.string().trim().min(3).max(120).optional(),
 });
 
 export const cardBuilderGenerateSlideBodySchema = z.object({
   slideId: z.string().trim().min(3).max(120),
   clientEstimateCredits: z.number().int().nonnegative().optional().nullable(),
+  /** SHA-256 плана галереи (поле «planHash» из ответа /estimate/card-builder). */
+  clientPlanHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/, "Обновите оценку («Оценить») перед генерацией"),
   useSavedPlan: z.boolean().optional().default(true),
 });
 
 export const cardBuilderGenerateGalleryBodySchema = z.object({
   clientEstimateCredits: z.number().int().nonnegative().optional().nullable(),
+  clientPlanHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/, "Обновите оценку всей галереи перед генерацией"),
 });
 
 export const cardBuilderSlideTemplateBodySchema = z.object({

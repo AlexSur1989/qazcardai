@@ -197,6 +197,40 @@ export function collectExactTextPhrases(input: {
   };
 }
 
+/** Конкатенация только пользовательского текста для модерации (длина/запреты без системного super prompt). */
+export function joinUserDerivedTextForCardBuilderModeration(input: {
+  productTitle?: string | null;
+  subtitle?: string | null;
+  benefitTagIds: string[];
+  additionalBenefits?: string | null;
+  mustShowTagIds: string[];
+  dimensions?: string | null;
+}): string {
+  const parts: string[] = [];
+  const t = stripHtmlFragments(input.productTitle?.trim() ?? "");
+  if (t) parts.push(t);
+  const st = stripHtmlFragments(input.subtitle?.trim() ?? "");
+  if (st) parts.push(st);
+  for (const line of benefitLabelsFromIds(input.benefitTagIds)) {
+    const x = stripHtmlFragments(line);
+    if (x) parts.push(x);
+  }
+  const extra = input.additionalBenefits?.trim() ?? "";
+  if (extra) {
+    for (const part of extra.split(/\r?\n/)) {
+      const x = stripHtmlFragments(part);
+      if (x) parts.push(x);
+    }
+  }
+  for (const line of mustShowLabelsFromIds(input.mustShowTagIds)) {
+    const x = stripHtmlFragments(line);
+    if (x) parts.push(x);
+  }
+  const dim = stripHtmlFragments(input.dimensions?.trim() ?? "");
+  if (dim) parts.push(dim);
+  return parts.join("\n\n").trim();
+}
+
 export function getSlideRoleInstruction(slideRole: string, templateId?: string): string {
   const cmp =
     templateId === "comparison_card"
@@ -709,12 +743,7 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
   const mainPhotoLocksText =
     input.slideRole === "main_photo" && profile ? !profile.mainPhotoTextAllowed : false;
 
-  let maxBenefitTags: number | undefined;
-  if (input.slideRole === "benefits_infographic" && profile) {
-    maxBenefitTags = Math.min(profile.maxBenefitBadges, profile.infographicRules.maxBenefitBadges);
-  }
-
-  const { phrases, validationErrors, benefitTagsTrimNotice } = collectExactTextPhrases({
+  const { phrases, validationErrors } = collectExactTextPhrases({
     productTitle: input.productTitle,
     subtitle: input.subtitle,
     benefitTagIds: input.benefits ?? [],
@@ -723,7 +752,6 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
     dimensions: input.dimensions,
     slideRole: input.slideRole,
     omitUserLockedText: mainPhotoLocksText,
-    maxBenefitTags,
   });
 
   if (validationErrors.length > 0) {
@@ -793,7 +821,6 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
       designFlexible: true,
       overlayApplied: false,
       exactTextRequested: true,
-      marketplaceBenefitTrimNotice: benefitTagsTrimNotice,
     },
   };
 }
