@@ -1,7 +1,6 @@
 import {
   defaultTemplateForSlideRole,
   getCardBuilderTemplate,
-  pickGalleryTemplateSequence,
   type CardBuilderTemplateSlideRole,
 } from "@/config/card-builder-templates";
 import type {
@@ -65,17 +64,27 @@ export function marketplaceGoalDisallowedReason(
   return cardBuilderProfileSlideErrorMessage(profile, role);
 }
 
+const HEAVY_INFOGRAPHIC_TEMPLATES = new Set([
+  "benefits_grid",
+  "benefits_left_column",
+  "dark_premium_benefits",
+  "protection_features",
+  "comparison_card",
+]);
+
 export type CardBuilderGallerySlide = {
   slideId: string;
   title: string;
   purpose: string;
-  /** Короткое описание для пользователя в превью */
   previewCaption: string;
   imageRole: CardBuilderSlideRole;
   templateId: string;
   templateLabel: string;
   layoutPreset: string;
   overlayRequired: boolean;
+  /** В метаданных плана; старые сохранения могли не иметь поля */
+  textRenderMode?: "ai_text_in_design";
+  marketplaceProfileId?: string;
   textSlots: string[];
   iconSlots: string[];
   sourceImageMode: "original" | "variant";
@@ -95,9 +104,7 @@ export type CardBuilderPlanInput = {
   allowCreativeStylization?: boolean;
   benefits: string[];
   benefitsExtra?: string;
-  /** Зеркало `benefits` в сохранённом metadata (семантические акценты). */
   semanticBenefits?: string[];
-  /** Зеркало `benefitsExtra` — дословный текст клиента («Дополнительные преимущества»). */
   additionalBenefits?: string;
   subtitle?: string;
   dimensions?: string;
@@ -110,101 +117,741 @@ export type CardBuilderPlanInput = {
   marketplaceProfileId?: string;
   marketplaceProfileVersion?: string;
   appliedMarketplaceRules?: AppliedMarketplaceRulesSnapshot;
-  /** Рекомендуемые выходные пропорции под площадку (подсказка / metadata) */
   cardBuilderTargetAspectRatio?: string;
   cardBuilderTargetSize?: string;
 };
 
-const BASE_SLIDES: Record<
+type PlannerBucket =
+  | "furniture"
+  | "apparel_clothing"
+  | "footwear"
+  | "jewelry_accessories"
+  | "beauty"
+  | "gadgets"
+  | "food"
+  | "universal";
+
+type MarketplacePlannerCluster =
+  | "classified_mp"
+  | "amazon"
+  | "lamoda"
+  | "classified_listings"
+  | "brand_ecom"
+  | "social"
+  | "neutral";
+
+const ROLE_META: Record<
   CardBuilderSlideRole,
-  Omit<
-    CardBuilderGallerySlide,
-    | "slideId"
-    | "previewCaption"
-    | "templateId"
-    | "templateLabel"
-    | "layoutPreset"
-    | "overlayRequired"
-    | "textSlots"
-    | "iconSlots"
-    | "overlayTexts"
-    | "overlayBenefitIcons"
-    | "needsMoreBenefits"
-  >
+  {
+    title: string;
+    purposeRu: string;
+    promptIntent: string;
+    recommendedTextMode: CardBuilderGallerySlide["recommendedTextMode"];
+    sourceMode: CardBuilderGallerySlide["sourceImageMode"];
+  }
 > = {
   main_photo: {
     title: "Главное фото",
-    purpose: "Показать товар на чистом читаемом фоне как герой кадра",
-    imageRole: "main_photo",
-    recommendedTextMode: "none",
+    purposeRu:
+      "Кадр-представление товара: читается с первого взгляда, без фальшивых подписей и лишней рекламы на маркетплейсовом первом экране, если этого не хотят правила.",
     promptIntent: "clean catalog hero image",
-    sourceImageMode: "original",
+    recommendedTextMode: "none",
+    sourceMode: "original",
   },
   benefits_infographic: {
     title: "Преимущества",
-    purpose: "Визуально выделить ключевые УТП; текст задаётся серверным overlay",
-    imageRole: "benefits_infographic",
-    recommendedTextMode: "medium",
+    purposeRu:
+      "Подчеркнуть только те качества, что вы уже сформулировали формой. Без лечебных, медицинских и технических утверждений без опоры.",
     promptIntent: "benefit-led selling layout without readable bitmap text",
-    sourceImageMode: "original",
+    recommendedTextMode: "medium",
+    sourceMode: "original",
   },
   dimensions: {
     title: "Размеры",
-    purpose: "Показать габариты и масштаб наглядно",
-    imageRole: "dimensions",
-    recommendedTextMode: "minimal",
+    purposeRu:
+      "Подсказать масштаб и понятную соразмерность. Цифры — только ваши из поля формы.",
     promptIntent: "scale and dimension readability",
-    sourceImageMode: "original",
+    recommendedTextMode: "minimal",
+    sourceMode: "original",
   },
   materials: {
     title: "Материалы",
-    purpose: "Раскрыть фактуру и качество материала",
-    imageRole: "materials",
-    recommendedTextMode: "minimal",
+    purposeRu:
+      "Материал и фактура честным крупным или полуторным планом, без добавления свойств продукта, которых нет в тексте.",
     promptIntent: "material macro and tactile premium cues",
-    sourceImageMode: "original",
+    recommendedTextMode: "minimal",
+    sourceMode: "original",
   },
   lifestyle: {
     title: "Lifestyle",
-    purpose: "Товар в естественном сценарии использования",
-    imageRole: "lifestyle",
-    recommendedTextMode: "minimal",
+    purposeRu:
+      "Товар в естественной сцене для выбранной аудитории и стиля продаж.",
     promptIntent: "aspirational in-context lifestyle commerce",
-    sourceImageMode: "original",
+    recommendedTextMode: "minimal",
+    sourceMode: "original",
   },
   premium_poster: {
     title: "Постер",
-    purpose: "Сильный рекламный кадр с премиальной подачёй",
-    imageRole: "premium_poster",
-    recommendedTextMode: "minimal",
+    purposeRu:
+      "Праздничный второй или заключительный кадр. Сохраняем форму, логотип и цвет модели там, где вы отметили «сохранить продукт».",
     promptIntent: "premium retail poster hero",
-    sourceImageMode: "original",
+    recommendedTextMode: "minimal",
+    sourceMode: "original",
   },
   detail_closeup: {
     title: "Детали",
-    purpose: "Крупный план якорной детали или фактуры",
-    imageRole: "detail_closeup",
-    recommendedTextMode: "none",
+    purposeRu:
+      "Подчеркнуть важную деталь, слой или интерфейс — без недостоверных спецификаций.",
     promptIntent: "macro hero detail fidelity",
-    sourceImageMode: "original",
+    recommendedTextMode: "none",
+    sourceMode: "original",
   },
   packaging: {
     title: "Упаковка / комплект",
-    purpose: "Комплектация и упаковка",
-    imageRole: "packaging",
-    recommendedTextMode: "minimal",
+    purposeRu:
+      "Показать упаковку и комплект только когда это вытекает из текста клиента или логики категории.",
     promptIntent: "kit and packaging storytelling",
-    sourceImageMode: "original",
+    recommendedTextMode: "minimal",
+    sourceMode: "original",
   },
   ad_banner: {
     title: "Рекламный баннер",
-    purpose: "Яркая рекламная подача с местом под текст overlay",
-    imageRole: "ad_banner",
-    recommendedTextMode: "minimal",
+    purposeRu:
+      "Рекламный кадр для социальных кампаний — яркий, но без недобросовестных утверждений.",
     promptIntent: "bold ecommerce banner framing",
-    sourceImageMode: "original",
+    recommendedTextMode: "minimal",
+    sourceMode: "original",
   },
 };
+
+function plannerCluster(marketplaceId: string): MarketplacePlannerCluster {
+  switch (marketplaceId) {
+    case "kaspi":
+    case "wildberries":
+    case "ozon":
+    case "yandex_market":
+    case "halyk_market":
+      return "classified_mp";
+    case "amazon":
+      return "amazon";
+    case "lamoda":
+      return "lamoda";
+    case "olx":
+    case "avito":
+      return "classified_listings";
+    case "shopify":
+    case "own_site":
+      return "brand_ecom";
+    case "instagram_vk":
+      return "social";
+    default:
+      return "neutral";
+  }
+}
+
+function inferFootwearFromClientText(input: CardBuilderPlanInput): boolean {
+  const t =
+    `${input.subtitle ?? ""} ${input.benefitsExtra ?? ""} ${input.additionalBenefits ?? ""}`.trim();
+  if (!t) return false;
+  const re =
+    /\b(?:обувь|ботинк|туфл|лоферы|босоножк|сапог|бутс|sandals|sneakers|boots)\b/ui;
+  return re.test(t);
+}
+
+function inferIngredientClaimsFromClientText(input: CardBuilderPlanInput): boolean {
+  const t =
+    `${input.subtitle ?? ""} ${input.benefitsExtra ?? ""} ${input.additionalBenefits ?? ""}`.trim();
+  if (!t) return false;
+  return /ингредиент|состав|актив\b|formula|spf|спф|extract|экстракт/ui.test(t);
+}
+
+function inferPlannerBucket(input: CardBuilderPlanInput): PlannerBucket {
+  const cat = input.selectedCategory;
+  if (cat === "home_and_furniture") return "furniture";
+  if (cat === "accessories") return "jewelry_accessories";
+  if (cat === "beauty_and_care") return "beauty";
+  if (cat === "gadgets_and_tech") return "gadgets";
+  if (cat === "food_and_drinks") return "food";
+  if (cat === "apparel") return inferFootwearFromClientText(input) ? "footwear" : "apparel_clothing";
+  return "universal";
+}
+
+function bucketSixTemplates(bucket: PlannerBucket, input: CardBuilderPlanInput): string[] {
+  switch (bucket) {
+    case "furniture":
+      return [
+        "hero_clean",
+        "lifestyle_card",
+        "material_focus",
+        "dimensions_schema",
+        "benefits_grid",
+        "premium_poster",
+      ];
+    case "apparel_clothing":
+      return [
+        "hero_clean",
+        "lifestyle_card",
+        "material_focus",
+        "size_range",
+        "texture_closeup",
+        "premium_poster",
+      ];
+    case "footwear":
+      return [
+        "hero_clean",
+        "lifestyle_card",
+        "material_focus",
+        "protection_features",
+        "texture_closeup",
+        "premium_poster",
+      ];
+    case "beauty":
+      return inferIngredientClaimsFromClientText(input)
+        ? [
+            "hero_clean",
+            "texture_closeup",
+            "benefits_grid",
+            "ingredients_effect",
+            "lifestyle_card",
+            "premium_poster",
+          ]
+        : [
+            "hero_clean",
+            "texture_closeup",
+            "benefits_grid",
+            "material_focus",
+            "lifestyle_card",
+            "premium_poster",
+          ];
+    case "gadgets":
+      return [
+        "hero_clean",
+        "feature_callouts",
+        "interface_detail",
+        "size_scale",
+        "lifestyle_card",
+        "ad_banner",
+      ];
+    case "food":
+      return [
+        "hero_clean",
+        "package_card",
+        "ingredients_effect",
+        "benefits_grid",
+        "lifestyle_card",
+        "premium_poster",
+      ];
+    case "jewelry_accessories":
+      return [
+        "hero_clean",
+        "premium_poster",
+        "texture_closeup",
+        "material_focus",
+        "lifestyle_card",
+        "package_card",
+      ];
+    default:
+      return [
+        "hero_clean",
+        "benefits_grid",
+        "material_focus",
+        "dimensions_schema",
+        "lifestyle_card",
+        "premium_poster",
+      ];
+  }
+}
+
+function fillerRolesForEight(bucket: PlannerBucket): CardBuilderSlideRole[] {
+  switch (bucket) {
+    case "gadgets":
+      return ["benefits_infographic", "dimensions", "packaging", "materials"];
+    case "furniture":
+      return ["packaging", "detail_closeup", "materials", "benefits_infographic"];
+    case "beauty":
+      return ["premium_poster", "packaging", "detail_closeup", "materials"];
+    case "food":
+      return ["detail_closeup", "materials", "dimensions", "ad_banner"];
+    case "jewelry_accessories":
+      return ["benefits_infographic", "dimensions", "ad_banner", "materials"];
+    default:
+      return ["packaging", "detail_closeup", "premium_poster", "materials"];
+  }
+}
+
+function defaultMainTemplate(cluster: MarketplacePlannerCluster): string {
+  if (cluster === "classified_listings") return "realistic_listing";
+  return "hero_clean";
+}
+
+function roleOkForPlan(
+  profile: ProductCardMarketplaceProfile,
+  role: CardBuilderSlideRole,
+): boolean {
+  if (!marketplaceProfileAllowsGalleryRole(profile, role)) return false;
+  if (role === "benefits_infographic") {
+    const cap = Math.min(profile.maxBenefitBadges, profile.infographicRules.maxBenefitBadges);
+    if (!profile.infographicAllowed || cap <= 0) return false;
+    return true;
+  }
+  if (role === "lifestyle") return profile.lifestyleAllowed;
+  return true;
+}
+
+/** Infographics demotion: Lamoda → fashion-catalog lifestyle; классические объявления → детальный кадр. */
+function demoteHeavyInfographic(
+  templateId: string,
+  cluster: MarketplacePlannerCluster,
+): string {
+  const def = getCardBuilderTemplate(templateId);
+  if (!def || def.slideRole !== "benefits_infographic") return templateId;
+  if (cluster === "lamoda") return "fashion_catalog";
+  if (!HEAVY_INFOGRAPHIC_TEMPLATES.has(templateId)) return templateId;
+  if (cluster === "classified_listings") return "texture_closeup";
+  return "benefits_grid";
+}
+
+/** Без реального текста клиента про состав — не использовать «ингредиентные» экраны. */
+function reconcileIngredientSlides(
+  templateIds: string[],
+  bucket: PlannerBucket,
+  input: CardBuilderPlanInput,
+): string[] {
+  if (inferIngredientClaimsFromClientText(input)) return templateIds;
+  const repl =
+    bucket === "food"
+      ? "texture_closeup"
+      : bucket === "beauty"
+        ? "material_focus"
+        : null;
+  if (!repl) return templateIds;
+  return templateIds.map((tid) =>
+    tid === "ingredients_effect"
+      ? repl
+      : getCardBuilderTemplate(tid)?.slideRole === "materials" && tid.includes("effect")
+        ? repl
+        : tid,
+  );
+}
+
+function coerceTemplateAgainstProfile(
+  templateId: string,
+  profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
+): string | null {
+  const def = getCardBuilderTemplate(templateId);
+  if (!def) return null;
+
+  let tid =
+    def.slideRole === "benefits_infographic" ? demoteHeavyInfographic(templateId, cluster) : templateId;
+
+  let d = getCardBuilderTemplate(tid);
+  if (d && roleOkForPlan(profile, d.slideRole)) return tid;
+
+  const substitutes: Partial<Record<CardBuilderSlideRole, string>> = {
+    benefits_infographic: profile.infographicAllowed ? demoteHeavyInfographic("benefits_grid", cluster) : "texture_closeup",
+    lifestyle: cluster === "lamoda" ? "fashion_catalog" : "detail_closeup",
+    dimensions: "lifestyle_card",
+    materials: "detail_closeup",
+    packaging: profile.lifestyleAllowed ? "lifestyle_card" : "texture_closeup",
+    premium_poster: "lifestyle_card",
+    ad_banner: "premium_poster",
+    detail_closeup: profile.lifestyleAllowed ? "lifestyle_card" : defaultMainTemplate(cluster),
+    main_photo: defaultMainTemplate(cluster),
+  };
+
+  let subRaw = substitutes[def.slideRole] ?? defaultMainTemplate(cluster);
+  if (getCardBuilderTemplate(subRaw)?.slideRole === "benefits_infographic") {
+    subRaw = demoteHeavyInfographic(subRaw, cluster);
+  }
+  tid = subRaw;
+
+  d = getCardBuilderTemplate(tid);
+  return d && roleOkForPlan(profile, d.slideRole) ? tid : null;
+}
+
+function uniqRolesPreferred(
+  templateIds: string[],
+  profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const tid of templateIds) {
+    const c = coerceTemplateAgainstProfile(tid, profile, cluster);
+    if (!c) continue;
+    const def = getCardBuilderTemplate(c);
+    if (!def || !roleOkForPlan(profile, def.slideRole)) continue;
+    if (seen.has(def.slideRole)) continue;
+    seen.add(def.slideRole);
+    out.push(c);
+  }
+  return out;
+}
+
+function extendToSlideCount(
+  base: string[],
+  count: 6 | 8,
+  bucket: PlannerBucket,
+  profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
+): string[] {
+  const out = uniqRolesPreferred(base, profile, cluster);
+  if (count === 6 || out.length >= count) return out.slice(0, count);
+
+  const seenRoles = new Set(out.map((t) => getCardBuilderTemplate(t)!.slideRole));
+
+  const tryPush = (tid: string): boolean => {
+    const c = coerceTemplateAgainstProfile(tid, profile, cluster);
+    if (!c) return false;
+    const r = getCardBuilderTemplate(c)!.slideRole;
+    if (seenRoles.has(r)) return false;
+    seenRoles.add(r);
+    out.push(c);
+    return true;
+  };
+
+  for (const role of fillerRolesForEight(bucket)) {
+    const tidRaw = defaultTemplateForSlideRole(role);
+    const tidPrep =
+      cluster === "lamoda" && role === "benefits_infographic" ? "fashion_catalog" : tidRaw;
+    if (tryPush(tidPrep) && out.length >= count) return out.slice(0, count);
+  }
+
+  for (const rid of profile.recommendedSlides) {
+    const r = rid as CardBuilderSlideRole;
+    const tidPrep =
+      cluster === "lamoda" && r === "benefits_infographic"
+        ? "fashion_catalog"
+        : defaultTemplateForSlideRole(r);
+    if (tryPush(tidPrep) && out.length >= count) return out.slice(0, count);
+  }
+
+  let i = 0;
+  const cycle = [...out];
+  while (out.length < count && cycle.length > 0) {
+    const src = cycle[i % cycle.length]!;
+    const c =
+      coerceTemplateAgainstProfile(defaultTemplateForSlideRole(getCardBuilderTemplate(src)!.slideRole), profile, cluster) ??
+      coerceTemplateAgainstProfile(src, profile, cluster);
+    if (c && !seenRoles.has(getCardBuilderTemplate(c)!.slideRole)) {
+      tryPush(c);
+    }
+    i += 1;
+    if (i > count * 4) break;
+  }
+
+  return out.slice(0, count);
+}
+
+function moveMainPhotoFirst(templateIds: string[]): string[] {
+  const idx = templateIds.findIndex((t) => getCardBuilderTemplate(t)?.slideRole === "main_photo");
+  if (idx <= 0) return templateIds;
+  const copy = [...templateIds];
+  const main = copy.splice(idx, 1)[0];
+  copy.unshift(main!);
+  return copy;
+}
+
+/** На классических МП главное всегда чистым; второй позицией держать не тяжёлую инфографику если есть «мягкие» позиции. */
+function softenSecondSlotInfographic(templateIds: string[]): string[] {
+  const copy = [...templateIds];
+  if (copy.length < 3) return copy;
+  const r1 = getCardBuilderTemplate(copy[1])?.slideRole;
+  if (r1 !== "benefits_infographic") return copy;
+
+  let swapIdx = copy.findIndex(
+    (tid, j) => j >= 3 && getCardBuilderTemplate(tid)?.slideRole !== "benefits_infographic",
+  );
+  if (swapIdx < 0) {
+    swapIdx = copy.findIndex(
+      (tid, j) => j >= 2 && !HEAVY_INFOGRAPHIC_TEMPLATES.has(tid ?? ""),
+    );
+  }
+  if (swapIdx > 1 && swapIdx !== -1) {
+    const tmp = copy[1];
+    copy[1] = copy[swapIdx]!;
+    copy[swapIdx] = tmp!;
+  }
+  return copy;
+}
+
+function socialCommerceReorder(templateIds: string[]): string[] {
+  const weight: Partial<Record<CardBuilderSlideRole, number>> = {
+    lifestyle: 1,
+    premium_poster: 2,
+    ad_banner: 3,
+    benefits_infographic: 4,
+    materials: 5,
+    detail_closeup: 5,
+    dimensions: 6,
+    packaging: 7,
+    main_photo: 12,
+  };
+  return [...templateIds].sort((a, b) => {
+    const ra = getCardBuilderTemplate(a)?.slideRole;
+    const rb = getCardBuilderTemplate(b)?.slideRole;
+    const wa = weight[ra!] ?? 8;
+    const wb = weight[rb!] ?? 8;
+    if (wa !== wb) return wa - wb;
+    return templateIds.indexOf(a) - templateIds.indexOf(b);
+  });
+}
+
+function applyClusterGalleryRules(
+  templateIds: string[],
+  cluster: MarketplacePlannerCluster,
+  profile: ProductCardMarketplaceProfile,
+): string[] {
+  let ids = templateIds.map((t, idx) =>
+    idx === 0 && cluster === "classified_listings" ? "realistic_listing" : t,
+  );
+
+  if (cluster === "classified_mp") {
+    ids = moveMainPhotoFirst(ids);
+    ids = softenSecondSlotInfographic(ids);
+    ids = uniqRolesPreferred(ids, profile, cluster);
+    return ids;
+  }
+
+  if (cluster === "amazon") {
+    ids = moveMainPhotoFirst(ids.map((t) => (t === "realistic_listing" ? "hero_clean" : t)));
+    ids = softenSecondSlotInfographic(ids);
+    ids = uniqRolesPreferred(ids, profile, cluster);
+    return ids;
+  }
+
+  if (cluster === "lamoda") {
+    ids = ids.map((tid) =>
+      HEAVY_INFOGRAPHIC_TEMPLATES.has(tid) ||
+      getCardBuilderTemplate(tid)?.slideRole === "benefits_infographic"
+        ? demoteHeavyInfographic(tid, "lamoda")
+        : tid,
+    );
+    ids = moveMainPhotoFirst(ids);
+    return uniqRolesPreferred(ids, profile, cluster);
+  }
+
+  if (cluster === "classified_listings") {
+    ids = moveMainPhotoFirst(
+      ids.map((t) => (HEAVY_INFOGRAPHIC_TEMPLATES.has(t) ? "texture_closeup" : t)),
+    );
+    return uniqRolesPreferred(ids, profile, cluster);
+  }
+
+  if (cluster === "brand_ecom") {
+    ids = moveMainPhotoFirst(ids);
+    return uniqRolesPreferred(ids, profile, cluster);
+  }
+
+  if (cluster === "social") {
+    ids = uniqRolesPreferred(
+      socialCommerceReorder(moveMainPhotoFirst(ids)),
+      profile,
+      cluster,
+    );
+    return moveMainPhotoFirst(ids);
+  }
+
+  return uniqRolesPreferred(moveMainPhotoFirst(ids), profile, cluster);
+}
+
+/** mustShow — добавлять по одному узлу каждого типа после главного. */
+function injectMustShow(
+  ids: string[],
+  must: string[],
+  profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
+): string[] {
+  let out = uniqRolesPreferred(ids, profile, cluster);
+
+  const set = new Set(must ?? []);
+
+  const mi = out.findIndex((t) => getCardBuilderTemplate(t)?.slideRole === "main_photo");
+  const insertAt = mi >= 0 ? mi + 1 : 0;
+
+  const addRoleOnce = (role: CardBuilderSlideRole) => {
+    if (out.some((x) => getCardBuilderTemplate(x)?.slideRole === role)) return;
+    const tidBase = defaultTemplateForSlideRole(role);
+    const tid =
+      cluster === "lamoda" && role === "benefits_infographic" ? "fashion_catalog" : tidBase;
+    const c = coerceTemplateAgainstProfile(demoteHeavyInfographic(tid, cluster), profile, cluster);
+    if (!c) return;
+
+    /** fashion_catalog уже lifestyle при lamoda-бенефицировании dimensions — OK */
+    if (cluster === "lamoda" && role === "lifestyle") {
+      const cc = coerceTemplateAgainstProfile("fashion_catalog", profile, cluster);
+      if (cc) {
+        const copy = [...out];
+        copy.splice(insertAt, 0, cc);
+        out = uniqRolesPreferred(copy, profile, cluster);
+        return;
+      }
+    }
+
+    const copy = [...out];
+    copy.splice(insertAt, 0, c);
+    out = uniqRolesPreferred(copy, profile, cluster);
+  };
+
+  if (set.has("texture")) addRoleOnce("materials");
+  if (set.has("scale")) addRoleOnce("dimensions");
+  if (set.has("usage")) addRoleOnce("lifestyle");
+  if (set.has("packaging")) addRoleOnce("packaging");
+  if (set.has("details")) addRoleOnce("detail_closeup");
+  if (set.has("color")) addRoleOnce("materials");
+  if (set.has("brand_style")) {
+    addRoleOnce("premium_poster");
+    if (!out.some((t) => getCardBuilderTemplate(t)?.slideRole === "ad_banner")) {
+      const b = coerceTemplateAgainstProfile("ad_banner", profile, cluster);
+      if (b && roleOkForPlan(profile, getCardBuilderTemplate(b)!.slideRole)) {
+        const copy = [...out];
+        copy.push(b);
+        out = uniqRolesPreferred(copy, profile, cluster);
+      }
+    }
+  }
+
+  return uniqRolesPreferred(out, profile, cluster);
+}
+
+/** Смысловые акценты из benefits[] */
+function injectBenefitsSemantics(
+  ids: string[],
+  input: CardBuilderPlanInput,
+  profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
+): string[] {
+  let out = uniqRolesPreferred(ids, profile, cluster);
+  const tags = input.benefits ?? [];
+  const hasRole = (r: CardBuilderSlideRole) =>
+    out.some((t) => getCardBuilderTemplate(t)?.slideRole === r);
+
+  if (
+    tags.length >= 3 &&
+    profile.infographicAllowed &&
+    !hasRole("benefits_infographic")
+  ) {
+    const tid = demoteHeavyInfographic(
+      coerceTemplateAgainstProfile("benefits_grid", profile, cluster) ?? "benefits_grid",
+      cluster,
+    );
+    const c = coerceTemplateAgainstProfile(tid, profile, cluster);
+    if (c && roleOkForPlan(profile, getCardBuilderTemplate(c)!.slideRole)) {
+      const copy = [...out];
+      const ins = Math.min(2, copy.length);
+      copy.splice(ins, 0, c);
+      out = uniqRolesPreferred(copy, profile, cluster);
+    }
+  }
+
+  if (
+    tags.includes("premium_feel") &&
+    roleOkForPlan(profile, "premium_poster") &&
+    !hasRole("premium_poster")
+  ) {
+    const c = coerceTemplateAgainstProfile("premium_poster", profile, cluster);
+    if (c) {
+      const copy = [...out, c];
+      out = uniqRolesPreferred(copy, profile, cluster);
+    }
+  }
+
+  if (tags.includes("material") && !hasRole("materials")) {
+    const c = coerceTemplateAgainstProfile("material_focus", profile, cluster);
+    if (c) {
+      out = uniqRolesPreferred([...out, c], profile, cluster);
+    }
+  }
+
+  if (
+    tags.includes("comfort") &&
+    !hasRole("lifestyle") &&
+    roleOkForPlan(profile, "lifestyle")
+  ) {
+    const c = coerceTemplateAgainstProfile(
+      cluster === "lamoda" ? "fashion_catalog" : "lifestyle_card",
+      profile,
+      cluster,
+    );
+    if (c) out = uniqRolesPreferred([...out, c], profile, cluster);
+  }
+
+  if (tags.includes("size") && !hasRole("dimensions")) {
+    const b = inferPlannerBucket(input);
+    const tid = b === "apparel_clothing" ? "size_range" : "size_scale";
+    const c = coerceTemplateAgainstProfile(tid, profile, cluster);
+    if (c) out = uniqRolesPreferred([...out, c], profile, cluster);
+  }
+
+  if (
+    tags.includes("gift") &&
+    !hasRole("packaging") &&
+    marketplaceProfileAllowsGalleryRole(profile, "packaging")
+  ) {
+    const c = coerceTemplateAgainstProfile("package_card", profile, cluster);
+    if (c) out = uniqRolesPreferred([...out, c], profile, cluster);
+  }
+
+  if (cluster !== "social") return out;
+
+  let seenLs = false;
+  return out.filter((t) => {
+    if (getCardBuilderTemplate(t)?.slideRole === "lifestyle") {
+      if (seenLs) return false;
+      seenLs = true;
+    }
+    return true;
+  });
+}
+
+function packagingReasonRequired(
+  bucket: PlannerBucket,
+  mustShow: string[],
+  cluster: MarketplacePlannerCluster,
+): boolean {
+  if (mustShow.includes("packaging")) return true;
+  if (bucket === "food") return true;
+  if (bucket === "jewelry_accessories") return true;
+  if (cluster === "classified_listings") return true;
+  return false;
+}
+
+function stripUnsupportedPackaging(
+  templateIds: string[],
+  ok: boolean,
+  profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
+): string[] {
+  const out = templateIds.filter((t) =>
+    !(getCardBuilderTemplate(t)?.slideRole === "packaging" && !ok),
+  );
+  return uniqRolesPreferred(out, profile, cluster);
+}
+
+/** Без габаритов в форме сохраняем кадр «размеры», дисклеймер в purposeSuffixForSlide. */
+function removeDimensionsWithoutMeasures(
+  templateIds: string[],
+  _profile: ProductCardMarketplaceProfile,
+  _cluster: MarketplacePlannerCluster,
+  _dims?: string,
+): string[] {
+  void _profile;
+  void _cluster;
+  void _dims;
+  return templateIds;
+}
+
+function maybeSwapPosterForBanner(templateIds: string[], input: CardBuilderPlanInput): string[] {
+  if (input.marketplace !== "instagram_vk" && input.salesStyle !== "bold_ad") return templateIds;
+  const copy = [...templateIds];
+  const lastIdx = copy.length - 1;
+  const lastTpl = copy[lastIdx] ? getCardBuilderTemplate(copy[lastIdx]!) : undefined;
+  if (lastTpl?.slideRole === "premium_poster") {
+    copy[lastIdx] = "ad_banner";
+  }
+  return copy;
+}
 
 function categoryLabelRu(categoryId: string): string {
   const cat = getPublicProductCategories().find((c) => c.id === categoryId);
@@ -222,70 +869,68 @@ function pickTextMode(
   return recommended;
 }
 
-function roleOkInFullGallery(
+function purposeSuffixForSlide(
+  imageRole: CardBuilderSlideRole,
   profile: ProductCardMarketplaceProfile,
-  role: CardBuilderTemplateSlideRole,
-): boolean {
-  if (!marketplaceProfileAllowsGalleryRole(profile, role)) return false;
-  if (role === "benefits_infographic") {
-    const cap = Math.min(profile.maxBenefitBadges, profile.infographicRules.maxBenefitBadges);
-    return profile.infographicAllowed && cap > 0;
+  marketplaceCluster: MarketplacePlannerCluster,
+  input: CardBuilderPlanInput,
+): string[] {
+  const bits: string[] = [];
+  if (marketplaceCluster === "amazon" && imageRole === "main_photo") {
+    bits.push("Профиль Amazon: только товар на чистом белом фоне, без текста и реквизита.");
   }
-  if (role === "lifestyle") {
-    return profile.lifestyleAllowed;
-  }
-  return true;
-}
-
-function rolesForFullGalleryFromProfile(
-  profile: ProductCardMarketplaceProfile,
-  slideCount: 6 | 8,
-  categoryId: string,
-): CardBuilderTemplateSlideRole[] {
-  const allowed = new Set<string>(
-    profile.allowedSlideTypes.filter((r) =>
-      roleOkInFullGallery(profile, r as CardBuilderTemplateSlideRole),
-    ),
-  );
-  const fromRec = profile.recommendedSlides.filter((r) => allowed.has(r));
-  const uniq: CardBuilderTemplateSlideRole[] = [];
-  const seen = new Set<string>();
-  for (const r of fromRec) {
-    if (!seen.has(r)) {
-      seen.add(r);
-      uniq.push(r as CardBuilderTemplateSlideRole);
+  if (marketplaceCluster === "classified_mp" || marketplaceCluster === "amazon") {
+    if (imageRole === "main_photo") {
+      bits.push("Не перегружать маркетплейсное главное окно текстом или «афишностью».");
     }
-    if (uniq.length >= slideCount) return uniq.slice(0, slideCount);
-  }
-
-  const fallbackTplIds = pickGalleryTemplateSequence(categoryId, slideCount);
-  for (const tid of fallbackTplIds) {
-    const tpl = getCardBuilderTemplate(tid);
-    const r = tpl?.slideRole;
-    if (!r || !allowed.has(r)) continue;
-    if (!seen.has(r)) {
-      seen.add(r);
-      uniq.push(r);
+    if (imageRole === "benefits_infographic") {
+      bits.push(
+        "Тяжёлая инфографика здесь вторичная — сохранять читаемость и связь только с уже заданными преимуществами формы.",
+      );
     }
-    if (uniq.length >= slideCount) return uniq.slice(0, slideCount);
+  }
+  if (marketplaceCluster === "lamoda" && imageRole === "main_photo") {
+    bits.push("Стиль модного каталога: нейтральный фон, без тяжёлых маркетплейсовых табло.");
   }
 
-  for (const r of profile.allowedSlideTypes) {
-    if (!seen.has(r)) {
-      seen.add(r);
-      uniq.push(r as CardBuilderTemplateSlideRole);
+  /** Food/medical disclaimers **/
+  const bucket = inferPlannerBucket(input);
+  if (
+    bucket === "food" &&
+    (imageRole === "materials" || imageRole === "benefits_infographic")
+  ) {
+    bits.push("Еда и вкусовые обещания — только там, где вы это явно указали текстом заказчика.");
+  }
+
+  /** Electronics — не выдумывать ТТХ **/
+  if (bucket === "gadgets" && (imageRole === "detail_closeup" || imageRole === "benefits_infographic")) {
+    bits.push("Не добавлять номинальный Wi‑Fi, мАч, разрешения экранов и прочее без указанного текста клиента.");
+  }
+
+  /** Beauty — без лечебных обещаний **/
+  if (bucket === "beauty" || bucket === "food") {
+    if (imageRole === "materials" || imageRole === "benefits_infographic") {
+      bits.push(
+        "Медицинские и излечивающие преимущества не формулируем без подтверждённой формулировки клиента.",
+      );
     }
-    if (uniq.length >= slideCount) return uniq.slice(0, slideCount);
   }
 
-  const cycle = uniq.length ? uniq : (["main_photo"] as CardBuilderTemplateSlideRole[]);
-  const out = [...uniq];
-  let i = 0;
-  while (out.length < slideCount && cycle.length > 0) {
-    out.push(cycle[i % cycle.length]!);
-    i += 1;
+  if (input.preserveProduct) bits.push("Сохраняем узнаваемость товара там, где вы это выбрали в настройках.");
+
+  if (!(input.dimensions ?? "").trim() && imageRole === "dimensions") {
+    bits.push(
+      "Визуальная соразмерность без конкретных чисел из формы: не добавлять вымышленные миллиметры и лишние цифры.",
+    );
   }
-  return out.slice(0, slideCount);
+
+  if (bucket === "jewelry_accessories" && marketplaceCluster !== "social") {
+    bits.push(
+      "Аккуратнее с формой и брендовыми элементами — не добавлять украшения и логотипы, если их не было во входном фото.",
+    );
+  }
+
+  return bits.filter(Boolean);
 }
 
 function buildSlideFromTemplate(
@@ -294,18 +939,30 @@ function buildSlideFromTemplate(
   input: CardBuilderPlanInput,
   categoryRu: string,
   profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
 ): CardBuilderGallerySlide | null {
   const def = getCardBuilderTemplate(templateId);
   if (!def) return null;
-  const base = BASE_SLIDES[def.slideRole];
+  const base = ROLE_META[def.slideRole];
   const slideId = `${String(idx + 1).padStart(2, "0")}_${def.slideRole}`;
-  const adaptedPurpose = `${base.purpose} (${categoryRu}).`;
+  const suffix = purposeSuffixForSlide(def.slideRole, profile, cluster, input);
+  const adaptedPurpose =
+    `${base.purposeRu} Контекст категории: ${categoryRu}.` +
+    (suffix.length ? ` Дополнительно: ${suffix.join(" ")}` : "");
+
   let tm: CardBuilderGallerySlide["recommendedTextMode"];
+  const mainNoTextCluster =
+    cluster === "classified_mp" ||
+    cluster === "amazon" ||
+    cluster === "lamoda" ||
+    cluster === "classified_listings";
 
   if (def.slideRole === "main_photo") {
-    tm = profile.mainPhotoTextAllowed
-      ? pickTextMode(input.textDensity, profile.mainPhotoRules.recommendedTextDensity)
-      : "none";
+    if (!profile.mainPhotoTextAllowed || mainNoTextCluster) {
+      tm = "none";
+    } else {
+      tm = pickTextMode(input.textDensity, profile.mainPhotoRules.recommendedTextDensity);
+    }
   } else if (def.slideRole === "benefits_infographic") {
     const cap = Math.min(profile.maxBenefitBadges, profile.infographicRules.maxBenefitBadges);
     if (!profile.infographicAllowed || cap <= 0) {
@@ -321,6 +978,11 @@ function buildSlideFromTemplate(
     tm = pickTextMode(input.textDensity, def.defaultTextDensity);
   }
 
+  /** Заглушить лишний текст главного там, где площадка хочет none */
+  if (def.slideRole === "main_photo" && !profile.mainPhotoTextAllowed && input.goal === "main_photo") {
+    tm = "none";
+  }
+
   return {
     slideId,
     title: base.title,
@@ -330,86 +992,184 @@ function buildSlideFromTemplate(
     templateId: def.templateId,
     templateLabel: def.label,
     layoutPreset: def.layoutPreset,
-    overlayRequired: def.overlayRequired,
+    overlayRequired: false,
     textSlots: [...def.textSlots],
     iconSlots: [...def.iconSlots],
+    textRenderMode: "ai_text_in_design",
+    marketplaceProfileId: profile.id,
     recommendedTextMode: tm,
     promptIntent: base.promptIntent,
-    sourceImageMode: input.allowCreativeStylization ? "variant" : base.sourceImageMode,
+    sourceImageMode: input.allowCreativeStylization ? "variant" : base.sourceMode,
   };
 }
 
-function maybeSwapPosterForBanner(templateIds: string[], input: CardBuilderPlanInput): string[] {
-  if (input.marketplace !== "instagram_vk" && input.salesStyle !== "bold_ad") {
-    return templateIds;
+function templatesBenefitsGoal(
+  input: CardBuilderPlanInput,
+  profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
+): string[] {
+  const benefitTid =
+    profile.infographicAllowed
+      ? coerceTemplateAgainstProfile(demoteHeavyInfographic("benefits_grid", cluster), profile, cluster) ??
+        "benefits_grid"
+      : coerceTemplateAgainstProfile(
+          cluster === "lamoda" ? "fashion_catalog" : "texture_closeup",
+          profile,
+          cluster,
+        ) ?? "texture_closeup";
+
+  const mainTid =
+    coerceTemplateAgainstProfile(defaultMainTemplate(cluster), profile, cluster) ?? "hero_clean";
+
+  let seq = uniqRolesPreferred([benefitTid, mainTid], profile, cluster);
+
+  const mustAdds: CardBuilderSlideRole[] = [];
+  if (input.mustShow.includes("details")) mustAdds.push("detail_closeup");
+  else if (input.mustShow.includes("texture")) mustAdds.push("materials");
+
+  for (const r of mustAdds) {
+    const tid = coerceTemplateAgainstProfile(defaultTemplateForSlideRole(r), profile, cluster);
+    if (!tid || seq.some((t) => getCardBuilderTemplate(t)?.slideRole === r)) continue;
+    seq.splice(1, 0, tid);
+    seq = uniqRolesPreferred(seq, profile, cluster);
   }
-  const copy = [...templateIds];
-  const lastIdx = copy.length - 1;
-  const lastId = copy[lastIdx];
-  const lastTpl = lastId ? getCardBuilderTemplate(lastId) : undefined;
-  if (lastTpl?.slideRole === "premium_poster") {
-    copy[lastIdx] = "ad_banner";
-  }
-  return copy;
+
+  return seq;
 }
 
-/** Rule-based галерея: категория → шаблоны слайдов; goal задаёт число кадров. */
+function trimOrExtend(
+  ids: string[],
+  count: number,
+  bucket: PlannerBucket,
+  profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
+): string[] {
+  const n = Math.min(Math.max(count, 1), 8) as 6 | 8;
+  let out = uniqRolesPreferred(ids, profile, cluster);
+
+  if (out.length > n) {
+    out = out.slice(0, n);
+    out = uniqRolesPreferred(out, profile, cluster);
+  }
+
+  if (out.length < n) out = extendToSlideCount(out, n, bucket, profile, cluster);
+  return uniqRolesPreferred(out.slice(0, n), profile, cluster);
+}
+
+/** Публичное API: сборка плана галереи */
 export function buildCardBuilderGalleryPlan(
   input: CardBuilderPlanInput,
   profile: ProductCardMarketplaceProfile,
-): {
-  slides: CardBuilderGallerySlide[];
-} {
+): { slides: CardBuilderGallerySlide[] } {
+  const cluster = plannerCluster(profile.id);
+  const bucket = inferPlannerBucket(input);
   const catRu = categoryLabelRu(input.selectedCategory);
 
-  let templateIds: string[];
+  const slideGoalCount: number =
+    input.goal === "full_gallery_8" ? 8 : input.goal === "full_gallery_6" ? 6 : 1;
+
+  let templateIds: string[] = [];
 
   switch (input.goal) {
-    case "full_gallery_8":
-      templateIds = rolesForFullGalleryFromProfile(profile, 8, input.selectedCategory).map((r) =>
-        defaultTemplateForSlideRole(r),
-      );
-      templateIds = maybeSwapPosterForBanner(templateIds, input);
-      break;
-    case "full_gallery_6":
-      templateIds = rolesForFullGalleryFromProfile(profile, 6, input.selectedCategory).map((r) =>
-        defaultTemplateForSlideRole(r),
-      );
-      templateIds = maybeSwapPosterForBanner(templateIds, input);
-      break;
     case "main_photo":
-      templateIds = [defaultTemplateForSlideRole("main_photo")];
+      templateIds = [
+        coerceTemplateAgainstProfile(defaultMainTemplate(cluster), profile, cluster) ?? "hero_clean",
+      ];
       break;
     case "benefits_info":
-      templateIds = [defaultTemplateForSlideRole("benefits_infographic")];
+      templateIds = templatesBenefitsGoal(input, profile, cluster);
       break;
-    case "dimensions_slide":
-      templateIds = [defaultTemplateForSlideRole("dimensions")];
+    case "dimensions_slide": {
+      const dimTid = coerceTemplateAgainstProfile(defaultTemplateForSlideRole("dimensions"), profile, cluster)!;
+      templateIds = [dimTid];
       break;
+    }
     case "materials_slide":
-      templateIds = [defaultTemplateForSlideRole("materials")];
+      templateIds = [coerceTemplateAgainstProfile(defaultTemplateForSlideRole("materials"), profile, cluster)!];
       break;
     case "lifestyle":
-      templateIds = [defaultTemplateForSlideRole("lifestyle")];
+      templateIds = [
+        coerceTemplateAgainstProfile(
+          cluster === "lamoda" ? "fashion_catalog" : defaultTemplateForSlideRole("lifestyle"),
+          profile,
+          cluster,
+        )!,
+      ];
       break;
     case "detail_closeup":
-      templateIds = [defaultTemplateForSlideRole("detail_closeup")];
+      templateIds = [coerceTemplateAgainstProfile(defaultTemplateForSlideRole("detail_closeup"), profile, cluster)!];
       break;
     case "packaging_kit":
-      templateIds = [defaultTemplateForSlideRole("packaging")];
+      templateIds = [
+        coerceTemplateAgainstProfile(defaultTemplateForSlideRole("packaging"), profile, cluster) ??
+          coerceTemplateAgainstProfile("package_card", profile, cluster)!,
+      ];
       break;
     case "premium_poster":
-      templateIds = [defaultTemplateForSlideRole("premium_poster")];
+      templateIds = [
+        coerceTemplateAgainstProfile(defaultTemplateForSlideRole("premium_poster"), profile, cluster)!,
+      ];
       break;
+    case "full_gallery_6":
+    case "full_gallery_8": {
+      const baseSix = reconcileIngredientSlides(bucketSixTemplates(bucket, input), bucket, input);
+      let draft = uniqRolesPreferred(baseSix, profile, cluster);
+      draft = applyClusterGalleryRules(draft, cluster, profile);
+      draft = injectMustShow(draft, input.mustShow, profile, cluster);
+      draft = injectBenefitsSemantics(draft, input, profile, cluster);
+
+      draft = stripUnsupportedPackaging(
+        draft,
+        packagingReasonRequired(bucket, input.mustShow, cluster),
+        profile,
+        cluster,
+      );
+      draft = removeDimensionsWithoutMeasures(draft, profile, cluster, input.dimensions);
+
+      /** TODO: когда UI будет стабильно оплачивать ровно 8 кадров вне Kuz category-наборов, расширить политику здесь. Сейчас — дотягивание ролями профиля. */
+      draft = trimOrExtend(draft, slideGoalCount === 8 ? 8 : 6, bucket, profile, cluster);
+      draft = maybeSwapPosterForBanner(draft, input);
+
+      templateIds = draft;
+      break;
+    }
     default:
-      templateIds = [defaultTemplateForSlideRole("main_photo")];
+      templateIds = [coerceTemplateAgainstProfile(defaultMainTemplate(cluster), profile, cluster) ?? "hero_clean"];
+      break;
   }
 
-  const slides: CardBuilderGallerySlide[] = [];
+  templateIds =
+    slideGoalCount > 1
+      ? uniqRolesPreferred(
+          reconcileIngredientSlides(
+            stripUnsupportedPackaging(
+              removeDimensionsWithoutMeasures(
+                uniqRolesPreferred([...templateIds], profile, cluster),
+                profile,
+                cluster,
+                input.dimensions,
+              ),
+              packagingReasonRequired(bucket, input.mustShow, cluster),
+              profile,
+              cluster,
+            ),
+            bucket,
+            input,
+          ),
+          profile,
+          cluster,
+        )
+      : templateIds;
+
+  if (slideGoalCount > 1 && input.goal !== "full_gallery_6" && input.goal !== "full_gallery_8") {
+    templateIds = trimOrExtend(templateIds, slideGoalCount, bucket, profile, cluster);
+  }
+
+  const slidesBuilt: CardBuilderGallerySlide[] = [];
   templateIds.forEach((tid, idx) => {
-    const s = buildSlideFromTemplate(tid, idx, input, catRu, profile);
-    if (s) slides.push(s);
+    const slide = buildSlideFromTemplate(tid, idx, input, catRu, profile, cluster);
+    if (slide) slidesBuilt.push(slide);
   });
 
-  return { slides };
+  return { slides: slidesBuilt };
 }

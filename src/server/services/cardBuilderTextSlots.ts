@@ -6,7 +6,7 @@ import {
   CARD_BUILDER_BENEFIT_TAG_ICON,
 } from "@/config/card-builder-benefit-icons";
 import {
-  cardBuilderRoleUserPreviewCaption,
+  cardBuilderSlideUserPreviewCaption,
   getCardBuilderTemplate,
   type CardBuilderTemplateSlideRole,
 } from "@/config/card-builder-templates";
@@ -124,7 +124,7 @@ export function enrichCardBuilderGallerySlides(
       overlayTexts: pack.slots,
       overlayBenefitIcons: pack.benefitIcons,
       needsMoreBenefits: pack.needsMoreBenefits,
-      previewCaption: cardBuilderRoleUserPreviewCaption(tpl.slideRole),
+      previewCaption: cardBuilderSlideUserPreviewCaption(slide.templateId, tpl.slideRole),
     };
   });
 }
@@ -153,13 +153,13 @@ export function enrichSingleSlideAfterTemplateChange(
     ...slide,
     templateLabel: tpl.label,
     layoutPreset: tpl.layoutPreset,
-    overlayRequired: tpl.overlayRequired,
+    overlayRequired: false,
     textSlots: [...tpl.textSlots],
     iconSlots: [...tpl.iconSlots],
     recommendedTextMode: slide.recommendedTextMode,
     overlayTexts: pack.slots,
     overlayBenefitIcons: pack.benefitIcons,
     needsMoreBenefits: pack.needsMoreBenefits,
-    previewCaption: cardBuilderRoleUserPreviewCaption(tpl.slideRole),
+    previewCaption: cardBuilderSlideUserPreviewCaption(slide.templateId, tpl.slideRole),
   };
 }

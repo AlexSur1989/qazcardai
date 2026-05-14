@@ -6,13 +6,25 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { APP_SETTINGS_REGISTRY } from "@/config/app-settings-registry";
+import { PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS } from "@/config/product-card-marketplace-profiles";
 import {
-  PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS,
-} from "@/config/product-card-marketplace-profiles";
-import { buildCardBuilderGalleryPlan } from "@/server/services/productCardBuilderPlan";
+  buildCardBuilderGalleryPlan,
+  type CardBuilderPlanInput,
+} from "@/server/services/productCardBuilderPlan";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
+}
+
+function assertSlideShape(s: ReturnType<typeof buildCardBuilderGalleryPlan>["slides"][number]): void {
+  assert(
+    typeof s.templateId === "string" && s.templateId.trim().length > 1,
+    `У каждого слайда есть templateId (${s.slideId})`,
+  );
+  assert(
+    typeof s.layoutPreset === "string" && s.layoutPreset.trim().length > 0,
+    `У каждого слайда есть layoutPreset (${s.slideId})`,
+  );
 }
 
 const scenariosEntry = APP_SETTINGS_REGISTRY.find((e) => e.key === "PRODUCT_CARD_SCENARIOS");
@@ -43,31 +55,79 @@ assert(Number.isFinite(single) && single > 0, "cardBuilderSingleSlideCredits > 0
 assert(Number.isFinite(g6) && g6 > 0, "cardBuilderGallery6Credits > 0");
 assert(Number.isFinite(g8) && g8 > 0, "cardBuilderGallery8Credits > 0");
 
-const samplePlan = {
-  selectedCategory: "apparel",
-  marketplace: "ozon",
-  goal: "full_gallery_6" as const,
-  preserveProduct: true,
-  preserveAspects: [] as string[],
-  benefits: [] as string[],
-  mustShow: [] as string[],
-  audience: "mass_market",
-  priceSegment: "middle",
-  salesStyle: "light_marketplace",
-  textDensity: "medium",
-};
+function basePlan(overrides: Partial<CardBuilderPlanInput> = {}): CardBuilderPlanInput {
+  return {
+    selectedCategory: "apparel",
+    marketplace: "ozon",
+    goal: "full_gallery_6",
+    preserveProduct: true,
+    preserveAspects: [],
+    benefits: [],
+    mustShow: [],
+    audience: "mass_market",
+    priceSegment: "middle",
+    salesStyle: "light_marketplace",
+    textDensity: "medium",
+    ...overrides,
+  };
+}
+
 const ozonProfile = PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "ozon");
 assert(ozonProfile, "В defaults есть профиль ozon для verify buildCardBuilderGalleryPlan");
-const { slides } = buildCardBuilderGalleryPlan(samplePlan, ozonProfile);
-assert(slides.length >= 6, "buildCardBuilderGalleryPlan(full_gallery_6): минимум 6 слайдов");
-for (const s of slides) {
-  assert(
-    typeof s.templateId === "string" && s.templateId.trim().length > 1,
-    `У каждого слайда есть templateId (${s.slideId})`,
-  );
-}
-const benefitSlides = slides.filter((s) => s.imageRole === "benefits_infographic");
-assert(benefitSlides.length >= 1, "В галерее есть слайд преимуществ");
+const { slides: ozonApparel } = buildCardBuilderGalleryPlan(basePlan(), ozonProfile);
+assert(ozonApparel.length === 6, "buildCardBuilderGalleryPlan(full_gallery_6, ozon): ровно 6 слайдов");
+for (const s of ozonApparel) assertSlideShape(s);
+
+const furniture = buildCardBuilderGalleryPlan(
+  basePlan({ selectedCategory: "home_and_furniture" }),
+  ozonProfile,
+).slides;
+const cosmetics = buildCardBuilderGalleryPlan(
+  basePlan({ selectedCategory: "beauty_and_care" }),
+  ozonProfile,
+).slides;
+assert(
+  furniture.map((x) => x.templateId).join("|") !== cosmetics.map((x) => x.templateId).join("|"),
+  "План мебели и косметики отличается по шаблонам на одной площадке",
+);
+
+const lamoda = PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "lamoda");
+assert(lamoda, "lamoda profile");
+const lamodaSlides = buildCardBuilderGalleryPlan(
+  basePlan({ marketplace: "lamoda", selectedCategory: "apparel" }),
+  lamoda,
+).slides;
+const earlyInfographic = lamodaSlides
+  .slice(0, 2)
+  .some((s) => s.imageRole === "benefits_infographic" && s.templateId === "benefits_grid");
+assert(!earlyInfographic, "Lamoda: в первых двух кадрах нет тяжёлой benefits_grid-инфографики");
+
+const amazon = PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "amazon");
+assert(amazon, "amazon profile");
+const amz = buildCardBuilderGalleryPlan(basePlan({ marketplace: "amazon" }), amazon).slides;
+const amzMain = amz[0];
+assert(amzMain?.imageRole === "main_photo", "Amazon: первый кадр main_photo");
+assert(amzMain?.templateId === "hero_clean", "Amazon: главный шаблон hero_clean");
+assert(amzMain?.recommendedTextMode === "none", "Amazon: главный кадр без текстового режима");
+assert(
+  (amzMain?.purpose ?? "").toLowerCase().includes("бел") &&
+    (amzMain?.purpose ?? "").toLowerCase().includes("amazon"),
+  "Amazon: в purpose есть белый фон и явная отсылка к правилам Amazon",
+);
+
+const ig = PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "instagram_vk");
+assert(ig, "instagram_vk profile");
+const igSlides = buildCardBuilderGalleryPlan(
+  basePlan({ marketplace: "instagram_vk", selectedCategory: "gadgets_and_tech" }),
+  ig,
+).slides;
+const hasLifestyle = igSlides.some((s) => s.imageRole === "lifestyle");
+const hasSocialAdish = igSlides.some(
+  (s) => s.imageRole === "ad_banner" || s.imageRole === "premium_poster",
+);
+assert(hasLifestyle && hasSocialAdish, "Instagram/VK: в плане есть lifestyle и рекламный/постерный кадр");
+
+const benefitSlides = ozonApparel.filter((s) => s.imageRole === "benefits_infographic");
 const allowedBenefitTemplates = new Set([
   "benefits_grid",
   "benefits_left_column",
@@ -81,8 +141,13 @@ for (const s of benefitSlides) {
     `Слайд преимуществ использует допустимый шаблон: ${s.templateId}`,
   );
 }
-const slideIds = slides.map((s) => s.slideId);
+const slideIds = ozonApparel.map((s) => s.slideId);
 assert(new Set(slideIds).size === slideIds.length, "slideId уникальные");
+
+for (const s of ozonApparel) {
+  assert(s.marketplaceProfileId === "ozon", "marketplaceProfileId сохраняется на слайде");
+  assert(s.textRenderMode === "ai_text_in_design", "textRenderMode на слайде");
+}
 
 const genPath = join(process.cwd(), "src/server/services/productCardCardBuilderGeneration.ts");
 const genSrc = readFileSync(genPath, "utf8");

@@ -39,6 +39,42 @@ export type CardBuilderTemplateDefinition = {
 };
 
 export const CARD_BUILDER_TEMPLATES: Record<string, CardBuilderTemplateDefinition> = {
+  /** Реалистичное главное фото объявления (OLX / Avito) */
+  realistic_listing: {
+    templateId: "realistic_listing",
+    label: "Главное фото — объявление",
+    slideRole: "main_photo",
+    recommendedFor: ["olx", "avito"],
+    layoutPreset: "listing_photo_natural",
+    overlayTemplatePreset: "clean_catalog",
+    typographyPreset: "marketplace",
+    overlayTemplate: "bottom_panel",
+    textSlots: ["title"],
+    iconSlots: [],
+    maxBenefits: 0,
+    allowText: false,
+    defaultTextDensity: "none",
+    preserveProductRequired: true,
+    overlayRequired: false,
+  },
+  /** Fashion-/каталожная подача (Lamoda и fashion-акценты) */
+  fashion_catalog: {
+    templateId: "fashion_catalog",
+    label: "Fashion-каталог",
+    slideRole: "lifestyle",
+    recommendedFor: ["lamoda", "premium"],
+    layoutPreset: "fashion_catalog_hero",
+    overlayTemplatePreset: "lifestyle_model",
+    typographyPreset: "fashion",
+    overlayTemplate: "bottom_panel",
+    textSlots: ["title"],
+    iconSlots: [],
+    maxBenefits: 0,
+    allowText: true,
+    defaultTextDensity: "minimal",
+    preserveProductRequired: true,
+    overlayRequired: false,
+  },
   hero_clean: {
     templateId: "hero_clean",
     label: "Главное фото — чистый hero",
@@ -465,41 +501,60 @@ export function defaultTemplateForSlideRole(role: CardBuilderTemplateSlideRole):
 
 export function cardBuilderRoleUserPreviewCaption(role: CardBuilderTemplateSlideRole): string {
   const map: Record<CardBuilderTemplateSlideRole, string> = {
-    main_photo: "Главное фото — товар на чистом фоне",
-    benefits_infographic: "Преимущества — ваши фразы будут встроены в дизайн",
-    materials: "Материалы — акцент на фактуру и качество",
-    dimensions: "Размеры — слайд с характеристиками",
-    lifestyle: "Lifestyle — товар в использовании",
-    premium_poster: "Постер — рекламный слайд",
-    ad_banner: "Рекламный баннер",
-    detail_closeup: "Детали — крупный план",
-    packaging: "Упаковка и комплект",
+    main_photo: "Чистое фото товара для выбранной площадки.",
+    benefits_infographic: "Ваши преимущества будут встроены в дизайн карточки.",
+    materials: "Фактура, качество и детали товара.",
+    dimensions: "Слайд для масштаба и характеристик.",
+    lifestyle: "Товар в использовании для выбранной аудитории.",
+    premium_poster: "Премиальный рекламный слайд.",
+    ad_banner: "Яркая рекламная подача под соцсети или акции.",
+    detail_closeup: "Крупный план узла, фактуры или элемента товара.",
+    packaging: "Упаковка и комплектация без выдумывания состава.",
   };
   return map[role] ?? map.main_photo;
+}
+
+/** Короткая подпись превью: приоритет у шаблона, иначе роль. Без промптов и технических блоков. */
+export function cardBuilderSlideUserPreviewCaption(
+  templateId: string,
+  slideRole: CardBuilderTemplateSlideRole,
+): string {
+  const tpl = templatePreviewCaption(templateId).trim();
+  if (tpl) return tpl;
+  return cardBuilderRoleUserPreviewCaption(slideRole);
 }
 
 /** Короткая подпись для превью галереи (без промптов и технички). */
 export function templatePreviewCaption(templateId: string): string {
   const captions: Partial<Record<string, string>> = {
-    hero_clean: "Товар на чистом фоне",
-    benefits_grid: "До четырёх преимуществ на плашках",
-    benefits_left_column: "Преимущества в колонке",
-    dark_premium_benefits: "Преимущества на тёмном фоне",
-    protection_features: "Защита и свойства на плашках",
-    material_focus: "Фактура, качество и детали",
-    size_range: "Размерный ряд или габариты",
-    dimensions_schema: "Схема размеров",
-    lifestyle_card: "Товар в использовании",
-    comparison_card: "Сравнение и коллауты",
-    package_card: "Упаковка и комплект",
-    premium_poster: "Премиальный рекламный слайд",
-    dark_premium: "Тёмная премиум-подача",
-    ad_banner: "Рекламный баннер",
-    texture_closeup: "Текстура и детали крупным планом",
-    ingredients_effect: "Состав и эффект",
-    feature_callouts: "Функции и акценты",
-    interface_detail: "Интерфейс или ключевая деталь",
-    size_scale: "Масштаб и размеры",
+    realistic_listing: "Натуральное фото товара, как для объявления.",
+    fashion_catalog: "Fashion- или каталожная подача без лишней инфографики.",
+    hero_clean: "Чистое фото товара для выбранной площадки.",
+    benefits_grid: "Ваши преимущества будут встроены в дизайн карточки.",
+    benefits_left_column:
+      "Текст ваших преимуществ — колонкой, без маркетплейсного «борща» из плашек.",
+    dark_premium_benefits:
+      "Эффектные преимущества на контрастном фоне (вторичный кадр, не главное фото).",
+    protection_features: "Подчеркнём свойства и защиту кратко и читабельно.",
+    material_focus: "Фактура, качество и детали материала.",
+    size_range: "Размерный ряд или габариты — только из вашего текста про размеры.",
+    dimensions_schema: "Размер и масштаб — только из указанных вами параметров.",
+    lifestyle_card: "Товар в использовании для выбранной аудитории.",
+    comparison_card:
+      "Сравнение и коллауты только по уже известным фактам из формы.",
+    package_card:
+      "Что входит и как выглядит упаковка — только по вашей комплектации.",
+    premium_poster: "Премиальный рекламный слайд.",
+    dark_premium: "Премиальная постерная подача.",
+    ad_banner: "Яркая рекламная подача под соцсети или акцию.",
+    texture_closeup: "Текстура и ключевые детали без вывода лишних свойств из воздуха.",
+    ingredients_effect:
+      "Состав и эффект — только из вашего текста, без медицинских или лечебных обещаний.",
+    feature_callouts:
+      "Коллауты только по понятным функциям; не выдумываем технические параметры.",
+    interface_detail:
+      "Крупный ракурс элементов управления или характерных деталей.",
+    size_scale: "Размер без выдуманных цифр — акцент на масштаб и читаемую сравнимость.",
   };
-  return captions[templateId] ?? getCardBuilderTemplate(templateId)?.label ?? "";
+  return captions[templateId] ?? "";
 }
