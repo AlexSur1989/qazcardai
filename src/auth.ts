@@ -117,6 +117,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         user.image = res.user.image;
       }
 
+      if (res.telegramIdentityLinked) {
+        await logAuthEventSafe({
+          action: "telegram.identity_linked",
+          provider: "telegram",
+          userId: res.user.id,
+          metadata:
+            typeof p.sub === "string"
+              ? { telegramUserId: p.sub.slice(0, 255) }
+              : undefined,
+        });
+      }
+
       await logAuthEventSafe({
         action: "telegram.sign_in_success",
         provider: "telegram",

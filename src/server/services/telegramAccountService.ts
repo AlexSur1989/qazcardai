@@ -45,7 +45,12 @@ function pickDisplayName(profile: TelegramOidcProfile): string {
 }
 
 export async function resolveTelegramOAuthUser(profile: TelegramOidcProfile): Promise<
-  | { ok: true; user: ResolvedUser }
+  | {
+      ok: true;
+      user: ResolvedUser;
+      /** Создана новая строка UserIdentity telegram в этом запросе (для аудита привязки). */
+      telegramIdentityLinked: boolean;
+    }
   | { ok: false; code: "BLOCKED" | "INACTIVE" | "ERROR" }
 > {
   const sub =
@@ -116,6 +121,7 @@ export async function resolveTelegramOAuthUser(profile: TelegramOidcProfile): Pr
         });
         return {
           kind: "ok" as const,
+          telegramIdentityLinked: false,
           user: {
             id: u.id,
             email: u.email,
@@ -157,6 +163,7 @@ export async function resolveTelegramOAuthUser(profile: TelegramOidcProfile): Pr
 
           return {
             kind: "ok" as const,
+            telegramIdentityLinked: true,
             user: {
               id: byEmail.id,
               email: byEmail.email,
@@ -182,6 +189,7 @@ export async function resolveTelegramOAuthUser(profile: TelegramOidcProfile): Pr
             },
           },
         });
+        let telegramIdentityLinked = false;
         if (!dup) {
           await tx.userIdentity.create({
             data: {
@@ -194,9 +202,11 @@ export async function resolveTelegramOAuthUser(profile: TelegramOidcProfile): Pr
               metadata: { backfill: true } satisfies Prisma.InputJsonObject,
             },
           });
+          telegramIdentityLinked = true;
         }
         return {
           kind: "ok" as const,
+          telegramIdentityLinked,
           user: {
             id: existingSyn.id,
             email: existingSyn.email,
@@ -238,6 +248,7 @@ export async function resolveTelegramOAuthUser(profile: TelegramOidcProfile): Pr
 
       return {
         kind: "ok" as const,
+        telegramIdentityLinked: true,
         user: {
           id: created.id,
           email: created.email,
@@ -250,7 +261,11 @@ export async function resolveTelegramOAuthUser(profile: TelegramOidcProfile): Pr
 
     if (result.kind === "blocked") return { ok: false, code: "BLOCKED" };
     if (result.kind === "inactive") return { ok: false, code: "INACTIVE" };
-    return { ok: true, user: result.user };
+    return {
+      ok: true,
+      user: result.user,
+      telegramIdentityLinked: result.telegramIdentityLinked,
+    };
   } catch {
     return { ok: false, code: "ERROR" };
   }
