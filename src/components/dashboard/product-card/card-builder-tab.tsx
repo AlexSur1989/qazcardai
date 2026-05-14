@@ -70,6 +70,12 @@ type CardBuilderGenHistoryRow = {
   errorMessage?: string;
 };
 
+type CardBuilderBlockPayload = {
+  galleryPlan?: GallerySlide[];
+  generations?: unknown;
+  settings?: Record<string, unknown>;
+};
+
 type Props = {
   hasImage: boolean;
   canUseBackend: boolean;
@@ -134,6 +140,15 @@ export function CardBuilderTab({
   );
   const [genHistory, setGenHistory] = useState<CardBuilderGenHistoryRow[]>([]);
   const [tplBusySlideId, setTplBusySlideId] = useState<string | null>(null);
+
+  /** После успешной гидратации для `projectId` не подставляем saved.* повторно при refresh. */
+  const hydratedProjectIdRef = useRef<string | null>(null);
+  /** Пользователь успел изменить форму до завершения первого fetch — не перезатирать локальный ввод. */
+  const userEditedFormRef = useRef(false);
+
+  const markUserEditedForm = useCallback(() => {
+    userEditedFormRef.current = true;
+  }, []);
 
   const enabledMpIndex = useMemo(() => {
     const m = new Map<string, ProductCardMarketplaceProfile>();
@@ -239,6 +254,152 @@ export function CardBuilderTab({
     ],
   );
 
+  const fetchCardBuilderBlockForProject = useCallback(
+    async (pid: string): Promise<CardBuilderBlockPayload | null> => {
+      if (!canUseBackend) return null;
+      const res = await fetch(`/api/product-card-projects/${pid}`);
+      const parsed = await readJsonSafe<{ project?: { metadata?: { cardBuilder?: CardBuilderBlockPayload } } }>(
+        res,
+      );
+      if (!parsed.ok || !res.ok) return null;
+      return parsed.data.project?.metadata?.cardBuilder ?? null;
+    },
+    [canUseBackend],
+  );
+
+  const applySlidesAndHistoryFromBlock = useCallback((blk: CardBuilderBlockPayload | null) => {
+    const list = blk?.galleryPlan;
+    if (Array.isArray(list) && list.length) {
+      setSlides(list as GallerySlide[]);
+      setActiveSlideId((prev) => {
+        if (prev && list.some((s: GallerySlide) => s.slideId === prev)) return prev;
+        return (list[0] as GallerySlide).slideId;
+      });
+    }
+    const rawGens = blk?.generations;
+    if (Array.isArray(rawGens)) {
+      const rows: CardBuilderGenHistoryRow[] = [];
+      for (const x of rawGens) {
+        if (!x || typeof x !== "object") continue;
+        const r = x as Record<string, unknown>;
+        const id = typeof r.generationId === "string" ? r.generationId.trim() : "";
+        const slideId = typeof r.slideId === "string" ? r.slideId.trim() : "";
+        if (!id || !slideId) continue;
+        const row: CardBuilderGenHistoryRow = {
+          generationId: id,
+          slideId,
+        };
+        if (typeof r.imageRole === "string") row.imageRole = r.imageRole;
+        if (typeof r.createdAt === "string") row.createdAt = r.createdAt;
+        if (typeof r.status === "string") row.status = r.status;
+        if (typeof r.errorMessage === "string" && r.errorMessage.trim()) {
+          row.errorMessage = r.errorMessage.trim().slice(0, 320);
+        }
+        rows.push(row);
+      }
+      setGenHistory(rows);
+    } else {
+      setGenHistory([]);
+    }
+  }, []);
+
+  const applyHydratedSettingsFromSaved = useCallback(
+    (saved: Record<string, unknown>, mpIndex: Map<string, ProductCardMarketplaceProfile>) => {
+      if (typeof saved.languageMode === "string" && saved.languageMode.trim()) {
+        setLanguageMode(saved.languageMode.trim());
+      }
+      if (typeof saved.subtitle === "string") setSubtitle(saved.subtitle);
+      if (typeof saved.dimensions === "string") setDimensionsUser(saved.dimensions);
+
+      if (typeof saved.marketplace === "string" && saved.marketplace.trim()) {
+        setMarketplace(saved.marketplace.trim());
+      }
+      if (typeof saved.goal === "string" && saved.goal.trim()) setGoal(saved.goal.trim());
+
+      if (typeof saved.preserveProduct === "boolean") setPreserveProduct(saved.preserveProduct);
+      if (Array.isArray(saved.preserveAspects)) {
+        setPreserveAspects(saved.preserveAspects.filter((x): x is string => typeof x === "string"));
+      }
+      if (typeof saved.allowCreativeStylization === "boolean") {
+        setCreativeStyle(saved.allowCreativeStylization);
+      }
+
+      if (Array.isArray(saved.benefits)) {
+        setBenefitsSel(saved.benefits.filter((x): x is string => typeof x === "string"));
+      } else if (Array.isArray(saved.semanticBenefits)) {
+        setBenefitsSel(saved.semanticBenefits.filter((x): x is string => typeof x === "string"));
+      }
+
+      const extra =
+        typeof saved.benefitsExtra === "string"
+          ? saved.benefitsExtra
+          : typeof saved.additionalBenefits === "string"
+            ? saved.additionalBenefits
+            : "";
+      if (extra.trim()) setBenefitsExtra(extra);
+
+      if (Array.isArray(saved.mustShow)) {
+        setMustSel(saved.mustShow.filter((x): x is string => typeof x === "string"));
+      }
+      if (typeof saved.audience === "string" && saved.audience.trim()) {
+        setAudience(saved.audience.trim());
+      }
+      if (typeof saved.priceSegment === "string" && saved.priceSegment.trim()) {
+        setPriceSegment(saved.priceSegment.trim());
+      }
+      if (typeof saved.salesStyle === "string" && saved.salesStyle.trim()) {
+        setSalesStyle(saved.salesStyle.trim());
+      }
+
+      if (typeof saved.textDensity === "string" && saved.textDensity.trim()) {
+        const mpKey =
+          typeof saved.marketplace === "string" && saved.marketplace.trim()
+            ? saved.marketplace.trim()
+            : "ozon";
+        const prof = mpIndex.get(mpKey);
+        const reco = prof?.mainPhotoRules.recommendedTextDensity ?? "medium";
+        setDensityStash({
+          key: `${mpKey}|${reco}`,
+          value: saved.textDensity.trim(),
+        });
+      }
+    },
+    [],
+  );
+
+  /** Гидратация полей формы только при первом заходе на проект или после смены projectId. */
+  const hydrateFormFromServer = useCallback(async () => {
+    const pid = projectId;
+    if (!pid || !canUseBackend) return;
+    const blk = await fetchCardBuilderBlockForProject(pid);
+    if (pid !== projectId) return;
+    const saved = blk?.settings;
+    const needsFormHydrate = hydratedProjectIdRef.current !== pid;
+    if (needsFormHydrate && saved && typeof saved === "object" && !userEditedFormRef.current) {
+      applyHydratedSettingsFromSaved(saved, enabledMpIndex);
+    }
+    if (needsFormHydrate) {
+      hydratedProjectIdRef.current = pid;
+    }
+    applySlidesAndHistoryFromBlock(blk);
+  }, [
+    projectId,
+    canUseBackend,
+    fetchCardBuilderBlockForProject,
+    enabledMpIndex,
+    applyHydratedSettingsFromSaved,
+    applySlidesAndHistoryFromBlock,
+  ]);
+
+  /** Обновление плана галереи и истории генераций без перезаписи полей формы. */
+  const refreshHistoryAndPlanStatus = useCallback(async () => {
+    const pid = projectId;
+    if (!pid || !canUseBackend) return;
+    const blk = await fetchCardBuilderBlockForProject(pid);
+    if (pid !== projectId) return;
+    applySlidesAndHistoryFromBlock(blk);
+  }, [projectId, canUseBackend, fetchCardBuilderBlockForProject, applySlidesAndHistoryFromBlock]);
+
   const runPlan = useCallback(async () => {
     if (!projectId || !selectedCategory) return;
     setPlanLoading(true);
@@ -262,10 +423,12 @@ export function CardBuilderTab({
       setSlides(list);
       setActiveSlideId(list[0]?.slideId ?? null);
       cbPricingSnapRef.current.lastPlanHash = null;
+      userEditedFormRef.current = false;
+      await refreshHistoryAndPlanStatus();
     } finally {
       setPlanLoading(false);
     }
-  }, [projectId, selectedCategory, planPayload]);
+  }, [projectId, selectedCategory, planPayload, refreshHistoryAndPlanStatus]);
 
   const runEstimate = useCallback(
     async (mode: "single_slide" | "full_gallery") => {
@@ -338,80 +501,6 @@ export function CardBuilderTab({
     }
     return null;
   }, []);
-
-  const syncPlanAndHistoryFromServer = useCallback(async () => {
-    if (!projectId || !canUseBackend) return;
-    const res = await fetch(`/api/product-card-projects/${projectId}`);
-    const parsed = await readJsonSafe<{
-      project?: {
-        metadata?: {
-          cardBuilder?: {
-            galleryPlan?: GallerySlide[];
-            generations?: unknown;
-            settings?: Record<string, unknown>;
-          };
-        };
-      };
-    }>(res);
-    if (!parsed.ok || !res.ok) return;
-    const blk = parsed.data.project?.metadata?.cardBuilder;
-    const list = blk?.galleryPlan;
-    if (Array.isArray(list) && list.length) {
-      setSlides(list as GallerySlide[]);
-      setActiveSlideId((prev) => {
-        if (prev && list.some((s: GallerySlide) => s.slideId === prev)) return prev;
-        return (list[0] as GallerySlide).slideId;
-      });
-    }
-    const rawGens = blk?.generations;
-    if (Array.isArray(rawGens)) {
-      const rows: CardBuilderGenHistoryRow[] = [];
-      for (const x of rawGens) {
-        if (!x || typeof x !== "object") continue;
-        const r = x as Record<string, unknown>;
-        const id = typeof r.generationId === "string" ? r.generationId.trim() : "";
-        const slideId = typeof r.slideId === "string" ? r.slideId.trim() : "";
-        if (!id || !slideId) continue;
-        const row: CardBuilderGenHistoryRow = {
-          generationId: id,
-          slideId,
-        };
-        if (typeof r.imageRole === "string") row.imageRole = r.imageRole;
-        if (typeof r.createdAt === "string") row.createdAt = r.createdAt;
-        if (typeof r.status === "string") row.status = r.status;
-        if (typeof r.errorMessage === "string" && r.errorMessage.trim()) {
-          row.errorMessage = r.errorMessage.trim().slice(0, 320);
-        }
-        rows.push(row);
-      }
-      setGenHistory(rows);
-    } else {
-      setGenHistory([]);
-    }
-
-    const saved = blk?.settings;
-    if (saved && typeof saved === "object") {
-      const lm = saved.languageMode;
-      if (typeof lm === "string" && lm.trim()) setLanguageMode(lm.trim());
-      if (typeof saved.subtitle === "string") setSubtitle(saved.subtitle);
-      if (typeof saved.dimensions === "string") setDimensionsUser(saved.dimensions);
-      if (typeof saved.marketplace === "string" && saved.marketplace.trim())
-        setMarketplace(saved.marketplace.trim());
-      if (typeof saved.goal === "string" && saved.goal.trim()) setGoal(saved.goal.trim());
-      if (typeof saved.textDensity === "string" && saved.textDensity.trim()) {
-        const mpKey =
-          typeof saved.marketplace === "string" && saved.marketplace.trim()
-            ? saved.marketplace.trim()
-            : marketplace;
-        const prof = enabledMpIndex.get(mpKey);
-        const reco = prof?.mainPhotoRules.recommendedTextDensity ?? "medium";
-        setDensityStash({
-          key: `${mpKey}|${reco}`,
-          value: saved.textDensity.trim(),
-        });
-      }
-    }
-  }, [projectId, canUseBackend, enabledMpIndex, marketplace]);
 
   const changeSlideTemplate = useCallback(
     async (slideId: string, templateId: string) => {
@@ -509,12 +598,12 @@ export function CardBuilderTab({
           ...prev,
           [slideId]: { status: url ? "done" : "error", url },
         }));
-        await syncPlanAndHistoryFromServer();
+        await refreshHistoryAndPlanStatus();
       } finally {
         setGenBusy(false);
       }
     },
-    [projectId, pollGen, syncPlanAndHistoryFromServer],
+    [projectId, pollGen, refreshHistoryAndPlanStatus],
   );
 
   const generateAll = useCallback(async () => {
@@ -577,13 +666,44 @@ export function CardBuilderTab({
       }
     } finally {
       setBatchBusy(false);
-      await syncPlanAndHistoryFromServer();
+      await refreshHistoryAndPlanStatus();
     }
-  }, [projectId, pollGen, runEstimate, syncPlanAndHistoryFromServer]);
+  }, [projectId, pollGen, runEstimate, refreshHistoryAndPlanStatus]);
 
   useEffect(() => {
-    void Promise.resolve().then(() => syncPlanAndHistoryFromServer());
-  }, [syncPlanAndHistoryFromServer]);
+    hydratedProjectIdRef.current = null;
+    userEditedFormRef.current = false;
+    void Promise.resolve().then(() => {
+      setMarketplace("ozon");
+      setGoal("full_gallery_6");
+      setPreserveProduct(true);
+      setPreserveAspects(["shape", "color", "logo", "proportions"]);
+      setCreativeStyle(false);
+      setBenefitsSel([]);
+      setBenefitsExtra("");
+      setSubtitle("");
+      setDimensionsUser("");
+      setLanguageMode("auto");
+      setMustSel(["texture", "details"]);
+      setAudience("mass_market");
+      setPriceSegment("middle");
+      setSalesStyle("light_marketplace");
+      setDensityStash({ key: "", value: "medium" });
+      setSlides([]);
+      setActiveSlideId(null);
+      setPlanError(null);
+      setEstimateSingle(null);
+      setEstimateGallery(null);
+      setSlideGen({});
+      setGenHistory([]);
+      cbPricingSnapRef.current = { lastPlanHash: null, singleCredits: null, galleryCredits: null };
+    });
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId || !canUseBackend) return;
+    void Promise.resolve().then(() => void hydrateFormFromServer());
+  }, [projectId, canUseBackend, enabledMpIndex, hydrateFormFromServer]);
 
   if (!hasImage) return null;
 
@@ -626,7 +746,10 @@ export function CardBuilderTab({
                 id="pc-marketplace"
                 className={nativeFieldClass}
                 value={coercedMarketplace}
-                onChange={(e) => setMarketplace(e.target.value)}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  setMarketplace(e.target.value);
+                }}
               >
                 {CARD_BUILDER_MARKETPLACES.filter((m) => enabledMpIndex.get(m.id)?.enabled !== false).map(
                   (m) => (
@@ -643,7 +766,10 @@ export function CardBuilderTab({
                 id="pc-goal"
                 className={nativeFieldClass}
                 value={effectiveGoal}
-                onChange={(e) => setGoal(e.target.value)}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  setGoal(e.target.value);
+                }}
               >
                 {goalChoices.map((g) => (
                   <option key={g.id} value={g.id}>
@@ -689,7 +815,10 @@ export function CardBuilderTab({
                 id="pc-preserve"
                 type="checkbox"
                 checked={preserveProduct}
-                onChange={(e) => setPreserveProduct(e.target.checked)}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  setPreserveProduct(e.target.checked);
+                }}
                 className="border-input accent-primary size-4 shrink-0 rounded border"
               />
               <Label htmlFor="pc-preserve">Сохранять товар без изменений</Label>
@@ -704,6 +833,7 @@ export function CardBuilderTab({
                     type="checkbox"
                     checked={preserveAspects.includes(a.id)}
                     onChange={(e) => {
+                      markUserEditedForm();
                       const on = e.target.checked;
                       setPreserveAspects((prev) =>
                         on ? [...prev, a.id] : prev.filter((x) => x !== a.id),
@@ -720,7 +850,10 @@ export function CardBuilderTab({
                 id="pc-creative"
                 type="checkbox"
                 checked={creativeStyle}
-                onChange={(e) => setCreativeStyle(e.target.checked)}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  setCreativeStyle(e.target.checked);
+                }}
                 className="border-input accent-primary size-4 shrink-0 rounded border"
               />
               <Label htmlFor="pc-creative">Разрешить креативную стилизацию</Label>
@@ -753,6 +886,7 @@ export function CardBuilderTab({
                     type="checkbox"
                     checked={benefitsSel.includes(b.id)}
                     onChange={(e) => {
+                      markUserEditedForm();
                       const on = e.target.checked;
                       setBenefitsSel((prev) =>
                         on ? [...prev, b.id] : prev.filter((x) => x !== b.id),
@@ -768,7 +902,10 @@ export function CardBuilderTab({
               <Label>Дополнительные преимущества</Label>
               <Textarea
                 value={benefitsExtra}
-                onChange={(e) => setBenefitsExtra(e.target.value)}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  setBenefitsExtra(e.target.value);
+                }}
                 rows={2}
                 className="rounded-xl"
               />
@@ -778,7 +915,10 @@ export function CardBuilderTab({
               <Input
                 id="pc-subtitle"
                 value={subtitle}
-                onChange={(e) => setSubtitle(e.target.value)}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  setSubtitle(e.target.value);
+                }}
                 maxLength={300}
                 className="rounded-xl"
                 placeholder="Короткая подпись"
@@ -789,7 +929,10 @@ export function CardBuilderTab({
               <Textarea
                 id="pc-dimensions"
                 value={dimensionsUser}
-                onChange={(e) => setDimensionsUser(e.target.value)}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  setDimensionsUser(e.target.value);
+                }}
                 rows={2}
                 maxLength={500}
                 className="rounded-xl"
@@ -802,7 +945,10 @@ export function CardBuilderTab({
                 id="pc-lang"
                 className={nativeFieldClass}
                 value={languageMode}
-                onChange={(e) => setLanguageMode(e.target.value)}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  setLanguageMode(e.target.value);
+                }}
               >
                 {CARD_BUILDER_LANGUAGE_MODES.map((l) => (
                   <option key={l.id} value={l.id}>
@@ -827,6 +973,7 @@ export function CardBuilderTab({
                       type="checkbox"
                       checked={mustSel.includes(m.id)}
                       onChange={(e) => {
+                        markUserEditedForm();
                         const on = e.target.checked;
                         setMustSel((prev) =>
                           on ? [...prev, m.id] : prev.filter((x) => x !== m.id),
@@ -853,7 +1000,10 @@ export function CardBuilderTab({
                 id="pc-audience"
                 className={nativeFieldClass}
                 value={audience}
-                onChange={(e) => setAudience(e.target.value)}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  setAudience(e.target.value);
+                }}
               >
                 {CARD_BUILDER_AUDIENCES.map((a) => (
                   <option key={a.id} value={a.id}>
@@ -868,7 +1018,10 @@ export function CardBuilderTab({
                 id="pc-price-segment"
                 className={nativeFieldClass}
                 value={priceSegment}
-                onChange={(e) => setPriceSegment(e.target.value)}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  setPriceSegment(e.target.value);
+                }}
               >
                 {CARD_BUILDER_PRICE_SEGMENTS.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -883,7 +1036,10 @@ export function CardBuilderTab({
                 id="pc-sales-style"
                 className={nativeFieldClass}
                 value={salesStyle}
-                onChange={(e) => setSalesStyle(e.target.value)}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  setSalesStyle(e.target.value);
+                }}
               >
                 {CARD_BUILDER_SALES_STYLES.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -898,7 +1054,10 @@ export function CardBuilderTab({
                 id="pc-text-density"
                 className={nativeFieldClass}
                 value={effectiveTextDensity}
-                onChange={(e) => setDensityStash({ key: densityRecoKey, value: e.target.value })}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  setDensityStash({ key: densityRecoKey, value: e.target.value });
+                }}
               >
                 {densityChoices.map((t) => (
                   <option key={t.id} value={t.id}>
