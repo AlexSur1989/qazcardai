@@ -1,6 +1,9 @@
 import "server-only";
 
 import {
+  hasUserDimensionMeasures,
+} from "@/config/card-builder-template-allowlist";
+import {
   CARD_BUILDER_AUDIENCES,
   CARD_BUILDER_MARKETPLACES,
   CARD_BUILDER_PRESERVE_ASPECTS,
@@ -369,6 +372,53 @@ export function getSlideRoleInstruction(slideRole: string, templateId?: string):
         `Слайд (роль ${slideRole}): коммерческий кадр; товар узнаваем; дизайн гибкий, текст клиента неизменяем.`,
       ].join("\n");
   }
+}
+
+/** Уточнение промпта по конкретному templateId внутри роли слайда. */
+export function getTemplateInstruction(templateId: string): string {
+  const m: Record<string, string> = {
+    texture_closeup:
+      "Покажи фактуру, материал, поверхность и важные детали крупным планом. Не выдумывай свойства материала.",
+    fabric_closeup:
+      "Покажи ткань, швы, фактуру, посадку или фурнитуру. Не выдумывай состав ткани.",
+    interface_detail:
+      "Покажи экран, кнопку, разъём, панель управления или техническую деталь. Не выдумывай функции и характеристики.",
+    feature_callouts:
+      "Покажи функции товара через аккуратные выноски. Используй только функции, указанные пользователем в locked phrases или явных формулировках.",
+    ingredients_effect:
+      "Покажи состав или эффект только если пользователь указал эти данные в тексте. Не делать медицинские или лечебные обещания; не добавлять БЖУ и health claims без исходного текста.",
+    fashion_catalog:
+      "Сделай fashion/catalog карточку без тяжёлой инфографики, с акцентом на внешний вид, посадку и материал.",
+    interior_lifestyle:
+      "Товар в реалистичном интерьерном контексте; без перегруженных маркетплейсных табло и лишней инфографики.",
+    hero_clean:
+      "Чистый каталожный кадр: товар узнаваем, фон спокойный; не добавляй рекламные утверждения без locked phrases.",
+    realistic_listing:
+      "Реалистичное фото объявления без глянцевой рекламы и перегруженной инфографики.",
+    premium_poster:
+      "Премиальный рекламный слайд без замены SKU; не добавляй неподтверждённые claims вне точного текста пользователя.",
+    ad_banner:
+      "Рекламный баннер с сильной композицией; используй только текст и свойства, указанные пользователем в locked phrases.",
+    dimensions_schema:
+      "Размеры и габариты только если пользователь указал их в форме или locked phrases; не выдумывай миллиметры, дюймы и схемы с цифрами.",
+    size_scale:
+      "Покажи масштаб товара визуально; без точных цифр, если пользователь не указал размеры в тексте формы.",
+    size_range:
+      "Размерный ряд — только если пользователь дал текстовые размеры или locked phrases с ними; не придумывай SKU/размерную сетку.",
+    lifestyle_card:
+      "Естественный lifestyle: сцена поддерживает товар без выдуманных свойств продукта.",
+    material_focus:
+      "Акцент на материале и качестве; не добавляй химический состав или характеристики без пользовательского текста.",
+    package_card:
+      "Упаковка и комплект честно по референсу; не придумывай состав, объём и маркировку без исходного текста.",
+    benefits_grid:
+      "Инфографика преимуществ только по locked phrases клиента.",
+    comparison_card:
+      "Сравнение и коллауты только по известным фактам пользователя.",
+    protection_features:
+      "Акцент на защитных свойствах кратко; без технических параметров без текста клиента.",
+  };
+  return (m[templateId.trim()] ?? "").trim();
 }
 
 export function getMarketplaceInstruction(marketplace: string): string {
@@ -856,11 +906,16 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
   const mainPhotoLocksText =
     input.slideRole === "main_photo" && profile ? !profile.mainPhotoTextAllowed : false;
 
+  const dimsForLockedPhrases =
+    input.slideRole === "dimensions" && !hasUserDimensionMeasures(input.dimensions ?? null)
+      ? undefined
+      : input.dimensions;
+
   const { phrases, validationErrors } = collectExactTextPhrases({
     productTitle: input.productTitle,
     subtitle: input.subtitle,
     additionalBenefits: input.additionalBenefits,
-    dimensions: input.dimensions,
+    dimensions: dimsForLockedPhrases,
     slideRole: input.slideRole,
     textDensity: input.textDensity ?? "medium",
     omitUserLockedText: mainPhotoLocksText,
@@ -875,7 +930,7 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
     productTitle: input.productTitle,
     subtitle: input.subtitle,
     additionalBenefits: input.additionalBenefits,
-    dimensions: input.dimensions,
+    dimensions: dimsForLockedPhrases,
   });
 
   const layoutNote =
@@ -886,10 +941,17 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
   const marketplaceInner = marketplacePromptBody(input.marketplace, input.slideRole, profile);
   const marketplaceBlock = ["=== 3) MARKETPLACE_INSTRUCTION ===", marketplaceInner].join("\n\n");
 
+  const templateSpecific = input.templateId ? getTemplateInstruction(input.templateId) : "";
+
   const slideRoleBlock = [
     "=== 4) SLIDE_ROLE_INSTRUCTION ===",
     getSlideRoleInstruction(input.slideRole, input.templateId),
   ].join("\n\n");
+
+  const templateInstructionBlock =
+    templateSpecific.length > 0
+      ? [`=== 4d) TEMPLATE_SPECIFIC (${input.templateId}) ===`, templateSpecific].join("\n\n")
+      : "";
 
   const accentsBlock = semanticSellingAccentsSection(input.benefits ?? []);
   const mustShowBlock = mustShowVisualRequirementsSection(input.mustShow ?? []);
@@ -922,6 +984,7 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
     productIdentityLockSection(input),
     marketplaceBlock,
     slideRoleBlock,
+    templateInstructionBlock,
     accentsBlock,
     mustShowBlock,
     salesStyleBlock,

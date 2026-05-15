@@ -22,6 +22,10 @@ import {
   listTemplatesForSlideRole,
   type CardBuilderTemplateSlideRole,
 } from "@/config/card-builder-templates";
+import {
+  getAllowedTemplatesForSlide,
+  hasUserDimensionMeasures,
+} from "@/config/card-builder-template-allowlist";
 import { readJsonSafe } from "@/lib/fetch-json-safe";
 import {
   IMAGE_GENERATION_POLL_INTERVAL_MS,
@@ -410,7 +414,11 @@ export function CardBuilderTab({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(planPayload),
       });
-      const parsed = await readJsonSafe<{ slides?: GallerySlide[]; error?: string }>(res);
+      const parsed = await readJsonSafe<{
+        slides?: GallerySlide[];
+        error?: string;
+        planWarning?: string;
+      }>(res);
       if (!parsed.ok) {
         setPlanError(parsed.message);
         return;
@@ -418,6 +426,9 @@ export function CardBuilderTab({
       if (!res.ok) {
         setPlanError(parsed.data.error ?? "Не удалось сохранить структуру");
         return;
+      }
+      if (parsed.data.planWarning?.trim()) {
+        toast.message(parsed.data.planWarning.trim(), { duration: 10_000 });
       }
       const list = parsed.data.slides ?? [];
       setSlides(list);
@@ -1208,7 +1219,17 @@ export function CardBuilderTab({
                 const st = slideGen[s.slideId]?.status ?? "не сгенерировано";
                 const url = slideGen[s.slideId]?.url;
                 const active = activeSlideId === s.slideId;
-                const tplOptions = listTemplatesForSlideRole(s.imageRole as CardBuilderTemplateSlideRole);
+                const mpProf = enabledMpIndex.get(coercedMarketplace);
+                const tplOptions = mpProf
+                  ? getAllowedTemplatesForSlide({
+                      categoryKey: selectedCategory ?? "other",
+                      marketplaceProfile: mpProf,
+                      imageRole: s.imageRole as CardBuilderTemplateSlideRole,
+                      currentTemplateId: s.templateId,
+                      hasConcreteDimensions: hasUserDimensionMeasures(dimensionsUser),
+                      mustShowScale: mustSel.includes("scale"),
+                    })
+                  : listTemplatesForSlideRole(s.imageRole as CardBuilderTemplateSlideRole);
                 const tplBusy = tplBusySlideId === s.slideId;
                 return (
                   <div

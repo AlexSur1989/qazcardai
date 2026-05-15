@@ -1,4 +1,14 @@
 import {
+  hasUserDimensionMeasures,
+  resolveTemplateWithFallback,
+} from "@/config/card-builder-template-allowlist";
+import {
+  inferIngredientClaimsFromClientText,
+  inferPlannerBucket,
+  pickGalleryTemplateSequenceForPlan,
+  type PlannerBucket,
+} from "@/config/card-builder-gallery-sequences";
+import {
   defaultTemplateForSlideRole,
   getCardBuilderTemplate,
   type CardBuilderTemplateSlideRole,
@@ -121,16 +131,6 @@ export type CardBuilderPlanInput = {
   cardBuilderTargetSize?: string;
 };
 
-type PlannerBucket =
-  | "furniture"
-  | "apparel_clothing"
-  | "footwear"
-  | "jewelry_accessories"
-  | "beauty"
-  | "gadgets"
-  | "food"
-  | "universal";
-
 type MarketplacePlannerCluster =
   | "classified_mp"
   | "amazon"
@@ -246,119 +246,6 @@ function plannerCluster(marketplaceId: string): MarketplacePlannerCluster {
       return "social";
     default:
       return "neutral";
-  }
-}
-
-function inferFootwearFromClientText(input: CardBuilderPlanInput): boolean {
-  const t =
-    `${input.subtitle ?? ""} ${input.benefitsExtra ?? ""} ${input.additionalBenefits ?? ""}`.trim();
-  if (!t) return false;
-  const re =
-    /\b(?:обувь|ботинк|туфл|лоферы|босоножк|сапог|бутс|sandals|sneakers|boots)\b/ui;
-  return re.test(t);
-}
-
-function inferIngredientClaimsFromClientText(input: CardBuilderPlanInput): boolean {
-  const t =
-    `${input.subtitle ?? ""} ${input.benefitsExtra ?? ""} ${input.additionalBenefits ?? ""}`.trim();
-  if (!t) return false;
-  return /ингредиент|состав|актив\b|formula|spf|спф|extract|экстракт/ui.test(t);
-}
-
-function inferPlannerBucket(input: CardBuilderPlanInput): PlannerBucket {
-  const cat = input.selectedCategory;
-  if (cat === "home_and_furniture") return "furniture";
-  if (cat === "accessories") return "jewelry_accessories";
-  if (cat === "beauty_and_care") return "beauty";
-  if (cat === "gadgets_and_tech") return "gadgets";
-  if (cat === "food_and_drinks") return "food";
-  if (cat === "apparel") return inferFootwearFromClientText(input) ? "footwear" : "apparel_clothing";
-  return "universal";
-}
-
-function bucketSixTemplates(bucket: PlannerBucket, input: CardBuilderPlanInput): string[] {
-  switch (bucket) {
-    case "furniture":
-      return [
-        "hero_clean",
-        "lifestyle_card",
-        "material_focus",
-        "dimensions_schema",
-        "benefits_grid",
-        "premium_poster",
-      ];
-    case "apparel_clothing":
-      return [
-        "hero_clean",
-        "lifestyle_card",
-        "material_focus",
-        "size_range",
-        "texture_closeup",
-        "premium_poster",
-      ];
-    case "footwear":
-      return [
-        "hero_clean",
-        "lifestyle_card",
-        "material_focus",
-        "protection_features",
-        "texture_closeup",
-        "premium_poster",
-      ];
-    case "beauty":
-      return inferIngredientClaimsFromClientText(input)
-        ? [
-            "hero_clean",
-            "texture_closeup",
-            "benefits_grid",
-            "ingredients_effect",
-            "lifestyle_card",
-            "premium_poster",
-          ]
-        : [
-            "hero_clean",
-            "texture_closeup",
-            "benefits_grid",
-            "material_focus",
-            "lifestyle_card",
-            "premium_poster",
-          ];
-    case "gadgets":
-      return [
-        "hero_clean",
-        "feature_callouts",
-        "interface_detail",
-        "size_scale",
-        "lifestyle_card",
-        "ad_banner",
-      ];
-    case "food":
-      return [
-        "hero_clean",
-        "package_card",
-        "ingredients_effect",
-        "benefits_grid",
-        "lifestyle_card",
-        "premium_poster",
-      ];
-    case "jewelry_accessories":
-      return [
-        "hero_clean",
-        "premium_poster",
-        "texture_closeup",
-        "material_focus",
-        "lifestyle_card",
-        "package_card",
-      ];
-    default:
-      return [
-        "hero_clean",
-        "benefits_grid",
-        "material_focus",
-        "dimensions_schema",
-        "lifestyle_card",
-        "premium_poster",
-      ];
   }
 }
 
@@ -830,16 +717,96 @@ function stripUnsupportedPackaging(
 }
 
 /** Без габаритов в форме сохраняем кадр «размеры», дисклеймер в purposeSuffixForSlide. */
+function sanitizeGalleryTemplateIds(
+  templateIds: string[],
+  input: CardBuilderPlanInput,
+  profile: ProductCardMarketplaceProfile,
+): string[] {
+  const hasDims = hasUserDimensionMeasures(input.dimensions);
+  const mustScale = input.mustShow.includes("scale");
+  return templateIds.map((tid) => {
+    const def = getCardBuilderTemplate(tid);
+    if (!def) return tid;
+    return resolveTemplateWithFallback(tid, {
+      categoryKey: input.selectedCategory,
+      marketplaceProfile: profile,
+      imageRole: def.slideRole,
+      hasConcreteDimensions: hasDims,
+      mustShowScale: mustScale,
+    });
+  });
+}
+
+/** Если нет цифр в поле размеров — не держать схемы с выдуманными мм; scale → только size_scale. */
 function removeDimensionsWithoutMeasures(
   templateIds: string[],
-  _profile: ProductCardMarketplaceProfile,
-  _cluster: MarketplacePlannerCluster,
-  _dims?: string,
+  profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
+  input: CardBuilderPlanInput,
 ): string[] {
-  void _profile;
-  void _cluster;
-  void _dims;
-  return templateIds;
+  const hasDims = hasUserDimensionMeasures(input.dimensions);
+  const needsScale = input.mustShow.includes("scale");
+  if (hasDims) return templateIds;
+
+  function roleOf(tid: string): CardBuilderSlideRole | null {
+    return getCardBuilderTemplate(tid)?.slideRole ?? null;
+  }
+
+  const isDimIdx = templateIds.map((tid) => getCardBuilderTemplate(tid)?.slideRole === "dimensions");
+
+  const out: string[] = templateIds.map((tid, i) => {
+    if (!isDimIdx[i]) return tid;
+    if (needsScale) {
+      return coerceTemplateAgainstProfile("size_scale", profile, cluster) ?? tid;
+    }
+    return tid;
+  });
+
+  if (!needsScale) {
+    const benefitTid = demoteHeavyInfographic(
+      coerceTemplateAgainstProfile("benefits_grid", profile, cluster) ?? "benefits_grid",
+      cluster,
+    );
+
+    for (let i = 0; i < out.length; i++) {
+      if (!isDimIdx[i]) continue;
+
+      const othersRoles = new Set(
+        out
+          .map((t, j) => (j === i ? null : roleOf(t)))
+          .filter((r): r is CardBuilderSlideRole => Boolean(r)),
+      );
+
+      const ordered = [
+        coerceTemplateAgainstProfile(benefitTid, profile, cluster),
+        coerceTemplateAgainstProfile("texture_closeup", profile, cluster),
+        coerceTemplateAgainstProfile("material_focus", profile, cluster),
+        coerceTemplateAgainstProfile("lifestyle_card", profile, cluster),
+        coerceTemplateAgainstProfile("package_card", profile, cluster),
+        coerceTemplateAgainstProfile("size_scale", profile, cluster),
+      ].filter((x): x is string => Boolean(x));
+
+      const uniqCandidates: string[] = [];
+      const seen = new Set<string>();
+      for (const c of ordered) {
+        if (seen.has(c)) continue;
+        seen.add(c);
+        uniqCandidates.push(c);
+      }
+
+      const picked =
+        uniqCandidates.find((c) => {
+          const r = roleOf(c);
+          return r && !othersRoles.has(r);
+        }) ??
+        coerceTemplateAgainstProfile("size_scale", profile, cluster) ??
+        templateIds[i]!;
+
+      out[i] = picked;
+    }
+  }
+
+  return out;
 }
 
 function maybeSwapPosterForBanner(templateIds: string[], input: CardBuilderPlanInput): string[] {
@@ -918,7 +885,7 @@ function purposeSuffixForSlide(
 
   if (input.preserveProduct) bits.push("Сохраняем узнаваемость товара там, где вы это выбрали в настройках.");
 
-  if (!(input.dimensions ?? "").trim() && imageRole === "dimensions") {
+  if (!hasUserDimensionMeasures(input.dimensions) && imageRole === "dimensions") {
     bits.push(
       "Визуальная соразмерность без конкретных чисел из формы: не добавлять вымышленные миллиметры и лишние цифры.",
     );
@@ -1060,7 +1027,7 @@ function trimOrExtend(
 export function buildCardBuilderGalleryPlan(
   input: CardBuilderPlanInput,
   profile: ProductCardMarketplaceProfile,
-): { slides: CardBuilderGallerySlide[] } {
+): { slides: CardBuilderGallerySlide[]; planWarning?: string } {
   const cluster = plannerCluster(profile.id);
   const bucket = inferPlannerBucket(input);
   const catRu = categoryLabelRu(input.selectedCategory);
@@ -1069,6 +1036,7 @@ export function buildCardBuilderGalleryPlan(
     input.goal === "full_gallery_8" ? 8 : input.goal === "full_gallery_6" ? 6 : 1;
 
   let templateIds: string[] = [];
+  let planWarning: string | undefined;
 
   switch (input.goal) {
     case "main_photo":
@@ -1080,7 +1048,22 @@ export function buildCardBuilderGalleryPlan(
       templateIds = templatesBenefitsGoal(input, profile, cluster);
       break;
     case "dimensions_slide": {
-      const dimTid = coerceTemplateAgainstProfile(defaultTemplateForSlideRole("dimensions"), profile, cluster)!;
+      if (!hasUserDimensionMeasures(input.dimensions)) {
+        planWarning =
+          "Размеры в форме не заполнены — использован слайд «Масштаб и размеры» без точных цифр. Добавьте габариты в поле размеров для схемы с числами.";
+      }
+      const dimPreferred =
+        hasUserDimensionMeasures(input.dimensions)
+          ? coerceTemplateAgainstProfile(defaultTemplateForSlideRole("dimensions"), profile, cluster)!
+          : coerceTemplateAgainstProfile("size_scale", profile, cluster) ??
+            coerceTemplateAgainstProfile(defaultTemplateForSlideRole("dimensions"), profile, cluster)!;
+      const dimTid = resolveTemplateWithFallback(dimPreferred, {
+        categoryKey: input.selectedCategory,
+        marketplaceProfile: profile,
+        imageRole: "dimensions",
+        hasConcreteDimensions: hasUserDimensionMeasures(input.dimensions),
+        mustShowScale: input.mustShow.includes("scale"),
+      });
       templateIds = [dimTid];
       break;
     }
@@ -1112,8 +1095,13 @@ export function buildCardBuilderGalleryPlan(
       break;
     case "full_gallery_6":
     case "full_gallery_8": {
-      const baseSix = reconcileIngredientSlides(bucketSixTemplates(bucket, input), bucket, input);
-      let draft = uniqRolesPreferred(baseSix, profile, cluster);
+      const galleryCount = slideGoalCount === 8 ? 8 : 6;
+      const baseSeq = reconcileIngredientSlides(
+        pickGalleryTemplateSequenceForPlan(input, galleryCount),
+        bucket,
+        input,
+      );
+      let draft = uniqRolesPreferred(baseSeq, profile, cluster);
       draft = applyClusterGalleryRules(draft, cluster, profile);
       draft = injectMustShow(draft, input.mustShow, profile, cluster);
       draft = injectBenefitsSemantics(draft, input, profile, cluster);
@@ -1124,7 +1112,9 @@ export function buildCardBuilderGalleryPlan(
         profile,
         cluster,
       );
-      draft = removeDimensionsWithoutMeasures(draft, profile, cluster, input.dimensions);
+      draft = removeDimensionsWithoutMeasures(draft, profile, cluster, input);
+      draft = sanitizeGalleryTemplateIds(draft, input, profile);
+      draft = uniqRolesPreferred(draft, profile, cluster);
 
       /** TODO: когда UI будет стабильно оплачивать ровно 8 кадров вне Kuz category-наборов, расширить политику здесь. Сейчас — дотягивание ролями профиля. */
       draft = trimOrExtend(draft, slideGoalCount === 8 ? 8 : 6, bucket, profile, cluster);
@@ -1141,20 +1131,24 @@ export function buildCardBuilderGalleryPlan(
   templateIds =
     slideGoalCount > 1
       ? uniqRolesPreferred(
-          reconcileIngredientSlides(
-            stripUnsupportedPackaging(
-              removeDimensionsWithoutMeasures(
-                uniqRolesPreferred([...templateIds], profile, cluster),
+          sanitizeGalleryTemplateIds(
+            reconcileIngredientSlides(
+              stripUnsupportedPackaging(
+                removeDimensionsWithoutMeasures(
+                  uniqRolesPreferred([...templateIds], profile, cluster),
+                  profile,
+                  cluster,
+                  input,
+                ),
+                packagingReasonRequired(bucket, input.mustShow, cluster),
                 profile,
                 cluster,
-                input.dimensions,
               ),
-              packagingReasonRequired(bucket, input.mustShow, cluster),
-              profile,
-              cluster,
+              bucket,
+              input,
             ),
-            bucket,
             input,
+            profile,
           ),
           profile,
           cluster,
@@ -1171,5 +1165,5 @@ export function buildCardBuilderGalleryPlan(
     if (slide) slidesBuilt.push(slide);
   });
 
-  return { slides: slidesBuilt };
+  return planWarning ? { slides: slidesBuilt, planWarning } : { slides: slidesBuilt };
 }

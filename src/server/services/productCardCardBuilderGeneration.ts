@@ -1,3 +1,4 @@
+import { getAllowedTemplatesForSlide, hasUserDimensionMeasures } from "@/config/card-builder-template-allowlist";
 import { getCardBuilderTemplate } from "@/config/card-builder-templates";
 import { cardBuilderPlanFieldsSchema, coerceCardBuilderPlan } from "@/lib/validations/card-builder-plan";
 
@@ -55,7 +56,7 @@ import {
 } from "@/server/services/productCardSettings";
 
 export type ServiceErr = { ok: false; error: string; status: number; code?: string };
-export type PlanOk = { ok: true; slides: CardBuilderGallerySlide[] };
+export type PlanOk = { ok: true; slides: CardBuilderGallerySlide[]; planWarning?: string };
 export type GenOk = {
   ok: true;
   generationId: string;
@@ -172,7 +173,7 @@ export async function planCardBuilderGallery(
     return { ok: false, error: goalFail, status: 400, code: "MARKETPLACE_GOAL_NOT_ALLOWED" };
   }
 
-  const { slides } = buildCardBuilderGalleryPlan(normalizedInput, mpRes.profile);
+  const { slides, planWarning } = buildCardBuilderGalleryPlan(normalizedInput, mpRes.profile);
   const enriched = enrichCardBuilderGallerySlides(
     slides,
     normalizedInput,
@@ -188,7 +189,7 @@ export async function planCardBuilderGallery(
     cardBuilderTargetSize: mpRes.profile.defaultSize,
   };
   await saveCardBuilderSettingsAndPlan(projectId, settingsOut, enriched);
-  return { ok: true, slides: enriched };
+  return { ok: true, slides: enriched, ...(planWarning ? { planWarning } : {}) };
 }
 
 export async function updateCardBuilderSlideTemplate(
@@ -232,6 +233,23 @@ export async function updateCardBuilderSlideTemplate(
   const slideErr = cardBuilderProfileSlideErrorMessage(mpRes.profile, slide.imageRole);
   if (slideErr) {
     return { ok: false, error: slideErr, status: 400, code: "MARKETPLACE_SLIDE_NOT_ALLOWED" };
+  }
+
+  const allowed = getAllowedTemplatesForSlide({
+    categoryKey: planParsed.plan.selectedCategory,
+    marketplaceProfile: mpRes.profile,
+    imageRole: slide.imageRole,
+    currentTemplateId: slide.templateId,
+    hasConcreteDimensions: hasUserDimensionMeasures(planParsed.plan.dimensions),
+    mustShowScale: planParsed.plan.mustShow.includes("scale"),
+  });
+  if (!allowed.some((t) => t.templateId === templateId)) {
+    return {
+      ok: false,
+      error: "Этот шаблон недоступен для выбранной категории и площадки",
+      status: 400,
+      code: "TEMPLATE_NOT_ALLOWED",
+    };
   }
 
   const merged = enrichSingleSlideAfterTemplateChange(

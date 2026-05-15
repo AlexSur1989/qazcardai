@@ -6,6 +6,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { APP_SETTINGS_REGISTRY } from "@/config/app-settings-registry";
+import {
+  getAllowedTemplatesForSlide,
+  hasUserDimensionMeasures,
+} from "@/config/card-builder-template-allowlist";
+import { pickGalleryTemplateSequenceForPlan } from "@/config/card-builder-gallery-sequences";
 import { PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS } from "@/config/product-card-marketplace-profiles";
 import {
   buildCardBuilderGalleryPlan,
@@ -74,6 +79,13 @@ function basePlan(overrides: Partial<CardBuilderPlanInput> = {}): CardBuilderPla
 
 const ozonProfile = PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "ozon");
 assert(ozonProfile, "В defaults есть профиль ozon для verify buildCardBuilderGalleryPlan");
+
+const apparelSeq = pickGalleryTemplateSequenceForPlan({ selectedCategory: "apparel" }, 6);
+assert(
+  apparelSeq.length === 6 && apparelSeq[0] === "hero_clean",
+  "pickGalleryTemplateSequenceForPlan: единый источник базовых 6 для apparel начинается с hero_clean",
+);
+
 const { slides: ozonApparel } = buildCardBuilderGalleryPlan(basePlan(), ozonProfile);
 assert(ozonApparel.length === 6, "buildCardBuilderGalleryPlan(full_gallery_6, ozon): ровно 6 слайдов");
 for (const s of ozonApparel) assertSlideShape(s);
@@ -89,6 +101,85 @@ const cosmetics = buildCardBuilderGalleryPlan(
 assert(
   furniture.map((x) => x.templateId).join("|") !== cosmetics.map((x) => x.templateId).join("|"),
   "План мебели и косметики отличается по шаблонам на одной площадке",
+);
+
+assert(
+  !ozonApparel.some((s) => s.templateId === "interface_detail"),
+  "Одежда: нет interface_detail по умолчанию",
+);
+const planGadgetDetails = buildCardBuilderGalleryPlan(
+  basePlan({ selectedCategory: "gadgets_and_tech" }),
+  ozonProfile,
+).slides;
+assert(
+  planGadgetDetails.some((s) => s.templateId === "interface_detail" || s.templateId === "feature_callouts"),
+  "Гаджеты: есть interface_detail или feature_callouts среди дефолтных шаблонов",
+);
+
+const planFoodMarket = buildCardBuilderGalleryPlan(
+  basePlan({ selectedCategory: "food_and_drinks" }),
+  ozonProfile,
+).slides;
+assert(!planFoodMarket.some((s) => s.templateId === "interface_detail"), "Еда: нет interface_detail");
+
+assert(
+  cosmetics.some((s) => s.templateId === "texture_closeup" || s.templateId === "ingredients_effect"),
+  "Косметика: есть texture_closeup или ingredients_effect",
+);
+
+assert(
+  furniture.some((s) => s.imageRole === "lifestyle" && s.templateId === "interior_lifestyle"),
+  "Мебель: lifestyle-слайд с interior_lifestyle",
+);
+
+const furnitureNoDim = buildCardBuilderGalleryPlan(
+  basePlan({ selectedCategory: "home_and_furniture", dimensions: "" }),
+  ozonProfile,
+).slides;
+assert(
+  !furnitureNoDim.some((s) => s.templateId === "dimensions_schema"),
+  "Мебель без цифр в размерах: нет dimensions_schema",
+);
+
+assert(
+  buildCardBuilderGalleryPlan(basePlan({ selectedCategory: "other" }), ozonProfile).slides.length === 6,
+  "Категория other: безопасная галерея из 6 слайдов",
+);
+
+assert(!hasUserDimensionMeasures(""), "hasUserDimensionMeasures: пустая строка");
+assert(hasUserDimensionMeasures("10 см"), "hasUserDimensionMeasures: есть цифры");
+
+const clothDetailAllowed = getAllowedTemplatesForSlide({
+  categoryKey: "apparel",
+  marketplaceProfile: ozonProfile,
+  imageRole: "detail_closeup",
+  hasConcreteDimensions: false,
+  mustShowScale: false,
+});
+assert(
+  !clothDetailAllowed.some((t) => t.templateId === "interface_detail"),
+  "Dropdown allowlist: одежда / детали — без interface_detail",
+);
+const gadDetailAllowed = getAllowedTemplatesForSlide({
+  categoryKey: "gadgets_and_tech",
+  marketplaceProfile: ozonProfile,
+  imageRole: "detail_closeup",
+  hasConcreteDimensions: false,
+  mustShowScale: false,
+});
+assert(
+  gadDetailAllowed.some((t) => t.templateId === "interface_detail"),
+  "Dropdown allowlist: гаджеты / детали — включают interface_detail",
+);
+
+const dimWarn = buildCardBuilderGalleryPlan(
+  basePlan({ goal: "dimensions_slide", dimensions: "" }),
+  ozonProfile,
+);
+assert(Boolean(dimWarn.planWarning?.trim()), "Цель «Размеры» без поля размеров — есть planWarning");
+assert(
+  !dimWarn.slides.some((s) => s.templateId === "dimensions_schema"),
+  "Нет точных размеров: dimensions_schema не используется",
 );
 
 const lamoda = PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "lamoda");

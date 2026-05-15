@@ -1,4 +1,3 @@
-import type { ProductCategoryId } from "@/config/product-card-categories";
 import type {
   ProductCardTemplatePresetId,
   ProductCardTypographyPresetId,
@@ -245,6 +244,24 @@ export const CARD_BUILDER_TEMPLATES: Record<string, CardBuilderTemplateDefinitio
     preserveProductRequired: true,
     overlayRequired: false,
   },
+  /** Интерьерный lifestyle для мебели и товаров для дома */
+  interior_lifestyle: {
+    templateId: "interior_lifestyle",
+    label: "Lifestyle — интерьер",
+    slideRole: "lifestyle",
+    recommendedFor: ["home_and_furniture", "own_site"],
+    layoutPreset: "interior_scene_hero",
+    overlayTemplatePreset: "lifestyle_model",
+    typographyPreset: "fashion",
+    overlayTemplate: "bottom_panel",
+    textSlots: ["title"],
+    iconSlots: [],
+    maxBenefits: 0,
+    allowText: true,
+    defaultTextDensity: "minimal",
+    preserveProductRequired: true,
+    overlayRequired: false,
+  },
   comparison_card: {
     templateId: "comparison_card",
     label: "Сравнение / коллауты",
@@ -321,6 +338,24 @@ export const CARD_BUILDER_TEMPLATES: Record<string, CardBuilderTemplateDefinitio
     layoutPreset: "macro_minimal",
     overlayTemplatePreset: "clean_catalog",
     typographyPreset: "minimalism",
+    overlayTemplate: "bottom_panel",
+    textSlots: ["title"],
+    iconSlots: [],
+    maxBenefits: 0,
+    allowText: false,
+    defaultTextDensity: "none",
+    preserveProductRequired: true,
+    overlayRequired: false,
+  },
+  /** Ткань / фактура одежды — отдельный id для allowlist */
+  fabric_closeup: {
+    templateId: "fabric_closeup",
+    label: "Ткань и фактура",
+    slideRole: "detail_closeup",
+    recommendedFor: ["apparel"],
+    layoutPreset: "macro_minimal",
+    overlayTemplatePreset: "clean_catalog",
+    typographyPreset: "fashion",
     overlayTemplate: "bottom_panel",
     textSlots: ["title"],
     iconSlots: [],
@@ -408,81 +443,6 @@ export function listTemplatesForSlideRole(role: CardBuilderTemplateSlideRole): C
   return Object.values(CARD_BUILDER_TEMPLATES).filter((t) => t.slideRole === role);
 }
 
-/** Последовательности шаблонов для полной галереи по категории товара */
-const FULL_6_APPAREL: readonly string[] = [
-  "hero_clean",
-  "benefits_grid",
-  "material_focus",
-  "lifestyle_card",
-  "size_range",
-  "premium_poster",
-];
-
-const FULL_6_FURNITURE: readonly string[] = [
-  "hero_clean",
-  "lifestyle_card",
-  "material_focus",
-  "dimensions_schema",
-  "benefits_grid",
-  "premium_poster",
-];
-
-const FULL_6_BEAUTY: readonly string[] = [
-  "hero_clean",
-  "texture_closeup",
-  "benefits_grid",
-  "ingredients_effect",
-  "lifestyle_card",
-  "premium_poster",
-];
-
-const FULL_6_TECH: readonly string[] = [
-  "hero_clean",
-  "feature_callouts",
-  "interface_detail",
-  "size_scale",
-  "benefits_grid",
-  "premium_poster",
-];
-
-const FULL_6_DEFAULT: readonly string[] = [
-  "hero_clean",
-  "benefits_grid",
-  "material_focus",
-  "dimensions_schema",
-  "lifestyle_card",
-  "premium_poster",
-];
-
-const FULL_8_TECH: readonly string[] = [
-  "hero_clean",
-  "feature_callouts",
-  "interface_detail",
-  "size_scale",
-  "benefits_grid",
-  "lifestyle_card",
-  "comparison_card",
-  "ad_banner",
-];
-
-function seqForCategory(categoryId: string): readonly string[] {
-  const id = categoryId as ProductCategoryId;
-  if (id === "apparel" || id === "accessories") return FULL_6_APPAREL;
-  if (id === "home_and_furniture") return FULL_6_FURNITURE;
-  if (id === "beauty_and_care") return FULL_6_BEAUTY;
-  if (id === "gadgets_and_tech") return FULL_6_TECH;
-  return FULL_6_DEFAULT;
-}
-
-export function pickGalleryTemplateSequence(categoryId: string, slideCount: 6 | 8): string[] {
-  const six = [...seqForCategory(categoryId)];
-  if (slideCount === 6) return six;
-  if ((categoryId as ProductCategoryId) === "gadgets_and_tech") {
-    return [...FULL_8_TECH];
-  }
-  return [...six, "texture_closeup", "package_card"];
-}
-
 const ROLE_DEFAULT_TEMPLATE: Partial<Record<string, string>> = {
   main_photo: "hero_clean",
   benefits_infographic: "benefits_grid",
@@ -540,6 +500,7 @@ export function templatePreviewCaption(templateId: string): string {
     size_range: "Размерный ряд или габариты — только из вашего текста про размеры.",
     dimensions_schema: "Размер и масштаб — только из указанных вами параметров.",
     lifestyle_card: "Товар в использовании для выбранной аудитории.",
+    interior_lifestyle: "Товар в интерьере без лишней маркетплейсной инфографики.",
     comparison_card:
       "Сравнение и коллауты только по уже известным фактам из формы.",
     package_card:
@@ -548,6 +509,7 @@ export function templatePreviewCaption(templateId: string): string {
     dark_premium: "Премиальная постерная подача.",
     ad_banner: "Яркая рекламная подача под соцсети или акцию.",
     texture_closeup: "Текстура и ключевые детали без вывода лишних свойств из воздуха.",
+    fabric_closeup: "Ткань, шов, фактура — без выдуманного состава материала.",
     ingredients_effect:
       "Состав и эффект — только из вашего текста, без медицинских или лечебных обещаний.",
     feature_callouts:

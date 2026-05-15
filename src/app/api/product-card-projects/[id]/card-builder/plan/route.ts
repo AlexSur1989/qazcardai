@@ -63,5 +63,8 @@ export async function POST(req: Request, ctx: Ctx) {
   if (!res.ok) {
     return NextResponse.json({ error: res.error }, { status: res.status });
   }
-  return NextResponse.json({ slides: res.slides });
+  return NextResponse.json({
+    slides: res.slides,
+    ...(res.planWarning ? { planWarning: res.planWarning } : {}),
+  });
 }
