@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import { PRODUCT_CATEGORY_IDS } from "@/config/product-card-categories";
+import {
+  CATEGORY_FIELD_KEY_MAX_CHARS,
+  CATEGORY_FIELD_VALUE_MAX_CHARS,
+} from "@/lib/card-builder-category-fields-runtime";
 import {
   CARD_BUILDER_AUDIENCES,
   CARD_BUILDER_BENEFIT_TAGS,
@@ -31,6 +36,13 @@ const Z_STYLE = z.enum(enumFrom(CARD_BUILDER_SALES_STYLES.map((x) => x.id)));
 const Z_DENSITY = z.enum(enumFrom(CARD_BUILDER_TEXT_DENSITY.map((x) => x.id)));
 const Z_LANG = z.enum(enumFrom(CARD_BUILDER_LANGUAGE_MODES.map((x) => x.id)));
 
+const Z_PRODUCT_CATEGORY = z.enum(enumFrom([...PRODUCT_CATEGORY_IDS]));
+const Z_CATEGORY_FIELD_MAP = z
+  .record(
+    z.string().max(CATEGORY_FIELD_KEY_MAX_CHARS),
+    z.string().max(CATEGORY_FIELD_VALUE_MAX_CHARS),
+  );
+
 const Z_APPLIED_MARKETPLACE_RULES = z
   .object({
     defaultAspectRatio: z.string(),
@@ -41,6 +53,22 @@ const Z_APPLIED_MARKETPLACE_RULES = z
     needsVerification: z.boolean().optional(),
     infographicAllowed: z.boolean(),
     lifestyleAllowed: z.boolean(),
+  })
+  .strict();
+
+const Z_STYLE_REFERENCE = z
+  .object({
+    enabled: z.boolean().optional().default(false),
+    referenceAssetIds: z.array(z.string().trim().min(1).max(96)).max(3).optional().default([]),
+    strength: z.enum(["low", "medium", "high"]).optional().default("medium"),
+    useComposition: z.boolean().optional().default(false),
+    useBackground: z.boolean().optional().default(false),
+    useColors: z.boolean().optional().default(false),
+    useTypography: z.boolean().optional().default(false),
+    useBadges: z.boolean().optional().default(false),
+    useIcons: z.boolean().optional().default(false),
+    useMood: z.boolean().optional().default(false),
+    useOverallPresentation: z.boolean().optional().default(false),
   })
   .strict();
 
@@ -72,6 +100,14 @@ export const cardBuilderPlanFieldsSchema = z
     appliedMarketplaceRules: Z_APPLIED_MARKETPLACE_RULES.optional(),
     cardBuilderTargetAspectRatio: z.string().optional(),
     cardBuilderTargetSize: z.string().optional(),
+    categoryFields: z
+      .object({
+        categoryKey: z.string().trim().min(1).max(64),
+        values: Z_CATEGORY_FIELD_MAP.optional(),
+      })
+      .optional(),
+    categoryFieldsByCategory: z.record(Z_PRODUCT_CATEGORY, Z_CATEGORY_FIELD_MAP).optional(),
+    styleReference: Z_STYLE_REFERENCE.optional(),
   })
   .strict();
 

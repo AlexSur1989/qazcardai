@@ -11,6 +11,11 @@ import {
   type CardBuilderTemplateSlideRole,
 } from "@/config/card-builder-templates";
 import { getPublicProductCategories } from "@/config/product-card-categories";
+import {
+  categoryFieldFactsLineForSlide,
+  effectiveDimensionsForOverlay,
+  type CardBuilderPlanWithCategoryFields,
+} from "@/lib/card-builder-category-fields-runtime";
 import type { CardBuilderGallerySlide, CardBuilderPlanInput } from "@/server/services/productCardBuilderPlan";
 
 export type BuildCardBuilderTextSlotsInput = {
@@ -25,6 +30,9 @@ export type BuildCardBuilderTextSlotsInput = {
   marketplace: string;
   slideRole: CardBuilderTemplateSlideRole;
   templateId: string;
+  /** Опционально: поля категории из мастера (metadata / план). */
+  categoryFields?: CardBuilderPlanInput["categoryFields"];
+  categoryFieldsByCategory?: CardBuilderPlanInput["categoryFieldsByCategory"];
 };
 
 function categoryLabelRu(categoryId: string): string {
@@ -72,19 +80,37 @@ export function buildCardBuilderTextSlots(input: BuildCardBuilderTextSlotsInput)
 
   const needsMoreBenefits = false;
 
+  const catPlan: CardBuilderPlanWithCategoryFields = {
+    selectedCategory: input.categoryId,
+    dimensions: input.dimensions ?? undefined,
+    categoryFields: input.categoryFields,
+    categoryFieldsByCategory: input.categoryFieldsByCategory,
+  };
+  const categoryFacts = categoryFieldFactsLineForSlide(input.slideRole, catPlan);
+  const dimLine = effectiveDimensionsForOverlay(catPlan);
+
   for (let i = 0; i < maxBen; i++) {
     const key = `benefit_${i + 1}`;
     slots[key] = labels[i]?.trim() ?? "";
   }
 
-  if (input.dimensions?.trim()) {
+  if (dimLine && (tpl?.textSlots ?? []).includes("size_line")) {
+    slots.size_line = dimLine.slice(0, 220);
+  } else if (input.dimensions?.trim()) {
     slots.size_line = input.dimensions.trim();
   } else if ((tpl?.textSlots ?? []).includes("size_line")) {
     slots.size_line = "";
   }
 
   const extra = input.additionalBenefits?.trim() ?? "";
-  slots.extraText = extra.slice(0, 280);
+  const combinedExtra = [extra, categoryFacts].filter(Boolean).join("\n\n");
+
+  if (categoryFacts && (tpl?.textSlots ?? []).includes("subtitle")) {
+    slots.subtitle = [slots.subtitle, categoryFacts].filter(Boolean).join("\n").slice(0, 380);
+    slots.extraText = extra.slice(0, 420);
+  } else {
+    slots.extraText = combinedExtra.slice(0, 420);
+  }
 
   const chars = input.characteristics?.trim();
   slots.statsText = chars ? chars.slice(0, 220) : "";
@@ -117,6 +143,8 @@ export function enrichCardBuilderGallerySlides(
       marketplace: input.marketplace,
       slideRole: tpl.slideRole,
       templateId: slide.templateId,
+      categoryFields: input.categoryFields,
+      categoryFieldsByCategory: input.categoryFieldsByCategory,
     });
 
     return {
@@ -148,6 +176,8 @@ export function enrichSingleSlideAfterTemplateChange(
     marketplace: input.marketplace,
     slideRole: tpl.slideRole,
     templateId: slide.templateId,
+    categoryFields: input.categoryFields,
+    categoryFieldsByCategory: input.categoryFieldsByCategory,
   });
   return {
     ...slide,

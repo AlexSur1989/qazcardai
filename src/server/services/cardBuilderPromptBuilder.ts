@@ -1,9 +1,6 @@
 import "server-only";
 
 import {
-  hasUserDimensionMeasures,
-} from "@/config/card-builder-template-allowlist";
-import {
   CARD_BUILDER_AUDIENCES,
   CARD_BUILDER_MARKETPLACES,
   CARD_BUILDER_PRESERVE_ASPECTS,
@@ -11,14 +8,24 @@ import {
   CARD_BUILDER_SALES_STYLES,
   CARD_BUILDER_TEXT_DENSITY,
 } from "@/config/card-builder-config";
+import type { CardBuilderTemplateSlideRole } from "@/config/card-builder-templates";
 import type { ProductCardMarketplaceProfile } from "@/config/product-card-marketplace-profiles";
 import { PRODUCT_CATEGORY_GROUPS } from "@/config/product-card-categories";
+import { getCategoryFieldsSafetyBullets } from "@/config/product-card-category-fields";
+import {
+  categoryFieldsPlainForPlanner,
+  effectiveDimensionsForOverlay,
+  hasMeasuresFromCategoryPlan,
+  lockedCategoryLabelsForSlideRole,
+  type CardBuilderPlanWithCategoryFields,
+} from "@/lib/card-builder-category-fields-runtime";
+import type { CardBuilderStyleReferencePlan } from "@/lib/card-builder-style-reference";
 
-const PROMPT_VERSION = "card_builder_super_prompt_v2" as const;
+const PROMPT_VERSION = "card_builder_super_prompt_v3" as const;
 
-const MAX_PHRASES = 7;
-/** Одна фраза на кадр (строка из названия, бенефита, размеров и т.д.): длинные строки характеристик. */
-const MAX_PHRASE_LEN = 120;
+const MAX_PHRASES = 16;
+/** Одна фраза на кадр; поля категории и характеристики до ~400 символов. */
+const MAX_PHRASE_LEN = 400;
 
 const KK_LETTERS_RE = /[әғқңөұүһіӘҒҚҢӨҰҮҺІ]/;
 const CYRILLIC_RE = /[а-яА-ЯёЁ]/;
@@ -52,6 +59,15 @@ export type CardBuilderSuperPromptInput = {
   dimensions?: string;
   /** Профиль площадки: промпт и текстовые ограничения; если не задан — трактовать как универсальный режим. */
   marketplaceProfile?: ProductCardMarketplaceProfile | null;
+  categoryFields?: CardBuilderPlanWithCategoryFields["categoryFields"];
+  categoryFieldsByCategory?: CardBuilderPlanWithCategoryFields["categoryFieldsByCategory"];
+
+  /** Референс стиля: не участвует в exactTextPhrases и locked product facts. */
+  styleReferencePlan?: CardBuilderStyleReferencePlan | null;
+  /** Сколько входных фото товара передано в генерацию (углы и т.д.). */
+  productSourceImageCount?: number;
+  /** Сколько изображений референса стиля реально подставлено после проверки доступа. */
+  styleReferenceImageCount?: number;
 };
 
 export type CardBuilderSuperPromptOk = {
@@ -132,6 +148,7 @@ export function collectExactTextPhrases(input: {
   textDensity: string;
   /** Если true — не включаем пользовательские фразы для bitmap-текста (главное фото без текста по правилам площадки). */
   omitUserLockedText?: boolean;
+  lockedCategoryPhrases?: readonly string[];
 }): {
   phrases: string[];
   validationErrors: string[];
@@ -168,6 +185,14 @@ export function collectExactTextPhrases(input: {
       const dim = stripHtmlFragments(input.dimensions?.trim() ?? "");
       if (dim) raw.push(dim);
     }
+
+    const allowCatLocked = showCardTextLayer || input.slideRole === "dimensions";
+    if (allowCatLocked) {
+      for (const line of input.lockedCategoryPhrases ?? []) {
+        const x = stripHtmlFragments(line.trim());
+        if (x) raw.push(x);
+      }
+    }
   }
 
   const seen = new Set<string>();
@@ -183,7 +208,7 @@ export function collectExactTextPhrases(input: {
 
   if (phrases.length > MAX_PHRASES) {
     errors.push(
-      `Слишком много текстовых фраз для одного слайда (максимум ${MAX_PHRASES}). Сократите название, подзаголовок, «Дополнительные преимущества», размеры или характеристики.`,
+      `Слишком много текстовых фраз для одного слайда (максимум ${MAX_PHRASES}). Сократите название, подзаголовок, «Дополнительные преимущества», размеры, поля категории или другие текстовые вводы.`,
     );
   }
 
@@ -209,6 +234,7 @@ export function joinUserDerivedTextForCardBuilderModeration(input: {
   additionalBenefits?: string | null;
   mustShowIds: string[];
   dimensions?: string | null;
+  categoryFactsPlain?: string | null;
 }): string {
   const parts: string[] = [];
   const t = stripHtmlFragments(input.productTitle?.trim() ?? "");
@@ -224,6 +250,8 @@ export function joinUserDerivedTextForCardBuilderModeration(input: {
   }
   const dim = stripHtmlFragments(input.dimensions?.trim() ?? "");
   if (dim) parts.push(dim);
+  const catp = stripHtmlFragments(input.categoryFactsPlain?.trim() ?? "");
+  if (catp) parts.push(`Данные из полей категории пользователя:\n${catp}`);
 
   const accentLines = input.semanticBenefitIds
     .map((id) => semanticBenefitAccentRu(id))
@@ -248,6 +276,7 @@ export function collectLanguageProbePhrases(input: {
   subtitle?: string | null;
   additionalBenefits?: string | null;
   dimensions?: string | null;
+  categoryPlain?: string | null;
 }): string[] {
   const raw: string[] = [];
   const t = stripHtmlFragments(input.productTitle?.trim() ?? "");
@@ -263,6 +292,8 @@ export function collectLanguageProbePhrases(input: {
   }
   const dim = stripHtmlFragments(input.dimensions?.trim() ?? "");
   if (dim) raw.push(dim);
+  const catp = stripHtmlFragments(input.categoryPlain?.trim() ?? "");
+  if (catp) raw.push(catp);
   const seen = new Set<string>();
   const phrases: string[] = [];
   for (const x of raw) {
@@ -504,6 +535,73 @@ export function getTextDensityInstruction(textDensity: string): string {
     infographic: `Плотность текста: инфографика — плашки, иконки, выноски; текст только из locked phrases. ${lock}`,
   };
   return body[id] ?? `Плотность текста: ${label}. ${lock}`;
+}
+
+function inputImagesRolesBlock(productImageCount: number, styleReferenceCount: number): string {
+  const p = Math.max(0, Math.floor(productImageCount));
+  const s = Math.max(0, Math.floor(styleReferenceCount));
+  const lines: string[] = [
+    "=== 2a) INPUT_IMAGES_ROLES ===",
+    "Роли входных изображений (смысл сохраняй даже если провайдер передаёт их одним списком URL).",
+  ];
+  if (p > 0) {
+    lines.push(
+      `Первые входные кадры (${p}) — фото товара: основной источник идентичности SKU.`,
+      "Используй как источник формы, цвета товара, логотипа на товаре, пропорций и важных деталей продукта.",
+    );
+  }
+  if (s > 0) {
+    lines.push(
+      `Отдельные кадры (${s}) — референс визуального стиля карточки.`,
+      "Используй только как style guide (композиция макета, фон, цветовая логика, характер плашек, характер типографики без переписывания текста, иконки/выноски, mood).",
+      "НЕ переносить с референса: чужой товар, логотипы и бренды, читаемый текст, маркировку, водяные знаки.",
+      "Референс не задаёт факты о товаре, размеры, комплектацию или характеристики.",
+    );
+  }
+  if (p === 0 && s === 0) {
+    lines.push("Явное разделение кадров недоступно в промпте — следуй политике провайдера и блокам ниже.");
+  }
+  return lines.join("\n");
+}
+
+function styleReferenceInstructionBlock(
+  plan: CardBuilderStyleReferencePlan | null | undefined,
+  styleReferenceCount: number,
+): string {
+  if (!plan?.enabled || styleReferenceCount <= 0) return "";
+
+  const strength = plan.strength ?? "medium";
+  const strengthRu =
+    strength === "low"
+      ? "Сила влияния: низкая — в целом настроение, цвета и характер фона; layout не копируй слишком близко."
+      : strength === "high"
+        ? "Сила влияния: высокая — сильно ориентируйся на композицию и стиль референса, но без копирования содержимого и без подмены товара."
+        : "Сила влияния: средняя — композиция, логика блоков, плашки, цветовая схема и характер типографики без пиксельного копирования.";
+
+  const take: string[] = [];
+  if (plan.useComposition) take.push("композицию и сетку");
+  if (plan.useBackground) take.push("фон");
+  if (plan.useColors) take.push("цветовую гамму");
+  if (plan.useTypography) take.push("характер типографики (не формулировки текста)");
+  if (plan.useBadges) take.push("стиль плашек");
+  if (plan.useIcons) take.push("иконки и выноски");
+  if (plan.useMood) take.push("атмосферу / mood");
+  if (plan.useOverallPresentation) take.push("общую подачу");
+
+  const takeLine =
+    take.length > 0
+      ? `Разрешено использовать из референса (только стиль, без чужого текста и товара): ${take.join("; ")}.`
+      : "Конкретные аспекты не отмечены — используй референс как мягкий общий ориентир.";
+
+  return [
+    "=== 4r) STYLE_REFERENCE ===",
+    "STYLE_REFERENCE:",
+    "Референс — только источник стиля оформления, не источник фактов о SKU.",
+    strengthRu,
+    takeLine,
+    "Товар на выходе = товар с фото товара; русский и казахский locked-текст пользователя не изменять.",
+    "Не копируй чужие логотипы, бренды и водяные знаки с референса.",
+  ].join("\n");
 }
 
 function roleBlock(): string {
@@ -906,10 +1004,23 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
   const mainPhotoLocksText =
     input.slideRole === "main_photo" && profile ? !profile.mainPhotoTextAllowed : false;
 
+  const catPlan: CardBuilderPlanWithCategoryFields = {
+    selectedCategory: input.selectedCategory,
+    dimensions: input.dimensions,
+    categoryFields: input.categoryFields,
+    categoryFieldsByCategory: input.categoryFieldsByCategory,
+  };
+
+  const effDimLine = effectiveDimensionsForOverlay(catPlan);
   const dimsForLockedPhrases =
-    input.slideRole === "dimensions" && !hasUserDimensionMeasures(input.dimensions ?? null)
+    input.slideRole === "dimensions" && !hasMeasuresFromCategoryPlan(catPlan)
       ? undefined
-      : input.dimensions;
+      : effDimLine || input.dimensions;
+
+  const lockedCatLines = lockedCategoryLabelsForSlideRole(
+    input.slideRole as CardBuilderTemplateSlideRole,
+    catPlan,
+  );
 
   const { phrases, validationErrors } = collectExactTextPhrases({
     productTitle: input.productTitle,
@@ -919,6 +1030,7 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
     slideRole: input.slideRole,
     textDensity: input.textDensity ?? "medium",
     omitUserLockedText: mainPhotoLocksText,
+    lockedCategoryPhrases: lockedCatLines,
   });
 
   if (validationErrors.length > 0) {
@@ -931,6 +1043,7 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
     subtitle: input.subtitle,
     additionalBenefits: input.additionalBenefits,
     dimensions: dimsForLockedPhrases,
+    categoryPlain: categoryFieldsPlainForPlanner(catPlan),
   });
 
   const layoutNote =
@@ -956,6 +1069,21 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
   const accentsBlock = semanticSellingAccentsSection(input.benefits ?? []);
   const mustShowBlock = mustShowVisualRequirementsSection(input.mustShow ?? []);
 
+  const cfSafety = getCategoryFieldsSafetyBullets(input.selectedCategory);
+  const cfPolicyBlock =
+    cfSafety.length > 0 || lockedCatLines.length > 0
+      ? [
+          "=== 4e) CATEGORY_USER_FACTS ===",
+          "Тексты из полей категории клиент заполнил сам; пустые поля не восстанавливать и не выдумывать.",
+          ...(cfSafety.length
+            ? ["Ограничения для этой категории:", ...cfSafety.map((s) => `— ${s}`)]
+            : []),
+          ...(lockedCatLines.length
+            ? ["Факты на этом слайде (как в форме):", ...lockedCatLines.map((s) => `— ${s}`)]
+            : []),
+        ].join("\n\n")
+      : "";
+
   const salesStyleBlock = [
     "=== 5) SALES_STYLE_INSTRUCTION ===",
     getSalesStyleInstruction(input.salesStyle ?? "light_marketplace"),
@@ -979,14 +1107,26 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
     layoutNote,
   ].filter((x) => x && String(x).trim() !== "");
 
+  const inputRolesBlock = inputImagesRolesBlock(
+    input.productSourceImageCount ?? 1,
+    input.styleReferenceImageCount ?? 0,
+  );
+  const styleRefPrompt = styleReferenceInstructionBlock(
+    input.styleReferencePlan,
+    input.styleReferenceImageCount ?? 0,
+  );
+
   const promptPieces = [
     roleBlock(),
+    inputRolesBlock,
     productIdentityLockSection(input),
     marketplaceBlock,
     slideRoleBlock,
     templateInstructionBlock,
+    styleRefPrompt,
     accentsBlock,
     mustShowBlock,
+    cfPolicyBlock,
     salesStyleBlock,
     textDensityParts.join("\n\n"),
     designFlexibilityWithTextLockBlock(),

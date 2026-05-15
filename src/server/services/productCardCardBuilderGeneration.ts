@@ -1,7 +1,16 @@
-import { getAllowedTemplatesForSlide, hasUserDimensionMeasures } from "@/config/card-builder-template-allowlist";
+import { getAllowedTemplatesForSlide } from "@/config/card-builder-template-allowlist";
 import { getCardBuilderTemplate } from "@/config/card-builder-templates";
 import { cardBuilderPlanFieldsSchema, coerceCardBuilderPlan } from "@/lib/validations/card-builder-plan";
+import {
+  categoryFieldsPlainForPlanner,
+  effectiveDimensionsForOverlay,
+  hasMeasuresFromCategoryPlan,
+  normalizeCategoryFieldsOnPlanInput,
+  validateNormalizedCategoryPlanFields,
+} from "@/lib/card-builder-category-fields-runtime";
+import { sanitizeStyleReferenceOnStoredPlan } from "@/lib/card-builder-style-reference";
 
+import { resolveCardBuilderStyleReferenceUrls } from "@/server/services/cardBuilderStyleReferenceFiles";
 import { assertUserOwnsFileUrl, getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 import { normalizeProductSourceImages } from "@/server/services/productCardProjects";
 import {
@@ -95,7 +104,12 @@ export function parseStoredCardBuilderPlan(
       status: 400,
     };
   }
-  return { ok: true, plan: coerceCardBuilderPlan(parsed.data) };
+  return {
+    ok: true,
+    plan: sanitizeStyleReferenceOnStoredPlan(
+      normalizeCategoryFieldsOnPlanInput(coerceCardBuilderPlan(parsed.data)),
+    ),
+  };
 }
 
 function ensureSlidePlanEnrichment(
@@ -156,7 +170,16 @@ export async function planCardBuilderGallery(
   const mpRes = await resolveProductCardMarketplaceProfile(input.marketplace);
   if (!mpRes.ok) return mpRes;
 
-  const normalizedInput = coerceCardBuilderPlan(cardBuilderPlanFieldsSchema.parse(input));
+  const normalizedInput = sanitizeStyleReferenceOnStoredPlan(
+    normalizeCategoryFieldsOnPlanInput(
+      coerceCardBuilderPlan(cardBuilderPlanFieldsSchema.parse(input)),
+    ),
+  );
+
+  const catFieldProblems = validateNormalizedCategoryPlanFields(normalizedInput);
+  if (catFieldProblems.length > 0) {
+    return { ok: false, error: catFieldProblems.join("\n"), status: 400 };
+  }
 
   const benefitErr = marketplaceBenefitsOverLimitMessage(normalizedInput.benefits, mpRes.profile);
   if (benefitErr) {
@@ -240,7 +263,7 @@ export async function updateCardBuilderSlideTemplate(
     marketplaceProfile: mpRes.profile,
     imageRole: slide.imageRole,
     currentTemplateId: slide.templateId,
-    hasConcreteDimensions: hasUserDimensionMeasures(planParsed.plan.dimensions),
+    hasConcreteDimensions: hasMeasuresFromCategoryPlan(planParsed.plan),
     mustShowScale: planParsed.plan.mustShow.includes("scale"),
   });
   if (!allowed.some((t) => t.templateId === templateId)) {
@@ -369,6 +392,23 @@ export async function generateCardBuilderSlide(
       ? "none"
       : planInput.textDensity;
 
+  const catFieldProblemsRun = validateNormalizedCategoryPlanFields(planInput);
+  if (catFieldProblemsRun.length > 0) {
+    return {
+      ok: false,
+      error: catFieldProblemsRun.join("\n"),
+      status: 400,
+      code: "CARD_BUILDER_CATEGORY_FIELDS",
+    };
+  }
+
+  const srForGen = planInput.styleReference;
+  const resolvedStyleUrls =
+    srForGen?.enabled && srForGen.referenceAssetIds.length > 0
+      ? await resolveCardBuilderStyleReferenceUrls(userId, srForGen.referenceAssetIds)
+      : [];
+  const styleRefForPrompt = resolvedStyleUrls.length > 0 ? planInput.styleReference : undefined;
+
   const superPrompt = buildCardBuilderSuperPrompt({
     productTitle: base.project.title ?? undefined,
     subtitle: planInput.subtitle,
@@ -398,7 +438,12 @@ export async function generateCardBuilderSlide(
       planInput.languageMode
         ? planInput.languageMode
         : "auto",
-    dimensions: planInput.dimensions,
+    dimensions: effectiveDimensionsForOverlay(planInput) ?? planInput.dimensions,
+    categoryFields: planInput.categoryFields,
+    categoryFieldsByCategory: planInput.categoryFieldsByCategory,
+    styleReferencePlan: styleRefForPrompt ?? undefined,
+    productSourceImageCount: base.sourceImageUrls.length,
+    styleReferenceImageCount: resolvedStyleUrls.length,
   });
 
   if (!superPrompt.ok) {
@@ -462,6 +507,7 @@ export async function generateCardBuilderSlide(
     additionalBenefits: planInput.benefitsExtra,
     mustShowIds: planInput.mustShow ?? [],
     dimensions: planInput.dimensions,
+    categoryFactsPlain: categoryFieldsPlainForPlanner(planInput) || undefined,
   });
 
   const cardBuilderPromptSnapshot = {
@@ -511,6 +557,10 @@ export async function generateCardBuilderSlide(
     exactTextPhrases: superPrompt.data.exactTextPhrases,
     designFlexible: superPrompt.data.designFlexible,
     overlayApplied: superPrompt.data.overlayApplied,
+    styleReferenceUsed: resolvedStyleUrls.length > 0,
+    styleReferenceStrength:
+      resolvedStyleUrls.length > 0 ? (planInput.styleReference?.strength ?? null) : null,
+    styleReferenceCount: resolvedStyleUrls.length,
     /** Сводка настроек мастера для аудита и трассировки (дублирует ключевые поля metadata.cardBuilder.settings в проекте). */
     cardBuilderSettingsSnapshot: {
       preserveProduct: planInput.preserveProduct ?? true,
@@ -528,6 +578,10 @@ export async function generateCardBuilderSlide(
       salesStyle: planInput.salesStyle,
       textDensity: textDensityEffective,
       languageMode: planInput.languageMode ?? "auto",
+      styleReferenceUsed: resolvedStyleUrls.length > 0,
+      styleReferenceStrength:
+        resolvedStyleUrls.length > 0 ? (planInput.styleReference?.strength ?? "medium") : null,
+      styleReferenceCount: resolvedStyleUrls.length,
     },
   };
 
@@ -542,6 +596,7 @@ export async function generateCardBuilderSlide(
     null,
     breakdown,
     moderationUserEnvelope || null,
+    resolvedStyleUrls.length > 0 ? resolvedStyleUrls : undefined,
   );
 
   if (!result.ok) {

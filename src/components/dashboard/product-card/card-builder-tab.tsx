@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import {
   CARD_BUILDER_AUDIENCES,
@@ -16,16 +16,29 @@ import {
   CARD_BUILDER_TEXT_DENSITY,
 } from "@/config/card-builder-config";
 import type { ProductCardMarketplaceProfile } from "@/config/product-card-marketplace-profiles";
-import { cardBuilderGoalToSlideRole } from "@/server/services/productCardBuilderPlan";
 import type { ProductCategoryId } from "@/config/product-card-categories";
+import {
+  getCategoryFieldsSafetyBullets,
+  getProductCardCategoryFieldsConfig,
+  isProductCategoryId,
+} from "@/config/product-card-category-fields";
 import {
   listTemplatesForSlideRole,
   type CardBuilderTemplateSlideRole,
 } from "@/config/card-builder-templates";
 import {
   getAllowedTemplatesForSlide,
-  hasUserDimensionMeasures,
 } from "@/config/card-builder-template-allowlist";
+import {
+  CATEGORY_FIELD_VALUE_MAX_CHARS,
+  hasMeasuresFromCategoryPlan,
+  sanitizeCategoryFieldValue,
+} from "@/lib/card-builder-category-fields-runtime";
+import {
+  DEFAULT_CARD_BUILDER_STYLE_REFERENCE,
+  type CardBuilderStyleReferenceStrength,
+} from "@/lib/card-builder-style-reference";
+import { cardBuilderGoalToSlideRole } from "@/server/services/productCardBuilderPlan";
 import { readJsonSafe } from "@/lib/fetch-json-safe";
 import {
   IMAGE_GENERATION_POLL_INTERVAL_MS,
@@ -43,6 +56,41 @@ import { cn } from "@/lib/utils";
 
 const nativeFieldClass =
   "h-10 w-full min-w-0 rounded-xl border border-input bg-card px-2.5 text-sm text-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
+
+type StyleReferenceRow = {
+  url: string;
+  fileName: string;
+  size: number;
+  fileId?: string;
+};
+
+const STYLE_REF_ACCEPT = "image/png,image/jpeg,image/jpg,image/webp";
+const STYLE_REF_MAX_MB = 10;
+const STYLE_REF_MAX_BYTES = STYLE_REF_MAX_MB * 1024 * 1024;
+
+function isValidStyleRefImage(file: File): boolean {
+  const t = file.type.toLowerCase();
+  if (
+    t === "image/jpeg" ||
+    t === "image/jpg" ||
+    t === "image/png" ||
+    t === "image/webp" ||
+    t === "image/pjpeg"
+  )
+    return true;
+  return /\.(jpe?g|png|webp)$/i.test(file.name);
+}
+
+const STYLE_REFERENCE_ASPECTS = [
+  { field: "useComposition" as const, label: "Композицию" },
+  { field: "useBackground" as const, label: "Фон" },
+  { field: "useColors" as const, label: "Цветовую гамму" },
+  { field: "useBadges" as const, label: "Стиль плашек" },
+  { field: "useTypography" as const, label: "Стиль текста" },
+  { field: "useIcons" as const, label: "Иконки / выноски" },
+  { field: "useMood" as const, label: "Атмосферу / mood" },
+  { field: "useOverallPresentation" as const, label: "Общую подачу" },
+];
 
 function slideProgressLabel(statusRaw: string): string {
   const s = statusRaw.trim().toLowerCase();
@@ -145,10 +193,31 @@ export function CardBuilderTab({
   const [genHistory, setGenHistory] = useState<CardBuilderGenHistoryRow[]>([]);
   const [tplBusySlideId, setTplBusySlideId] = useState<string | null>(null);
 
+  /** Архив полей категории по ключу ProductCategoryId; при переключении категории не теряем ввод. */
+  const [categoryFieldsByCategory, setCategoryFieldsByCategory] = useState<
+    Partial<Record<ProductCategoryId, Record<string, string>>>
+  >({});
+  const [styleReferenceEnabled, setStyleReferenceEnabled] = useState(false);
+  const [styleReferenceStrength, setStyleReferenceStrength] =
+    useState<CardBuilderStyleReferenceStrength>("medium");
+  const [styleReferenceFlags, setStyleReferenceFlags] = useState({
+    useComposition: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useComposition,
+    useBackground: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useBackground,
+    useColors: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useColors,
+    useTypography: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useTypography,
+    useBadges: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useBadges,
+    useIcons: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useIcons,
+    useMood: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useMood,
+    useOverallPresentation: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useOverallPresentation,
+  });
+  const [styleReferenceImages, setStyleReferenceImages] = useState<StyleReferenceRow[]>([]);
+  const [styleReferenceUploading, setStyleReferenceUploading] = useState(false);
   /** После успешной гидратации для `projectId` не подставляем saved.* повторно при refresh. */
   const hydratedProjectIdRef = useRef<string | null>(null);
   /** Пользователь успел изменить форму до завершения первого fetch — не перезатирать локальный ввод. */
   const userEditedFormRef = useRef(false);
+  const styleReferenceFileInputRef = useRef<HTMLInputElement>(null);
+  const styleReferenceFieldId = useId();
 
   const markUserEditedForm = useCallback(() => {
     userEditedFormRef.current = true;
@@ -217,11 +286,209 @@ export function CardBuilderTab({
     densityChoices,
   ]);
 
+  const categoryConfig = useMemo(
+    () => (selectedCategory ? getProductCardCategoryFieldsConfig(selectedCategory) : null),
+    [selectedCategory],
+  );
+
+  const measuresPlanFinger = useMemo(() => {
+    const cat = selectedCategory ?? "other";
+    const row =
+      cat in categoryFieldsByCategory
+        ? categoryFieldsByCategory[cat as ProductCategoryId]
+        : undefined;
+    const hasRow = row && Object.keys(row).length > 0;
+    return {
+      selectedCategory: cat,
+      dimensions: dimensionsUser.trim() || undefined,
+      categoryFields:
+        selectedCategory && hasRow
+          ? { categoryKey: selectedCategory, values: row ?? {} }
+          : undefined,
+      categoryFieldsByCategory:
+        Object.keys(categoryFieldsByCategory).length > 0 ? categoryFieldsByCategory : undefined,
+    };
+  }, [selectedCategory, dimensionsUser, categoryFieldsByCategory]);
+
+  const updateCategoryFieldValue = useCallback(
+    (fieldKey: string, raw: string) => {
+      if (!selectedCategory) return;
+      markUserEditedForm();
+      const v = sanitizeCategoryFieldValue(raw);
+      setCategoryFieldsByCategory((prev) => {
+        const cur = { ...(prev[selectedCategory] ?? {}) };
+        if (!v) delete cur[fieldKey];
+        else cur[fieldKey] = v;
+        const next: Partial<Record<ProductCategoryId, Record<string, string>>> = { ...prev };
+        if (Object.keys(cur).length === 0) delete next[selectedCategory];
+        else next[selectedCategory] = cur;
+        return next;
+      });
+    },
+    [selectedCategory, markUserEditedForm],
+  );
+
+  const validateClientCategoryRows = useCallback(
+    (rows: Record<string, string> | undefined): string | null => {
+      if (!rows) return null;
+      for (const [k, raw] of Object.entries(rows)) {
+        if (!raw.trim()) continue;
+        if (raw.includes("<")) {
+          return `Поле «${k}»: удалите HTML и символ "<".`;
+        }
+        const s = sanitizeCategoryFieldValue(raw);
+        if (s.length > CATEGORY_FIELD_VALUE_MAX_CHARS) {
+          return `Поле «${k}»: сократите текст (максимум ${CATEGORY_FIELD_VALUE_MAX_CHARS} символов).`;
+        }
+      }
+      return null;
+    },
+    [],
+  );
+
+  const removeStyleReferenceAt = useCallback(
+    (idx: number) => {
+      markUserEditedForm();
+      setStyleReferenceImages((prev) => prev.filter((_, i) => i !== idx));
+    },
+    [markUserEditedForm],
+  );
+
+  const handleStyleReferenceFileInputChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const list = e.target.files;
+      e.target.value = "";
+      if (!list?.length) return;
+      if (!projectId || !canUseBackend) {
+        toast.error("Чтобы загрузить референс, нужен сохранённый проект с доступом к загрузкам.");
+        return;
+      }
+      markUserEditedForm();
+      const files = [...list];
+      setStyleReferenceUploading(true);
+      try {
+        for (const file of files) {
+          if (!isValidStyleRefImage(file)) {
+            toast.error("Референс: нужен файл PNG, JPG, JPEG или WebP.");
+            continue;
+          }
+          if (file.size > STYLE_REF_MAX_BYTES) {
+            toast.error(`Референс: файл не больше ${STYLE_REF_MAX_MB} МБ.`);
+            continue;
+          }
+          const form = new FormData();
+          form.set("file", file);
+          form.set("purpose", "product_card_style_reference");
+          const res = await fetch("/api/uploads", { method: "POST", body: form });
+          const data = (await res.json()) as {
+            url?: string;
+            fileId?: string;
+            size?: number;
+            error?: string;
+          };
+          const ok =
+            res.ok &&
+            typeof data.url === "string" &&
+            data.url.trim() &&
+            typeof data.fileId === "string" &&
+            data.fileId.trim();
+          if (!ok) {
+            toast.error(
+              typeof data.error === "string" && data.error.trim()
+                ? data.error
+                : "Не удалось загрузить референс стиля.",
+            );
+            continue;
+          }
+
+          let atCap = false;
+          setStyleReferenceImages((prev) => {
+            if (prev.length >= 3) {
+              atCap = true;
+              return prev;
+            }
+            const sizeNum =
+              typeof data.size === "number" && Number.isFinite(data.size) ? data.size : file.size;
+            return [
+              ...prev,
+              {
+                url: data.url!.trim(),
+                fileName: file.name,
+                size: sizeNum,
+                fileId: data.fileId!.trim(),
+              },
+            ];
+          });
+
+          if (atCap) {
+            toast.message("Уже загружено максимум три референса.");
+            break;
+          }
+        }
+      } finally {
+        setStyleReferenceUploading(false);
+      }
+    },
+    [projectId, canUseBackend, markUserEditedForm],
+  );
+
+  const ensureCategoryFieldsValid = useCallback((): boolean => {
+    for (const row of Object.values(categoryFieldsByCategory)) {
+      if (!row) continue;
+      const msg = validateClientCategoryRows(row);
+      if (msg) {
+        setPlanError(msg);
+        return false;
+      }
+    }
+    return true;
+  }, [categoryFieldsByCategory, validateClientCategoryRows]);
+
   const canWork = Boolean(hasImage && canUseBackend && projectId && selectedCategory);
 
-  const planPayload = useMemo(
-    () => ({
-      selectedCategory: selectedCategory ?? "other",
+  const planPayload = useMemo(() => {
+    const cat = selectedCategory ?? "other";
+    const rowRaw = selectedCategory ? categoryFieldsByCategory[selectedCategory] : undefined;
+    const pruned: Record<string, string> = {};
+    if (rowRaw) {
+      for (const [k, val] of Object.entries(rowRaw)) {
+        const s = String(val).trim();
+        if (s) pruned[k] = s;
+      }
+    }
+
+    const byOut: Partial<Record<ProductCategoryId, Record<string, string>>> = {};
+    for (const [ck, m] of Object.entries(categoryFieldsByCategory)) {
+      if (!m || typeof m !== "object") continue;
+      const sub: Record<string, string> = {};
+      for (const [k, val] of Object.entries(m)) {
+        const s = String(val).trim();
+        if (s) sub[k] = s;
+      }
+      if (Object.keys(sub).length) byOut[ck as ProductCategoryId] = sub;
+    }
+
+    const styleReferenceIds = styleReferenceEnabled
+      ? styleReferenceImages
+          .map((x) => x.fileId?.trim())
+          .filter((x): x is string => Boolean(x))
+          .slice(0, 3)
+      : [];
+
+    const styleReferenceBlock =
+      styleReferenceEnabled && styleReferenceIds.length
+        ? {
+            styleReference: {
+              enabled: true,
+              referenceAssetIds: styleReferenceIds,
+              strength: styleReferenceStrength,
+              ...styleReferenceFlags,
+            },
+          }
+        : {};
+
+    return {
+      selectedCategory: cat,
       marketplace: coercedMarketplace,
       goal: effectiveGoal,
       preserveProduct,
@@ -237,26 +504,35 @@ export function CardBuilderTab({
       priceSegment,
       salesStyle,
       textDensity: effectiveTextDensity,
-    }),
-    [
-      selectedCategory,
-      coercedMarketplace,
-      effectiveGoal,
-      preserveProduct,
-      preserveAspects,
-      creativeStyle,
-      benefitsSel,
-      benefitsExtra,
-      subtitle,
-      dimensionsUser,
-      languageMode,
-      mustSel,
-      audience,
-      priceSegment,
-      salesStyle,
-      effectiveTextDensity,
-    ],
-  );
+      ...(Object.keys(byOut).length ? { categoryFieldsByCategory: byOut } : {}),
+      ...(selectedCategory && Object.keys(pruned).length
+        ? { categoryFields: { categoryKey: selectedCategory, values: pruned } }
+        : {}),
+      ...styleReferenceBlock,
+    };
+  }, [
+    selectedCategory,
+    categoryFieldsByCategory,
+    coercedMarketplace,
+    effectiveGoal,
+    preserveProduct,
+    preserveAspects,
+    creativeStyle,
+    benefitsSel,
+    benefitsExtra,
+    subtitle,
+    dimensionsUser,
+    languageMode,
+    mustSel,
+    audience,
+    priceSegment,
+    salesStyle,
+    effectiveTextDensity,
+    styleReferenceEnabled,
+    styleReferenceImages,
+    styleReferenceStrength,
+    styleReferenceFlags,
+  ]);
 
   const fetchCardBuilderBlockForProject = useCallback(
     async (pid: string): Promise<CardBuilderBlockPayload | null> => {
@@ -367,6 +643,89 @@ export function CardBuilderTab({
           value: saved.textDensity.trim(),
         });
       }
+
+      const mergedArchive: Partial<Record<ProductCategoryId, Record<string, string>>> = {};
+      const rawBy = saved.categoryFieldsByCategory;
+      if (rawBy && typeof rawBy === "object" && !Array.isArray(rawBy)) {
+        for (const [ck, mv] of Object.entries(rawBy)) {
+          if (!isProductCategoryId(ck)) continue;
+          if (!mv || typeof mv !== "object" || Array.isArray(mv)) continue;
+          const row: Record<string, string> = {};
+          for (const [fk, val] of Object.entries(mv as Record<string, unknown>)) {
+            if (typeof val !== "string") continue;
+            const s = sanitizeCategoryFieldValue(val);
+            if (s) row[fk] = s;
+          }
+          if (Object.keys(row).length) mergedArchive[ck] = row;
+        }
+      }
+
+      const snap = saved.categoryFields;
+      if (snap && typeof snap === "object" && !Array.isArray(snap)) {
+        const r = snap as Record<string, unknown>;
+        const ck = typeof r.categoryKey === "string" ? r.categoryKey.trim() : "";
+        const vals = r.values;
+        if (isProductCategoryId(ck) && vals && typeof vals === "object" && !Array.isArray(vals)) {
+          const row: Record<string, string> = {};
+          for (const [fk, val] of Object.entries(vals as Record<string, unknown>)) {
+            if (typeof val !== "string") continue;
+            const s = sanitizeCategoryFieldValue(val);
+            if (s) row[fk] = s;
+          }
+          if (Object.keys(row).length) {
+            mergedArchive[ck] = { ...(mergedArchive[ck] ?? {}), ...row };
+          }
+        }
+      }
+
+      setCategoryFieldsByCategory(mergedArchive);
+
+      const rawSr = saved.styleReference;
+      if (rawSr && typeof rawSr === "object" && !Array.isArray(rawSr)) {
+        const s = rawSr as Record<string, unknown>;
+        setStyleReferenceEnabled(s.enabled === true);
+        const stRaw = typeof s.strength === "string" ? s.strength.trim() : "";
+        setStyleReferenceStrength(
+          stRaw === "low" || stRaw === "high" || stRaw === "medium" ? stRaw : "medium",
+        );
+        setStyleReferenceFlags({
+          useComposition: s.useComposition === true,
+          useBackground: s.useBackground === true,
+          useColors: s.useColors === true,
+          useTypography: s.useTypography === true,
+          useBadges: s.useBadges === true,
+          useIcons: s.useIcons === true,
+          useMood: s.useMood === true,
+          useOverallPresentation: s.useOverallPresentation === true,
+        });
+        const idList = Array.isArray(s.referenceAssetIds)
+          ? s.referenceAssetIds
+              .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+              .slice(0, 3)
+          : [];
+        setStyleReferenceImages(
+          idList.map((fid, idx) => ({
+            fileId: fid.trim(),
+            url: "",
+            fileName: `Референс ${idx + 1}`,
+            size: 0,
+          })),
+        );
+      } else {
+        setStyleReferenceEnabled(false);
+        setStyleReferenceStrength("medium");
+        setStyleReferenceFlags({
+          useComposition: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useComposition,
+          useBackground: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useBackground,
+          useColors: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useColors,
+          useTypography: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useTypography,
+          useBadges: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useBadges,
+          useIcons: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useIcons,
+          useMood: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useMood,
+          useOverallPresentation: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useOverallPresentation,
+        });
+        setStyleReferenceImages([]);
+      }
     },
     [],
   );
@@ -409,6 +768,7 @@ export function CardBuilderTab({
     setPlanLoading(true);
     setPlanError(null);
     try {
+      if (!ensureCategoryFieldsValid()) return;
       const res = await fetch(`/api/product-card-projects/${projectId}/card-builder/plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -439,13 +799,14 @@ export function CardBuilderTab({
     } finally {
       setPlanLoading(false);
     }
-  }, [projectId, selectedCategory, planPayload, refreshHistoryAndPlanStatus]);
+  }, [projectId, selectedCategory, planPayload, refreshHistoryAndPlanStatus, ensureCategoryFieldsValid]);
 
   const runEstimate = useCallback(
     async (mode: "single_slide" | "full_gallery") => {
       if (!projectId) return;
       setEstimating(true);
       try {
+        if (!ensureCategoryFieldsValid()) return;
         const res = await fetch(`/api/product-card-projects/${projectId}/estimate/card-builder`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -493,7 +854,7 @@ export function CardBuilderTab({
         setEstimating(false);
       }
     },
-    [projectId, planPayload, slides, activeSlideId],
+    [projectId, planPayload, slides, activeSlideId, ensureCategoryFieldsValid],
   );
 
   const pollGen = useCallback(async (generationId: string) => {
@@ -557,6 +918,7 @@ export function CardBuilderTab({
       if (!projectId) return;
       setGenBusy(true);
       try {
+        if (!ensureCategoryFieldsValid()) return;
         const hash = cbPricingSnapRef.current.lastPlanHash;
         const cred = cbPricingSnapRef.current.singleCredits;
         if (!hash || cred == null) {
@@ -614,7 +976,7 @@ export function CardBuilderTab({
         setGenBusy(false);
       }
     },
-    [projectId, pollGen, refreshHistoryAndPlanStatus],
+    [projectId, pollGen, refreshHistoryAndPlanStatus, ensureCategoryFieldsValid],
   );
 
   const generateAll = useCallback(async () => {
@@ -707,6 +1069,21 @@ export function CardBuilderTab({
       setEstimateGallery(null);
       setSlideGen({});
       setGenHistory([]);
+      setCategoryFieldsByCategory({});
+      setStyleReferenceEnabled(false);
+      setStyleReferenceStrength("medium");
+      setStyleReferenceFlags({
+        useComposition: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useComposition,
+        useBackground: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useBackground,
+        useColors: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useColors,
+        useTypography: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useTypography,
+        useBadges: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useBadges,
+        useIcons: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useIcons,
+        useMood: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useMood,
+        useOverallPresentation: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useOverallPresentation,
+      });
+      setStyleReferenceImages([]);
+      setStyleReferenceUploading(false);
       cbPricingSnapRef.current = { lastPlanHash: null, singleCredits: null, galleryCredits: null };
     });
   }, [projectId]);
@@ -716,9 +1093,19 @@ export function CardBuilderTab({
     void Promise.resolve().then(() => void hydrateFormFromServer());
   }, [projectId, canUseBackend, enabledMpIndex, hydrateFormFromServer]);
 
+  const categorySafetyBullets = useMemo(
+    () => (selectedCategory ? getCategoryFieldsSafetyBullets(selectedCategory) : []),
+    [selectedCategory],
+  );
+
   if (!hasImage) return null;
 
   const selProfile = enabledMpIndex.get(coercedMarketplace);
+
+  const styleReferencePreviewActive =
+    styleReferenceEnabled && styleReferenceImages.some((x) => Boolean(x.fileId?.trim()));
+  const primaryStyleReferenceThumbUrl =
+    styleReferenceImages.find((x) => typeof x.url === "string" && x.url.trim())?.url ?? "";
 
   return (
     <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
@@ -740,8 +1127,8 @@ export function CardBuilderTab({
         <Alert>
           <AlertTitle>Текст на изображении</AlertTitle>
           <AlertDescription>
-            Лимиты для одного слайда: одна строка — не длиннее 120 символов; всего не больше 7 фраз (название,
-            подзаголовок, теги, строки из поля дополнительного текста, размеры).
+            Лимиты для одного слайда: одна текстовая фраза до ~400 символов; суммарно не больше 16 значимых фраз
+            (название, подзаголовок, дополнительный текст, размеры, поля категории).
           </AlertDescription>
         </Alert>
 
@@ -814,6 +1201,88 @@ export function CardBuilderTab({
             ) : null}
           </CardContent>
         </Card>
+
+        {selectedCategory && categoryConfig ? (
+          <Card className="rounded-2xl border-border">
+            <CardHeader>
+              <CardTitle className="text-base">Данные для категории</CardTitle>
+              <CardDescription className="space-y-3">
+                <div>
+                  <p className="text-foreground text-sm font-medium">
+                    Дополните данные товара — это поможет сделать карточку точнее
+                  </p>
+                  <p className="text-muted-foreground mt-2 text-sm">
+                    Можно пропустить. AI будет использовать только то, что вы указали, и не должен выдумывать
+                    характеристики.
+                  </p>
+                </div>
+                {categorySafetyBullets.length ? (
+                  <ul className="text-muted-foreground list-inside list-disc text-xs leading-relaxed">
+                    {categorySafetyBullets.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-muted-foreground text-xs">
+                Категория: <span className="text-foreground font-medium">{categoryConfig.label}</span>
+              </p>
+              {categoryConfig.fields.map((field) => {
+                const row = categoryFieldsByCategory[selectedCategory] ?? {};
+                const val = row[field.key] ?? "";
+                const inputId = `pc-catfield-${selectedCategory}-${field.key}`;
+                const optionalSuffix = field.optional ? (
+                  <span className="text-muted-foreground font-normal"> (необязательно)</span>
+                ) : null;
+                const control =
+                  field.type === "textarea" || field.type === "multi_select" ? (
+                    <Textarea
+                      id={inputId}
+                      value={val}
+                      onChange={(e) => {
+                        updateCategoryFieldValue(field.key, e.target.value);
+                      }}
+                      rows={field.type === "multi_select" ? 3 : 2}
+                      maxLength={CATEGORY_FIELD_VALUE_MAX_CHARS}
+                      className="rounded-xl"
+                      placeholder={field.placeholder}
+                    />
+                  ) : field.type === "select" ? (
+                    <Input
+                      id={inputId}
+                      value={val}
+                      onChange={(e) => updateCategoryFieldValue(field.key, e.target.value)}
+                      maxLength={CATEGORY_FIELD_VALUE_MAX_CHARS}
+                      className="rounded-xl"
+                      placeholder={field.placeholder}
+                    />
+                  ) : (
+                    <Input
+                      id={inputId}
+                      value={val}
+                      onChange={(e) => updateCategoryFieldValue(field.key, e.target.value)}
+                      maxLength={CATEGORY_FIELD_VALUE_MAX_CHARS}
+                      className="rounded-xl"
+                      placeholder={field.placeholder}
+                      inputMode={field.type === "number" ? "decimal" : undefined}
+                    />
+                  );
+
+                return (
+                  <div key={field.key} className="space-y-2">
+                    <Label htmlFor={inputId}>
+                      {field.label}
+                      {optionalSuffix}
+                    </Label>
+                    {control}
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card className="rounded-2xl border-border">
           <CardHeader>
@@ -997,6 +1466,143 @@ export function CardBuilderTab({
                 ))}
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-border">
+          <CardHeader>
+            <CardTitle className="text-base">Референс стиля (необязательно)</CardTitle>
+            <CardDescription>
+              Загрузите пример карточки или фото в желаемом стиле. Мы используем его как ориентир по дизайну, но
+              не будем копировать чужой товар или текст.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-2">
+              <input
+                id={`${styleReferenceFieldId}-toggle`}
+                type="checkbox"
+                checked={styleReferenceEnabled}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  setStyleReferenceEnabled(e.target.checked);
+                }}
+                className="border-input accent-primary size-4 shrink-0 rounded border"
+              />
+              <Label htmlFor={`${styleReferenceFieldId}-toggle`}>Использовать референс стиля</Label>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor={`${styleReferenceFieldId}-strength`}>Сила влияния</Label>
+              <select
+                id={`${styleReferenceFieldId}-strength`}
+                className={nativeFieldClass}
+                value={styleReferenceStrength}
+                onChange={(e) => {
+                  markUserEditedForm();
+                  const v = e.target.value;
+                  if (v === "low" || v === "medium" || v === "high") setStyleReferenceStrength(v);
+                }}
+              >
+                <option value="low">Низкая</option>
+                <option value="medium">Средняя</option>
+                <option value="high">Высокая</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Что брать из референса</Label>
+              <div className="flex flex-wrap gap-2">
+                {STYLE_REFERENCE_ASPECTS.map((a) => (
+                  <label
+                    key={a.field}
+                    className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={styleReferenceFlags[a.field]}
+                      onChange={(e) => {
+                        markUserEditedForm();
+                        const on = e.target.checked;
+                        setStyleReferenceFlags((prev) => ({ ...prev, [a.field]: on }));
+                      }}
+                      className="border-input accent-primary size-4 shrink-0 rounded border"
+                    />
+                    {a.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor={styleReferenceFieldId}>Изображения референса (1–3)</Label>
+              <input
+                ref={styleReferenceFileInputRef}
+                id={styleReferenceFieldId}
+                type="file"
+                accept={STYLE_REF_ACCEPT}
+                multiple
+                className="sr-only"
+                onChange={(e) => void handleStyleReferenceFileInputChange(e)}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-xl"
+                  disabled={
+                    !canUseBackend || !projectId || styleReferenceUploading || styleReferenceImages.length >= 3
+                  }
+                  onClick={() => styleReferenceFileInputRef.current?.click()}
+                >
+                  {styleReferenceUploading ? "Загрузка…" : "Выбрать файлы"}
+                </Button>
+                <span className="text-muted-foreground text-xs">
+                  PNG, JPG, WebP · до {STYLE_REF_MAX_MB} МБ · максимум 3 файла
+                </span>
+              </div>
+            </div>
+
+            {styleReferenceImages.length ? (
+              <div className="space-y-2">
+                {styleReferenceImages.map((row, idx) => (
+                  <div
+                    key={row.fileId ?? `style-ref-${idx}`}
+                    className="flex items-start gap-3 rounded-xl border border-border bg-card p-2"
+                  >
+                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border bg-muted">
+                      {row.url ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element -- динамический URL из uploads */}
+                          <img src={row.url} alt="" className="size-full object-cover" />
+                        </>
+                      ) : (
+                        <div className="text-muted-foreground flex size-full items-center justify-center text-[10px]">
+                          Нет превью
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 text-xs leading-snug">
+                      <div className="truncate font-medium">{row.fileName || `Референс ${idx + 1}`}</div>
+                      {row.size ? (
+                        <div className="text-muted-foreground">
+                          {(row.size / (1024 * 1024)).toFixed(1)} МБ
+                        </div>
+                      ) : null}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 text-destructive"
+                      onClick={() => removeStyleReferenceAt(idx)}
+                    >
+                      Удалить
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -1210,6 +1816,29 @@ export function CardBuilderTab({
             <CardDescription>Порядок и статус слайдов</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Стиль будет ориентироваться на загруженный референс.
+            </p>
+            {styleReferencePreviewActive ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-xs">
+                {primaryStyleReferenceThumbUrl.trim() ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={primaryStyleReferenceThumbUrl}
+                      alt=""
+                      className="h-10 w-10 shrink-0 rounded-md border object-cover"
+                    />
+                  </>
+                ) : null}
+                <div className="min-w-0">
+                  <div className="font-medium text-primary">Style reference active</div>
+                  <div className="text-muted-foreground leading-snug">
+                    Товар остаётся с исходного фото; референс влияет только на верстку и визуальную подачу.
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {slides.length === 0 ? (
               <p className="text-muted-foreground text-sm">
                 После нажатия «Сгенерировать структуру» здесь появится план из 6–8 кадров.
@@ -1226,7 +1855,7 @@ export function CardBuilderTab({
                       marketplaceProfile: mpProf,
                       imageRole: s.imageRole as CardBuilderTemplateSlideRole,
                       currentTemplateId: s.templateId,
-                      hasConcreteDimensions: hasUserDimensionMeasures(dimensionsUser),
+                      hasConcreteDimensions: hasMeasuresFromCategoryPlan(measuresPlanFinger),
                       mustShowScale: mustSel.includes("scale"),
                     })
                   : listTemplatesForSlideRole(s.imageRole as CardBuilderTemplateSlideRole);

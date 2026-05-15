@@ -6,8 +6,10 @@ import {
   inferIngredientClaimsFromClientText,
   inferPlannerBucket,
   pickGalleryTemplateSequenceForPlan,
+  type GallerySequenceInput,
   type PlannerBucket,
 } from "@/config/card-builder-gallery-sequences";
+import type { ProductCategoryId } from "@/config/product-card-categories";
 import {
   defaultTemplateForSlideRole,
   getCardBuilderTemplate,
@@ -18,6 +20,16 @@ import type {
   ProductCardMarketplaceProfile,
 } from "@/config/product-card-marketplace-profiles";
 import { getPublicProductCategories } from "@/config/product-card-categories";
+import type {
+  CardBuilderCategoryFieldsSnapshot,
+} from "@/lib/card-builder-category-fields-runtime";
+import {
+  categoryFieldsPlainForPlanner,
+  clonePlanInputWithMergedMeasuresForPlanner,
+  hasMeasuresFromCategoryPlan,
+  mergedCategoryValues,
+} from "@/lib/card-builder-category-fields-runtime";
+import type { CardBuilderStyleReferencePlan } from "@/lib/card-builder-style-reference";
 
 export type CardBuilderSlideRole = CardBuilderTemplateSlideRole;
 
@@ -129,6 +141,11 @@ export type CardBuilderPlanInput = {
   appliedMarketplaceRules?: AppliedMarketplaceRulesSnapshot;
   cardBuilderTargetAspectRatio?: string;
   cardBuilderTargetSize?: string;
+  /** Поля категории (опционально); снимок по выбранной категории + архив по другим. */
+  categoryFields?: CardBuilderCategoryFieldsSnapshot;
+  categoryFieldsByCategory?: Partial<Record<ProductCategoryId, Record<string, string>>>;
+  /** Референс визуального стиля (id файлов); не источник фактов о товаре. */
+  styleReference?: CardBuilderStyleReferencePlan;
 };
 
 type MarketplacePlannerCluster =
@@ -285,6 +302,35 @@ function roleOkForPlan(
   return true;
 }
 
+/** Преобразование сохранённых полей плана в вход последовательности галереи Kie/эвристик. */
+function gallerySeqFromPlan(inp: CardBuilderPlanInput): GallerySequenceInput {
+  const sr = inp.styleReference;
+  const srPlanner =
+    sr?.enabled && sr.referenceAssetIds.length > 0
+      ? {
+          enabled: true as const,
+          strength: sr.strength,
+          referenceCount: sr.referenceAssetIds.length,
+          useComposition: sr.useComposition,
+          useBackground: sr.useBackground,
+          useColors: sr.useColors,
+          useTypography: sr.useTypography,
+          useBadges: sr.useBadges,
+          useIcons: sr.useIcons,
+          useMood: sr.useMood,
+          useOverallPresentation: sr.useOverallPresentation,
+        }
+      : undefined;
+  return {
+    selectedCategory: inp.selectedCategory,
+    subtitle: inp.subtitle,
+    benefitsExtra: inp.benefitsExtra,
+    additionalBenefits: inp.additionalBenefits,
+    categoryFieldsPlain: categoryFieldsPlainForPlanner(inp),
+    styleReference: srPlanner,
+  };
+}
+
 /** Infographics demotion: Lamoda → fashion-catalog lifestyle; классические объявления → детальный кадр. */
 function demoteHeavyInfographic(
   templateId: string,
@@ -304,7 +350,7 @@ function reconcileIngredientSlides(
   bucket: PlannerBucket,
   input: CardBuilderPlanInput,
 ): string[] {
-  if (inferIngredientClaimsFromClientText(input)) return templateIds;
+  if (inferIngredientClaimsFromClientText(gallerySeqFromPlan(input))) return templateIds;
   const repl =
     bucket === "food"
       ? "texture_closeup"
@@ -429,6 +475,77 @@ function extendToSlideCount(
   }
 
   return out.slice(0, count);
+}
+
+/** Вторичный выбор шаблонов под настройки референса стиля (без vision); marketplace и category-безопасность через coerce. */
+function applyStyleReferenceTemplateNudge(
+  templateIds: string[],
+  seqIn: GallerySequenceInput,
+  profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
+): string[] {
+  const sr = seqIn.styleReference;
+  if (!sr?.enabled || sr.referenceCount <= 0) return templateIds;
+
+  const bucket = inferPlannerBucket(seqIn);
+  const maxSwaps = sr.strength === "high" ? 4 : sr.strength === "medium" ? 2 : 1;
+  let swaps = 0;
+  const out = [...templateIds];
+
+  const replaceSlideRolePrefer = (
+    role: CardBuilderTemplateSlideRole,
+    preferTemplateId: string,
+  ): void => {
+    if (swaps >= maxSwaps) return;
+    const idx = out.findIndex((tid) => getCardBuilderTemplate(tid)?.slideRole === role);
+    if (idx < 0) return;
+    const cur = out[idx]!;
+    if (cur === preferTemplateId) return;
+    const c = coerceTemplateAgainstProfile(preferTemplateId, profile, cluster);
+    if (!c || c === cur) return;
+    const d = getCardBuilderTemplate(c);
+    if (!d || d.slideRole !== role) return;
+    out[idx] = c;
+    swaps += 1;
+  };
+
+  const infographicHint = sr.useBadges || sr.useIcons;
+
+  if (infographicHint) {
+    replaceSlideRolePrefer("benefits_infographic", "benefits_grid");
+  }
+
+  const techCatalog =
+    sr.strength !== "low" &&
+    bucket === "gadgets" &&
+    (sr.useTypography || sr.useComposition) &&
+    infographicHint;
+  if (techCatalog) {
+    replaceSlideRolePrefer("materials", "feature_callouts");
+  }
+
+  const editorialApparel =
+    sr.strength !== "low" &&
+    bucket === "apparel_clothing" &&
+    sr.useComposition &&
+    (sr.useMood || sr.useOverallPresentation);
+  if (editorialApparel) {
+    replaceSlideRolePrefer("lifestyle", "fashion_catalog");
+  }
+
+  const interior =
+    sr.useBackground &&
+    (sr.useMood || sr.useOverallPresentation) &&
+    (bucket === "furniture" || bucket === "universal");
+  if (interior) {
+    replaceSlideRolePrefer("lifestyle", "interior_lifestyle");
+  }
+
+  if (bucket === "gadgets" && sr.strength === "high" && infographicHint) {
+    replaceSlideRolePrefer("benefits_infographic", "comparison_card");
+  }
+
+  return uniqRolesPreferred(out, profile, cluster);
 }
 
 function moveMainPhotoFirst(templateIds: string[]): string[] {
@@ -602,6 +719,76 @@ function injectMustShow(
   return uniqRolesPreferred(out, profile, cluster);
 }
 
+/** Необязательные поля категории усиливают релевантные роли плана. */
+function injectCategoryFieldSemantics(
+  ids: string[],
+  input: CardBuilderPlanInput,
+  profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
+): string[] {
+  const v = mergedCategoryValues(input);
+  if (!Object.keys(v).length) return ids;
+
+  let out = uniqRolesPreferred(ids, profile, cluster);
+
+  const mi = out.findIndex((t) => getCardBuilderTemplate(t)?.slideRole === "main_photo");
+  const insertAt = mi >= 0 ? mi + 1 : 0;
+
+  const addRoleOnce = (role: CardBuilderSlideRole) => {
+    if (out.some((x) => getCardBuilderTemplate(x)?.slideRole === role)) return;
+    if (!roleOkForPlan(profile, role)) return;
+
+    const tidBase = defaultTemplateForSlideRole(role);
+    const tid =
+      cluster === "lamoda" && role === "benefits_infographic" ? "fashion_catalog" : tidBase;
+    const c = coerceTemplateAgainstProfile(demoteHeavyInfographic(tid, cluster), profile, cluster);
+    if (!c) return;
+
+    if (cluster === "lamoda" && role === "lifestyle") {
+      const cc = coerceTemplateAgainstProfile("fashion_catalog", profile, cluster);
+      if (cc) {
+        const copy = [...out];
+        copy.splice(insertAt, 0, cc);
+        out = uniqRolesPreferred(copy, profile, cluster);
+        return;
+      }
+    }
+
+    const copy = [...out];
+    copy.splice(insertAt, 0, c);
+    out = uniqRolesPreferred(copy, profile, cluster);
+  };
+
+  if (hasMeasuresFromCategoryPlan(input)) addRoleOnce("dimensions");
+  if (v.material?.trim()) addRoleOnce("materials");
+
+  if (v.packageInfo?.trim() && marketplaceProfileAllowsGalleryRole(profile, "packaging")) {
+    addRoleOnce("packaging");
+  }
+
+  const usageLine =
+    (typeof v.useCase === "string" && v.useCase.trim()) ||
+    (typeof v.usage === "string" && v.usage.trim());
+  if (usageLine && marketplaceProfileAllowsGalleryRole(profile, "lifestyle")) addRoleOnce("lifestyle");
+
+  if (v.keyDetails?.trim()) addRoleOnce("detail_closeup");
+
+  const cat = input.selectedCategory?.trim();
+  if (cat === "gadgets_and_tech" && (v.mainFunctions?.trim() || v.specs?.trim())) {
+    addRoleOnce("detail_closeup");
+  }
+
+  if (
+    cat === "beauty_and_care" &&
+    (v.activeIngredients?.trim() || v.effect?.trim()) &&
+    !out.some((t) => getCardBuilderTemplate(t)?.slideRole === "materials")
+  ) {
+    addRoleOnce("materials");
+  }
+
+  return uniqRolesPreferred(out, profile, cluster);
+}
+
 /** Смысловые акценты из benefits[] */
 function injectBenefitsSemantics(
   ids: string[],
@@ -665,7 +852,7 @@ function injectBenefitsSemantics(
   }
 
   if (tags.includes("size") && !hasRole("dimensions")) {
-    const b = inferPlannerBucket(input);
+    const b = inferPlannerBucket(gallerySeqFromPlan(input));
     const tid = b === "apparel_clothing" ? "size_range" : "size_scale";
     const c = coerceTemplateAgainstProfile(tid, profile, cluster);
     if (c) out = uniqRolesPreferred([...out, c], profile, cluster);
@@ -861,7 +1048,7 @@ function purposeSuffixForSlide(
   }
 
   /** Food/medical disclaimers **/
-  const bucket = inferPlannerBucket(input);
+  const bucket = inferPlannerBucket(gallerySeqFromPlan(input));
   if (
     bucket === "food" &&
     (imageRole === "materials" || imageRole === "benefits_infographic")
@@ -885,7 +1072,7 @@ function purposeSuffixForSlide(
 
   if (input.preserveProduct) bits.push("Сохраняем узнаваемость товара там, где вы это выбрали в настройках.");
 
-  if (!hasUserDimensionMeasures(input.dimensions) && imageRole === "dimensions") {
+  if (!hasMeasuresFromCategoryPlan(input) && imageRole === "dimensions") {
     bits.push(
       "Визуальная соразмерность без конкретных чисел из формы: не добавлять вымышленные миллиметры и лишние цифры.",
     );
@@ -1029,7 +1216,9 @@ export function buildCardBuilderGalleryPlan(
   profile: ProductCardMarketplaceProfile,
 ): { slides: CardBuilderGallerySlide[]; planWarning?: string } {
   const cluster = plannerCluster(profile.id);
-  const bucket = inferPlannerBucket(input);
+  const measureInput = clonePlanInputWithMergedMeasuresForPlanner(input);
+  const seqIn = gallerySeqFromPlan(input);
+  const bucket = inferPlannerBucket(seqIn);
   const catRu = categoryLabelRu(input.selectedCategory);
 
   const slideGoalCount: number =
@@ -1048,12 +1237,12 @@ export function buildCardBuilderGalleryPlan(
       templateIds = templatesBenefitsGoal(input, profile, cluster);
       break;
     case "dimensions_slide": {
-      if (!hasUserDimensionMeasures(input.dimensions)) {
+      if (!hasUserDimensionMeasures(measureInput.dimensions)) {
         planWarning =
-          "Размеры в форме не заполнены — использован слайд «Масштаб и размеры» без точных цифр. Добавьте габариты в поле размеров для схемы с числами.";
+          "Размеры в форме не заполнены — использован слайд «Масштаб и размеры» без точных цифр. Добавьте габариты в поле размеров или в полях категории для схемы с числами.";
       }
       const dimPreferred =
-        hasUserDimensionMeasures(input.dimensions)
+        hasUserDimensionMeasures(measureInput.dimensions)
           ? coerceTemplateAgainstProfile(defaultTemplateForSlideRole("dimensions"), profile, cluster)!
           : coerceTemplateAgainstProfile("size_scale", profile, cluster) ??
             coerceTemplateAgainstProfile(defaultTemplateForSlideRole("dimensions"), profile, cluster)!;
@@ -1061,7 +1250,7 @@ export function buildCardBuilderGalleryPlan(
         categoryKey: input.selectedCategory,
         marketplaceProfile: profile,
         imageRole: "dimensions",
-        hasConcreteDimensions: hasUserDimensionMeasures(input.dimensions),
+        hasConcreteDimensions: hasUserDimensionMeasures(measureInput.dimensions),
         mustShowScale: input.mustShow.includes("scale"),
       });
       templateIds = [dimTid];
@@ -1096,15 +1285,18 @@ export function buildCardBuilderGalleryPlan(
     case "full_gallery_6":
     case "full_gallery_8": {
       const galleryCount = slideGoalCount === 8 ? 8 : 6;
-      const baseSeq = reconcileIngredientSlides(
-        pickGalleryTemplateSequenceForPlan(input, galleryCount),
-        bucket,
-        input,
+      const baseSeq = applyStyleReferenceTemplateNudge(
+        pickGalleryTemplateSequenceForPlan(seqIn, galleryCount),
+        seqIn,
+        profile,
+        cluster,
       );
-      let draft = uniqRolesPreferred(baseSeq, profile, cluster);
+      const reconciled = reconcileIngredientSlides(baseSeq, bucket, input);
+      let draft = uniqRolesPreferred(reconciled, profile, cluster);
       draft = applyClusterGalleryRules(draft, cluster, profile);
       draft = injectMustShow(draft, input.mustShow, profile, cluster);
       draft = injectBenefitsSemantics(draft, input, profile, cluster);
+      draft = injectCategoryFieldSemantics(draft, input, profile, cluster);
 
       draft = stripUnsupportedPackaging(
         draft,
@@ -1112,8 +1304,8 @@ export function buildCardBuilderGalleryPlan(
         profile,
         cluster,
       );
-      draft = removeDimensionsWithoutMeasures(draft, profile, cluster, input);
-      draft = sanitizeGalleryTemplateIds(draft, input, profile);
+      draft = removeDimensionsWithoutMeasures(draft, profile, cluster, measureInput);
+      draft = sanitizeGalleryTemplateIds(draft, measureInput, profile);
       draft = uniqRolesPreferred(draft, profile, cluster);
 
       /** TODO: когда UI будет стабильно оплачивать ровно 8 кадров вне Kuz category-наборов, расширить политику здесь. Сейчас — дотягивание ролями профиля. */
@@ -1138,7 +1330,7 @@ export function buildCardBuilderGalleryPlan(
                   uniqRolesPreferred([...templateIds], profile, cluster),
                   profile,
                   cluster,
-                  input,
+                  measureInput,
                 ),
                 packagingReasonRequired(bucket, input.mustShow, cluster),
                 profile,
@@ -1147,7 +1339,7 @@ export function buildCardBuilderGalleryPlan(
               bucket,
               input,
             ),
-            input,
+            measureInput,
             profile,
           ),
           profile,

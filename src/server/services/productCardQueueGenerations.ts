@@ -223,6 +223,11 @@ type QueueOk = {
 type QueueErr = { ok: false; error: string; status: number; reason?: string };
 export type QueueResult = QueueOk | QueueErr;
 
+export type BuildImageModelInputOptions = {
+  /** Публичные URL референсов стиля (не товар). */
+  styleReferenceUrls?: string[];
+};
+
 /**
  * Сбор inputFiles + settings (image) как в /api/generations/image.
  * Экспортируется для product-card: estimate + merge marketplaceCard settings.
@@ -230,10 +235,15 @@ export type QueueResult = QueueOk | QueueErr;
 export function buildImageModelInput(
   model: { settingsSchema: unknown; supportsImageInput: boolean },
   sourceImageUrl: string | string[],
+  options?: BuildImageModelInputOptions,
 ): { normalizedSettings: Record<string, unknown>; inputFiles: string[]; hasSchema: boolean } {
   const sourceImageUrls = (Array.isArray(sourceImageUrl) ? sourceImageUrl : [sourceImageUrl])
     .map((url) => url.trim())
     .filter(Boolean);
+  const styleReferenceUrls = (options?.styleReferenceUrls ?? [])
+    .map((u) => u.trim())
+    .filter(Boolean)
+    .slice(0, 5);
   const mainSourceImageUrl = sourceImageUrls[0] ?? "";
   const hasSchema = modelHasSettingsSchema(model.settingsSchema);
   let schemaAcceptsMultipleImages = !hasSchema;
@@ -251,25 +261,59 @@ export function buildImageModelInput(
           f.type === "image-upload-list" ||
           (typeof f.maxItems === "number" && f.maxItems > 1)),
     );
-    const urlsForSchema = schemaAcceptsMultipleImages
-      ? sourceImageUrls
-      : mainSourceImageUrl
-        ? [mainSourceImageUrl]
-        : [];
-    if (fieldNames.has("referenceImageUrls")) {
-      d.referenceImageUrls = urlsForSchema;
-    }
-    if (fieldNames.has("imageUrls")) {
-      d.imageUrls = urlsForSchema;
-    }
-    if (fieldNames.has("inputUrls")) {
-      d.inputUrls = urlsForSchema;
-    }
-    if (mainSourceImageUrl && fieldNames.has("imageUrl")) {
-      d.imageUrl = mainSourceImageUrl;
-    }
-    if (mainSourceImageUrl && fieldNames.has("firstFrameUrl")) {
-      d.firstFrameUrl = mainSourceImageUrl;
+
+    const canSplitStyleRefs =
+      styleReferenceUrls.length > 0 &&
+      fieldNames.has("referenceImageUrls") &&
+      (fieldNames.has("imageUrls") || fieldNames.has("inputUrls") || fieldNames.has("imageUrl"));
+
+    if (canSplitStyleRefs) {
+      if (fieldNames.has("imageUrls")) {
+        const arr = schemaAcceptsMultipleImages
+          ? sourceImageUrls
+          : mainSourceImageUrl
+            ? [mainSourceImageUrl]
+            : [];
+        d.imageUrls = arr;
+      }
+      if (fieldNames.has("inputUrls")) {
+        const arr = schemaAcceptsMultipleImages
+          ? sourceImageUrls
+          : mainSourceImageUrl
+            ? [mainSourceImageUrl]
+            : [];
+        d.inputUrls = arr;
+      }
+      if (mainSourceImageUrl && fieldNames.has("imageUrl")) {
+        d.imageUrl = mainSourceImageUrl;
+      }
+      if (mainSourceImageUrl && fieldNames.has("firstFrameUrl")) {
+        d.firstFrameUrl = mainSourceImageUrl;
+      }
+      d.referenceImageUrls = styleReferenceUrls;
+    } else {
+      const urlsForSchema = schemaAcceptsMultipleImages
+        ? styleReferenceUrls.length > 0
+          ? [...sourceImageUrls, ...styleReferenceUrls]
+          : sourceImageUrls
+        : mainSourceImageUrl
+          ? [mainSourceImageUrl]
+          : [];
+      if (fieldNames.has("referenceImageUrls")) {
+        d.referenceImageUrls = urlsForSchema;
+      }
+      if (fieldNames.has("imageUrls")) {
+        d.imageUrls = urlsForSchema;
+      }
+      if (fieldNames.has("inputUrls")) {
+        d.inputUrls = urlsForSchema;
+      }
+      if (mainSourceImageUrl && fieldNames.has("imageUrl")) {
+        d.imageUrl = mainSourceImageUrl;
+      }
+      if (mainSourceImageUrl && fieldNames.has("firstFrameUrl")) {
+        d.firstFrameUrl = mainSourceImageUrl;
+      }
     }
     const v = validateAndNormalizeModelSettings(
       model.settingsSchema,
@@ -294,11 +338,26 @@ export function buildImageModelInput(
       ]
     : [];
   const fallbackUrls = schemaAcceptsMultipleImages
-    ? sourceImageUrls
+    ? styleReferenceUrls.length > 0
+      ? [...sourceImageUrls, ...styleReferenceUrls]
+      : sourceImageUrls
     : mainSourceImageUrl
       ? [mainSourceImageUrl]
       : [];
-  const inputFiles = fromSettings.length > 0 ? fromSettings : fallbackUrls;
+
+  const uniq = (arr: string[]) => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const x of arr) {
+      const t = x.trim();
+      if (!t || seen.has(t)) continue;
+      seen.add(t);
+      out.push(t);
+    }
+    return out;
+  };
+
+  const inputFiles = uniq(fromSettings.length > 0 ? fromSettings : fallbackUrls);
   return { normalizedSettings, inputFiles, hasSchema };
 }
 
@@ -331,6 +390,8 @@ export async function queueProductCardImage(
   pricingBreakdown?: ProductCardPriceBreakdown | null,
   /** Только пользовательский текст: модерация по длине/запретам без полного super prompt (card_builder). */
   productCardUserModerationEnvelope?: string | null,
+  /** URL референсов стиля (card_builder): отдельно от фото товара. */
+  styleReferenceUrls?: string[],
 ): Promise<QueueResult> {
   if (!model || model.type !== "IMAGE") {
     return { ok: false, error: "Модель изображения недоступна", status: 500 };
@@ -353,6 +414,7 @@ export async function queueProductCardImage(
     const b = buildImageModelInput(
       { settingsSchema: model.settingsSchema, supportsImageInput: model.supportsImageInput },
       sourceImageUrl,
+      styleReferenceUrls?.length ? { styleReferenceUrls } : undefined,
     );
     normalizedSettings = b.normalizedSettings;
     inputFilesCombined = b.inputFiles;

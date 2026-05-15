@@ -20,11 +20,27 @@ export type GallerySequenceInput = {
   subtitle?: string;
   benefitsExtra?: string;
   additionalBenefits?: string;
+  /** Эвристики плана: текст из categoryFields клиента (только переданное). */
+  categoryFieldsPlain?: string;
+  /** Вторичный модификатор под референс стиля (без анализа пикселей). */
+  styleReference?: {
+    enabled: true;
+    strength: "low" | "medium" | "high";
+    referenceCount: number;
+    useComposition: boolean;
+    useBackground: boolean;
+    useColors: boolean;
+    useTypography: boolean;
+    useBadges: boolean;
+    useIcons: boolean;
+    useMood: boolean;
+    useOverallPresentation: boolean;
+  };
 };
 
 function inferFootwearFromClientText(input: GallerySequenceInput): boolean {
   const t =
-    `${input.subtitle ?? ""} ${input.benefitsExtra ?? ""} ${input.additionalBenefits ?? ""}`.trim();
+    `${input.subtitle ?? ""} ${input.benefitsExtra ?? ""} ${input.additionalBenefits ?? ""} ${input.categoryFieldsPlain ?? ""}`.trim();
   if (!t) return false;
   const re =
     /\b(?:обувь|ботинк|туфл|лоферы|босоножк|сапог|бутс|sandals|sneakers|boots)\b/ui;
@@ -32,9 +48,19 @@ function inferFootwearFromClientText(input: GallerySequenceInput): boolean {
 }
 
 export function inferIngredientClaimsFromClientText(input: GallerySequenceInput): boolean {
+  const plain = input.categoryFieldsPlain?.trim() ?? "";
   const t =
-    `${input.subtitle ?? ""} ${input.benefitsExtra ?? ""} ${input.additionalBenefits ?? ""}`.trim();
+    `${input.subtitle ?? ""} ${input.benefitsExtra ?? ""} ${input.additionalBenefits ?? ""} ${plain}`.trim();
   if (!t) return false;
+
+  const cat = input.selectedCategory.trim();
+  if (cat === "food_and_drinks" && plain && /\b(?:вкус|состав|ингредиент|ингредиенты)\b/ui.test(plain)) {
+    return true;
+  }
+  if (cat === "beauty_and_care" && plain && /\b(?:актив|эффект|состав)\b/ui.test(plain)) {
+    return true;
+  }
+
   return /ингредиент|состав|актив\b|formula|spf|спф|extract|экстракт/ui.test(t);
 }
 
