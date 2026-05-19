@@ -1,10 +1,12 @@
 import { hasUserDimensionMeasures } from "@/config/card-builder-template-allowlist";
-import {
-  getProductCardCategoryFieldsConfig,
-  isProductCategoryId,
-} from "@/config/product-card-category-fields";
+import { isProductCategoryId } from "@/config/product-card-category-fields";
 import type { ProductCategoryId } from "@/config/product-card-categories";
 import type { CardBuilderTemplateSlideRole } from "@/config/card-builder-templates";
+import {
+  buildCategoryFactsPromptBlock,
+  categoryExactTextValuesForSlide,
+  type BuildCategoryFactsPromptBlockInput,
+} from "@/lib/card-builder-category-facts-prompt";
 
 /** Длина одного текстового поля категории после очистки. */
 export const CATEGORY_FIELD_VALUE_MAX_CHARS = 400;
@@ -159,31 +161,52 @@ export function validateNormalizedCategoryPlanFields(
   return errs;
 }
 
-/** Строки «Label: значение» для locked phrases на указанную роль слайда (без общего дубля всех полей). */
+function categoryFactsInputFromPlan(
+  slideRole: CardBuilderTemplateSlideRole,
+  input: CardBuilderPlanWithCategoryFields,
+  templateId?: string,
+): BuildCategoryFactsPromptBlockInput {
+  return {
+    categoryKey: input.selectedCategory,
+    categoryFields: input.categoryFields,
+    categoryFieldsByCategory: input.categoryFieldsByCategory,
+    slideRole,
+    templateId,
+  };
+}
+
+/** Строки «Label: значение» только для релевантных полей слайда (блок CATEGORY_FACTS). */
 export function lockedCategoryLabelsForSlideRole(
   slideRole: CardBuilderTemplateSlideRole,
   input: CardBuilderPlanWithCategoryFields,
+  templateId?: string,
 ): string[] {
-  const cat = input.selectedCategory?.trim();
-  if (!cat || !isProductCategoryId(cat)) return [];
-  const conf = getProductCardCategoryFieldsConfig(cat);
-  if (!conf) return [];
-  const vals = mergedCategoryValues(input);
-  const out: string[] = [];
-  for (const f of conf.fields) {
-    const raw = vals[f.key]?.trim();
-    if (!raw) continue;
-    if (f.useAsExactText === false) continue;
-    const roles = f.useInSlideRoles;
-    if (roles?.length && !roles.includes(slideRole)) continue;
-    out.push(`${f.label}: ${raw}`);
-  }
-  return out;
+  return buildCategoryFactsPromptBlock(categoryFactsInputFromPlan(slideRole, input, templateId))
+    .factsListLines;
+}
+
+/** Значения полей для exact text lock (без префикса label). */
+export function lockedCategoryExactValuesForSlideRole(
+  slideRole: CardBuilderTemplateSlideRole,
+  input: CardBuilderPlanWithCategoryFields,
+  templateId?: string,
+): string[] {
+  return categoryExactTextValuesForSlide(categoryFactsInputFromPlan(slideRole, input, templateId));
+}
+
+export function slideCategoryFactsForRole(
+  slideRole: CardBuilderTemplateSlideRole,
+  input: CardBuilderPlanWithCategoryFields,
+  templateId?: string,
+): Record<string, string> {
+  return buildCategoryFactsPromptBlock(categoryFactsInputFromPlan(slideRole, input, templateId))
+    .slideFacts;
 }
 
 export function categoryFieldFactsLineForSlide(
   slideRole: CardBuilderTemplateSlideRole,
   input: CardBuilderPlanWithCategoryFields,
+  templateId?: string,
 ): string {
-  return lockedCategoryLabelsForSlideRole(slideRole, input).join("\n");
+  return lockedCategoryLabelsForSlideRole(slideRole, input, templateId).join("\n");
 }

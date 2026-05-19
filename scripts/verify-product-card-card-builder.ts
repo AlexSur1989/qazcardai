@@ -13,6 +13,14 @@ import {
 import { pickGalleryTemplateSequenceForPlan } from "@/config/card-builder-gallery-sequences";
 import { PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS } from "@/config/product-card-marketplace-profiles";
 import {
+  buildCategoryFactsPromptBlock,
+  slideCategoryFactsRecord,
+} from "@/lib/card-builder-category-facts-prompt";
+import {
+  lockedCategoryExactValuesForSlideRole,
+  slideCategoryFactsForRole,
+} from "@/lib/card-builder-category-fields-runtime";
+import {
   buildCardBuilderGalleryPlan,
   type CardBuilderPlanInput,
 } from "@/server/services/productCardBuilderPlan";
@@ -274,5 +282,73 @@ assert(
   !mpSrc.includes("scenarioKey"),
   "Карточка маркетплейса не должна задавать scenarioKey рядом с card_builder (изоляция сценариев)",
 );
+
+const accCatPlan = {
+  selectedCategory: "accessories" as const,
+  categoryFields: {
+    categoryKey: "accessories",
+    values: {
+      material: "пластик",
+      sizeOrVolume: "560 мл",
+      useCase: "спорт, прогулка",
+      keyDetails: "крышка, ремешок",
+      packageInfo: "коробка",
+    },
+  },
+};
+
+const detailFacts = slideCategoryFactsRecord({
+  categoryKey: "accessories",
+  categoryFields: accCatPlan.categoryFields,
+  slideRole: "detail_closeup",
+  templateId: "detail_closeup",
+});
+assert(detailFacts.material === "пластик", "detail: material из categoryFields");
+assert(detailFacts.keyDetails === "крышка, ремешок", "detail: keyDetails");
+assert(!detailFacts.packageInfo, "detail: packageInfo не на слайде деталей");
+
+const dimFacts = slideCategoryFactsRecord({
+  categoryKey: "accessories",
+  categoryFields: accCatPlan.categoryFields,
+  slideRole: "dimensions",
+  templateId: "dimensions_schema",
+});
+assert(dimFacts.sizeOrVolume === "560 мл", "dimensions: только объём");
+assert(!dimFacts.keyDetails, "dimensions: без keyDetails");
+
+const detailPrompt = buildCategoryFactsPromptBlock({
+  categoryKey: "accessories",
+  categoryFields: accCatPlan.categoryFields,
+  slideRole: "detail_closeup",
+  templateId: "detail_closeup",
+});
+assert(detailPrompt.block.includes("CATEGORY_FACTS"), "блок CATEGORY_FACTS");
+assert(detailPrompt.block.includes("560 мл"), "факт объёма в detail prompt");
+assert(detailPrompt.block.includes("Не выдумывай"), "правило не выдумывать");
+
+const promptBuilderPath = join(process.cwd(), "src/server/services/cardBuilderPromptBuilder.ts");
+const promptBuilderSrc = readFileSync(promptBuilderPath, "utf8");
+assert(
+  promptBuilderSrc.includes("card_builder_super_prompt_v4"),
+  "супер-промпт v4 с CATEGORY_FACTS и SLIDE_TEXT_PLAN",
+);
+assert(promptBuilderSrc.includes("buildCategoryFactsPromptBlock"), "prompt builder использует buildCategoryFactsPromptBlock");
+assert(
+  promptBuilderSrc.includes("=== 6) CATEGORY_FACTS ===") &&
+    promptBuilderSrc.includes("=== 7) SLIDE_TEXT_PLAN ===") &&
+    promptBuilderSrc.includes("TEXT_LOCK_AND_DESIGN_FLEXIBILITY"),
+  "структура секций супер-промпта",
+);
+
+const exactDim = lockedCategoryExactValuesForSlideRole("dimensions", accCatPlan, "dimensions_schema");
+assert(exactDim.includes("560 мл"), "exact lock: значение объёма без label");
+assert(
+  !exactDim.some((x) => x.includes("Размер")),
+  "exact lock: без префикса label",
+);
+
+const mainFacts = slideCategoryFactsForRole("main_photo", accCatPlan, "hero_clean");
+assert(!mainFacts.keyDetails, "main_photo: без keyDetails");
+assert(mainFacts.material === "пластик" || mainFacts.color, "main_photo: базовые факты");
 
 console.log("[verify-product-card-card-builder] OK");

@@ -12,8 +12,8 @@ import {
 } from "@/config/card-builder-templates";
 import { getPublicProductCategories } from "@/config/product-card-categories";
 import {
-  categoryFieldFactsLineForSlide,
   effectiveDimensionsForOverlay,
+  slideCategoryFactsForRole,
   type CardBuilderPlanWithCategoryFields,
 } from "@/lib/card-builder-category-fields-runtime";
 import type { CardBuilderGallerySlide, CardBuilderPlanInput } from "@/server/services/productCardBuilderPlan";
@@ -86,8 +86,8 @@ export function buildCardBuilderTextSlots(input: BuildCardBuilderTextSlotsInput)
     categoryFields: input.categoryFields,
     categoryFieldsByCategory: input.categoryFieldsByCategory,
   };
-  const categoryFacts = categoryFieldFactsLineForSlide(input.slideRole, catPlan);
   const dimLine = effectiveDimensionsForOverlay(catPlan);
+  const slideFacts = slideCategoryFactsForRole(input.slideRole, catPlan, input.templateId);
 
   for (let i = 0; i < maxBen; i++) {
     const key = `benefit_${i + 1}`;
@@ -103,13 +103,21 @@ export function buildCardBuilderTextSlots(input: BuildCardBuilderTextSlotsInput)
   }
 
   const extra = input.additionalBenefits?.trim() ?? "";
-  const combinedExtra = [extra, categoryFacts].filter(Boolean).join("\n\n");
+  slots.extraText = extra.slice(0, 420);
 
-  if (categoryFacts && (tpl?.textSlots ?? []).includes("subtitle")) {
-    slots.subtitle = [slots.subtitle, categoryFacts].filter(Boolean).join("\n").slice(0, 380);
-    slots.extraText = extra.slice(0, 420);
-  } else {
-    slots.extraText = combinedExtra.slice(0, 420);
+  if (
+    input.slideRole === "dimensions" &&
+    (tpl?.textSlots ?? []).includes("size_line") &&
+    !slots.size_line?.trim()
+  ) {
+    const measureVal =
+      slideFacts.sizeOrVolume ??
+      slideFacts.volumeWeight ??
+      slideFacts.volume ??
+      slideFacts.size ??
+      slideFacts.dimensions ??
+      slideFacts.sizeRange;
+    if (measureVal?.trim()) slots.size_line = measureVal.trim().slice(0, 220);
   }
 
   const chars = input.characteristics?.trim();

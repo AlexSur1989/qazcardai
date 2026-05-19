@@ -12,16 +12,17 @@ import type { CardBuilderTemplateSlideRole } from "@/config/card-builder-templat
 import type { ProductCardMarketplaceProfile } from "@/config/product-card-marketplace-profiles";
 import { PRODUCT_CATEGORY_GROUPS } from "@/config/product-card-categories";
 import { getCategoryFieldsSafetyBullets } from "@/config/product-card-category-fields";
+import { buildCategoryFactsPromptBlock } from "@/lib/card-builder-category-facts-prompt";
 import {
   categoryFieldsPlainForPlanner,
   effectiveDimensionsForOverlay,
   hasMeasuresFromCategoryPlan,
-  lockedCategoryLabelsForSlideRole,
+  lockedCategoryExactValuesForSlideRole,
   type CardBuilderPlanWithCategoryFields,
 } from "@/lib/card-builder-category-fields-runtime";
 import type { CardBuilderStyleReferencePlan } from "@/lib/card-builder-style-reference";
 
-const PROMPT_VERSION = "card_builder_super_prompt_v3" as const;
+const PROMPT_VERSION = "card_builder_super_prompt_v4" as const;
 
 const MAX_PHRASES = 16;
 /** Одна фраза на кадр; поля категории и характеристики до ~400 символов. */
@@ -148,7 +149,8 @@ export function collectExactTextPhrases(input: {
   textDensity: string;
   /** Если true — не включаем пользовательские фразы для bitmap-текста (главное фото без текста по правилам площадки). */
   omitUserLockedText?: boolean;
-  lockedCategoryPhrases?: readonly string[];
+  /** Значения полей категории для exact lock (без «Label:»). */
+  lockedCategoryExactValues?: readonly string[];
 }): {
   phrases: string[];
   validationErrors: string[];
@@ -188,8 +190,8 @@ export function collectExactTextPhrases(input: {
 
     const allowCatLocked = showCardTextLayer || input.slideRole === "dimensions";
     if (allowCatLocked) {
-      for (const line of input.lockedCategoryPhrases ?? []) {
-        const x = stripHtmlFragments(line.trim());
+      for (const val of input.lockedCategoryExactValues ?? []) {
+        const x = stripHtmlFragments(val.trim());
         if (x) raw.push(x);
       }
     }
@@ -614,44 +616,44 @@ function roleBlock(): string {
   ].join("\n\n");
 }
 
-function designFlexibilityWithTextLockBlock(): string {
+function textLockAndDesignFlexibilityBlock(): string {
   return [
-    "=== 7) DESIGN_FLEXIBILITY_WITH_TEXT_LOCK ===",
-    `DESIGN_FLEXIBILITY_WITH_TEXT_LOCK:
+    "=== 9) TEXT_LOCK_AND_DESIGN_FLEXIBILITY ===",
+    `TEXT_LOCK_AND_DESIGN_FLEXIBILITY:
 
-You may freely improve the visual design of the card:
-- change badge shapes;
-- choose better icons;
-- improve composition;
-- improve background;
-- improve colors;
-- improve lighting;
-- improve spacing;
-- improve typography style;
-- adapt the design to the selected marketplace and sales style.
+You may change the visual design:
+- background;
+- composition;
+- badges and callouts;
+- icons;
+- color scheme;
+- decorative elements;
+- block layout;
+- lighting and mood.
 
-However, the written text provided by the user is LOCKED COPY.
-Do not modify the text content in any way.
-
-The design is flexible.
-The text content is immutable.`,
-    `Ты можешь менять визуальный дизайн карточки:
-- форму плашек;
-- иконки;
+You must NOT change any user-provided text content.
+Exact user phrases are locked copy.
+Do not translate, paraphrase, correct, shorten, or replace characters.
+Do not replace Kazakh letters: Ә ә, Ғ ғ, Қ қ, Ң ң, Ө ө, Ұ ұ, Ү ү, Һ һ, І і.`,
+    `Дизайн можно менять:
 - фон;
-- цвета;
 - композицию;
-- расположение блоков;
+- плашки;
+- иконки;
+- цветовую схему;
 - декоративные элементы;
-- стиль карточки;
-- освещение;
-- визуальную подачу под выбранный маркетплейс и стиль.
+- расположение блоков.
 
-Но текст клиента является неизменяемым.
-Нельзя менять содержимое текста ни при каких условиях.
-
-Дизайн можно адаптировать.
-Текст менять нельзя.`,
+Но текст пользователя менять нельзя.
+Точные фразы пользователя являются locked copy.
+Не переводить.
+Не перефразировать.
+Не исправлять.
+Не сокращать.
+Не менять буквы.
+Не менять русский/казахский текст.
+Не заменять казахские буквы:
+Ә ә, Ғ ғ, Қ қ, Ң ң, Ө ө, Ұ ұ, Ү ү, Һ һ, І і.`,
   ].join("\n\n");
 }
 
@@ -761,18 +763,59 @@ Do not replace Russian letters with Latin lookalikes.`,
   ].join("\n\n");
 }
 
-function lockedTextPhrasesSection(phrases: string[]): string {
+function slideTextPlanSection(phrases: string[]): string {
   if (phrases.length === 0) {
     return [
-      "=== 10) LOCKED_TEXT_PHRASES ===",
-      "The user did not supply separate on-card text phrases for this slide.",
-      "Do not invent marketing copy, specs, or benefits as readable text.",
-      "Пользователь не передал отдельные фразы — не выдумывай читаемые подписи и характеристики.",
+      "=== 7) SLIDE_TEXT_PLAN ===",
+      "На этом слайде нет отдельных фраз пользователя для размещения на карточке.",
+      "Не выдумывай читаемые подписи, характеристики и преимущества как текст.",
     ].join("\n\n");
   }
-  const enLines = ["LOCKED TEXT PHRASES TO PLACE ON THE CARD:", ...phrases.map((p, i) => `${i + 1}. "${p}"`)];
-  const ruLines = ["НЕИЗМЕНЯЕМЫЕ ФРАЗЫ ДЛЯ РАЗМЕЩЕНИЯ НА КАРТОЧКЕ:", ...phrases.map((p, i) => `${i + 1}. «${p}»`)];
-  return ["=== 10) LOCKED_TEXT_PHRASES ===", enLines.join("\n"), "", ruLines.join("\n")].join("\n\n");
+  const exactBlocks = phrases.map(
+    (p) =>
+      `Размести точный текст:\n«${p}»\n\nНе меняй этот текст.\nНе переводи.\nНе исправляй.\nНе заменяй символы.`,
+  );
+  const enLines = ["Exact phrases for this slide:", ...phrases.map((p, i) => `${i + 1}. "${p}"`)];
+  return [
+    "=== 7) SLIDE_TEXT_PLAN ===",
+    enLines.join("\n"),
+    "",
+    "Точные фразы для этого слайда (locked copy):",
+    ...exactBlocks,
+  ].join("\n\n");
+}
+
+function categoryContextSection(categoryId: string): string {
+  const label = categoryLabel(categoryId);
+  const hints = getCategoryFieldsSafetyBullets(categoryId);
+  const lines = [
+    "=== 3) CATEGORY_CONTEXT ===",
+    `Категория товара: ${label}.`,
+    "Держись этой категории; не подменяй товар другим типом продукта.",
+  ];
+  if (hints.length) {
+    lines.push(
+      "Краткие ограничения категории:",
+      ...hints.slice(0, 5).map((h) => `— ${h}`),
+    );
+  }
+  return lines.join("\n");
+}
+
+function categoryFactsSection(
+  catPlan: CardBuilderPlanWithCategoryFields,
+  slideRole: CardBuilderTemplateSlideRole,
+  templateId?: string,
+): string {
+  const built = buildCategoryFactsPromptBlock({
+    categoryKey: catPlan.selectedCategory,
+    categoryFields: catPlan.categoryFields,
+    categoryFieldsByCategory: catPlan.categoryFieldsByCategory,
+    slideRole,
+    templateId,
+  });
+  if (!built.block.trim()) return "";
+  return ["=== 6) CATEGORY_FACTS ===", built.block].join("\n\n");
 }
 
 function languagePreservationSection(
@@ -896,7 +939,6 @@ function productIdentityLockSection(input: CardBuilderSuperPromptInput): string 
       ? "Исходное фото можно интерпретировать как референс сцены; товар не заменять."
       : "Опирайся на загруженные фото товара как на референс идентичности SKU.";
 
-  const cat = categoryLabel(input.selectedCategory);
   const mp = input.marketplaceProfile ?? undefined;
   const mpStrict =
     mp?.preserveProductRequired && input.preserveProduct
@@ -908,8 +950,7 @@ function productIdentityLockSection(input: CardBuilderSuperPromptInput): string 
     : "";
 
   return [
-    "=== 2) PRODUCT_IDENTITY_LOCK ===",
-    `Категория товара (не придумывать другой продукт): ${cat}.`,
+    "=== 8) PRESERVE_PRODUCT_LOCK ===",
     preserveBlock,
     creativeNote,
     mpStrict,
@@ -1017,9 +1058,10 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
       ? undefined
       : effDimLine || input.dimensions;
 
-  const lockedCatLines = lockedCategoryLabelsForSlideRole(
+  const lockedCatExact = lockedCategoryExactValuesForSlideRole(
     input.slideRole as CardBuilderTemplateSlideRole,
     catPlan,
+    input.templateId,
   );
 
   const { phrases, validationErrors } = collectExactTextPhrases({
@@ -1030,7 +1072,7 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
     slideRole: input.slideRole,
     textDensity: input.textDensity ?? "medium",
     omitUserLockedText: mainPhotoLocksText,
-    lockedCategoryPhrases: lockedCatLines,
+    lockedCategoryExactValues: lockedCatExact,
   });
 
   if (validationErrors.length > 0) {
@@ -1052,40 +1094,32 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
       : "";
 
   const marketplaceInner = marketplacePromptBody(input.marketplace, input.slideRole, profile);
-  const marketplaceBlock = ["=== 3) MARKETPLACE_INSTRUCTION ===", marketplaceInner].join("\n\n");
+  const marketplaceBlock = ["=== 2) MARKETPLACE_PROFILE ===", marketplaceInner].join("\n\n");
 
   const templateSpecific = input.templateId ? getTemplateInstruction(input.templateId) : "";
 
   const slideRoleBlock = [
-    "=== 4) SLIDE_ROLE_INSTRUCTION ===",
+    "=== 4) SLIDE_ROLE ===",
     getSlideRoleInstruction(input.slideRole, input.templateId),
   ].join("\n\n");
 
   const templateInstructionBlock =
     templateSpecific.length > 0
-      ? [`=== 4d) TEMPLATE_SPECIFIC (${input.templateId}) ===`, templateSpecific].join("\n\n")
+      ? [`=== 5) TEMPLATE_INSTRUCTION (${input.templateId}) ===`, templateSpecific].join("\n\n")
       : "";
 
   const accentsBlock = semanticSellingAccentsSection(input.benefits ?? []);
   const mustShowBlock = mustShowVisualRequirementsSection(input.mustShow ?? []);
 
-  const cfSafety = getCategoryFieldsSafetyBullets(input.selectedCategory);
-  const cfPolicyBlock =
-    cfSafety.length > 0 || lockedCatLines.length > 0
-      ? [
-          "=== 4e) CATEGORY_USER_FACTS ===",
-          "Тексты из полей категории клиент заполнил сам; пустые поля не восстанавливать и не выдумывать.",
-          ...(cfSafety.length
-            ? ["Ограничения для этой категории:", ...cfSafety.map((s) => `— ${s}`)]
-            : []),
-          ...(lockedCatLines.length
-            ? ["Факты на этом слайде (как в форме):", ...lockedCatLines.map((s) => `— ${s}`)]
-            : []),
-        ].join("\n\n")
-      : "";
+  const categoryCtxBlock = categoryContextSection(input.selectedCategory);
+  const categoryFactsBlock = categoryFactsSection(
+    catPlan,
+    input.slideRole as CardBuilderTemplateSlideRole,
+    input.templateId,
+  );
 
   const salesStyleBlock = [
-    "=== 5) SALES_STYLE_INSTRUCTION ===",
+    "=== 5b) SALES_STYLE ===",
     getSalesStyleInstruction(input.salesStyle ?? "light_marketplace"),
   ].join("\n\n");
 
@@ -1119,20 +1153,21 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
   const promptPieces = [
     roleBlock(),
     inputRolesBlock,
-    productIdentityLockSection(input),
     marketplaceBlock,
+    categoryCtxBlock,
     slideRoleBlock,
-    templateInstructionBlock,
-    styleRefPrompt,
     accentsBlock,
     mustShowBlock,
-    cfPolicyBlock,
+    templateInstructionBlock,
     salesStyleBlock,
-    textDensityParts.join("\n\n"),
-    designFlexibilityWithTextLockBlock(),
+    categoryFactsBlock,
+    styleRefPrompt,
+    slideTextPlanSection(phrases),
+    productIdentityLockSection(input),
+    textLockAndDesignFlexibilityBlock(),
     criticalExactTextLockBlock(),
     languagePreservationSection(languageProbePhrases, languageMode),
-    lockedTextPhrasesSection(phrases),
+    textDensityParts.join("\n\n"),
     negativeInstructionsBlock(profile),
   ].filter((x) => x && String(x).trim() !== "");
 
