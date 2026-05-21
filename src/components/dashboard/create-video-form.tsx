@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { USER_LABELS } from "@/lib/user-facing-copy";
 import { canonicalModelSlug } from "@/lib/model-slug-params";
 import {
   defaultsFromSchema,
@@ -335,7 +336,7 @@ export function CreateVideoForm({
       return;
     }
     if (!prompt.trim()) {
-      setError("Введите промпт");
+      setError("Введите описание");
       return;
     }
     if (selected?.slug === "kling-3-0-motion-control") {
@@ -690,7 +691,7 @@ export function CreateVideoForm({
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="vprompt">Промпт</Label>
+          <Label htmlFor="vprompt">{USER_LABELS.prompt}</Label>
           <Textarea
             id="vprompt"
             name="prompt"
@@ -703,7 +704,7 @@ export function CreateVideoForm({
 
         {!hasDynamicSettings && selected?.supportsNegativePrompt && (
           <div className="space-y-2">
-            <Label htmlFor="vneg">Негативный промпт</Label>
+            <Label htmlFor="vneg">{USER_LABELS.negativePrompt}</Label>
             <Textarea
               id="vneg"
               value={negativePrompt}

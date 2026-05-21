@@ -50,7 +50,7 @@ type Props = {
 };
 
 /**
- * Список публичных URL для Kie (reference_*_urls), заполняется загрузкой файлов на /api/uploads.
+ * Список референс-изображений через загрузку файлов.
  */
 export function SeedanceReferenceUploadList({
   fieldName,
@@ -111,7 +111,7 @@ export function SeedanceReferenceUploadList({
         </span>
       </div>
       <p className="text-muted-foreground text-xs">
-        Файлы загружаются на сервер, в Kie уходит публичная ссылка (как требует API).
+        Файлы загружаются на сервер — для генерации используются подготовленные ссылки.
       </p>
 
       <input

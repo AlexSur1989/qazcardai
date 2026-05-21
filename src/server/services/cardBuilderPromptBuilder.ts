@@ -20,6 +20,11 @@ import {
   lockedCategoryExactValuesForSlideRole,
   type CardBuilderPlanWithCategoryFields,
 } from "@/lib/card-builder-category-fields-runtime";
+import {
+  benefitsExtraPhrasesForSlideRole,
+  parseBenefitsExtraLines,
+  plannerClusterFromMarketplaceId,
+} from "@/lib/card-builder-benefits-extra";
 import type { CardBuilderStyleReferencePlan } from "@/lib/card-builder-style-reference";
 
 const PROMPT_VERSION = "card_builder_super_prompt_v4" as const;
@@ -143,6 +148,8 @@ export function collectExactTextPhrases(input: {
   productTitle?: string | null;
   subtitle?: string | null;
   additionalBenefits?: string | null;
+  /** Строки из benefitsExtra только для этого слайда (не дублировать на все кадры). */
+  lockedBenefitLines?: readonly string[];
   dimensions?: string | null;
   slideRole: string;
   /** Глобальная плотность текста (после оверрайда площадки для main_photo уже учтён во входе). */
@@ -175,12 +182,21 @@ export function collectExactTextPhrases(input: {
       if (st) raw.push(st);
     }
 
-    const extra = input.additionalBenefits?.trim() ?? "";
-    if (showCardTextLayer && extra) {
-      for (const part of extra.split(/\r?\n/)) {
-        const x = stripHtmlFragments(part);
-        if (x) raw.push(x);
-      }
+    const benefitLines =
+      input.lockedBenefitLines ??
+      (() => {
+        const extra = input.additionalBenefits?.trim() ?? "";
+        if (!showCardTextLayer || !extra) return [] as string[];
+        const lines: string[] = [];
+        for (const part of extra.split(/\r?\n/)) {
+          const x = stripHtmlFragments(part);
+          if (x) lines.push(x);
+        }
+        return lines;
+      })();
+    for (const line of benefitLines) {
+      const x = stripHtmlFragments(line);
+      if (x) raw.push(x);
     }
 
     if (includeDimensions) {
@@ -1064,10 +1080,23 @@ export function buildCardBuilderSuperPrompt(input: CardBuilderSuperPromptInput):
     input.templateId,
   );
 
+  const cluster = plannerClusterFromMarketplaceId(input.marketplace);
+  const extraLines = parseBenefitsExtraLines({
+    benefitsExtra: input.additionalBenefits,
+    additionalBenefits: input.additionalBenefits,
+  });
+  const lockedBenefitLines = benefitsExtraPhrasesForSlideRole(
+    input.slideRole,
+    extraLines,
+    cluster,
+    profile,
+    { mainPhotoOmitsUserText: mainPhotoLocksText },
+  );
+
   const { phrases, validationErrors } = collectExactTextPhrases({
     productTitle: input.productTitle,
     subtitle: input.subtitle,
-    additionalBenefits: input.additionalBenefits,
+    lockedBenefitLines,
     dimensions: dimsForLockedPhrases,
     slideRole: input.slideRole,
     textDensity: input.textDensity ?? "medium",

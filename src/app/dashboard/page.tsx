@@ -118,7 +118,6 @@ export default async function DashboardPage() {
             {activePlan ? (
               <div>
                 <p className="text-lg font-medium">{activePlan.name}</p>
-                <p className="text-muted-foreground text-xs">{activePlan.slug}</p>
               </div>
             ) : (
               <DashboardSectionEmpty

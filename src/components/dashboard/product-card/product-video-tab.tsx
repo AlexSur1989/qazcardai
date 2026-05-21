@@ -20,6 +20,7 @@ import {
   VIDEO_GENERATION_POLL_INTERVAL_MS,
   VIDEO_GENERATION_POLL_MAX_ITERATIONS,
 } from "@/lib/generation-client-polling";
+import { getUserFacingGenerationStatusFromRaw } from "@/lib/generation-display";
 import { cn } from "@/lib/utils";
 
 const motions = getPublicProductVideoMotionStyles();
@@ -454,13 +455,11 @@ export function ProductVideoTab({
                           : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
                       )}
                     >
-                      <p className="break-all font-mono text-[#4a6e7a]">
-                        {r.generationId.slice(0, 12)}…
-                      </p>
+                      <p className="text-[#0C2D38] font-medium">Фото с концепциями</p>
                       {pr && (
                         <p className="mt-1 text-[#4a6e7a]">
-                          {pr.status}
-                          {pr.outputUrl ? "" : " · нет preview"}
+                          {getUserFacingGenerationStatusFromRaw(pr.status)}
+                          {pr.outputUrl ? "" : " · нет превью"}
                         </p>
                       )}
                       {pr?.outputUrl && (
@@ -494,13 +493,11 @@ export function ProductVideoTab({
                           : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
                       )}
                     >
-                      <p className="break-all font-mono text-[#4a6e7a]">
-                        {r.generationId.slice(0, 12)}…
-                      </p>
+                      <p className="text-[#0C2D38] font-medium">Карточка товара</p>
                       {pr && (
                         <p className="mt-1 text-[#4a6e7a]">
-                          {pr.status}
-                          {pr.outputUrl ? "" : " · нет preview"}
+                          {getUserFacingGenerationStatusFromRaw(pr.status)}
+                          {pr.outputUrl ? "" : " · нет превью"}
                         </p>
                       )}
                       {pr?.outputUrl && (
@@ -616,7 +613,7 @@ export function ProductVideoTab({
           </select>
           {motion === "none" && (
             <p className="text-xs text-[#4a6e7a]">
-              Без пресета камеры: в промпт уйдут только ваши пожелания и базовые правила качества.
+              Без пресета камеры: в описание попадут только ваши пожелания и базовые правила качества.
             </p>
           )}
         </div>
@@ -696,8 +693,9 @@ export function ProductVideoTab({
             <p className="text-sm font-medium text-[#0C2D38]">
               {result.status === "COMPLETED" && result.outputUrl ? "Видео готово" : "Видео создаётся"}
             </p>
-            <p className="font-mono text-xs text-[#4a6e7a]">
-              {result.generationId} · {result.status}
+            <p className="text-xs text-[#4a6e7a]">
+              Видео товара · {getUserFacingGenerationStatusFromRaw(result.status)}
+              {result.costCredits > 0 ? ` · ${result.costCredits} ток.` : null}
             </p>
             {result.status === "COMPLETED" && result.outputUrl && (
               <div className="space-y-2">

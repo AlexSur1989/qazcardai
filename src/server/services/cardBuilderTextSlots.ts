@@ -11,6 +11,7 @@ import {
   type CardBuilderTemplateSlideRole,
 } from "@/config/card-builder-templates";
 import { getPublicProductCategories } from "@/config/product-card-categories";
+import { parseBenefitsExtraLines } from "@/lib/card-builder-benefits-extra";
 import {
   effectiveDimensionsForOverlay,
   slideCategoryFactsForRole,
@@ -77,6 +78,10 @@ export function buildCardBuilderTextSlots(input: BuildCardBuilderTextSlotsInput)
 
   const maxBen = tpl?.maxBenefits ?? 0;
   const { labels, icons } = benefitLabelsOrdered(input.benefitTagIds, maxBen);
+  const extraLines = parseBenefitsExtraLines({
+    benefitsExtra: input.additionalBenefits,
+    additionalBenefits: input.additionalBenefits,
+  });
 
   const needsMoreBenefits = false;
 
@@ -91,7 +96,11 @@ export function buildCardBuilderTextSlots(input: BuildCardBuilderTextSlotsInput)
 
   for (let i = 0; i < maxBen; i++) {
     const key = `benefit_${i + 1}`;
-    slots[key] = labels[i]?.trim() ?? "";
+    if (input.slideRole === "benefits_infographic" && extraLines[i]) {
+      slots[key] = extraLines[i]!.slice(0, 80);
+    } else {
+      slots[key] = labels[i]?.trim() ?? "";
+    }
   }
 
   if (dimLine && (tpl?.textSlots ?? []).includes("size_line")) {
@@ -102,8 +111,16 @@ export function buildCardBuilderTextSlots(input: BuildCardBuilderTextSlotsInput)
     slots.size_line = "";
   }
 
-  const extra = input.additionalBenefits?.trim() ?? "";
-  slots.extraText = extra.slice(0, 420);
+  if (input.slideRole === "benefits_infographic") {
+    slots.extraText = "";
+  } else if (
+    input.slideRole === "premium_poster" ||
+    input.slideRole === "ad_banner"
+  ) {
+    slots.extraText = (extraLines[0] ?? "").slice(0, 420);
+  } else {
+    slots.extraText = "";
+  }
 
   if (
     input.slideRole === "dimensions" &&
@@ -146,7 +163,7 @@ export function enrichCardBuilderGallerySlides(
       additionalBenefits: input.benefitsExtra,
       mustShowTagIds: input.mustShow ?? [],
       dimensions: input.dimensions ?? null,
-      characteristics: input.benefitsExtra ?? null,
+      characteristics: null,
       categoryId: input.selectedCategory,
       marketplace: input.marketplace,
       slideRole: tpl.slideRole,
@@ -179,7 +196,7 @@ export function enrichSingleSlideAfterTemplateChange(
     additionalBenefits: input.benefitsExtra,
     mustShowTagIds: input.mustShow ?? [],
     dimensions: input.dimensions ?? null,
-    characteristics: input.benefitsExtra ?? null,
+    characteristics: null,
     categoryId: input.selectedCategory,
     marketplace: input.marketplace,
     slideRole: tpl.slideRole,

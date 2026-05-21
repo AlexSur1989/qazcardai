@@ -82,7 +82,7 @@ export function KlingMotionControlUploads({
           Файлы для Motion Control
         </h2>
         <p className="text-muted-foreground text-sm leading-relaxed">
-          Загрузите фото персонажа и видео с движением. Мы отправим в Kie.ai только ссылки на
+          Загрузите фото персонажа и видео с движением. Для генерации используются только ваши
           загруженные файлы.
         </p>
       </div>

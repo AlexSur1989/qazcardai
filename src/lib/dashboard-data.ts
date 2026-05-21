@@ -1,4 +1,8 @@
-import type { GenerationStatus, GenerationType } from "@/generated/prisma/enums";
+import type { GenerationStatus } from "@/generated/prisma/enums";
+import {
+  serializeGenerationListItemForUser,
+  type UserFacingHistoryListItem,
+} from "@/lib/generation-display";
 import { prisma } from "@/lib/prisma";
 
 const ACTIVE_STATUSES: GenerationStatus[] = [
@@ -7,15 +11,7 @@ const ACTIVE_STATUSES: GenerationStatus[] = [
   "PROCESSING",
 ];
 
-export type GenerationListItem = {
-  id: string;
-  type: GenerationType;
-  status: GenerationStatus;
-  prompt: string;
-  costCredits: number;
-  createdAt: Date;
-  model: { name: string };
-};
+export type { UserFacingHistoryListItem as DashboardGenerationListItem } from "@/lib/generation-display";
 
 export type UserPlanSummary = {
   name: string;
@@ -28,8 +24,8 @@ export type DashboardSnapshot =
       balanceCredits: number;
       /** Связи пользователь–тариф в схеме пока нет; null = нет отображаемого тарифа. */
       activePlan: UserPlanSummary | null;
-      recent: GenerationListItem[];
-      active: GenerationListItem[];
+      recent: UserFacingHistoryListItem[];
+      active: UserFacingHistoryListItem[];
     }
   | { ok: false; error: "not_found" | "database" };
 
@@ -46,26 +42,19 @@ function fetchUserGenerations(
       id: true,
       type: true,
       status: true,
-      prompt: true,
       costCredits: true,
       createdAt: true,
-      model: { select: { name: true } },
+      outputFiles: true,
+      metadata: true,
+      model: { select: { id: true } },
     },
   });
 }
 
 type GenerationRow = Awaited<ReturnType<typeof fetchUserGenerations>>[number];
 
-function mapGenerations(rows: GenerationRow[]): GenerationListItem[] {
-  return rows.map((g) => ({
-    id: g.id,
-    type: g.type,
-    status: g.status,
-    prompt: g.prompt,
-    costCredits: g.costCredits,
-    createdAt: g.createdAt,
-    model: { name: g.model.name },
-  }));
+function mapGenerations(rows: GenerationRow[]): UserFacingHistoryListItem[] {
+  return rows.map((g) => serializeGenerationListItemForUser(g));
 }
 
 /**
@@ -106,7 +95,7 @@ export async function getDashboardSnapshot(
 }
 
 export type GenerationsListResult =
-  | { ok: true; items: GenerationListItem[] }
+  | { ok: true; items: UserFacingHistoryListItem[] }
   | { ok: false; error: "not_found" | "database" };
 
 /** Список генераций пользователя (только userId) для страницы истории. */

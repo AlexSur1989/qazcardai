@@ -3,7 +3,7 @@ import { AlertCircle } from "lucide-react";
 
 import { GenerationDetailView } from "@/components/dashboard/generation-detail-view";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { getUserGenerationDetail } from "@/lib/generation-history-data";
+import { getUserFacingGenerationDetail } from "@/lib/generation-history-data";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 
 export const metadata = {
@@ -25,11 +25,11 @@ export default async function HistoryDetailPage({ params }: Props) {
     );
   }
 
-  const res = await getUserGenerationDetail(current.user.id, id);
+  const res = await getUserFacingGenerationDetail(current.user.id, id);
   if (res.ok) {
     return (
       <GenerationDetailView
-        gen={res.generation}
+        display={res.generation}
         backHref="/dashboard/history"
         backLabel="К истории"
         showRepeat

@@ -52,6 +52,7 @@ export default async function AdminGenerationDetailPage({ params }: Props) {
     return (
       <div className="space-y-6">
         <GenerationDetailView
+          showTechnicalDetails
           gen={detail}
           backHref="/admin/generations"
           backLabel="К списку генераций"

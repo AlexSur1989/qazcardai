@@ -23,6 +23,7 @@ import {
 } from "@/config/product-card-overlay-presets";
 import { readJsonSafe } from "@/lib/fetch-json-safe";
 import { getFirstOutputUrlFromJson } from "@/lib/product-card-output";
+import { getUserFacingGenerationStatusFromRaw } from "@/lib/generation-display";
 import { cn } from "@/lib/utils";
 
 import { ProductCardTemplatePreview } from "./product-card-template-preview";
@@ -468,8 +469,13 @@ export function MarketplaceCardTab({
                   const preview = genPreviews[row.generationId];
                   return (
                     <button key={row.generationId} type="button" onClick={() => setSourceGenerationId(row.generationId)} className={cn("rounded-2xl border-2 p-2 text-left text-xs transition-colors", sourceGenerationId === row.generationId ? "border-[#00AFCA] bg-[#F4FBFD]" : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45")}>
-                      <p className="break-all font-mono text-[#4a6e7a]">{row.generationId.slice(0, 12)}…</p>
-                      {preview && <p className="mt-1 text-[#4a6e7a]">{preview.status}{preview.outputUrl ? "" : " · нет preview"}</p>}
+                      <p className="font-medium text-[#0C2D38]">Фото с концепциями</p>
+                      {preview && (
+                        <p className="mt-1 text-[#4a6e7a]">
+                          {getUserFacingGenerationStatusFromRaw(preview.status)}
+                          {preview.outputUrl ? "" : " · нет превью"}
+                        </p>
+                      )}
                       {preview?.outputUrl && (
                         <div className="mt-2 max-h-24 overflow-hidden rounded-xl border border-[#B8DCE6] bg-white">
                           {/* eslint-disable-next-line @next/next/no-img-element -- remote URL */}

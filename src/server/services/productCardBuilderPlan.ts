@@ -30,6 +30,11 @@ import {
   mergedCategoryValues,
 } from "@/lib/card-builder-category-fields-runtime";
 import type { CardBuilderStyleReferencePlan } from "@/lib/card-builder-style-reference";
+import {
+  benefitsSlideInsertIndex,
+  parseBenefitsExtraLines,
+  pickBenefitsInfographicTemplateId,
+} from "@/lib/card-builder-benefits-extra";
 
 export type CardBuilderSlideRole = CardBuilderTemplateSlideRole;
 
@@ -789,7 +794,35 @@ function injectCategoryFieldSemantics(
   return uniqRolesPreferred(out, profile, cluster);
 }
 
-/** Смысловые акценты из benefits[] */
+function insertGalleryTemplateAt(
+  ids: string[],
+  templateId: string,
+  insertAt: number,
+  profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
+): string[] {
+  const c = coerceTemplateAgainstProfile(templateId, profile, cluster);
+  if (!c) return ids;
+  const def = getCardBuilderTemplate(c);
+  if (!def || !roleOkForPlan(profile, def.slideRole)) return ids;
+  const copy = [...ids];
+  const ins = Math.min(Math.max(insertAt, 0), copy.length);
+  copy.splice(ins, 0, c);
+  return uniqRolesPreferred(copy, profile, cluster);
+}
+
+function canAddBenefitsInfographicSlide(
+  profile: ProductCardMarketplaceProfile,
+  cluster: MarketplacePlannerCluster,
+  extraLineCount: number,
+): boolean {
+  if (profile.infographicAllowed && profile.maxBenefitBadges > 0) return true;
+  if (cluster === "lamoda" && extraLineCount >= 2) return true;
+  if (cluster === "social" || cluster === "brand_ecom") return true;
+  return false;
+}
+
+/** Смысловые акценты: benefitsExtra (locked text) и benefits[] (теги). */
 function injectBenefitsSemantics(
   ids: string[],
   input: CardBuilderPlanInput,
@@ -798,8 +831,24 @@ function injectBenefitsSemantics(
 ): string[] {
   let out = uniqRolesPreferred(ids, profile, cluster);
   const tags = input.benefits ?? [];
+  const extraLines = parseBenefitsExtraLines(input);
   const hasRole = (r: CardBuilderSlideRole) =>
     out.some((t) => getCardBuilderTemplate(t)?.slideRole === r);
+
+  if (
+    extraLines.length >= 2 &&
+    canAddBenefitsInfographicSlide(profile, cluster, extraLines.length) &&
+    !hasRole("benefits_infographic")
+  ) {
+    const tid = pickBenefitsInfographicTemplateId(cluster, profile, extraLines.length);
+    out = insertGalleryTemplateAt(
+      out,
+      tid,
+      benefitsSlideInsertIndex(cluster, out.length),
+      profile,
+      cluster,
+    );
+  }
 
   if (
     tags.length >= 3 &&
@@ -813,9 +862,46 @@ function injectBenefitsSemantics(
     const c = coerceTemplateAgainstProfile(tid, profile, cluster);
     if (c && roleOkForPlan(profile, getCardBuilderTemplate(c)!.slideRole)) {
       const copy = [...out];
-      const ins = Math.min(2, copy.length);
+      const ins = benefitsSlideInsertIndex(cluster, copy.length);
       copy.splice(ins, 0, c);
       out = uniqRolesPreferred(copy, profile, cluster);
+    }
+  }
+
+  if (extraLines.length === 1 && !hasRole("benefits_infographic")) {
+    const posterWanted =
+      input.goal === "premium_poster" ||
+      input.goal === "benefits_info" ||
+      input.textDensity === "heavy" ||
+      input.textDensity === "infographic";
+    if (
+      posterWanted &&
+      roleOkForPlan(profile, "premium_poster") &&
+      !hasRole("premium_poster")
+    ) {
+      const c = coerceTemplateAgainstProfile("premium_poster", profile, cluster);
+      if (c) out = uniqRolesPreferred([...out, c], profile, cluster);
+    } else if (
+      cluster === "social" &&
+      profile.infographicAllowed &&
+      (input.textDensity === "medium" || input.textDensity === "heavy")
+    ) {
+      const tid = pickBenefitsInfographicTemplateId(cluster, profile, 1);
+      out = insertGalleryTemplateAt(
+        out,
+        tid,
+        benefitsSlideInsertIndex(cluster, out.length),
+        profile,
+        cluster,
+      );
+    } else if (
+      cluster === "brand_ecom" &&
+      roleOkForPlan(profile, "ad_banner") &&
+      !hasRole("ad_banner") &&
+      !hasRole("premium_poster")
+    ) {
+      const c = coerceTemplateAgainstProfile("ad_banner", profile, cluster);
+      if (c) out = uniqRolesPreferred([...out, c], profile, cluster);
     }
   }
 
@@ -1100,8 +1186,13 @@ function buildSlideFromTemplate(
   const base = ROLE_META[def.slideRole];
   const slideId = `${String(idx + 1).padStart(2, "0")}_${def.slideRole}`;
   const suffix = purposeSuffixForSlide(def.slideRole, profile, cluster, input);
+  const extraLines = parseBenefitsExtraLines(input);
+  const purposeCore =
+    def.slideRole === "benefits_infographic" && extraLines.length >= 2
+      ? "Показать ключевые преимущества товара."
+      : base.purposeRu;
   const adaptedPurpose =
-    `${base.purposeRu} Контекст категории: ${categoryRu}.` +
+    `${purposeCore} Контекст категории: ${categoryRu}.` +
     (suffix.length ? ` Дополнительно: ${suffix.join(" ")}` : "");
 
   let tm: CardBuilderGallerySlide["recommendedTextMode"];

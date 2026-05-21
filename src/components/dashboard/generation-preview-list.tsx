@@ -2,11 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
-import type { GenerationListItem } from "@/lib/dashboard-data";
-import {
-  generationStatusLabel,
-  generationTypeLabel,
-} from "@/lib/generation-labels";
+import type { DashboardGenerationListItem } from "@/lib/dashboard-data";
 import type { GenerationStatus } from "@/generated/prisma/enums";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +24,7 @@ function statusBadgeClass(status: GenerationStatus): string {
 }
 
 type GenerationPreviewListProps = {
-  items: GenerationListItem[];
+  items: DashboardGenerationListItem[];
   emptyMessage: string;
 };
 
@@ -50,11 +46,11 @@ export function GenerationPreviewList({
           className="border-border bg-card/50 flex flex-col gap-1.5 rounded-lg border px-3 py-2.5"
         >
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-foreground line-clamp-2 min-w-0 flex-1 text-sm">
-              {g.prompt}
+            <span className="text-foreground line-clamp-2 min-w-0 flex-1 text-sm font-medium">
+              {g.title}
             </span>
             <Badge variant="outline" className="shrink-0 text-xs">
-              {generationTypeLabel(g.type)}
+              {g.kindLabel}
             </Badge>
             <Badge
               variant="outline"
@@ -63,11 +59,11 @@ export function GenerationPreviewList({
                 statusBadgeClass(g.status),
               )}
             >
-              {generationStatusLabel(g.status)}
+              {g.statusLabel}
             </Badge>
           </div>
           <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-            <span>{g.model.name}</span>
+            {g.subtitle ? <span className="line-clamp-1">{g.subtitle}</span> : null}
             <span>
               {g.createdAt.toLocaleString("ru-RU", {
                 dateStyle: "short",

@@ -82,7 +82,7 @@ function isLikelyKiePayloadError(msg: string): boolean {
 }
 
 /**
- * Сообщение для БД/истории/UI: безопасное пояснение по типичным ответам Kie.
+ * Сообщение для БД/истории/UI: без упоминания Kie, API-ключей и внутренних полей.
  */
 export function explainKieErrorForUser(
   providerMessage: string | null | undefined,
@@ -90,49 +90,27 @@ export function explainKieErrorForUser(
 ): string {
   const raw = (providerMessage ?? "").trim() || fallback;
   if (isLikelyKieAccountInsufficientMessage(raw)) {
-    return [
-      "Недостаточно credits на стороне Kie.ai (это не баланс токенов в приложении).",
-      "Пополните баланс Kie или проверьте API-ключ.",
-      `Детали: ${raw}`,
-    ]
-      .join(" ")
-      .slice(0, 8000);
+    return "Сервис генерации временно недоступен. Попробуйте позже или обратитесь в поддержку.";
   }
   if (isLikelyKieImageUrlError(raw)) {
-    return [
-      "Kie не может открыть или скачать исходное изображение по переданному URL.",
-      "Нужен публичный https-адрес (S3/R2/CDN). Локальный сервер Kie из интернета не достанет.",
-      `Детали: ${raw}`,
-    ]
-      .join(" ")
-      .slice(0, 8000);
+    return "Не удалось использовать загруженное изображение. Загрузите файл ещё раз или выберите другой.";
   }
   if (isLikelyKieAuthError(raw)) {
-    return `Kie API key invalid или запрос не авторизован. Проверьте KIE_API_KEY. Детали: ${raw}`.slice(
-      0,
-      8000,
-    );
+    return "Генерация временно недоступна. Попробуйте позже.";
   }
   if (isLikelyKieModelError(raw)) {
-    return `Неверный apiModelId или модель недоступна у Kie. Проверьте карточку модели в админке. Детали: ${raw}`.slice(
-      0,
-      8000,
-    );
+    return "Выбранный режим генерации сейчас недоступен. Попробуйте другой режим или позже.";
   }
   if (isLikelyKiePayloadError(raw) && !isLikelyKieImageUrlError(raw)) {
-    return `Некорректный payload для модели Kie. Проверьте payloadMapping и поля input в админке. Детали: ${raw}`.slice(
-      0,
-      8000,
-    );
+    return "Проверьте параметры запроса и попробуйте снова.";
   }
   if (isLikelyKieOverloadMessage(raw)) {
-    return [
-      "Провайдер Kie.ai или сеть до него временно перегружены (сервис может отвечать 502/503).",
-      "Подождите несколько минут и запустите генерацию снова.",
-      `Текст ответа: ${raw}`,
-    ]
-      .join(" ")
-      .slice(0, 8000);
+    return "Сервис перегружен. Подождите несколько минут и запустите генерацию снова.";
   }
-  return raw.slice(0, 8000);
+  if (/kie\.ai|\bkie\b|apiModelId|payloadMapping|KIE_API|providerTaskId/i.test(raw)) {
+    return "Не удалось завершить генерацию. Попробуйте ещё раз или измените параметры.";
+  }
+  return raw.length > 400
+    ? `${raw.slice(0, 400)}…`
+    : raw.slice(0, 8000);
 }

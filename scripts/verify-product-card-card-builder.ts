@@ -20,6 +20,9 @@ import {
   lockedCategoryExactValuesForSlideRole,
   slideCategoryFactsForRole,
 } from "@/lib/card-builder-category-fields-runtime";
+import { cardBuilderPlanFieldsSchema } from "@/lib/validations/card-builder-plan";
+import { parseBenefitsExtraLines } from "@/lib/card-builder-benefits-extra";
+import { enrichCardBuilderGallerySlides } from "@/server/services/cardBuilderTextSlots";
 import {
   buildCardBuilderGalleryPlan,
   type CardBuilderPlanInput,
@@ -350,5 +353,125 @@ assert(
 const mainFacts = slideCategoryFactsForRole("main_photo", accCatPlan, "hero_clean");
 assert(!mainFacts.keyDetails, "main_photo: без keyDetails");
 assert(mainFacts.material === "пластик" || mainFacts.color, "main_photo: базовые факты");
+
+function planBodyBase(extra: Record<string, unknown> = {}) {
+  return {
+    selectedCategory: "accessories",
+    marketplace: "ozon",
+    goal: "full_gallery_6",
+    preserveProduct: true,
+    preserveAspects: [] as string[],
+    benefits: [] as string[],
+    mustShow: [] as string[],
+    audience: "mass_market",
+    priceSegment: "middle",
+    salesStyle: "light_marketplace",
+    textDensity: "medium",
+    ...extra,
+  };
+}
+
+const noByCat = cardBuilderPlanFieldsSchema.safeParse(planBodyBase());
+assert(noByCat.success, "plan schema: без categoryFieldsByCategory");
+
+const oneCat = cardBuilderPlanFieldsSchema.safeParse(
+  planBodyBase({
+    categoryFieldsByCategory: { accessories: { material: "пластик" } },
+  }),
+);
+assert(oneCat.success, "plan schema: одна категория в categoryFieldsByCategory");
+
+const twoCat = cardBuilderPlanFieldsSchema.safeParse(
+  planBodyBase({
+    categoryFieldsByCategory: {
+      apparel: { material: "хлопок" },
+      accessories: { material: "пластик", sizeOrVolume: "560 мл" },
+    },
+  }),
+);
+assert(twoCat.success, "plan schema: две категории в categoryFieldsByCategory");
+
+const emptyByCat = cardBuilderPlanFieldsSchema.safeParse(
+  planBodyBase({ categoryFieldsByCategory: {} }),
+);
+assert(emptyByCat.success, "plan schema: пустой categoryFieldsByCategory");
+assert(
+  emptyByCat.success && emptyByCat.data.categoryFieldsByCategory === undefined,
+  "plan schema: {} categoryFieldsByCategory нормализуется в undefined",
+);
+
+const badKey = cardBuilderPlanFieldsSchema.safeParse(
+  planBodyBase({
+    categoryFieldsByCategory: { clothing: { material: "x" } },
+  }),
+);
+assert(!badKey.success, "plan schema: неизвестный ключ categoryFieldsByCategory отклоняется");
+if (!badKey.success) {
+  const msg = badKey.error.issues.map((i) => i.message).join(" ");
+  assert(msg.includes("Неизвестная категория"), "plan schema: понятная ошибка для неизвестного ключа");
+}
+
+const kaspiProfile = PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "kaspi");
+assert(kaspiProfile, "В defaults есть профиль kaspi");
+
+const benefitsExtraThree =
+  "Лёгкая и компактная\nУдобно брать с собой\nПодходит для спорта и прогулок";
+const accKaspiPlan = basePlan({
+  selectedCategory: "accessories",
+  marketplace: "kaspi",
+  benefitsExtra: benefitsExtraThree,
+  categoryFieldsByCategory: {
+    accessories: {
+      material: "пластик",
+      sizeOrVolume: "560 мл",
+      useCase: "спорт, прогулка",
+      keyDetails: "крышка, ремешок",
+    },
+  },
+  categoryFields: {
+    categoryKey: "accessories",
+    values: {
+      material: "пластик",
+      sizeOrVolume: "560 мл",
+      useCase: "спорт, прогулка",
+      keyDetails: "крышка, ремешок",
+    },
+  },
+});
+
+const extraLines = parseBenefitsExtraLines(accKaspiPlan);
+assert(extraLines.length === 3, "parseBenefitsExtraLines: три непустые строки");
+
+const { slides: kaspiAccSlides } = buildCardBuilderGalleryPlan(accKaspiPlan, kaspiProfile);
+const benefitsSlide = kaspiAccSlides.find((s) => s.imageRole === "benefits_infographic");
+assert(benefitsSlide, "accessories+Kaspi+3 строки benefitsExtra: слайд benefits_infographic в плане");
+assert(benefitsSlide.title === "Преимущества", "заголовок слайда Преимущества");
+assert(
+  benefitsSlide.purpose.includes("Показать ключевые преимущества"),
+  "purpose слайда преимуществ из benefitsExtra",
+);
+
+const enriched = enrichCardBuilderGallerySlides(kaspiAccSlides, accKaspiPlan, "Термокружка");
+const enrichedBenefits = enriched.find((s) => s.imageRole === "benefits_infographic");
+assert(enrichedBenefits?.overlayTexts?.benefit_1?.includes("Лёгкая"), "benefit_1 из benefitsExtra");
+assert(
+  enrichedBenefits?.overlayTexts?.benefit_2?.includes("Удобно"),
+  "benefit_2 из benefitsExtra",
+);
+const mainSlide = enriched.find((s) => s.imageRole === "main_photo");
+assert(mainSlide, "есть главное фото");
+assert(!mainSlide.overlayTexts?.extraText?.trim(), "main_photo без полного benefitsExtra в extraText");
+
+const noExtraPlan = basePlan({
+  selectedCategory: "accessories",
+  marketplace: "kaspi",
+  benefits: [],
+  benefitsExtra: undefined,
+});
+const { slides: noExtraSlides } = buildCardBuilderGalleryPlan(noExtraPlan, kaspiProfile);
+assert(
+  !noExtraSlides.some((s) => s.imageRole === "benefits_infographic"),
+  "без benefitsExtra и без 3 тегов: нет слайда benefits_infographic",
+);
 
 console.log("[verify-product-card-card-builder] OK");

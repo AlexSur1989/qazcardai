@@ -95,7 +95,7 @@ export default async function HistoryPage({ searchParams }: PageProps) {
       <PageHeader
         variant="qaz"
         title="История генераций"
-        description="Ваши запросы. Скачивание готовых файлов, повтор — с теми же modelId и промптом (в пределах длины URL)."
+        description="Результаты генераций: сценарий, статус, скачивание и повтор без технических деталей."
         breadcrumbs={[
           { label: "Кабинет", href: "/dashboard" },
           { label: "История" },
@@ -107,7 +107,7 @@ export default async function HistoryPage({ searchParams }: PageProps) {
             <History className="size-5" aria-hidden />
             Фильтры
           </CardTitle>
-          <CardDescription>Тип, статус, поиск по тексту промпта.</CardDescription>
+          <CardDescription>Тип, статус, поиск по внутреннему тексту запроса.</CardDescription>
         </CardHeader>
         <CardContent>
           <HistoryFiltersForm

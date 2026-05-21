@@ -16,6 +16,7 @@ import {
   type SchemaField,
 } from "@/lib/generation-form-settings-schema";
 import { cn } from "@/lib/utils";
+import { USER_LABELS } from "@/lib/user-facing-copy";
 import { toast } from "sonner";
 
 export type GptImage2PlaygroundModel = {
@@ -36,8 +37,8 @@ const TERMINAL: GenerationStatus[] = [
   "BLOCKED",
 ];
 
-const GPT_DOCS_HINT =
-  "Поля Kie GPT Image 2: prompt → input.prompt, aspect_ratio — из настроек; image-to-image — input_urls из загрузки файлов (/api/uploads).";
+const GPT_FORM_HINT =
+  "Опишите сцену и при необходимости загрузите исходные изображения. Соотношение сторон и разрешение — в настройках ниже.";
 
 type Props = {
   balanceCredits: number;
@@ -247,7 +248,7 @@ export function GptImage2Playground({
     setPollComplete(false);
 
     if (!p) {
-      setError("Введите промпт (обязательное поле API: prompt)");
+      setError("Введите описание");
       return;
     }
 
@@ -326,7 +327,7 @@ export function GptImage2Playground({
       }
       if (data.generationId && data.status) {
         setResult({ generationId: data.generationId, status: data.status });
-        toast.success("Запрос поставлен в очередь");
+        toast.success(USER_LABELS.generationStarted);
         void fetchStatus(data.generationId);
       } else {
         setError("Некорректный ответ сервера");
@@ -355,17 +356,7 @@ export function GptImage2Playground({
     >
       <div className="mb-6 space-y-1">
         <h2 className="text-lg font-semibold">Генерация GPT Image 2</h2>
-        <p className="text-muted-foreground text-sm">
-          {GPT_DOCS_HINT}{" "}
-          <a
-            href="https://kie.ai/gpt-image-2"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline"
-          >
-            Документация Kie: GPT Image 2
-          </a>
-        </p>
+        <p className="text-muted-foreground text-sm">{GPT_FORM_HINT}</p>
       </div>
 
       <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
@@ -378,7 +369,7 @@ export function GptImage2Playground({
           )}
 
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Режим (Kie)</Label>
+            <Label className="text-sm font-medium">Режим генерации</Label>
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -398,15 +389,13 @@ export function GptImage2Playground({
               </Button>
             </div>
             <p className="text-muted-foreground text-xs">
-              Маршруты API Kie: модель текст→изображение —{" "}
-              <span className="font-mono">gpt-image-2-text-to-image</span>; с
-              входными картинками —{" "}
-              <span className="font-mono">gpt-image-2-image-to-image</span>.
+              Текст → изображение — без загрузки файлов; изображение → изображение — с одним или
+              несколькими исходными кадрами.
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="gpt2-prompt">Промпт (prompt → input.prompt)</Label>
+            <Label htmlFor="gpt2-prompt">{USER_LABELS.prompt}</Label>
             <Textarea
               id="gpt2-prompt"
               name="prompt"
@@ -427,7 +416,7 @@ export function GptImage2Playground({
 
           {resolutionField ? (
             <div className="space-y-2">
-              <Label>Разрешение (resolution)</Label>
+              <Label>Разрешение</Label>
               <div className="flex flex-wrap gap-2">
                 {resolutionOptions.map((opt) => {
                   const current =
@@ -451,23 +440,15 @@ export function GptImage2Playground({
                 })}
               </div>
               <p className="text-muted-foreground text-xs leading-relaxed">
-                По документации Kie допустимы <span className="font-mono">1K</span>,{" "}
-                <span className="font-mono">2K</span>,{" "}
-                <span className="font-mono">4K</span>. Если{" "}
-                <span className="font-mono">aspect_ratio</span> не 1:1, вывод 4K
-                может ограничиваться (фактически 1K). Для{" "}
-                <span className="font-mono">auto</span> или без заданной пары может
-                применяться сценарий 1K.
+                Доступны варианты 1K, 2K и 4K. При соотношении сторон, отличном от 1:1, максимум
+                может быть ниже. Для режима «авто» или без явного выбора обычно применяется 1K.
               </p>
             </div>
           ) : null}
 
           {variant === "i2i" && (
             <p className="text-muted-foreground text-xs leading-relaxed">
-              <span className="font-mono">input_urls</span>: до 16 изображений
-              после загрузки; форматы JPEG / PNG / WebP, как в Kie; публичные URL
-              подставляет сервер после <span className="font-mono">/api/uploads</span>
-              .
+              {USER_LABELS.uploadHintFilesForGeneration} До 16 файлов, форматы JPEG, PNG или WebP.
             </p>
           )}
 

@@ -54,7 +54,7 @@ export default async function CreateHubPage() {
                 Создать фото
               </CardTitle>
               <CardDescription>
-                Выбор модели из каталога изображений и постановка задачи в очередь
+                Выбор модели из каталога и запуск генерации изображения
               </CardDescription>
             </CardHeader>
           </Card>

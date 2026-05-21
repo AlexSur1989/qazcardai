@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { canAccessAdminPanel } from "@/lib/auth";
+import { fixUtf8MojibakeDisplay } from "@/lib/fix-utf8-mojibake-display";
+import { mapGenerationErrorToUserMessage } from "@/lib/generation-display";
 import { prisma } from "@/lib/prisma";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 
@@ -34,13 +36,18 @@ export async function GET(_req: Request, context: RouteContext) {
     return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
   }
 
+  const isAdmin = canAccessAdminPanel(current.user.role);
+  const errorRaw = fixUtf8MojibakeDisplay(generation.errorMessage);
+
   return NextResponse.json({
     id: generation.id,
     type: generation.type,
     status: generation.status,
     outputFiles: generation.outputFiles,
-    errorMessage: generation.errorMessage,
-    metadata: generation.metadata,
+    errorMessage: isAdmin
+      ? errorRaw
+      : mapGenerationErrorToUserMessage(errorRaw, generation.metadata),
+    ...(isAdmin ? { metadata: generation.metadata } : {}),
     createdAt: generation.createdAt.toISOString(),
     completedAt: generation.completedAt?.toISOString() ?? null,
   });

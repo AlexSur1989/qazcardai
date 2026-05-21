@@ -2,9 +2,16 @@ import "server-only";
 
 import type { Prisma } from "@/generated/prisma/client";
 import type { GenerationStatus, GenerationType } from "@/generated/prisma/enums";
+import {
+  serializeGenerationForUser,
+  serializeGenerationListItemForUser,
+  type UserFacingGenerationDetail,
+  type UserFacingHistoryListItem,
+} from "@/lib/generation-display";
 import { fixUtf8MojibakeDisplay } from "@/lib/fix-utf8-mojibake-display";
 import { prisma } from "@/lib/prisma";
-import { getFirstOutputPreviewUrl, parseOutputFilesList } from "@/lib/generation-output-utils";
+
+export type { UserFacingGenerationDetail, UserFacingHistoryListItem } from "@/lib/generation-display";
 
 const HISTORY_LIMIT = 100;
 
@@ -15,21 +22,8 @@ export type UserHistoryFilters = {
   q?: string;
 };
 
-export type UserHistoryListItem = {
-  id: string;
-  type: GenerationType;
-  status: GenerationStatus;
-  prompt: string;
-  costCredits: number;
-  createdAt: Date;
-  model: { id: string; name: string; slug: string };
-  previewUrl: string | null;
-  /** Для кнопки скачать: готово и есть url/storageKey. */
-  canDownload: boolean;
-};
-
 export type UserHistoryListResult =
-  | { ok: true; items: UserHistoryListItem[] }
+  | { ok: true; items: UserFacingHistoryListItem[] }
   | { ok: false; error: "not_found" | "database" };
 
 function buildWhere(
@@ -71,30 +65,25 @@ export async function getUserHistoryList(
         id: true,
         type: true,
         status: true,
-        prompt: true,
         costCredits: true,
         createdAt: true,
         outputFiles: true,
-        model: { select: { id: true, name: true, slug: true } },
+        metadata: true,
+        model: { select: { id: true } },
       },
     });
-    const items: UserHistoryListItem[] = rows.map((g) => {
-      const files = parseOutputFilesList(g.outputFiles);
-      const canDownload =
-        g.status === "COMPLETED" &&
-        files.some((f) => Boolean(f.url?.trim() || f.storageKey));
-      return {
+    const items = rows.map((g) =>
+      serializeGenerationListItemForUser({
         id: g.id,
         type: g.type,
         status: g.status,
-        prompt: g.prompt,
         costCredits: g.costCredits,
         createdAt: g.createdAt,
+        outputFiles: g.outputFiles,
+        metadata: g.metadata,
         model: g.model,
-        previewUrl: getFirstOutputPreviewUrl(g.outputFiles),
-        canDownload,
-      };
-    });
+      }),
+    );
     return { ok: true, items };
   } catch {
     return { ok: false, error: "database" };
@@ -123,6 +112,36 @@ export type UserGenerationDetail = {
 export type UserGenerationDetailResult =
   | { ok: true; generation: UserGenerationDetail }
   | { ok: false; error: "not_found" | "forbidden" | "database" };
+
+export type UserFacingGenerationDetailResult =
+  | { ok: true; generation: UserFacingGenerationDetail }
+  | { ok: false; error: "not_found" | "forbidden" | "database" };
+
+export async function getUserFacingGenerationDetail(
+  userId: string,
+  id: string,
+): Promise<UserFacingGenerationDetailResult> {
+  const res = await getUserGenerationDetail(userId, id);
+  if (!res.ok) {
+    return res;
+  }
+  const g = res.generation;
+  return {
+    ok: true,
+    generation: serializeGenerationForUser({
+      id: g.id,
+      type: g.type,
+      status: g.status,
+      costCredits: g.costCredits,
+      createdAt: g.createdAt,
+      completedAt: g.completedAt,
+      outputFiles: g.outputFiles,
+      metadata: g.metadata,
+      errorMessage: g.errorMessage,
+      model: g.model,
+    }),
+  };
+}
 
 export async function getUserGenerationDetail(
   userId: string,

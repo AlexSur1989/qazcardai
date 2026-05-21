@@ -36,11 +36,52 @@ const Z_STYLE = z.enum(enumFrom(CARD_BUILDER_SALES_STYLES.map((x) => x.id)));
 const Z_DENSITY = z.enum(enumFrom(CARD_BUILDER_TEXT_DENSITY.map((x) => x.id)));
 const Z_LANG = z.enum(enumFrom(CARD_BUILDER_LANGUAGE_MODES.map((x) => x.id)));
 
-const Z_PRODUCT_CATEGORY = z.enum(enumFrom([...PRODUCT_CATEGORY_IDS]));
-const Z_CATEGORY_FIELD_MAP = z
-  .record(
-    z.string().max(CATEGORY_FIELD_KEY_MAX_CHARS),
-    z.string().max(CATEGORY_FIELD_VALUE_MAX_CHARS),
+const PRODUCT_CATEGORY_ID_SET = new Set<string>(PRODUCT_CATEGORY_IDS);
+
+const Z_CATEGORY_FIELD_MAP = z.record(
+  z.string().max(CATEGORY_FIELD_KEY_MAX_CHARS),
+  z.string().max(CATEGORY_FIELD_VALUE_MAX_CHARS),
+);
+
+/**
+ * Частичный архив полей по категориям: UI шлёт только заполненные категории, не все enum-ключи.
+ * (z.record(Z_PRODUCT_CATEGORY, …) в Zod 4 требует полный набор ключей enum.)
+ */
+const Z_CATEGORY_FIELDS_BY_CATEGORY = z
+  .preprocess(
+    (val) => {
+      if (val === null || val === undefined) return undefined;
+      if (typeof val === "object" && !Array.isArray(val) && Object.keys(val).length === 0) {
+        return undefined;
+      }
+      return val;
+    },
+    z
+      .record(z.string(), Z_CATEGORY_FIELD_MAP)
+      .superRefine((record, ctx) => {
+        for (const key of Object.keys(record)) {
+          if (!PRODUCT_CATEGORY_ID_SET.has(key)) {
+            ctx.addIssue({
+              code: "custom",
+              path: [key],
+              message: `Неизвестная категория «${key}». Укажите одну из допустимых категорий товара.`,
+            });
+          }
+        }
+      })
+      .transform((record) => {
+        const out: Partial<
+          Record<(typeof PRODUCT_CATEGORY_IDS)[number], Record<string, string>>
+        > = {};
+        for (const [key, vals] of Object.entries(record)) {
+          if (!PRODUCT_CATEGORY_ID_SET.has(key)) continue;
+          if (vals && typeof vals === "object" && Object.keys(vals).length > 0) {
+            out[key as (typeof PRODUCT_CATEGORY_IDS)[number]] = vals;
+          }
+        }
+        return Object.keys(out).length > 0 ? out : undefined;
+      })
+      .optional(),
   );
 
 const Z_APPLIED_MARKETPLACE_RULES = z
@@ -106,7 +147,7 @@ export const cardBuilderPlanFieldsSchema = z
         values: Z_CATEGORY_FIELD_MAP.optional(),
       })
       .optional(),
-    categoryFieldsByCategory: z.record(Z_PRODUCT_CATEGORY, Z_CATEGORY_FIELD_MAP).optional(),
+    categoryFieldsByCategory: Z_CATEGORY_FIELDS_BY_CATEGORY,
     styleReference: Z_STYLE_REFERENCE.optional(),
   })
   .strict();

@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { USER_LABELS } from "@/lib/user-facing-copy";
 
 type Props = {
   estimateLoading: boolean;
@@ -75,8 +76,7 @@ export function GenerationCostCard({
                 Будет списано после запуска задачи.
               </p>
               <p className="text-muted-foreground text-xs leading-relaxed">
-                Если генерация упадёт по ошибке провайдера, токены будут
-                возвращены на баланс.
+                {USER_LABELS.providerErrorFallback}
               </p>
             </div>
 

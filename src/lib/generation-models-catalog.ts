@@ -8,6 +8,10 @@ import {
   TASK_LABELS_RU,
 } from "@/config/generation-models";
 import { isAiModelVisibleInUserCatalog } from "@/lib/ai-model-public-catalog";
+import {
+  sanitizeUserFacingHelpText,
+  userFacingProviderLabel,
+} from "@/lib/user-facing-copy";
 
 export type AiModelCatalogRow = {
   id: string;
@@ -53,10 +57,7 @@ export type MergedCatalogModelCard = {
 };
 
 export function providerToLabel(provider: AiModelProvider): string {
-  if (provider === "KIE_AI") {
-    return "Kie.ai";
-  }
-  return "Провайдер";
+  return userFacingProviderLabel(provider);
 }
 
 export function inferTasksFromDbModel(row: AiModelCatalogRow): GenerationTaskId[] {
@@ -245,8 +246,10 @@ export function mergeGenerationCatalog(params: {
     merged.push({
       catalogSlug: def.catalogSlug,
       displayName: displayTitle,
-      providerLabel: def.providerLabel,
-      description: displayDescriptionRaw.trim(),
+      providerLabel: userFacingProviderLabel(null, def.providerLabel),
+      description:
+        sanitizeUserFacingHelpText(displayDescriptionRaw.trim()) ??
+        displayDescriptionRaw.trim(),
       tasks: def.tasks,
       category: def.category,
       costCreditsMin: costCreditsMinEffective,
@@ -293,7 +296,8 @@ export function mergeGenerationCatalog(params: {
       catalogSlug: row.slug,
       displayName: row.name,
       providerLabel: providerToLabel(row.provider),
-      description: row.description ?? "",
+      description:
+        sanitizeUserFacingHelpText(row.description ?? "") ?? row.description ?? "",
       tasks,
       category: row.type === "IMAGE" ? "image" : "video",
       costCreditsMin: row.creditsUiMin ?? row.costCredits,

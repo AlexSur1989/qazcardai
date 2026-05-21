@@ -4,6 +4,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { USER_LABELS } from "@/lib/user-facing-copy";
 import type { GenerationStatus } from "@/generated/prisma/enums";
 
 const STATUSES: GenerationStatus[] = [
@@ -19,7 +20,7 @@ const STATUSES: GenerationStatus[] = [
 
 const STATUS_LABEL: Record<GenerationStatus, string> = {
   CREATED: "Создана",
-  QUEUED: "В очереди",
+  QUEUED: USER_LABELS.waiting,
   PROCESSING: "В обработке",
   COMPLETED: "Готово",
   FAILED: "Ошибка",
@@ -82,14 +83,14 @@ export function HistoryFiltersForm({ typeValue, statusValue, qValue }: Props) {
       </div>
       <div className="min-w-0 flex-1 space-y-1 sm:min-w-[12rem]">
         <Label htmlFor="hf-q" className="text-xs text-muted-foreground">
-          Поиск в промпте
+          {USER_LABELS.searchByRequestText}
         </Label>
         <Input
           id="hf-q"
           name="q"
           type="search"
           defaultValue={qValue}
-          placeholder="Слова из промпта"
+          placeholder="Слова из описания запроса"
           className="h-9"
         />
       </div>

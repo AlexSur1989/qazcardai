@@ -85,7 +85,7 @@ export default async function CreateVideoPage({ searchParams }: PageProps) {
       <PageHeader
         variant="qaz"
         title="Создать видео"
-        description="Постановка в очередь, статусы и результат отслеживайте в истории и на этой странице (опрос по id)."
+        description="Запустите генерацию и отслеживайте статус на этой странице или в истории."
         breadcrumbs={[
           { label: "Кабинет", href: "/dashboard" },
           { label: "AI-модели", href: "/dashboard/models" },
@@ -100,7 +100,7 @@ export default async function CreateVideoPage({ searchParams }: PageProps) {
           </CardTitle>
           <CardDescription>
             Модели и стоимость из базы; кредиты резервируются при создании задачи.
-            Завершение и списание — во воркере (следующий этап).
+            Кредиты резервируются при запуске; окончательное списание — после успешного результата.
           </CardDescription>
         </CardHeader>
         <CardContent>

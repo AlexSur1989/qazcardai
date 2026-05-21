@@ -22,6 +22,10 @@ import {
   IMAGE_GENERATION_POLL_MAX_ITERATIONS,
 } from "@/lib/generation-client-polling";
 import { getFirstOutputUrlFromJson } from "@/lib/product-card-output";
+import {
+  getUserFacingGenerationStatusFromRaw,
+  mapGenerationErrorToUserMessage,
+} from "@/lib/generation-display";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -279,8 +283,8 @@ export function ConceptPhotoTab({
           Фото с концепциями
         </CardTitle>
         <CardDescription>
-          Выберите концепцию и при необходимости опишите пожелания. Промпт для модели собирается на
-          сервере.
+          Выберите концепцию и при необходимости опишите пожелания. Текст для генерации собирается на
+          сервере автоматически.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -440,9 +444,10 @@ export function ConceptPhotoTab({
                 ? "Готово"
                 : "Генерация запущена"}
             </p>
-            <p className="text-muted-foreground font-mono text-xs">
-              id: {result.generationId} · {result.status}
-              {result.costCredits > 0 ? ` · −${result.costCredits} ток.` : null}
+            <p className="text-muted-foreground text-xs">
+              Фото с концепциями ·{" "}
+              {getUserFacingGenerationStatusFromRaw(result.status)}
+              {result.costCredits > 0 ? ` · ${result.costCredits} ток.` : null}
             </p>
             {result.status === "COMPLETED" && result.outputUrl && (
               <div className="space-y-2">
@@ -485,9 +490,8 @@ export function ConceptPhotoTab({
               <div className="text-destructive space-y-2 text-sm">
                 <p className="font-medium leading-relaxed">
                   {result.errorMessage
-                    ? result.errorMessage.length > 600
-                      ? `${result.errorMessage.slice(0, 600)}…`
-                      : result.errorMessage
+                    ? mapGenerationErrorToUserMessage(result.errorMessage) ??
+                      "Ошибка генерации. Токены обычно возвращаются — проверьте историю."
                     : "Ошибка генерации. Токены обычно возвращаются — проверьте историю."}
                 </p>
                 <Link

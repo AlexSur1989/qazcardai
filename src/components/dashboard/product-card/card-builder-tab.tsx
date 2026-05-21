@@ -53,6 +53,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import {
+  getUserFacingGenerationStatusFromRaw,
+  getUserFacingMarketplaceLabel,
+  getUserFacingSlideLabel,
+  mapGenerationErrorToUserMessage,
+} from "@/lib/generation-display";
 
 const nativeFieldClass =
   "h-10 w-full min-w-0 rounded-xl border border-input bg-card px-2.5 text-sm text-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
@@ -94,7 +100,7 @@ const STYLE_REFERENCE_ASPECTS = [
 
 function slideProgressLabel(statusRaw: string): string {
   const s = statusRaw.trim().toLowerCase();
-  if (s === "queued") return "в очереди";
+  if (s === "queued") return "ожидает";
   if (s === "done" || s === "готово") return "готово";
   if (s === "error" || s === "ошибка") return "ошибка";
   if (s === "generating") return "генерация";
@@ -1766,41 +1772,74 @@ export function CardBuilderTab({
             </CardHeader>
             <CardContent className="max-h-64 space-y-2 overflow-y-auto text-sm">
               {[...genHistory].reverse().map((g) => {
-                const title =
-                  slides.find((s) => s.slideId === g.slideId)?.title ?? g.slideId.replace(/_/g, " ");
+                const slide = slides.find((s) => s.slideId === g.slideId);
+                const slideTitle = slide?.title ?? "Слайд";
+                const slideLabel =
+                  getUserFacingSlideLabel(g.imageRole ?? slide?.imageRole) ?? slideTitle;
+                const marketplaceLabel = getUserFacingMarketplaceLabel(coercedMarketplace);
+                const previewUrl = slideGen[g.slideId]?.url ?? null;
+                const statusLabel = g.status
+                  ? getUserFacingGenerationStatusFromRaw(g.status)
+                  : null;
+                const userError = g.errorMessage
+                  ? mapGenerationErrorToUserMessage(g.errorMessage)
+                  : null;
                 return (
                   <div
                     key={`${g.generationId}-${g.createdAt ?? ""}`}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
+                    className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border px-3 py-2"
                   >
-                    <div>
-                      <div className="font-medium">{title}</div>
-                      <div className="text-muted-foreground text-xs">
-                        {g.createdAt
-                          ? new Date(g.createdAt).toLocaleString("ru-RU", {
-                              dateStyle: "short",
-                              timeStyle: "short",
-                            })
-                          : "—"}
-                        {g.status ? (
-                          <>
-                            {" "}
-                            · {slideProgressLabel(g.status)}
-                          </>
+                    <div className="flex min-w-0 gap-2">
+                      {previewUrl ? (
+                        <div className="bg-muted h-12 w-12 shrink-0 overflow-hidden rounded-md border">
+                          {/* eslint-disable-next-line @next/next/no-img-element -- generation preview */}
+                          <img
+                            src={previewUrl}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      ) : null}
+                      <div className="min-w-0">
+                        <div className="font-medium">Создать карточку</div>
+                        <div className="text-muted-foreground text-xs">
+                          Слайд: {slideLabel}
+                          {marketplaceLabel ? ` · ${marketplaceLabel}` : null}
+                        </div>
+                        <div className="text-muted-foreground text-xs">
+                          {g.createdAt
+                            ? new Date(g.createdAt).toLocaleString("ru-RU", {
+                                dateStyle: "short",
+                                timeStyle: "short",
+                              })
+                            : "—"}
+                          {statusLabel ? <> · {statusLabel}</> : null}
+                        </div>
+                        {userError ? (
+                          <p className="text-destructive mt-1 max-w-[min(28rem,88vw)] text-[11px] leading-snug">
+                            {userError}
+                          </p>
                         ) : null}
                       </div>
-                      {g.errorMessage ? (
-                        <p className="text-destructive mt-1 max-w-[min(28rem,88vw)] text-[11px] leading-snug">
-                          {g.errorMessage}
-                        </p>
-                      ) : null}
                     </div>
-                    <Link
-                      href={`/dashboard/history/${g.generationId}`}
-                      className="text-primary text-xs font-medium underline"
-                    >
-                      Открыть
-                    </Link>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      {previewUrl && g.status?.toLowerCase() === "done" ? (
+                        <a
+                          href={`/api/generations/${g.generationId}/download`}
+                          className="text-primary text-xs font-medium underline"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Скачать
+                        </a>
+                      ) : null}
+                      <Link
+                        href={`/dashboard/history/${g.generationId}`}
+                        className="text-primary text-xs font-medium underline"
+                      >
+                        Открыть
+                      </Link>
+                    </div>
                   </div>
                 );
               })}

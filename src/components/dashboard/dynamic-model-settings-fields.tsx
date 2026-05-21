@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { sanitizeUserFacingHelpText } from "@/lib/user-facing-copy";
 import type { SchemaField } from "@/lib/generation-form-settings-schema";
 import { KIE_SETTINGS_URL_LIST_FROM_COMPUTER } from "@/lib/kie-computer-upload-fields";
 import {
@@ -77,10 +78,7 @@ export function DynamicModelSettingsFields({
             typeof (opt as { label: unknown }).label === "string"
               ? (opt as { label: string }).label
               : optValue(opt);
-          const help =
-            typeof field.helpText === "string" && field.helpText.trim()
-              ? field.helpText.trim()
-              : null;
+          const help = sanitizeUserFacingHelpText(field.helpText);
           return (
             <div key={field.name} className="space-y-2">
               <Label htmlFor={id}>{label}</Label>

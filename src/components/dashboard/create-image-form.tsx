@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { USER_LABELS } from "@/lib/user-facing-copy";
 import { canonicalModelSlug } from "@/lib/model-slug-params";
 import {
   defaultsFromSchema,
@@ -281,7 +282,7 @@ export function CreateImageForm({
       return;
     }
     if (!prompt.trim()) {
-      setError("Введите промпт");
+      setError("Введите описание");
       return;
     }
 
@@ -371,7 +372,7 @@ export function CreateImageForm({
       }
       if (data.generationId && data.status) {
         setResult({ generationId: data.generationId, status: data.status });
-        toast.success("Запрос поставлен в очередь");
+        toast.success(USER_LABELS.generationStarted);
         void fetchStatus(data.generationId);
       } else {
         setError("Некорректный ответ сервера");
@@ -463,7 +464,7 @@ export function CreateImageForm({
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="prompt">Промпт</Label>
+          <Label htmlFor="prompt">{USER_LABELS.prompt}</Label>
           <Textarea
             id="prompt"
             name="prompt"
@@ -477,7 +478,7 @@ export function CreateImageForm({
 
         {!hasDynamicSettings && selected?.supportsNegativePrompt && (
           <div className="space-y-2">
-            <Label htmlFor="neg">Негативный промпт (опционально)</Label>
+            <Label htmlFor="neg">{USER_LABELS.negativePromptOptional}</Label>
             <Textarea
               id="neg"
               value={negativePrompt}

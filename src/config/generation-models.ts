@@ -50,7 +50,7 @@ export const TASK_LABELS_RU: Record<GenerationTaskId, string> = {
   prompt_helper: "Помощник промптов",
 };
 
-/** Секции фильтров (как Kie.ai): id задачи → label */
+/** Секции фильтров каталога: id задачи → label */
 export const TASK_FILTER_GROUPS: {
   title: string;
   groupId: GenerationTaskFilterGroupId;
@@ -187,7 +187,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     displayName: "Seedance 2.0",
     providerLabel: "ByteDance",
     descriptionFallback:
-      "Видео по тексту, first/last frame, референсы изображений/видео/аудио (Kie: bytedance/seedance-2).",
+      "Видео по тексту, первый и последний кадр, референсы изображений, видео и аудио.",
     tasks: ["text_to_video", "image_to_video", "lip_sync"],
     category: "video",
     dbSlugCandidates: [
@@ -208,7 +208,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     displayName: "Seedance 2.0 Fast",
     providerLabel: "ByteDance",
     descriptionFallback:
-      "Более быстрый режим той же линейки API (Kie: bytedance/seedance-2-fast).",
+      "Более быстрый режим той же линейки для ускоренной генерации видео.",
     tasks: ["text_to_video", "image_to_video", "lip_sync"],
     category: "video",
     dbSlugCandidates: [
@@ -229,7 +229,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     displayName: "Seedance 1.5 Pro",
     providerLabel: "ByteDance",
     descriptionFallback:
-      "Видео Kie Market: bytedance/seedance-1.5-pro (сценарии и поля как у Seedance 2.0).",
+      "Видео Seedance 1.5 Pro: сценарии и настройки как у Seedance 2.0.",
     tasks: ["text_to_video", "image_to_video", "lip_sync"],
     category: "video",
     dbSlugCandidates: ["seedance-1-5-pro"],
@@ -268,7 +268,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     displayName: "Kling 2.6",
     providerLabel: "Kuaishou",
     descriptionFallback:
-      "Видео по тексту и из изображения (Kie: kling-2.6/text-to-video и kling-2.6/image-to-video) — отдельные поля по документации Kie для каждого режима.",
+      "Видео по тексту и из изображения — отдельные режимы с понятными настройками для каждого сценария.",
     tasks: ["text_to_video", "image_to_video"],
     category: "video",
     dbSlugCandidates: [
@@ -290,7 +290,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     displayName: "Wan 2.7 Video",
     providerLabel: "Alibaba",
     descriptionFallback:
-      "Wan 2.7: текст → видео, изображение → видео, reference → video и редактирование видео по Kie.",
+      "Wan 2.7: текст в видео, изображение в видео, по референсам и редактирование ролика.",
     tasks: ["text_to_video", "image_to_video", "video_to_video", "video_editing"],
     category: "video",
     dbSlugCandidates: [
@@ -316,7 +316,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     displayName: "Wan 2.6",
     providerLabel: "Alibaba",
     descriptionFallback:
-      "Wan 2.6: текст → видео, изображение → видео и видео → видео по Kie.",
+      "Wan 2.6: текст в видео, изображение в видео и видео в видео.",
     tasks: ["text_to_video", "image_to_video", "video_to_video", "video_editing"],
     category: "video",
     dbSlugCandidates: [
@@ -341,7 +341,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     displayName: "Grok Imagine",
     providerLabel: "xAI",
     descriptionFallback:
-      "Grok Imagine: генерация и редактирование изображений, текст → видео и изображение → видео через Kie.",
+      "Grok Imagine: изображения, редактирование, текст в видео и изображение в видео.",
     tasks: ["text_to_image", "image_to_image", "image_editing", "text_to_video", "image_to_video"],
     category: "image",
     dbSlugCandidates: [
@@ -366,7 +366,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   {
     catalogSlug: "nano-banana-2",
     displayName: "Nano Banana 2",
-    providerLabel: "Google (Kie)",
+    providerLabel: "Google",
     descriptionFallback:
       "Nano Banana 2 image generation with optional reference images.",
     tasks: ["text_to_image", "image_to_image"],
@@ -388,7 +388,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   {
     catalogSlug: "nano-banana-pro",
     displayName: "Nano Banana Pro",
-    providerLabel: "Google (Kie)",
+    providerLabel: "Google",
     descriptionFallback: "Nano Banana Pro image-to-image generation.",
     tasks: ["image_to_image", "image_editing"],
     category: "image",
@@ -401,7 +401,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   {
     catalogSlug: "seedream-5-lite",
     displayName: "Seedream 5.0 Lite",
-    providerLabel: "ByteDance (Kie)",
+    providerLabel: "ByteDance",
     descriptionFallback: "Seedream 5.0 Lite image-to-image generation.",
     tasks: ["image_to_image", "image_editing"],
     category: "image",
@@ -414,7 +414,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   {
     catalogSlug: "seedream-4-5",
     displayName: "Seedream 4.5",
-    providerLabel: "ByteDance (Kie)",
+    providerLabel: "ByteDance",
     descriptionFallback: "Seedream 4.5 text-to-image and edit modes.",
     tasks: ["text_to_image", "image_to_image", "image_editing"],
     category: "image",
@@ -435,9 +435,9 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   {
     catalogSlug: "flux-2",
     displayName: "Flux 2",
-    providerLabel: "Black Forest Labs (Kie)",
+    providerLabel: "Black Forest Labs",
     descriptionFallback:
-      "Flux 2 Flex: текст в изображение и изображение в изображение (Kie).",
+      "Flux 2 Flex: текст в изображение и изображение в изображение.",
     tasks: ["text_to_image", "image_to_image"],
     category: "image",
     dbSlugCandidates: [
@@ -457,7 +457,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   {
     catalogSlug: "qwen-image",
     displayName: "Qwen Image",
-    providerLabel: "Alibaba (Kie)",
+    providerLabel: "Alibaba",
     descriptionFallback: "Qwen text-to-image and Qwen2 image edit.",
     tasks: ["text_to_image", "image_editing"],
     category: "image",
@@ -472,7 +472,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   {
     catalogSlug: "ideogram-v3",
     displayName: "Ideogram V3",
-    providerLabel: "Ideogram (Kie)",
+    providerLabel: "Ideogram",
     descriptionFallback: "Ideogram V3 edit and remix modes.",
     tasks: ["image_to_image", "image_editing"],
     category: "image",
@@ -489,7 +489,7 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
     displayName: "Hailuo 2.3",
     providerLabel: "MiniMax",
     descriptionFallback:
-      "Hailuo 2.3 Image→Video: Standard и Pro режимы Kie для анимации изображения.",
+      "Hailuo 2.3: анимация изображения в видео, режимы Standard и Pro.",
     tasks: ["image_to_video"],
     category: "video",
     dbSlugCandidates: [
@@ -510,9 +510,9 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   {
     catalogSlug: "sora-2-pro-storyboard",
     displayName: "Sora 2 Pro · Storyboard",
-    providerLabel: "OpenAI (Kie)",
+    providerLabel: "OpenAI",
     descriptionFallback:
-      "Видео по сценарию из кадров с длительностями (Kie: sora-2-pro-storyboard): shots, n_frames 10/15/25 с.",
+      "Видео по сценарию из кадров с длительностями 10, 15 или 25 секунд.",
     tasks: ["text_to_video", "image_to_video"],
     category: "video",
     dbSlugCandidates: ["sora-2-pro-storyboard"],
@@ -525,9 +525,9 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   {
     catalogSlug: "veo-3-1",
     displayName: "Google Veo 3.1",
-    providerLabel: "Google (Kie)",
+    providerLabel: "Google",
     descriptionFallback:
-      "Google Veo 3.1: генерация видео, extend и получение 4K/1080p результата через Kie.",
+      "Google Veo 3.1: генерация видео, продление ролика и результат в 4K или 1080p.",
     tasks: ["text_to_video", "image_to_video", "video_to_video", "video_editing"],
     category: "video",
     dbSlugCandidates: [
@@ -552,9 +552,9 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
   {
     catalogSlug: "happyhorse-1-0",
     displayName: "HappyHorse-1.0",
-    providerLabel: "Alibaba ATH (Kie)",
+    providerLabel: "Alibaba",
     descriptionFallback:
-      "Текст → видео, изображение → видео, по референсам и редактирование ролика (Kie HappyHorse-1.0).",
+      "Текст в видео, изображение в видео, по референсам и редактирование ролика.",
     tasks: ["text_to_video", "image_to_video", "video_editing"],
     category: "video",
     dbSlugCandidates: [

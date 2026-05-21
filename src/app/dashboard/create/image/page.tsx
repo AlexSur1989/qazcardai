@@ -102,7 +102,7 @@ export default async function CreateImagePage({ searchParams }: PageProps) {
       <PageHeader
         variant="qaz"
         title="Создать фото"
-        description="Выбор модели из каталога, постановка в очередь, воркер обращается к провайдеру. Статус обновляется на странице."
+        description="Выберите модель и параметры. Статус генерации обновляется на этой странице и в истории."
         breadcrumbs={[
           { label: "Кабинет", href: "/dashboard" },
           { label: "AI-модели", href: "/dashboard/models" },

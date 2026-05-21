@@ -11,8 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { GenerationStatus } from "@/generated/prisma/enums";
-import { generationStatusLabel } from "@/lib/generation-labels";
+import { getUserFacingGenerationStatusFromRaw } from "@/lib/generation-display";
 import { parseOutputFilesList } from "@/lib/generation-output-utils";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +19,7 @@ type ModelKind = "VIDEO" | "IMAGE";
 
 function statusLabel(s: string | null): string {
   if (!s) return "—";
-  return generationStatusLabel(s as GenerationStatus);
+  return getUserFacingGenerationStatusFromRaw(s);
 }
 
 function previewMode(

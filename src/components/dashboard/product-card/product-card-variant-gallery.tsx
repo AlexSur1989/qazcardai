@@ -64,7 +64,7 @@ export function ProductCardVariantGallery({
                     ? item.errorMessage || "Вариант не создан"
                     : hasRealGeneration
                       ? "Ожидаем результат генерации…"
-                      : "Не поставлен в очередь"}
+                      : "Ещё не запущено"}
                 </div>
               )}
               <div className="flex flex-wrap gap-2">

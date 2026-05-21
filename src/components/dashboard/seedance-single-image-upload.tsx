@@ -32,14 +32,14 @@ function fileLabel(url: string): string {
 }
 
 /**
- * Один кадр (first_frame_url / last_frame_url): загрузка → публичный URL для Kie.
+ * Один кадр: загрузка файла для генерации.
  */
 export function SeedanceSingleImageUpload({
   fieldName,
   label,
   value,
   onChange,
-  hint = "JPEG, PNG, WEBP до 10 МБ — как в консоли Kie",
+  hint = "JPEG, PNG или WebP до 10 МБ",
   disabled = false,
 }: Props) {
   const id = useId();

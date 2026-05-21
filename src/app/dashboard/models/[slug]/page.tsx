@@ -340,10 +340,8 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
           <div className="mb-6 space-y-1">
             <h2 className="text-lg font-semibold">Генерация Kling 2.6</h2>
             <p className="text-muted-foreground text-sm">
-              Режимы Kie:{" "}
-              <span className="font-mono">kling-2.6/text-to-video</span> и{" "}
-              <span className="font-mono">kling-2.6/image-to-video</span>. Параметры
-              берутся из схемы модели; списание — в токенах QazCard.
+              Два режима: текст → видео и изображение → видео. Параметры задаются в форме;
+              списание — в токенах QazCard.
             </p>
           </div>
           <CreateVideoForm
@@ -453,7 +451,7 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
       genericFamilyPlayground = (
         <ModelFamilyGenerationHub
           title={def.displayName}
-          description="Выберите режим модели. Поля формы берутся из settingsSchema, который сиды заполняют по документации Kie; списание идёт в токенах QazCard."
+          description="Выберите режим модели и заполните поля формы. Списание — в токенах QazCard."
           modes={modes}
           balanceCredits={balanceCredits}
           initialSlug={firstSearchParam(sp.mode)}
@@ -530,7 +528,7 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
             <h2 className="text-lg font-semibold">Стоимость</h2>
             <p className="text-muted-foreground text-sm">
               {card.costCreditsMin != null
-                ? `От ${card.costCreditsMin} токенов за операцию (зависит от настроек и провайдера).`
+                ? `От ${card.costCreditsMin} токенов за операцию. Стоимость зависит от выбранных настроек.`
                 : "Стоимость уточняется при выборе параметров в форме генерации."}
             </p>
           </section>
