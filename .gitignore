@@ -33,6 +33,10 @@ yarn-error.log*
 # env files
 .env
 .env*.local
+.env.save
+.env.production
+.env.backup-*
+.env.rotation-secrets.txt
 !.env.example
 
 # vercel
