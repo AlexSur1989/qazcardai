@@ -522,7 +522,7 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
     type: "json",
     defaultValue: [
       { id: "1x1", label: "1:1 1024x1024", width: 1024, height: 1024, aspectRatio: "1:1" },
-      { id: "4x5", label: "4:5 1200x1500", width: 1200, height: 1500, aspectRatio: "4:5" },
+      { id: "4x3", label: "4:3 1200x900", width: 1200, height: 900, aspectRatio: "4:3" },
       { id: "3x4", label: "3:4 1200x1600", width: 1200, height: 1600, aspectRatio: "3:4" },
       { id: "16x9", label: "16:9 1344x768", width: 1344, height: 768, aspectRatio: "16:9" },
       { id: "9x16", label: "9:16 768x1344", width: 768, height: 1344, aspectRatio: "9:16" }

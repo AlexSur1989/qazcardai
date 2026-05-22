@@ -127,14 +127,8 @@ const OTHER: ConceptMap = {
     "Mode: clean studio. Versatile e-commerce look, one hero object, no clutter, true-to-image identity.",
   lifestyle:
     "Mode: general lifestyle. Realistic scene that fits the product type; keep the product legible and central.",
-  closeup:
-    "Mode: close-up / detail. Focus on the defining features of the product, sharp, commercial clarity.",
-  hero:
-    "Mode: hero shot. Single bold hero framing, high impact, clean composition, strong subject separation.",
-  ad_poster:
-    "Mode: retail poster. Large hero product, visual hierarchy, ready for callouts, no text generation required.",
-  clean_studio:
-    "Mode: clean still life. Even light, true colors, no unrelated props, professional catalog discipline.",
+  in_use:
+    "Mode: in use. Show believable real-world usage, natural interaction or context, sharp product legibility, honest environment lighting.",
 };
 
 const BY_CATEGORY: Record<ProductCategoryId, ConceptMap> = {
@@ -150,6 +144,11 @@ const BY_CATEGORY: Record<ProductCategoryId, ConceptMap> = {
 const LEGACY_CONCEPT_ALIASES: Record<string, string> = {
   // Ранний id «еда / каталог»
   studio_pack: "studio_catalog",
+  // Удалённые концепции «Прочее» → ближайшие актуальные
+  closeup: "studio_catalog",
+  hero: "studio_catalog",
+  ad_poster: "lifestyle",
+  clean_studio: "studio_catalog",
 };
 
 // --- Classifier (strict JSON) ---

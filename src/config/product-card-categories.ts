@@ -20,7 +20,9 @@ export type ProductConcept = {
   description: string;
   /**
    * Публичный URL без префикса `/public`: `/product-card/concepts/{категория}/{файл}`.
-   * Рекомендуемый файл: **300×300 px**, JPG/WebP/PNG (~30–80 KB). Только UI; не уходит в API и промпты.
+   * В имени файла допустимо любое расширение (или без него) — UI перебирает
+   * webp/jpg/jpeg/png/svg/gif и варианты kebab/snake + id концепции.
+   * Рекомендуемый размер: **300×300 px**, ~30–80 KB. Только UI; не уходит в API и промпты.
    */
   previewImage: string;
 };
@@ -37,7 +39,7 @@ export function productCategoryPreviewFolder(
 }
 
 /**
- * @param previewFile имя файла в папке категории, например `catalog.jpg`
+ * @param previewFile имя файла в папке категории (любое расширение или без него), например `catalog.jpg` или `in_use`
  */
 function conceptWithPreview(
   folder: string,
@@ -414,31 +416,10 @@ const CATEGORIES: readonly ProductCategory[] = [
       ),
       conceptWithPreview(
         "other",
-        "closeup",
-        "Крупный план",
-        "Детализация",
-        "close-up.jpg",
-      ),
-      conceptWithPreview(
-        "other",
-        "hero",
-        "Hero shot",
-        "Сильный герой-кадр",
-        "hero.jpg",
-      ),
-      conceptWithPreview(
-        "other",
-        "ad_poster",
-        "Рекламный постер",
-        "Постерный визуал",
-        "promo.jpg",
-      ),
-      conceptWithPreview(
-        "other",
-        "clean_studio",
-        "Чистая предметная съёмка",
-        "Ровный свет, без лишнего",
-        "studio.jpg",
+        "in_use",
+        "В использовании",
+        "Товар в реалистичном сценарии применения",
+        "in-use.jpg",
       ),
     ],
   },

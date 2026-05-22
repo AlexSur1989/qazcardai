@@ -48,10 +48,7 @@ const SPECS = [
   ["home-and-furniture", "premium_poster"],
   ["other", "studio_catalog"],
   ["other", "lifestyle"],
-  ["other", "closeup"],
-  ["other", "hero"],
-  ["other", "ad_poster"],
-  ["other", "clean_studio"],
+  ["other", "in_use"],
 ];
 
 /** Уникальный «рисунок» под смысл концепции — только простые фигуры, без фото */

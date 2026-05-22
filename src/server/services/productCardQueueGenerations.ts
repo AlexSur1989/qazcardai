@@ -392,6 +392,8 @@ export async function queueProductCardImage(
   productCardUserModerationEnvelope?: string | null,
   /** URL референсов стиля (card_builder): отдельно от фото товара. */
   styleReferenceUrls?: string[],
+  /** Merge в metadata.settings (concept photo: aspectRatio / resolution). */
+  settingsMerge?: Record<string, unknown> | null,
 ): Promise<QueueResult> {
   if (!model || model.type !== "IMAGE") {
     return { ok: false, error: "Модель изображения недоступна", status: 500 };
@@ -450,12 +452,15 @@ export async function queueProductCardImage(
   }
 
   const metadata: Record<string, unknown> = {};
-  if (hasSchema) {
-    metadata.settings = marketplaceCardSettings
+  const mergedSettings = settingsMerge
+    ? marketplaceCardSettings
+      ? { ...normalizedSettings, ...marketplaceCardSettings, ...settingsMerge }
+      : { ...normalizedSettings, ...settingsMerge }
+    : marketplaceCardSettings
       ? { ...normalizedSettings, ...marketplaceCardSettings }
       : normalizedSettings;
-  } else if (marketplaceCardSettings) {
-    metadata.settings = { ...marketplaceCardSettings };
+  if (hasSchema || marketplaceCardSettings || settingsMerge) {
+    metadata.settings = mergedSettings;
   }
   mergeProductCardInputIntoKieSettings(metadata, model, inputFilesCombined);
   applyProductCardMetadata(metadata, productMeta);
@@ -489,9 +494,13 @@ export async function queueProductCardImage(
     };
   }
 
-  const mergedForCredits = marketplaceCardSettings
-    ? { ...normalizedSettings, ...marketplaceCardSettings }
-    : normalizedSettings;
+  const mergedForCredits = settingsMerge
+    ? marketplaceCardSettings
+      ? { ...normalizedSettings, ...marketplaceCardSettings, ...settingsMerge }
+      : { ...normalizedSettings, ...settingsMerge }
+    : marketplaceCardSettings
+      ? { ...normalizedSettings, ...marketplaceCardSettings }
+      : normalizedSettings;
   let price = pricingBreakdown ?? null;
   if (!price) {
     if (productMeta.productCard.tab === "marketplace_card") {

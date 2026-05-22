@@ -13,9 +13,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   getConceptsForCategory,
-  PRODUCT_CONCEPT_PREVIEW_PLACEHOLDER,
   type ProductCategoryId,
 } from "@/config/product-card-categories";
+import { buildConceptPreviewCandidates } from "@/lib/product-card-concept-preview";
 import { readJsonSafe } from "@/lib/fetch-json-safe";
 import {
   IMAGE_GENERATION_POLL_INTERVAL_MS,
@@ -43,31 +43,16 @@ type GenPollRow = {
   errorMessage?: string | null;
 };
 
-function buildPreviewCandidates(src: string): string[] {
-  const fallback = PRODUCT_CONCEPT_PREVIEW_PLACEHOLDER;
-  const primary = src.trim();
-  if (!primary) return [fallback];
-
-  const withoutExt = primary.replace(/\.(jpe?g|png|webp)$/i, "");
-  const candidates = [
-    primary,
-    `${withoutExt}.webp`,
-    `${withoutExt}.jpg`,
-    `${withoutExt}.jpeg`,
-    `${withoutExt}.png`,
-    fallback,
-  ];
-  return Array.from(new Set(candidates));
-}
-
 function ConceptPreviewImage({
   previewSrc,
+  conceptId,
   label,
 }: {
   previewSrc: string;
+  conceptId: string;
   label: string;
 }) {
-  const candidates = buildPreviewCandidates(previewSrc);
+  const candidates = buildConceptPreviewCandidates(previewSrc, conceptId);
   const [candidateIndex, setCandidateIndex] = useState(0);
   const imageSrc = candidates[Math.min(candidateIndex, candidates.length - 1)];
 
@@ -316,8 +301,9 @@ export function ConceptPhotoTab({
                   )}
                 >
                   <ConceptPreviewImage
-                    key={c.previewImage}
+                    key={c.id}
                     previewSrc={c.previewImage}
+                    conceptId={c.id}
                     label={c.label}
                   />
                 </div>

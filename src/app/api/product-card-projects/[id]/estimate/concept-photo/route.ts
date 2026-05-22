@@ -10,10 +10,14 @@ import { resolveDefaultProductConceptImageModel } from "@/server/services/produc
 import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 import { normalizeProductSourceImages } from "@/server/services/productCardProjects";
 import { buildImageModelInput } from "@/server/services/productCardQueueGenerations";
+import { resolveMarketplaceCardSize } from "@/server/services/marketplaceCardSizing";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 import { modelHasSettingsSchema } from "@/server/services/model-settings";
 import { calculateProductCardConceptImageCredits } from "@/server/services/productCardPricing";
-import { PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE } from "@/server/services/productCardSettings";
+import {
+  getProductCardSettings,
+  PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE,
+} from "@/server/services/productCardSettings";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -69,8 +73,21 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
+  const productCardSettings = await getProductCardSettings();
+  const resolvedSize = resolveMarketplaceCardSize(
+    productCardSettings.conceptImageSizes,
+    body.size,
+  );
+  if (!resolvedSize.ok) {
+    return NextResponse.json({ error: resolvedSize.error }, { status: 400 });
+  }
+
   if (!modelHasSettingsSchema(model.settingsSchema)) {
-    const price = await calculateProductCardConceptImageCredits(model, { size: body.size });
+    const price = await calculateProductCardConceptImageCredits(model, {
+      size: resolvedSize.size.id,
+      aspectRatio: resolvedSize.size.kieAspectRatio,
+      resolution: resolvedSize.size.kieResolution,
+    });
     return NextResponse.json({
       credits: price.credits,
       modelName: model.name,
@@ -93,7 +110,11 @@ export async function POST(req: Request, ctx: Ctx) {
   }
   const price = await calculateProductCardConceptImageCredits(model, {
     ...settings,
-    size: body.size,
+    size: resolvedSize.size.id,
+    aspectRatio: resolvedSize.size.kieAspectRatio,
+    resolution: resolvedSize.size.kieResolution,
+    outputWidth: resolvedSize.size.width,
+    outputHeight: resolvedSize.size.height,
   });
   return NextResponse.json({
     credits: price.credits,

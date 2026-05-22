@@ -1310,6 +1310,87 @@ function isSora2ProStoryboardModelId(modelId: string): boolean {
   return modelId.trim() === "sora-2-pro-storyboard";
 }
 
+function isSeedreamV4EditModelId(modelId: string): boolean {
+  return modelId.trim().toLowerCase() === "bytedance/seedream-v4-edit";
+}
+
+/** Kie Seedream 4.0 Edit: input.image_size + input.image_resolution (docs.kie.ai/market/seedream/seedream-v4-edit). */
+function seedreamV4EditImageSizeFromSettings(settings: Record<string, unknown>): string {
+  const ar = typeof settings.aspectRatio === "string" ? settings.aspectRatio.trim() : "";
+  const width = Number(settings.outputWidth);
+  const height = Number(settings.outputHeight);
+  const ratio =
+    Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
+      ? width / height
+      : ratioFromAspectLabel(ar);
+
+  if (ratio == null) return "square_hd";
+  if (Math.abs(ratio - 1) < 0.05 || ar === "1:1") return "square_hd";
+  if (ar === "16:9" || ratio >= 1.65) return "landscape_16_9";
+  if (ar === "9:16" || ratio <= 0.62) return "portrait_16_9";
+  if (ar === "3:4" || (ratio < 1 && Math.abs(ratio - 0.75) < 0.08)) return "portrait_4_3";
+  if (ar === "4:3" || (ratio >= 1 && Math.abs(ratio - 4 / 3) < 0.08)) return "landscape_4_3";
+  return ratio >= 1 ? "landscape_4_3" : "portrait_4_3";
+}
+
+function ratioFromAspectLabel(aspectRatio: string): number | null {
+  const [rawW, rawH] = aspectRatio.split(":");
+  const w = Number(rawW);
+  const h = Number(rawH);
+  return Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0 ? w / h : null;
+}
+
+function seedreamV4EditResolutionFromSettings(settings: Record<string, unknown>): "1K" | "2K" | "4K" {
+  const raw = typeof settings.resolution === "string" ? settings.resolution.trim().toUpperCase() : "";
+  if (raw === "2K" || raw === "4K") return raw;
+  return "1K";
+}
+
+function collectSeedreamV4EditImageUrls(
+  settings: Record<string, unknown>,
+  inputFiles: string[],
+): string[] {
+  const fromSettings = [
+    ...(Array.isArray(settings.imageUrls)
+      ? settings.imageUrls.filter((x): x is string => typeof x === "string")
+      : []),
+    ...(Array.isArray(settings.inputUrls)
+      ? settings.inputUrls.filter((x): x is string => typeof x === "string")
+      : []),
+  ];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const url of [...fromSettings, ...inputFiles]) {
+    const t = url.trim();
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
+function buildSeedreamV4EditMarketCreateTaskPayload(
+  prompt: string,
+  modelId: string,
+  settings: Record<string, unknown>,
+  inputFiles: string[],
+): JsonRecord {
+  const base = getAppUrlForKieCallback();
+  const image_urls = collectSeedreamV4EditImageUrls(settings, inputFiles);
+  const input: JsonRecord = {
+    prompt: prompt.trim(),
+    image_urls,
+    image_size: seedreamV4EditImageSizeFromSettings(settings),
+    image_resolution: seedreamV4EditResolutionFromSettings(settings),
+    max_images: 1,
+  };
+  return stripUndefinedDeep({
+    model: modelId,
+    callBackUrl: `${base}/api/webhooks/kie`,
+    input: stripUndefinedDeep(input) as JsonRecord,
+  }) as JsonRecord;
+}
+
 function parseSoraStoryboardShotsFromSettings(
   shots: unknown,
 ): { Scene: string; duration: number }[] {
@@ -1433,6 +1514,14 @@ export function buildKieMarketCreateTaskPayload(
       prompt,
       modelId,
       settings,
+    );
+  }
+  if (isSeedreamV4EditModelId(modelId)) {
+    return buildSeedreamV4EditMarketCreateTaskPayload(
+      prompt,
+      modelId,
+      settings,
+      inputFiles,
     );
   }
   if (!isRecord(model.payloadMapping)) {

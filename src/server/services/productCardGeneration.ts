@@ -88,6 +88,37 @@ export function isConceptInCategory(
   return Boolean(c?.concepts.some((x) => x.id === conceptId));
 }
 
+function buildConceptPhotoModelSettings(
+  model: AiModel,
+  sourceImageUrl: string | string[],
+  resolvedSize: MarketplaceCardResolvedSize,
+):
+  | { ok: true; merged: Record<string, unknown> }
+  | { ok: false; error: string } {
+  try {
+    const b = buildImageModelInput(
+      { settingsSchema: model.settingsSchema, supportsImageInput: model.supportsImageInput },
+      sourceImageUrl,
+    );
+    return {
+      ok: true,
+      merged: {
+        ...b.normalizedSettings,
+        size: resolvedSize.id,
+        aspectRatio: resolvedSize.kieAspectRatio,
+        resolution: resolvedSize.kieResolution,
+        outputWidth: resolvedSize.width,
+        outputHeight: resolvedSize.height,
+      },
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Некорректные настройки модели",
+    };
+  }
+}
+
 export type GenerateConceptPhotoOk = {
   ok: true;
   generationId: string;
@@ -152,6 +183,16 @@ export async function generateConceptPhotoForProductCard(
     };
   }
 
+  const productCardSettings = await getProductCardSettings();
+  const resolvedSize = resolveMarketplaceCardSize(
+    productCardSettings.conceptImageSizes,
+    input.size,
+  );
+  if (!resolvedSize.ok) {
+    return { ok: false, error: resolvedSize.error, status: 400 };
+  }
+  const sizePreset = resolvedSize.size;
+
   const finalPrompt = buildConceptPhotoPrompt({
     categoryId: input.categoryId,
     conceptId: input.conceptId,
@@ -176,7 +217,7 @@ export async function generateConceptPhotoForProductCard(
     categoryId: input.categoryId,
     conceptId: input.conceptId,
     userPrompt: input.userPrompt,
-    size: input.size ?? "1x1",
+    size: sizePreset.id,
     sourceImageUrl: sourceUrl,
     sourceImages,
     sourceImagesCount: sourceImages.length,
@@ -186,14 +227,22 @@ export async function generateConceptPhotoForProductCard(
   };
 
   let conceptPricing;
+  const mergedSettings = buildConceptPhotoModelSettings(
+    model,
+    sourceImageUrls.length > 0 ? sourceImageUrls : sourceUrl,
+    sizePreset,
+  );
+  if (!mergedSettings.ok) {
+    return {
+      ok: false,
+      error: mergedSettings.error,
+      status: 400,
+    };
+  }
   try {
-    const built = buildImageModelInput(
-      { settingsSchema: model.settingsSchema, supportsImageInput: model.supportsImageInput },
-      sourceImageUrls.length > 0 ? sourceImageUrls : sourceUrl,
-    );
     conceptPricing = await calculateProductCardConceptImageCredits(
       model,
-      { ...built.normalizedSettings, size: input.size ?? "1x1" },
+      mergedSettings.merged,
     );
   } catch (e) {
     return {
@@ -213,6 +262,9 @@ export async function generateConceptPhotoForProductCard(
     metadataRoot,
     null,
     conceptPricing,
+    null,
+    undefined,
+    mergedSettings.merged,
   );
 
   if (!result.ok) {
