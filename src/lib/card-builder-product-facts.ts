@@ -2,6 +2,7 @@ import type { CardBuilderTemplateSlideRole } from "@/config/card-builder-templat
 
 export const CARD_BUILDER_PRODUCT_FACT_TYPES = [
   "benefit",
+  "product_purpose",
   "material",
   "dimension",
   "usage",
@@ -96,14 +97,14 @@ export function normalizeProductFactsList(raw: unknown): CardBuilderProductFact[
 
 const SLIDE_FACT_TYPES: Partial<Record<CardBuilderTemplateSlideRole, CardBuilderProductFactType[]>> =
   {
-    main_photo: [],
+    main_photo: ["product_purpose"],
     benefits_infographic: ["benefit", "feature"],
     detail_closeup: ["detail", "feature"],
     materials: ["material"],
     dimensions: ["dimension"],
-    lifestyle: ["usage"],
+    lifestyle: ["usage", "product_purpose"],
     packaging: ["package"],
-    premium_poster: ["benefit", "feature"],
+    premium_poster: ["benefit", "feature", "product_purpose"],
     ad_banner: ["benefit", "feature"],
   };
 
@@ -131,6 +132,7 @@ export function hasBenefitProductFacts(facts: readonly CardBuilderProductFact[])
 
 export const CARD_BUILDER_PRODUCT_FACT_TYPE_LABELS: Record<CardBuilderProductFactType, string> = {
   benefit: "Преимущество",
+  product_purpose: "Назначение / описание товара",
   material: "Материал",
   dimension: "Размер / объём / вес",
   usage: "Использование",
@@ -185,6 +187,41 @@ export function nonBenefitProductFacts(
   facts: readonly CardBuilderProductFact[],
 ): CardBuilderProductFact[] {
   return facts.filter((f) => f.type !== "benefit");
+}
+
+export function productPurposeTextareaValue(facts: readonly CardBuilderProductFact[]): string {
+  return facts
+    .filter((f) => f.type === "product_purpose" && f.value.trim())
+    .map((f) => f.value.trim())
+    .join("\n");
+}
+
+/** Заменяет product_purpose-факты одной строкой из textarea «Краткое описание»; остальные facts не трогает. */
+export function mergeProductPurposeFromTextarea(
+  facts: readonly CardBuilderProductFact[],
+  textarea: string,
+): CardBuilderProductFact[] {
+  const others = facts.filter((f) => f.type !== "product_purpose");
+  const line = textarea
+    .split(/\r?\n/)
+    .map((p) => p.trim())
+    .find(Boolean);
+  if (!line) return others;
+  const purpose: CardBuilderProductFact = {
+    id: newProductFactId(),
+    label: "Назначение",
+    value: line.slice(0, 400),
+    type: "product_purpose",
+    source: "user",
+    visibleOnCard: true,
+    lockedText: true,
+  };
+  return [...others, purpose];
+}
+
+/** Назначение/описание товара — не benefit и не usage. */
+export function isProductPurposeFact(fact: CardBuilderProductFact): boolean {
+  return fact.type === "product_purpose";
 }
 
 export function hasDimensionProductFacts(facts: readonly CardBuilderProductFact[]): boolean {

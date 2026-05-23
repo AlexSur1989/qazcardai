@@ -107,6 +107,8 @@ JSON должен точно соответствовать схеме:
 - materialGuess — null, если материал не очевиден.
 - productShape — null, если форма неясна.
 - suggestedProductFacts — только то, что можно обосновать визуально; confidence 0.0–1.0.
+- type=product_purpose для назначения или краткого описания товара (например «шампунь против перхоти», «крем для сухой кожи») — это НЕ benefit.
+- type=benefit только для конкретных selling points / преимуществ, а не для общего назначения товара.
 - warnings — короткие предупреждения на русском, если данных мало.
 - Не добавляй поля вне схемы.`;
 
@@ -126,7 +128,7 @@ export const PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA = `{
     {
       "label": "string",
       "value": "string",
-      "type": "benefit | material | dimension | usage | detail | package | feature | ingredient | effect | compatibility | care | other",
+      "type": "benefit | product_purpose | material | dimension | usage | detail | package | feature | ingredient | effect | compatibility | care | other",
       "confidence": 0.0
     }
   ],
@@ -213,6 +215,7 @@ const TEMPLATE_DEFAULTS: Record<string, string> = {
   beauty_packshot: "Косметика: чистый premium packshot, мягкий свет.",
   benefits_grid: "Инфографика преимуществ только по locked phrases клиента.",
   benefits_left_column: "Преимущества в колонке; текст только locked.",
+  comparison_card: "Сравнение только по фактам пользователя; без ложных claims.",
   feature_callouts: "Выноски функций только из locked phrases.",
   texture_closeup: "Фактура и поверхность крупным планом.",
   material_focus: "Акцент на материале без выдуманного состава.",

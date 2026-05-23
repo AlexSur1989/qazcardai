@@ -10,7 +10,18 @@ import { CARD_BUILDER_PROMPTS_DEFAULTS } from "@/config/card-builder-prompts-def
 import { mergeCardBuilderPromptsWithDefaults } from "@/lib/validations/card-builder-prompts-setting";
 import { getAllowedTemplatesForSlide } from "@/config/card-builder-template-allowlist";
 import { buildUniversalGalleryTemplateIds } from "@/lib/card-builder-universal-planner";
-import { buildSlidePreviewModels, unusedProductFactsForSlides } from "@/lib/card-builder-slide-preview";
+import { getCardBuilderTemplate } from "@/config/card-builder-templates";
+import { buildCardBuilderInstructionSnippet } from "@/lib/card-builder-prompt-instructions";
+import { computeEffectiveCardBuilderSettingsForSlide } from "@/lib/card-builder-effective-settings";
+import { buildUniversalCardBuilderGalleryPlan } from "@/server/services/universalCardBuilderPlan";
+import { computeCardBuilderProductTitle } from "@/lib/card-builder-product-title";
+import { buildSlidePreviewModels, unusedProductFactsForSlides, computeSlideCardTextPhrases } from "@/lib/card-builder-slide-preview";
+import {
+  hasBenefitProductFacts,
+  lockedTextPhrasesFromFacts,
+  productFactsForSlideRole,
+} from "@/lib/card-builder-product-facts";
+import { derivePlanStyleFields } from "@/lib/card-builder-style-choice";
 import { UNIVERSAL_CARD_BUILDER_PROFILE } from "@/config/universal-card-builder-profile";
 import { cardBuilderPlanFieldsSchema } from "@/lib/validations/card-builder-plan";
 import { enrichCardBuilderGallerySlides } from "@/server/services/cardBuilderTextSlots";
@@ -182,8 +193,208 @@ assert(promptBuilderSrc.includes("pickCategoryPrompt"), "prompt builder uses cat
 assert(promptBuilderSrc.includes("pickCardTypePrompt"), "prompt builder uses cardType overrides");
 assert(promptBuilderSrc.includes("pickTemplatePrompt"), "prompt builder uses template overrides");
 assert(
-  promptBuilderSrc.includes("getSalesStyleInstruction(input.salesStyle"),
-  "salesStyle instruction wired in super prompt",
+  promptBuilderSrc.includes("computeEffectiveCardBuilderSettings"),
+  "prompt builder uses effective settings layer",
+);
+assert(
+  promptBuilderSrc.includes("mergedCategoryStyleSection"),
+  "prompt builder deduplicated category/style block",
+);
+
+function assertSnippet(
+  input: Parameters<typeof buildCardBuilderInstructionSnippet>[0],
+  mustNotContain: string[],
+) {
+  const { snippet } = buildCardBuilderInstructionSnippet(input);
+  const p = snippet.toLowerCase();
+  for (const bad of mustNotContain) {
+    assert(!p.includes(bad.toLowerCase()), `snippet must not contain «${bad}»`);
+  }
+}
+
+function assertSnippetContains(
+  input: Parameters<typeof buildCardBuilderInstructionSnippet>[0],
+  need: string[],
+) {
+  const { snippet } = buildCardBuilderInstructionSnippet(input);
+  const p = snippet.toLowerCase();
+  for (const s of need) {
+    assert(p.includes(s.toLowerCase()), `snippet must contain «${s}»`);
+  }
+}
+
+// 1) lifestyle + infographic + heavy
+assertSnippet(
+  {
+    slideRole: "lifestyle",
+    rawSalesStyle: "infographic",
+    rawTextDensity: "heavy",
+    rawVisualStyle: "infographic",
+    categoryKey: "beauty_care",
+    productFacts: [],
+    exactTextPhrases: ["Clear Men", "Шампунь"],
+  },
+  ["3–5 преимуществ", "плашки, иконки, выноски, сетка", "стиль: инфографика"],
+);
+
+// 2) main_photo + heavy + benefit facts
+assertSnippet(
+  {
+    slideRole: "main_photo",
+    rawSalesStyle: "infographic",
+    rawTextDensity: "heavy",
+    rawVisualStyle: "infographic",
+    productFacts: [
+      {
+        id: "b1",
+        label: "Плюс",
+        value: "Лёгкая",
+        type: "benefit",
+        source: "user",
+        visibleOnCard: true,
+        lockedText: true,
+      },
+    ],
+    exactTextPhrases: ["Clear Men"],
+  },
+  ["3–5 преимуществ", "плашки, иконки", "стиль: инфографика"],
+);
+
+// 3) benefits with 3 benefits
+assertSnippetContains(
+  {
+    slideRole: "benefits_infographic",
+    rawSalesStyle: "infographic",
+    rawTextDensity: "heavy",
+    rawVisualStyle: "infographic",
+    productFacts: [
+      { id: "b1", label: "A", value: "Ледяная свежесть", type: "benefit", source: "user", lockedText: true },
+      { id: "b2", label: "B", value: "Для мужчин", type: "benefit", source: "user", lockedText: true },
+      { id: "b3", label: "C", value: "Ежедневный уход", type: "benefit", source: "user", lockedText: true },
+    ],
+    exactTextPhrases: ["Clear Men", "Ледяная свежесть", "Для мужчин", "Ежедневный уход"],
+  },
+  ["стиль: инфографика", "3–5 преимуществ"],
+);
+
+// 4) dimensions without facts
+assertSnippet(
+  {
+    slideRole: "dimensions",
+    rawSalesStyle: "clean_catalog",
+    rawTextDensity: "heavy",
+    productFacts: [],
+    exactTextPhrases: ["Бутылка"],
+  },
+  ["3–5 преимуществ"],
+);
+assertSnippetContains(
+  {
+    slideRole: "dimensions",
+    rawSalesStyle: "clean_catalog",
+    rawTextDensity: "heavy",
+    productFacts: [],
+    exactTextPhrases: ["Бутылка"],
+  },
+  ["без числовых размеров"],
+);
+
+// 5) materials without facts
+assertSnippetContains(
+  {
+    slideRole: "materials",
+    rawSalesStyle: "clean_catalog",
+    rawTextDensity: "medium",
+    productFacts: [],
+    exactTextPhrases: [],
+  },
+  ["visual texture", "не называй конкретный материал"],
+);
+
+// 6) exactTextPhrases <= 2
+assertSnippet(
+  {
+    slideRole: "benefits_infographic",
+    rawSalesStyle: "infographic",
+    rawTextDensity: "heavy",
+    productFacts: [
+      { id: "b1", label: "A", value: "One", type: "benefit", source: "user", lockedText: true },
+    ],
+    exactTextPhrases: ["Only Title", "One"],
+  },
+  ["3–5 преимуществ"],
+);
+
+// 7) gallery 8 set_contents template exists
+assert(getCardBuilderTemplate("set_contents"), "set_contents в CARD_BUILDER_TEMPLATES");
+const gallery8Pkg = buildUniversalGalleryTemplateIds({
+  categoryKey: "gadgets_tech",
+  productFacts: [
+    {
+      id: "p1",
+      label: "Комплект",
+      value: "2 шт",
+      type: "package",
+      source: "user",
+      visibleOnCard: true,
+      lockedText: true,
+    },
+  ],
+  galleryCount: 8,
+});
+assert(gallery8Pkg.includes("set_contents"), "gallery 8 с package facts → set_contents");
+const plan8 = buildUniversalCardBuilderGalleryPlan(
+  basePlan({
+    creationMode: "full_gallery",
+    gallerySlideCount: 8,
+    goal: "full_gallery_8",
+    productFacts: [
+      {
+        id: "p1",
+        label: "Комплект",
+        value: "2 шт",
+        type: "package",
+        source: "user",
+        visibleOnCard: true,
+        lockedText: true,
+      },
+    ],
+  }),
+  UNIVERSAL_CARD_BUILDER_PROFILE,
+);
+assert(plan8.slides.length === 8, "full_gallery_8 plan → 8 slides with package facts");
+
+// 8) preview title = generation title rule
+assert(
+  computeCardBuilderProductTitle({
+    settingsProductTitle: "A",
+    productNameGuess: "B",
+    projectTitle: "C",
+  }) === "A",
+  "computedProductTitle settings first",
+);
+assert(
+  computeCardBuilderProductTitle({ productNameGuess: "B", projectTitle: "C" }) === "B",
+  "computedProductTitle guess second",
+);
+assert(
+  computeCardBuilderProductTitle({ projectTitle: "C" }) === "C",
+  "computedProductTitle project third",
+);
+
+// benefits without facts blocks generation
+const blocked = computeEffectiveCardBuilderSettingsForSlide({
+  slideRole: "benefits_infographic",
+  rawSalesStyle: "infographic",
+  rawTextDensity: "heavy",
+  productFacts: [],
+  exactTextPhrases: [],
+});
+assert(blocked.blockGeneration, "benefits_infographic без facts блокируется");
+
+assert(
+  promptBuilderSrc.includes("computeEffectiveCardBuilderSettings"),
+  "prompt builder uses effective settings layer",
 );
 
 const previewSrc = readFileSync(
@@ -281,5 +492,96 @@ assert(
   "generation использует AppSetting prompts",
 );
 assert(genSrc.includes("promptSource"), "metadata promptSource");
+
+// --- product_purpose fact type ---
+const purposeFact = {
+  id: "pp1",
+  label: "Назначение",
+  value: "Шампунь против перхоти для мужчин",
+  type: "product_purpose" as const,
+  source: "user" as const,
+  visibleOnCard: true,
+  lockedText: true,
+};
+
+const lifestylePurposeFacts = productFactsForSlideRole([purposeFact], "lifestyle");
+assert(lifestylePurposeFacts.length === 1, "product_purpose попадает на lifestyle slide facts");
+const lifestylePhrases = lockedTextPhrasesFromFacts(lifestylePurposeFacts);
+assert(
+  lifestylePhrases.includes("Шампунь против перхоти для мужчин"),
+  "product_purpose в locked phrases для lifestyle",
+);
+
+const mainPurposeFacts = productFactsForSlideRole([purposeFact], "main_photo");
+assert(mainPurposeFacts.length === 1, "product_purpose разрешён на main_photo");
+const mainCardText = computeSlideCardTextPhrases("main_photo", [purposeFact], {
+  productTitle: "Clear Men Ледяная свежесть",
+  textDensity: "medium",
+  mainPhotoTextAllowed: true,
+});
+assert(
+  mainCardText.includes("Шампунь против перхоти для мужчин"),
+  "product_purpose как subtitle на main_photo при разрешённом тексте",
+);
+const mainCardTextBlocked = computeSlideCardTextPhrases("main_photo", [purposeFact], {
+  productTitle: "Clear Men",
+  textDensity: "medium",
+  mainPhotoTextAllowed: false,
+});
+assert(
+  !mainCardTextBlocked.includes("Шампунь против перхоти для мужчин"),
+  "product_purpose не на main_photo без текста",
+);
+
+const premiumPurposeFacts = productFactsForSlideRole([purposeFact], "premium_poster");
+assert(premiumPurposeFacts.length === 1, "product_purpose на premium_poster");
+
+assert(!hasBenefitProductFacts([purposeFact]), "product_purpose не считается benefit");
+
+const blockedBenefitsOnlyPurpose = computeEffectiveCardBuilderSettingsForSlide({
+  slideRole: "benefits_infographic",
+  rawSalesStyle: "infographic",
+  rawTextDensity: "infographic",
+  productFacts: [purposeFact],
+  exactTextPhrases: ["Title", purposeFact.value],
+});
+assert(
+  blockedBenefitsOnlyPurpose.blockGeneration,
+  "benefits_infographic только с product_purpose блокируется",
+);
+
+const clearMenPreview = buildSlidePreviewModels(
+  [{ slideId: "07_lifestyle", imageRole: "lifestyle", templateLabel: "Lifestyle" }],
+  [purposeFact],
+  { productTitle: "Clear Men Ледяная свежесть", textDensity: "medium", mainPhotoTextAllowed: true },
+);
+const clearMenLifestyle = clearMenPreview[0];
+assert(clearMenLifestyle, "Clear Men lifestyle preview");
+assert(
+  clearMenLifestyle.cardTextPhrases.length === 2 &&
+    clearMenLifestyle.cardTextPhrases[0] === "Clear Men Ледяная свежесть" &&
+    clearMenLifestyle.cardTextPhrases[1] === "Шампунь против перхоти для мужчин",
+  "Clear Men lifestyle preview: 2 фразы на карточке",
+);
+assert(
+  clearMenLifestyle.facts.some((f) => f.label === "Назначение"),
+  "Clear Men lifestyle preview: fact в данных товара",
+);
+
+const rawInfographic = derivePlanStyleFields({ visualStyle: "infographic", textAmountToggle: "more" });
+const clearMenEffective = computeEffectiveCardBuilderSettingsForSlide({
+  slideRole: "lifestyle",
+  categoryKey: "beauty_care",
+  rawSalesStyle: rawInfographic.salesStyle,
+  rawTextDensity: rawInfographic.textDensity,
+  rawVisualStyle: "infographic",
+  productFacts: [purposeFact],
+  exactTextPhrases: ["Clear Men Ледяная свежесть", purposeFact.value],
+});
+assert(
+  clearMenEffective.suppressInfographicInstructions &&
+    clearMenEffective.effectiveSalesStyle === "premium",
+  "Clear Men lifestyle effective settings без infographic",
+);
 
 console.log("[verify-product-card-card-builder] OK");

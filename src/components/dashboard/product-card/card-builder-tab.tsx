@@ -4,12 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import {
-  CARD_BUILDER_AUDIENCES,
   CARD_BUILDER_DEFAULT_MARKETPLACE_ID,
-  CARD_BUILDER_LANGUAGE_MODES,
-  CARD_BUILDER_PRICE_SEGMENTS,
-  CARD_BUILDER_SALES_STYLES,
-  CARD_BUILDER_TEXT_DENSITY,
 } from "@/config/card-builder-config";
 import {
   CARD_BUILDER_DEFAULT_TARGET_PLATFORM,
@@ -23,6 +18,12 @@ import {
   normalizeProductFactsList,
   type CardBuilderProductFact,
 } from "@/lib/card-builder-product-facts";
+import { computeCardBuilderProductTitle } from "@/lib/card-builder-product-title";
+import {
+  derivePlanStyleFields,
+  textDensityToToggle,
+  type CardBuilderTextAmountToggle,
+} from "@/lib/card-builder-style-choice";
 import { mapUniversalCategoryToPlannerCategory } from "@/lib/card-builder-universal-planner";
 import {
   CardBuilderUniversalPanel,
@@ -84,17 +85,6 @@ function isValidStyleRefImage(file: File): boolean {
   return /\.(jpe?g|png|webp)$/i.test(file.name);
 }
 
-const STYLE_REFERENCE_ASPECTS = [
-  { field: "useComposition" as const, label: "Композицию" },
-  { field: "useBackground" as const, label: "Фон" },
-  { field: "useColors" as const, label: "Цветовую гамму" },
-  { field: "useBadges" as const, label: "Стиль плашек" },
-  { field: "useTypography" as const, label: "Стиль текста" },
-  { field: "useIcons" as const, label: "Иконки / выноски" },
-  { field: "useMood" as const, label: "Атмосферу / mood" },
-  { field: "useOverallPresentation" as const, label: "Общую подачу" },
-];
-
 function slideProgressLabel(statusRaw: string): string {
   const s = statusRaw.trim().toLowerCase();
   if (s === "queued") return "ожидает";
@@ -155,11 +145,11 @@ export function CardBuilderTab({
   balanceCredits,
 }: Props) {
   const templateProfile = UNIVERSAL_CARD_BUILDER_PROFILE;
-  const [languageMode, setLanguageMode] = useState("auto");
   const [categoryKey, setCategoryKey] = useState<CardBuilderUniversalCategoryId>("auto");
   const [categoryManuallyOverridden, setCategoryManuallyOverridden] = useState(false);
   const [productType, setProductType] = useState("");
   const [productNameGuess, setProductNameGuess] = useState("");
+  const [projectTitle, setProjectTitle] = useState<string | null>(null);
   const [productFacts, setProductFacts] = useState<CardBuilderProductFact[]>([]);
   const [visionAnalysis, setVisionAnalysis] = useState<Record<string, unknown> | null>(null);
   const [visionSummary, setVisionSummary] = useState<VisionSummary | null>(null);
@@ -167,12 +157,8 @@ export function CardBuilderTab({
   const [creationMode, setCreationMode] = useState<CardBuilderCreationModeId>("full_gallery");
   const [singleCardType, setSingleCardType] = useState<CardBuilderSingleCardTypeId>("auto");
   const [visualStyle, setVisualStyle] = useState<CardBuilderVisualStyleId>("auto");
+  const [textAmountToggle, setTextAmountToggle] = useState<CardBuilderTextAmountToggle>("more");
   const [gallerySlideCount, setGallerySlideCount] = useState<6 | 8>(6);
-  const [audience, setAudience] = useState("mass_market");
-  const [priceSegment, setPriceSegment] = useState("middle");
-  const [salesStyle, setSalesStyle] = useState("light_marketplace");
-  type DensityStash = { key: string; value: string };
-  const [densityStash, setDensityStash] = useState<DensityStash>({ key: "", value: "medium" });
 
   const [slides, setSlides] = useState<GallerySlide[]>([]);
   const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
@@ -207,9 +193,9 @@ export function CardBuilderTab({
     useComposition: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useComposition,
     useBackground: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useBackground,
     useColors: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useColors,
-    useTypography: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useTypography,
-    useBadges: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useBadges,
-    useIcons: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useIcons,
+    useTypography: false,
+    useBadges: false,
+    useIcons: false,
     useMood: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useMood,
     useOverallPresentation: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useOverallPresentation,
   });
@@ -243,15 +229,25 @@ export function CardBuilderTab({
     setProductNameGuess("");
   }, []);
 
-  const recommendedTextDensity =
-    templateProfile.mainPhotoRules.recommendedTextDensity ?? "medium";
-  const densityRecoKey = `${CARD_BUILDER_DEFAULT_MARKETPLACE_ID}|${recommendedTextDensity}`;
+  const derivedPlanStyles = useMemo(
+    () =>
+      derivePlanStyleFields({
+        visualStyle,
+        textAmountToggle,
+      }),
+    [visualStyle, textAmountToggle],
+  );
 
-  const effectiveTextDensity = useMemo(() => {
-    const rawPick = densityStash.key === densityRecoKey ? densityStash.value : recommendedTextDensity;
-    if (CARD_BUILDER_TEXT_DENSITY.some((c) => c.id === rawPick)) return rawPick;
-    return recommendedTextDensity;
-  }, [densityStash, densityRecoKey, recommendedTextDensity]);
+  const computedProductTitle = useMemo(
+    () =>
+      computeCardBuilderProductTitle({
+        productNameGuess,
+        projectTitle,
+      }),
+    [productNameGuess, projectTitle],
+  );
+
+  const previewTextDensity = derivedPlanStyles.textDensity;
 
   const removeStyleReferenceAt = useCallback(
     (idx: number) => {
@@ -404,11 +400,11 @@ export function CardBuilderTab({
       preserveProduct: true,
       preserveAspects: [...CARD_BUILDER_FIXED_PRESERVE_ASPECTS],
       allowCreativeStylization: false,
-      languageMode,
-      audience,
-      priceSegment,
-      salesStyle,
-      textDensity: effectiveTextDensity,
+      languageMode: "auto",
+      audience: "mass_market",
+      priceSegment: "middle",
+      salesStyle: derivedPlanStyles.salesStyle,
+      textDensity: derivedPlanStyles.textDensity,
       ...styleReferenceBlock,
     };
   }, [
@@ -424,11 +420,7 @@ export function CardBuilderTab({
     visionAnalysis,
     gallerySlideCount,
     planGoal,
-    languageMode,
-    audience,
-    priceSegment,
-    salesStyle,
-    effectiveTextDensity,
+    derivedPlanStyles,
     styleReferenceEnabled,
     styleReferenceImages,
     styleReferenceStrength,
@@ -456,14 +448,21 @@ export function CardBuilderTab({
   }, []);
 
   const fetchCardBuilderBlockForProject = useCallback(
-    async (pid: string): Promise<CardBuilderBlockPayload | null> => {
-      if (!initDone) return null;
+    async (
+      pid: string,
+    ): Promise<{ block: CardBuilderBlockPayload | null; projectTitle: string | null }> => {
+      if (!initDone) return { block: null, projectTitle: null };
       const res = await fetch(`/api/product-card-projects/${pid}`);
-      const parsed = await readJsonSafe<{ project?: { metadata?: { cardBuilder?: CardBuilderBlockPayload } } }>(
-        res,
-      );
-      if (!parsed.ok || !res.ok) return null;
-      return parsed.data.project?.metadata?.cardBuilder ?? null;
+      const parsed = await readJsonSafe<{
+        project?: { title?: string | null; metadata?: { cardBuilder?: CardBuilderBlockPayload } };
+      }>(res);
+      if (!parsed.ok || !res.ok) return { block: null, projectTitle: null };
+      const title =
+        typeof parsed.data.project?.title === "string" ? parsed.data.project.title.trim() : null;
+      return {
+        block: parsed.data.project?.metadata?.cardBuilder ?? null,
+        projectTitle: title || null,
+      };
     },
     [initDone],
   );
@@ -517,9 +516,6 @@ export function CardBuilderTab({
 
   const applyHydratedSettingsFromSaved = useCallback(
     (saved: Record<string, unknown>) => {
-      if (typeof saved.languageMode === "string" && saved.languageMode.trim()) {
-        setLanguageMode(saved.languageMode.trim());
-      }
       if (typeof saved.cardBuilderCategoryKey === "string" && saved.cardBuilderCategoryKey.trim()) {
         setCategoryKey(saved.cardBuilderCategoryKey.trim() as CardBuilderUniversalCategoryId);
       }
@@ -558,24 +554,10 @@ export function CardBuilderTab({
       if (typeof saved.visualStyle === "string" && saved.visualStyle.trim()) {
         setVisualStyle(saved.visualStyle.trim() as CardBuilderVisualStyleId);
       }
-      if (saved.gallerySlideCount === 8) setGallerySlideCount(8);
-      if (typeof saved.audience === "string" && saved.audience.trim()) {
-        setAudience(saved.audience.trim());
-      }
-      if (typeof saved.priceSegment === "string" && saved.priceSegment.trim()) {
-        setPriceSegment(saved.priceSegment.trim());
-      }
-      if (typeof saved.salesStyle === "string" && saved.salesStyle.trim()) {
-        setSalesStyle(saved.salesStyle.trim());
-      }
-
       if (typeof saved.textDensity === "string" && saved.textDensity.trim()) {
-        const reco = UNIVERSAL_CARD_BUILDER_PROFILE.mainPhotoRules.recommendedTextDensity ?? "medium";
-        setDensityStash({
-          key: `${CARD_BUILDER_DEFAULT_MARKETPLACE_ID}|${reco}`,
-          value: saved.textDensity.trim(),
-        });
+        setTextAmountToggle(textDensityToToggle(saved.textDensity.trim()));
       }
+      if (saved.gallerySlideCount === 8) setGallerySlideCount(8);
 
       const rawSr = saved.styleReference;
       if (rawSr && typeof rawSr === "object" && !Array.isArray(rawSr)) {
@@ -631,9 +613,10 @@ export function CardBuilderTab({
   const refreshHistoryAndPlanStatus = useCallback(async () => {
     const pid = projectId;
     if (!pid || !initDone) return;
-    const blk = await fetchCardBuilderBlockForProject(pid);
+    const { block: blk, projectTitle: fetchedTitle } = await fetchCardBuilderBlockForProject(pid);
     if (pid !== projectId) return;
     applySlidesAndHistoryFromBlock(blk);
+    if (fetchedTitle) setProjectTitle(fetchedTitle);
   }, [projectId, initDone, fetchCardBuilderBlockForProject, applySlidesAndHistoryFromBlock]);
 
   const runVisionAnalysis = useCallback(
@@ -684,9 +667,14 @@ export function CardBuilderTab({
           setProductFacts((prev) => {
             const merged = normalizeProductFactsList(d.productFacts);
             const userBenefits = prev.filter((f) => f.type === "benefit" && f.source === "user");
-            if (userBenefits.length === 0) return merged;
-            const mergedNonBenefits = merged.filter((f) => f.type !== "benefit");
-            return normalizeProductFactsList([...mergedNonBenefits, ...userBenefits]);
+            const userPurpose = prev.filter(
+              (f) => f.type === "product_purpose" && f.source === "user",
+            );
+            if (userBenefits.length === 0 && userPurpose.length === 0) return merged;
+            const mergedRest = merged.filter(
+              (f) => f.type !== "benefit" && f.type !== "product_purpose",
+            );
+            return normalizeProductFactsList([...mergedRest, ...userBenefits, ...userPurpose]);
           });
         }
       } finally {
@@ -784,8 +772,9 @@ export function CardBuilderTab({
   const hydrateFormFromServer = useCallback(async () => {
     const pid = projectId;
     if (!pid || !initDone) return;
-    const blk = await fetchCardBuilderBlockForProject(pid);
+    const { block: blk, projectTitle: fetchedTitle } = await fetchCardBuilderBlockForProject(pid);
     if (pid !== projectId) return;
+    if (fetchedTitle) setProjectTitle(fetchedTitle);
     const saved = blk?.settings;
     const needsFormHydrate = hydratedProjectIdRef.current !== pid;
     if (needsFormHydrate && saved && typeof saved === "object" && !userEditedFormRef.current) {
@@ -1112,7 +1101,6 @@ export function CardBuilderTab({
     hydrateVisionTriggeredRef.current = null;
     userEditedFormRef.current = false;
     void Promise.resolve().then(() => {
-      setLanguageMode("auto");
       setCategoryKey("auto");
       setCategoryManuallyOverridden(false);
       setProductType("");
@@ -1124,11 +1112,9 @@ export function CardBuilderTab({
       setCreationMode("full_gallery");
       setSingleCardType("auto");
       setVisualStyle("auto");
+      setTextAmountToggle("more");
       setGallerySlideCount(6);
-      setAudience("mass_market");
-      setPriceSegment("middle");
-      setSalesStyle("light_marketplace");
-      setDensityStash({ key: "", value: "medium" });
+      setProjectTitle(null);
       setSlides([]);
       setActiveSlideId(null);
       setPlanError(null);
@@ -1170,7 +1156,9 @@ export function CardBuilderTab({
     if (!ps?.url?.trim() || !ps.fileId?.trim() || ps.isLocalPreview) return;
 
     autoSyncedFromProjectRef.current = projectId;
-    void persistCardBuilderSourceImage(ps);
+    queueMicrotask(() => {
+      void persistCardBuilderSourceImage(ps);
+    });
   }, [
     initDone,
     projectId,
@@ -1262,6 +1250,11 @@ export function CardBuilderTab({
             markUserEditedForm();
             setVisualStyle(v);
           }}
+          textAmountToggle={textAmountToggle}
+          onTextAmountToggleChange={(v) => {
+            markUserEditedForm();
+            setTextAmountToggle(v);
+          }}
           onRetryAnalysis={() => void runVisionAnalysis({ manual: true })}
           canRetryAnalysis={canWork}
           gallerySlideCount={gallerySlideCount}
@@ -1270,34 +1263,6 @@ export function CardBuilderTab({
             setGallerySlideCount(v);
           }}
         />
-
-        <Card className="rounded-2xl border-border">
-          <CardHeader>
-            <CardTitle className="text-base">Язык текста для подсказок модели</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Label htmlFor="pc-lang">Язык</Label>
-            <select
-              id="pc-lang"
-              className={nativeFieldClass}
-              value={languageMode}
-              onChange={(e) => {
-                markUserEditedForm();
-                setLanguageMode(e.target.value);
-              }}
-            >
-              {CARD_BUILDER_LANGUAGE_MODES.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              AI может менять дизайн, плашки, иконки и стиль карточки, но мы просим сохранить ваш
-              русский/казахский текст точно. После генерации обязательно проверьте текст перед публикацией.
-            </p>
-          </CardContent>
-        </Card>
 
         <Card className="rounded-2xl border-border">
           <CardHeader>
@@ -1338,30 +1303,6 @@ export function CardBuilderTab({
                 <option value="medium">Средняя</option>
                 <option value="high">Высокая</option>
               </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Что брать из референса</Label>
-              <div className="flex flex-wrap gap-2">
-                {STYLE_REFERENCE_ASPECTS.map((a) => (
-                  <label
-                    key={a.field}
-                    className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={styleReferenceFlags[a.field]}
-                      onChange={(e) => {
-                        markUserEditedForm();
-                        const on = e.target.checked;
-                        setStyleReferenceFlags((prev) => ({ ...prev, [a.field]: on }));
-                      }}
-                      className="border-input accent-primary size-4 shrink-0 rounded border"
-                    />
-                    {a.label}
-                  </label>
-                ))}
-              </div>
             </div>
 
             <div className="space-y-2">
@@ -1433,86 +1374,6 @@ export function CardBuilderTab({
                 ))}
               </div>
             ) : null}
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-border">
-          <CardHeader>
-            <CardTitle className="text-base">Аудитория и стиль</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="pc-audience">Для кого товар</Label>
-              <select
-                id="pc-audience"
-                className={nativeFieldClass}
-                value={audience}
-                onChange={(e) => {
-                  markUserEditedForm();
-                  setAudience(e.target.value);
-                }}
-              >
-                {CARD_BUILDER_AUDIENCES.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pc-price-segment">Ценовой сегмент</Label>
-              <select
-                id="pc-price-segment"
-                className={nativeFieldClass}
-                value={priceSegment}
-                onChange={(e) => {
-                  markUserEditedForm();
-                  setPriceSegment(e.target.value);
-                }}
-              >
-                {CARD_BUILDER_PRICE_SEGMENTS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pc-sales-style">Стиль продаж</Label>
-              <select
-                id="pc-sales-style"
-                className={nativeFieldClass}
-                value={salesStyle}
-                onChange={(e) => {
-                  markUserEditedForm();
-                  setSalesStyle(e.target.value);
-                }}
-              >
-                {CARD_BUILDER_SALES_STYLES.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pc-text-density">Текст на изображении</Label>
-              <select
-                id="pc-text-density"
-                className={nativeFieldClass}
-                value={effectiveTextDensity}
-                onChange={(e) => {
-                  markUserEditedForm();
-                  setDensityStash({ key: densityRecoKey, value: e.target.value });
-                }}
-              >
-                {CARD_BUILDER_TEXT_DENSITY.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </div>
           </CardContent>
         </Card>
 
@@ -1662,8 +1523,8 @@ export function CardBuilderTab({
         <CardBuilderGalleryPreview
           slides={slides}
           productFacts={productFacts}
-          productTitle={productNameGuess}
-          textDensity={effectiveTextDensity}
+          productTitle={computedProductTitle}
+          textDensity={previewTextDensity}
           mainPhotoTextAllowed={templateProfile.mainPhotoTextAllowed}
           slideGen={slideGen}
           activeSlideId={activeSlideId}

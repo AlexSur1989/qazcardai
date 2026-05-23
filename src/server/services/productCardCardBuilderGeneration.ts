@@ -4,6 +4,8 @@ import { cardBuilderPlanFieldsSchema, coerceCardBuilderPlan } from "@/lib/valida
 import { sanitizeStyleReferenceOnStoredPlan } from "@/lib/card-builder-style-reference";
 import { hasDimensionProductFacts } from "@/lib/card-builder-product-facts";
 
+import { computeCardBuilderProductTitle } from "@/lib/card-builder-product-title";
+import { resolveCardBuilderPricingStyleForSlide } from "@/lib/card-builder-pricing-style";
 import { resolveCardBuilderStyleReferenceUrls } from "@/server/services/cardBuilderStyleReferenceFiles";
 import { resolveCardBuilderSourceImage } from "@/server/services/cardBuilderSourceImage";
 import { assertUserOwnsFileUrl, getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
@@ -332,10 +334,26 @@ export async function generateCardBuilderSlide(
   }
   const settings = await getProductCardSettings();
 
-  const textDensityEffective =
+  const textDensityRaw =
     slide.imageRole === "main_photo" && !profile.mainPhotoTextAllowed
       ? "none"
       : planInput.textDensity;
+
+  const productTitle = computeCardBuilderProductTitle({
+    productNameGuess: planInput.productNameGuess,
+    projectTitle: base.project.title,
+  });
+
+  const pricingStyle = resolveCardBuilderPricingStyleForSlide({
+    slideRole: slide.imageRole,
+    visualStyle: planInput.visualStyle,
+    salesStyle: planInput.salesStyle,
+    textDensity: textDensityRaw,
+    categoryKey: planInput.cardBuilderCategoryKey,
+    productFacts: planInput.productFacts ?? [],
+    productTitle,
+  });
+  const textDensityEffective = pricingStyle.textDensity;
 
   const srForGen = planInput.styleReference;
   const resolvedStyleUrls =
@@ -345,7 +363,7 @@ export async function generateCardBuilderSlide(
   const styleRefForPrompt = resolvedStyleUrls.length > 0 ? planInput.styleReference : undefined;
 
   const superPrompt = await buildCardBuilderSuperPromptWithAppSettings({
-    productTitle: base.project.title ?? undefined,
+    productTitle,
     selectedCategory: planInput.selectedCategory,
     marketplace: planInput.marketplace,
     marketplaceProfile: profile,
@@ -398,7 +416,7 @@ export async function generateCardBuilderSlide(
       "slide",
       model,
       settings.cardBuilderPricing,
-      planInput.salesStyle,
+      pricingStyle.salesStyle,
       textDensityEffective,
       slide.imageRole,
       body.gallerySlideCount ?? null,
@@ -636,12 +654,24 @@ export async function generateCardBuilderAllSlides(
   let allocations: number[];
 
   if (bundle) {
+    const bundlePricing = resolveCardBuilderPricingStyleForSlide({
+      slideRole: "benefits_infographic",
+      visualStyle: planInput.visualStyle,
+      salesStyle: planInput.salesStyle,
+      textDensity: planInput.textDensity,
+      categoryKey: planInput.cardBuilderCategoryKey,
+      productFacts: planInput.productFacts ?? [],
+      productTitle: computeCardBuilderProductTitle({
+        productNameGuess: planInput.productNameGuess,
+        projectTitle: base.project.title,
+      }),
+    });
     const totalBr = await estimateCardBuilderCharge(
       bundle,
       model,
       settings.cardBuilderPricing,
-      planInput.salesStyle,
-      planInput.textDensity,
+      bundlePricing.salesStyle,
+      bundlePricing.textDensity,
       "gallery_bundle",
       slides.length,
     );
@@ -651,16 +681,28 @@ export async function generateCardBuilderAllSlides(
     allocations = [];
     let sum = 0;
     for (const s of slides) {
-      const dens =
+      const densRaw =
         s.imageRole === "main_photo" && !mpForGallery.profile.mainPhotoTextAllowed
           ? "none"
           : planInput.textDensity;
+      const slidePricing = resolveCardBuilderPricingStyleForSlide({
+        slideRole: s.imageRole,
+        visualStyle: planInput.visualStyle,
+        salesStyle: planInput.salesStyle,
+        textDensity: densRaw,
+        categoryKey: planInput.cardBuilderCategoryKey,
+        productFacts: planInput.productFacts ?? [],
+        productTitle: computeCardBuilderProductTitle({
+          productNameGuess: planInput.productNameGuess,
+          projectTitle: base.project.title,
+        }),
+      });
       const br = await estimateCardBuilderCharge(
         "slide",
         model,
         settings.cardBuilderPricing,
-        planInput.salesStyle,
-        dens,
+        slidePricing.salesStyle,
+        slidePricing.textDensity,
         s.imageRole,
         null,
       );

@@ -1,10 +1,7 @@
-import "server-only";
-
 import {
   CARD_BUILDER_AUDIENCES,
   CARD_BUILDER_PRESERVE_ASPECTS,
   CARD_BUILDER_PRICE_SEGMENTS,
-  CARD_BUILDER_SALES_STYLES,
   CARD_BUILDER_TEXT_DENSITY,
 } from "@/config/card-builder-config";
 import type { CardBuilderTemplateSlideRole } from "@/config/card-builder-templates";
@@ -21,6 +18,17 @@ import {
   lockedTextPhrasesFromFacts,
   productFactsForSlideRole,
 } from "@/lib/card-builder-product-facts";
+import {
+  computeEffectiveCardBuilderSettings,
+  type CardBuilderEffectiveSettings,
+} from "@/lib/card-builder-effective-settings";
+import { categoryNegativeRulesBlock } from "@/lib/card-builder-category-negatives";
+import {
+  getSalesStyleInstruction,
+  getTextDensityInstruction,
+  type CardBuilderStyleInstructionOpts,
+  type CardBuilderTextDensityInstructionOpts,
+} from "@/lib/card-builder-prompt-instructions";
 import { CARD_BUILDER_PROMPTS_DEFAULTS } from "@/config/card-builder-prompts-defaults";
 import {
   buildCardBuilderPromptSelectionMeta,
@@ -85,6 +93,7 @@ export type CardBuilderSuperPromptOk = {
   overlayApplied: false;
   exactTextRequested: true;
   promptMeta: CardBuilderPromptSelectionMeta;
+  effectiveSettings?: CardBuilderEffectiveSettings;
   /** @deprecated оставлено для совместимости metadata */
   legacySuperPromptVersion?: typeof LEGACY_SUPER_PROMPT_VERSION;
   marketplaceBenefitTrimNotice?: string;
@@ -195,9 +204,11 @@ export function collectExactTextPhrases(input: {
         }
         return lines;
       })();
-    for (const line of benefitLines) {
-      const x = stripHtmlFragments(line);
-      if (x) raw.push(x);
+    if (showCardTextLayer) {
+      for (const line of benefitLines) {
+        const x = stripHtmlFragments(line);
+        if (x) raw.push(x);
+      }
     }
 
     if (includeDimensions) {
@@ -464,59 +475,12 @@ export function getMarketplaceInstruction(marketplace: string): string {
   return `Площадка: ${id.replace(/_/g, " ")}. Сохраняй универсально пригодный коммерческий вид карточки.`;
 }
 
-export function getSalesStyleInstruction(salesStyle: string): string {
-  const id = salesStyle.trim();
-  const label = CARD_BUILDER_SALES_STYLES.find((s) => s.id === id)?.label ?? id;
-  const blocks: Record<string, string> = {
-    clean_catalog: [
-      "Стиль: чистый каталог.",
-      "Белый/светлый фон, ровная композиция, минимум декора.",
-    ].join("\n"),
-    light_marketplace: [
-      "Стиль: светлый маркетплейс.",
-      "Светлый фон, понятные плашки, уверенный коммерческий вид.",
-    ].join("\n"),
-    premium: [
-      "Стиль: премиум.",
-      "Дорогой визуал, качественный свет, аккуратная типографика.",
-    ].join("\n"),
-    cozy_lifestyle: [
-      "Стиль: уютный lifestyle.",
-      "Тёплая сцена, естественное использование, мягкий свет.",
-    ].join("\n"),
-    minimalism: [
-      "Стиль: минимализм.",
-      "Много воздуха, простая композиция, мало отвлекающих деталей.",
-    ].join("\n"),
-    bold_ad: [
-      "Стиль: яркая реклама.",
-      "Насыщенный визуал и сильный акцент без визуального перегруза.",
-    ].join("\n"),
-    infographic: [
-      "Стиль: инфографика.",
-      "Визуально: плашки, иконки, выноски, сетка — адаптируй под стиль; символы текста только из locked phrases пользователя.",
-    ].join("\n"),
-    editorial: [
-      "Стиль: editorial.",
-      "Журнальная композиция, премиальный кадрирование.",
-    ].join("\n"),
-  };
-  return (blocks[id] ?? `Стиль продаж: ${label}.`).trim();
-}
-
-export function getTextDensityInstruction(textDensity: string): string {
-  const id = textDensity.trim();
-  const label = CARD_BUILDER_TEXT_DENSITY.find((t) => t.id === id)?.label ?? id;
-  const lock = "Все читаемые слова на кадре — только из locked phrases; не добавляй другой маркетинговый текст.";
-  const body: Record<string, string> = {
-    none: `Плотность текста: без текста — не добавляй заголовков и плашек. ${lock}`,
-    minimal: `Плотность текста: минимум — не больше одной короткой строки из locked phrases. ${lock}`,
-    medium: `Плотность текста: средне — заголовок и несколько ключевых тезисов только из locked phrases (ориентир: несколько плашек). ${lock}`,
-    heavy: `Плотность текста: высокая — заголовок, 3–5 преимуществ и характеристики только из locked phrases («много текста», без собственных формулировок). ${lock}`,
-    infographic: `Плотность текста: инфографика — плашки, иконки, выноски; текст только из locked phrases. ${lock}`,
-  };
-  return body[id] ?? `Плотность текста: ${label}. ${lock}`;
-}
+export {
+  getSalesStyleInstruction,
+  getTextDensityInstruction,
+  type CardBuilderStyleInstructionOpts,
+  type CardBuilderTextDensityInstructionOpts,
+} from "@/lib/card-builder-prompt-instructions";
 
 function inputImagesRolesBlock(productImageCount: number, styleReferenceCount: number): string {
   const p = Math.max(0, Math.floor(productImageCount));
@@ -1051,14 +1015,25 @@ function productFactsForSlideSection(
   ].join("\n\n");
 }
 
-function universalCategoryStyleSection(
+function slideRoleConstraintsSection(lines: readonly string[]): string {
+  if (!lines.length) return "";
+  return [
+    "=== SLIDE_ROLE_CONSTRAINTS ===",
+    ...lines,
+  ].join("\n");
+}
+
+function mergedCategoryStyleSection(
   categoryKey: string | undefined,
   visualStyle: string | undefined,
 ): string {
   const cat = (categoryKey ?? "other").trim() as CardBuilderUniversalCategoryId;
+  const resolvedCat = cat === "auto" ? "other" : cat;
   const catHint =
-    cat !== "auto" && cat in CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS
-      ? CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS[cat as Exclude<CardBuilderUniversalCategoryId, "auto">]
+    resolvedCat in CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS
+      ? CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS[
+          resolvedCat as Exclude<CardBuilderUniversalCategoryId, "auto">
+        ]
       : CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS.other;
   const styleMap: Record<string, string> = {
     minimalism: "Минимализм: много воздуха, простые формы, спокойная палитра.",
@@ -1069,11 +1044,21 @@ function universalCategoryStyleSection(
   };
   const stylePick = visualStyle && visualStyle !== "auto" ? styleMap[visualStyle] : null;
   return [
-    "=== 9) STYLE ===",
-    `Категория: ${labelForUniversalCategory(cat === "auto" ? "other" : cat)}.`,
+    "=== CATEGORY_AND_STYLE ===",
+    `Категория: ${labelForUniversalCategory(resolvedCat)}.`,
     catHint,
     stylePick ?? "Стиль подбирай по категории и типу слайда; сохраняй товар 1:1.",
   ].join("\n\n");
+}
+
+function mergedNegativeRulesSection(
+  globalNegative: string,
+  categoryKey: string | undefined,
+): string {
+  const catNeg = categoryNegativeRulesBlock(categoryKey);
+  const parts = [globalNegative.trim(), catNeg.trim()].filter((x) => x.length > 0);
+  if (parts.length === 0) return "";
+  return parts.join("\n\n");
 }
 
 function universalNegativeRulesBlock(): string {
@@ -1116,11 +1101,15 @@ export function buildCardBuilderSuperPrompt(
     input.productNameGuess?.trim() ||
     undefined;
 
+  const rawTextDensity = input.textDensity ?? "medium";
+  const rawSalesStyle = input.salesStyle ?? "clean_catalog";
+  const rawVisualStyle = input.visualStyle ?? "auto";
+
   const { phrases, validationErrors } = collectExactTextPhrases({
     productTitle: titleForPhrases,
     lockedBenefitLines: slideFactPhrases,
     slideRole: input.slideRole,
-    textDensity: input.textDensity ?? "medium",
+    textDensity: rawTextDensity,
     omitUserLockedText: false,
     lockedCategoryExactValues: [],
   });
@@ -1128,6 +1117,41 @@ export function buildCardBuilderSuperPrompt(
   if (validationErrors.length > 0) {
     return { ok: false, validationErrors };
   }
+
+  const effective = computeEffectiveCardBuilderSettings({
+    slideRole: input.slideRole,
+    templateId: input.templateId,
+    categoryKey: input.cardBuilderCategoryKey,
+    rawSalesStyle,
+    rawTextDensity,
+    rawVisualStyle,
+    audience: input.audience,
+    priceSegment: input.priceSegment,
+    productFactsForSlide: productFactsForSlideRole(input.productFacts ?? [], slideRoleTyped),
+    allProductFacts: input.productFacts ?? [],
+    exactTextPhrases: phrases,
+    creationMode: undefined,
+  });
+
+  if (effective.blockGeneration) {
+    return {
+      ok: false,
+      validationErrors: [effective.blockGenerationMessage ?? "Нельзя сгенерировать этот слайд."],
+    };
+  }
+
+  const finalPhraseCollect = collectExactTextPhrases({
+    productTitle: titleForPhrases,
+    lockedBenefitLines: slideFactPhrases,
+    slideRole: input.slideRole,
+    textDensity: effective.effectiveTextDensity,
+    omitUserLockedText: false,
+    lockedCategoryExactValues: [],
+  });
+  if (finalPhraseCollect.validationErrors.length > 0) {
+    return { ok: false, validationErrors: finalPhraseCollect.validationErrors };
+  }
+  const finalPhrases = finalPhraseCollect.phrases;
 
   const languageMode: CardBuilderSuperPromptLanguageMode = input.languageMode ?? "auto";
   const languageProbePhrases = collectLanguageProbePhrases({
@@ -1141,13 +1165,12 @@ export function buildCardBuilderSuperPrompt(
       ? `Логическая схема слайда (только композиция; не выводить как отдельную этикетку): templateId=${input.templateId ?? "—"}, layoutPreset=${input.layoutPreset ?? "—"}.`
       : "";
 
-  const categoryBlock = pickCategoryPrompt(prompts, input.cardBuilderCategoryKey ?? "other");
   const cardTypeBlock = pickCardTypePrompt(prompts, input.slideRole);
-  const templateBlock = pickTemplatePrompt(prompts, input.templateId);
+  const templateBlock = pickTemplatePrompt(prompts, input.templateId, input.slideRole);
 
   const templateInstructionBlock =
     templateBlock.trim().length > 0
-      ? [`=== 5) TEMPLATE_INSTRUCTION (${input.templateId ?? "—"}) ===`, templateBlock.trim()].join("\n\n")
+      ? [`=== TEMPLATE_INSTRUCTION (${input.templateId ?? "—"}) ===`, templateBlock.trim()].join("\n\n")
       : "";
 
   const inputRolesBlock = inputImagesRolesBlock(
@@ -1163,10 +1186,21 @@ export function buildCardBuilderSuperPrompt(
       ? [prompts.styleReferencePrompt.trim(), styleRefDynamic].filter(Boolean).join("\n\n")
       : "";
 
+  const salesStyleLine = getSalesStyleInstruction(effective.effectiveSalesStyle, {
+    suppressInfographicInstructions: effective.suppressInfographicInstructions,
+    suppressBadgeCalloutInstructions: effective.suppressBadgeCalloutInstructions,
+  });
+  const densityLine = getTextDensityInstruction(effective.effectiveTextDensity, {
+    suppressHeavyTextInstructions: effective.suppressHeavyTextInstructions,
+    suppressInfographicInstructions: effective.suppressInfographicInstructions,
+    exactTextPhraseCount: finalPhrases.length,
+    allowBenefitLanguage: effective.allowBenefitLanguage,
+  });
+
   const textDensityParts = [
-    "=== 6) TEXT_DENSITY_AUDIENCE_PRICE_SALES ===",
-    getTextDensityInstruction(input.textDensity ?? "medium"),
-    getSalesStyleInstruction(input.salesStyle ?? "clean_catalog"),
+    "=== TEXT_DENSITY_AND_SALES ===",
+    densityLine,
+    salesStyleLine,
     audienceSceneMoodBlock(input.audience),
     priceSegmentVisualBlock(input.priceSegment),
     layoutNote,
@@ -1176,23 +1210,34 @@ export function buildCardBuilderSuperPrompt(
     .filter((x) => x.trim().length > 0)
     .join("\n\n");
 
+  const roleConstraints = slideRoleConstraintsSection(effective.slideRoleConstraintLines);
+  const negativeBlock = mergedNegativeRulesSection(
+    prompts.negativeRulesPrompt.trim(),
+    input.cardBuilderCategoryKey,
+  );
+
   const promptPieces = [
     prompts.slidePromptBase.trim(),
     inputRolesBlock,
     productVisionContextSection(input),
-    categoryBlock.trim(),
     cardTypeBlock.trim(),
     templateInstructionBlock,
     productFactsForSlideSection(input.productFacts ?? [], slideRoleTyped),
     styleRefBlock,
-    slideTextPlanSection(phrases),
+    slideTextPlanSection(finalPhrases),
+    roleConstraints,
     preserveBlock,
     prompts.textLockPrompt.trim(),
     languagePreservationSection(languageProbePhrases, languageMode),
-    universalCategoryStyleSection(input.cardBuilderCategoryKey, input.visualStyle),
+    mergedCategoryStyleSection(input.cardBuilderCategoryKey, effective.effectiveVisualStyle),
     textDensityParts.join("\n\n"),
-    prompts.negativeRulesPrompt.trim(),
+    negativeBlock,
   ].filter((x) => x && String(x).trim() !== "");
+
+  const promptWarnings = [
+    ...(promptMeta.promptWarnings ?? []),
+    ...effective.effectivePromptWarnings,
+  ].slice(0, 16);
 
   const prompt = promptPieces.join("\n\n");
 
@@ -1201,13 +1246,17 @@ export function buildCardBuilderSuperPrompt(
     data: {
       prompt,
       promptVersion: promptMeta.promptVersion,
-      exactTextPhrases: phrases,
+      exactTextPhrases: finalPhrases,
       textRenderMode: "ai_text_in_design",
       textLockLevel: "strict",
       designFlexible: true,
       overlayApplied: false,
       exactTextRequested: true,
-      promptMeta,
+      promptMeta: {
+        ...promptMeta,
+        ...(promptWarnings.length ? { promptWarnings } : {}),
+      },
+      effectiveSettings: effective,
       legacySuperPromptVersion: LEGACY_SUPER_PROMPT_VERSION,
     },
   };

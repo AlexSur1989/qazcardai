@@ -221,6 +221,8 @@ ${PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA}
 - materialGuess — null, если материал не очевиден.
 - productShape — null, если форма неясна.
 - suggestedProductFacts — только то, что можно обосновать визуально; confidence 0.0–1.0.
+- type=product_purpose для назначения или краткого описания товара — это НЕ benefit.
+- type=benefit только для конкретных selling points / преимуществ, а не для общего назначения товара.
 - warnings — короткие предупреждения на русском, если данных мало.
 - Не добавляй поля вне схемы.`;
   return visionAnalysisPromptCache;

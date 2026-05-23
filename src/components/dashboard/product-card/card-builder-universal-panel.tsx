@@ -13,13 +13,16 @@ import {
   type CardBuilderUniversalCategoryId,
   type CardBuilderVisualStyleId,
 } from "@/config/card-builder-universal";
+import type { CardBuilderTextAmountToggle } from "@/lib/card-builder-style-choice";
 import {
   benefitTextareaValue,
   CARD_BUILDER_PRODUCT_FACT_TYPE_LABELS,
   CARD_BUILDER_PRODUCT_FACT_TYPES,
   mergeBenefitFactsFromTextarea,
+  mergeProductPurposeFromTextarea,
   newProductFactId,
   nonBenefitProductFacts,
+  productPurposeTextareaValue,
   type CardBuilderProductFact,
   type CardBuilderProductFactType,
 } from "@/lib/card-builder-product-facts";
@@ -58,6 +61,7 @@ type Props = {
   creationMode: CardBuilderCreationModeId;
   singleCardType: CardBuilderSingleCardTypeId;
   visualStyle: CardBuilderVisualStyleId;
+  textAmountToggle: CardBuilderTextAmountToggle;
   gallerySlideCount: 6 | 8;
   onCategoryKeyChange: (v: CardBuilderUniversalCategoryId) => void;
   onProductTypeChange: (v: string) => void;
@@ -65,6 +69,7 @@ type Props = {
   onCreationModeChange: (v: CardBuilderCreationModeId) => void;
   onSingleCardTypeChange: (v: CardBuilderSingleCardTypeId) => void;
   onVisualStyleChange: (v: CardBuilderVisualStyleId) => void;
+  onTextAmountToggleChange: (v: CardBuilderTextAmountToggle) => void;
   onGallerySlideCountChange: (v: 6 | 8) => void;
   onRetryAnalysis?: () => void;
   canRetryAnalysis?: boolean;
@@ -79,6 +84,7 @@ export function CardBuilderUniversalPanel({
   creationMode,
   singleCardType,
   visualStyle,
+  textAmountToggle,
   gallerySlideCount,
   onCategoryKeyChange,
   onProductTypeChange,
@@ -86,12 +92,17 @@ export function CardBuilderUniversalPanel({
   onCreationModeChange,
   onSingleCardTypeChange,
   onVisualStyleChange,
+  onTextAmountToggleChange,
   onGallerySlideCountChange,
   onRetryAnalysis,
   canRetryAnalysis,
 }: Props) {
-  const detailFacts = useMemo(() => nonBenefitProductFacts(productFacts), [productFacts]);
+  const detailFacts = useMemo(
+    () => nonBenefitProductFacts(productFacts).filter((f) => f.type !== "product_purpose"),
+    [productFacts],
+  );
   const benefitsText = useMemo(() => benefitTextareaValue(productFacts), [productFacts]);
+  const productPurposeText = useMemo(() => productPurposeTextareaValue(productFacts), [productFacts]);
 
   const updateFact = useCallback(
     (id: string, patch: Partial<CardBuilderProductFact>) => {
@@ -129,6 +140,13 @@ export function CardBuilderUniversalPanel({
   const handleBenefitsTextChange = useCallback(
     (text: string) => {
       onProductFactsChange(mergeBenefitFactsFromTextarea(productFacts, text));
+    },
+    [onProductFactsChange, productFacts],
+  );
+
+  const handleProductPurposeChange = useCallback(
+    (text: string) => {
+      onProductFactsChange(mergeProductPurposeFromTextarea(productFacts, text));
     },
     [onProductFactsChange, productFacts],
   );
@@ -236,6 +254,22 @@ export function CardBuilderUniversalPanel({
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="cb-product-purpose">Краткое описание товара</Label>
+            <Textarea
+              id="cb-product-purpose"
+              value={productPurposeText}
+              onChange={(e) => handleProductPurposeChange(e.target.value)}
+              rows={2}
+              className="rounded-xl text-sm"
+              placeholder="Например: Шампунь против перхоти для мужчин"
+            />
+            <p className="text-muted-foreground text-xs">
+              Назначение или краткое описание — попадёт на lifestyle, главное фото (как подзаголовок) и
+              premium-слайды. Не смешивается с преимуществами.
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="cb-benefits">Преимущества товара</Label>
             <Textarea
               id="cb-benefits"
@@ -260,7 +294,8 @@ export function CardBuilderUniversalPanel({
             </div>
             {detailFacts.length === 0 ? (
               <p className="text-muted-foreground text-xs">
-                Материал, объём, детали — добавьте вручную или дождитесь распознавания фото.
+                Материал, объём, детали — добавьте вручную или дождитесь распознавания фото. Для назначения
+                товара используйте тип «Назначение / описание товара».
               </p>
             ) : (
               <div className="space-y-2">
@@ -391,7 +426,7 @@ export function CardBuilderUniversalPanel({
             </div>
           ) : null}
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="cb-visual-style">Стиль</Label>
+            <Label htmlFor="cb-visual-style">Стиль карточки</Label>
             <select
               id="cb-visual-style"
               className={nativeFieldClass}
@@ -404,6 +439,24 @@ export function CardBuilderUniversalPanel({
                 </option>
               ))}
             </select>
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="cb-text-amount">Текст на карточке</Label>
+            <select
+              id="cb-text-amount"
+              className={nativeFieldClass}
+              value={textAmountToggle}
+              onChange={(e) =>
+                onTextAmountToggleChange(e.target.value === "less" ? "less" : "more")
+              }
+            >
+              <option value="less">Меньше текста</option>
+              <option value="more">Больше текста</option>
+            </select>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Итоговая плотность текста зависит от типа слайда — на lifestyle и главном фото текст
+              автоматически ограничивается.
+            </p>
           </div>
         </CardContent>
       </Card>

@@ -82,9 +82,9 @@ export function computeSlideCardTextPhrases(
   if (showCardTextLayer) {
     const t = opts.productTitle?.trim();
     if (t) raw.push(t);
-  }
-  for (const line of fromFacts) {
-    raw.push(line);
+    for (const line of fromFacts) {
+      raw.push(line);
+    }
   }
 
   const seen = new Set<string>();
@@ -165,8 +165,11 @@ export function slidePreviewWarning(
     const hasUsage = allFacts.some(
       (f) => f.type === "usage" && f.visibleOnCard !== false && f.value.trim(),
     );
-    if (!hasUsage) {
-      return "Добавьте сценарий использования, чтобы lifestyle-кадр был точнее.";
+    const hasPurpose = allFacts.some(
+      (f) => f.type === "product_purpose" && f.visibleOnCard !== false && f.value.trim(),
+    );
+    if (!hasUsage && !hasPurpose) {
+      return "Добавьте сценарий использования или назначение товара, чтобы lifestyle-кадр был точнее.";
     }
   }
   if (factsForSlide.length === 0 && slideRole !== "main_photo" && slideRole !== "premium_poster") {

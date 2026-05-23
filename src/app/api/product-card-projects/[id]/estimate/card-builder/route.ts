@@ -9,6 +9,7 @@ import {
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
+import { resolveCardBuilderPricingStyleForSlide } from "@/lib/card-builder-pricing-style";
 import { allocateCreditsAcrossVariants, estimateCardBuilderCharge } from "@/server/services/productCardPricing";
 import { resolveCardBuilderImageModel } from "@/server/services/productCardModelResolver";
 import { readCardBuilderBlock } from "@/server/services/productCardCardBuilderMeta";
@@ -162,18 +163,21 @@ export async function POST(req: Request, ctx: Ctx) {
       if (found) pricingRole = found;
     }
 
-    const textDensityEffective = textDensityEffectiveForSlide(
-      mpRes.profile,
-      pricingRole,
-      plan.textDensity,
-    );
+    const pricingStyle = resolveCardBuilderPricingStyleForSlide({
+      slideRole: pricingRole,
+      visualStyle: plan.visualStyle,
+      salesStyle: plan.salesStyle,
+      textDensity: textDensityEffectiveForSlide(mpRes.profile, pricingRole, plan.textDensity),
+      categoryKey: plan.cardBuilderCategoryKey,
+      productFacts: plan.productFacts ?? [],
+    });
 
     const br = await estimateCardBuilderCharge(
       "slide",
       model,
       settings.cardBuilderPricing,
-      plan.salesStyle,
-      textDensityEffective,
+      pricingStyle.salesStyle,
+      pricingStyle.textDensity,
       pricingRole,
       null,
     );
@@ -189,12 +193,20 @@ export async function POST(req: Request, ctx: Ctx) {
   let totalCredits: number;
 
   if (bundle) {
+    const bundlePricing = resolveCardBuilderPricingStyleForSlide({
+      slideRole: "benefits_infographic",
+      visualStyle: plan.visualStyle,
+      salesStyle: plan.salesStyle,
+      textDensity: plan.textDensity,
+      categoryKey: plan.cardBuilderCategoryKey,
+      productFacts: plan.productFacts ?? [],
+    });
     const br = await estimateCardBuilderCharge(
       bundle,
       model,
       settings.cardBuilderPricing,
-      plan.salesStyle,
-      plan.textDensity,
+      bundlePricing.salesStyle,
+      bundlePricing.textDensity,
       "gallery_bundle",
       slides.length,
     );
@@ -202,13 +214,21 @@ export async function POST(req: Request, ctx: Ctx) {
   } else {
     let sum = 0;
     for (const s of slides) {
-      const dens = textDensityEffectiveForSlide(mpRes.profile, s.imageRole, plan.textDensity);
+      const densRaw = textDensityEffectiveForSlide(mpRes.profile, s.imageRole, plan.textDensity);
+      const slidePricing = resolveCardBuilderPricingStyleForSlide({
+        slideRole: s.imageRole,
+        visualStyle: plan.visualStyle,
+        salesStyle: plan.salesStyle,
+        textDensity: densRaw,
+        categoryKey: plan.cardBuilderCategoryKey,
+        productFacts: plan.productFacts ?? [],
+      });
       const br = await estimateCardBuilderCharge(
         "slide",
         model,
         settings.cardBuilderPricing,
-        plan.salesStyle,
-        dens,
+        slidePricing.salesStyle,
+        slidePricing.textDensity,
         s.imageRole,
         null,
       );

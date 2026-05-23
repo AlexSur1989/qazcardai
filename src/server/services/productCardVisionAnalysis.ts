@@ -106,6 +106,25 @@ function parseFactType(raw: unknown): CardBuilderProductFactType {
   return "other";
 }
 
+/** Назначение/описание товара Vision не должно попадать в benefit. */
+function normalizeVisionSuggestedFactType(
+  label: string,
+  type: CardBuilderProductFactType,
+): CardBuilderProductFactType {
+  const l = label.trim().toLowerCase();
+  const purposeHint =
+    l.includes("назначение") ||
+    l.includes("описание товара") ||
+    l.includes("описание продукта") ||
+    l === "описание" ||
+    l.includes("product purpose");
+  if (purposeHint) return "product_purpose";
+  if (type === "benefit" && (l.includes("назначение") || l.includes("описание"))) {
+    return "product_purpose";
+  }
+  return type;
+}
+
 function parseStringList(raw: unknown, max = 12): string[] {
   if (!Array.isArray(raw)) return [];
   const out: string[] = [];
@@ -143,7 +162,7 @@ function validateVisionJson(parsed: unknown): ProductCardVisionAnalysisResult | 
       suggested.push({
         label,
         value,
-        type: parseFactType(r.type),
+        type: normalizeVisionSuggestedFactType(label, parseFactType(r.type)),
         confidence: fc,
       });
       if (suggested.length >= 16) break;

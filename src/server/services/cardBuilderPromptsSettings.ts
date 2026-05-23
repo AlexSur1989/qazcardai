@@ -5,6 +5,10 @@ import {
   PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA,
   type CardBuilderPromptsSetting,
 } from "@/config/card-builder-prompts-defaults";
+import {
+  CARD_BUILDER_TEMPLATE_PROMPT_ROLE_FALLBACK,
+  resolveCardBuilderTemplatePromptKey,
+} from "@/lib/card-builder-template-prompt-aliases";
 import { mergeCardBuilderPromptsWithDefaults } from "@/lib/validations/card-builder-prompts-setting";
 import { getAppSetting } from "@/server/services/appSettings";
 
@@ -59,7 +63,8 @@ export function resolveCardTypePromptKey(slideRole: string): string {
 
 export function resolveTemplatePromptKey(templateId?: string | null): string {
   const id = templateId?.trim();
-  return id && id.length > 0 ? id : "hero_clean";
+  if (!id) return "hero_clean";
+  return resolveCardBuilderTemplatePromptKey(id);
 }
 
 export function pickCategoryPrompt(
@@ -75,9 +80,25 @@ export function pickCardTypePrompt(prompts: CardBuilderPromptsSetting, slideRole
   return prompts.cardTypePrompts[key] ?? prompts.cardTypePrompts.main_photo ?? "";
 }
 
-export function pickTemplatePrompt(prompts: CardBuilderPromptsSetting, templateId?: string): string {
+export function pickTemplatePrompt(
+  prompts: CardBuilderPromptsSetting,
+  templateId?: string,
+  slideRole?: string,
+): string {
   const key = resolveTemplatePromptKey(templateId);
-  return prompts.templatePrompts[key] ?? "";
+  const direct = prompts.templatePrompts[key]?.trim() ?? "";
+  if (direct.length > 0) return direct;
+
+  const role = slideRole?.trim();
+  if (role) {
+    const fallbackKey = CARD_BUILDER_TEMPLATE_PROMPT_ROLE_FALLBACK[role];
+    if (fallbackKey) {
+      const fromRole = prompts.templatePrompts[fallbackKey]?.trim() ?? "";
+      if (fromRole.length > 0) return fromRole;
+    }
+  }
+
+  return "";
 }
 
 export function buildCardBuilderPromptSelectionMeta(input: {
