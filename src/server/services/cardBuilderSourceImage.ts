@@ -7,7 +7,8 @@ import {
   type CardBuilderSourceImage,
   type CardBuilderStoredSettings,
 } from "@/server/services/productCardCardBuilderMeta";
-import { assertUserOwnsFileUrl } from "@/server/services/productCardProjectAccess";
+import { assertUserOwnsFileUrl, getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
+import { normalizeProductSourceImages } from "@/server/services/productCardProjects";
 
 export type { CardBuilderSourceImage } from "@/server/services/productCardCardBuilderMeta";
 
@@ -24,23 +25,46 @@ export function parseCardBuilderSourceImage(raw: unknown): CardBuilderSourceImag
   return out;
 }
 
-export async function resolveCardBuilderSourceImage(
+async function resolveProjectMainSourceImage(
   userId: string,
   projectId: string,
 ): Promise<{ ok: true; url: string; fileId: string } | { ok: false; error: string; status: number }> {
-  const blk = await readCardBuilderBlock(projectId);
-  const img = parseCardBuilderSourceImage(blk?.sourceImage);
-  if (!img) {
+  const project = await getOwnedProjectOrNull(userId, projectId);
+  if (!project) {
+    return { ok: false, error: "Проект не найден", status: 404 };
+  }
+
+  const sources = normalizeProductSourceImages(project);
+  const main = sources[0];
+  const url = main?.url?.trim() ?? project.sourceImageUrl?.trim() ?? "";
+  const fileId = main?.fileId?.trim() ?? project.sourceImageFileId?.trim() ?? "";
+  if (!url) {
     return {
       ok: false,
       error: "Загрузите фото для «Создать карточку»",
       status: 400,
     };
   }
-  if (!(await assertUserOwnsFileUrl(userId, img.url))) {
+  if (!(await assertUserOwnsFileUrl(userId, url))) {
     return { ok: false, error: "Нет доступа к файлу", status: 403 };
   }
-  return { ok: true, url: img.url, fileId: img.fileId };
+  return { ok: true, url, fileId: fileId || url };
+}
+
+export async function resolveCardBuilderSourceImage(
+  userId: string,
+  projectId: string,
+): Promise<{ ok: true; url: string; fileId: string } | { ok: false; error: string; status: number }> {
+  const blk = await readCardBuilderBlock(projectId);
+  const img = parseCardBuilderSourceImage(blk?.sourceImage);
+  if (img) {
+    if (!(await assertUserOwnsFileUrl(userId, img.url))) {
+      return { ok: false, error: "Нет доступа к файлу", status: 403 };
+    }
+    return { ok: true, url: img.url, fileId: img.fileId };
+  }
+
+  return resolveProjectMainSourceImage(userId, projectId);
 }
 
 export async function saveCardBuilderSourceImage(

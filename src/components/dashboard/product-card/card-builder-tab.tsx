@@ -142,6 +142,8 @@ type Props = {
   initDone: boolean;
   ensureProjectId: () => Promise<string | null>;
   projectId: string | null;
+  /** Общее фото проекта (блок выше) — используется, если отдельное фото card_builder ещё не задано. */
+  projectSource?: SourceImageValue;
   balanceCredits: number;
 };
 
@@ -149,6 +151,7 @@ export function CardBuilderTab({
   initDone,
   ensureProjectId,
   projectId,
+  projectSource = null,
   balanceCredits,
 }: Props) {
   const templateProfile = UNIVERSAL_CARD_BUILDER_PROFILE;
@@ -216,6 +219,8 @@ export function CardBuilderTab({
   const [sourceImageSaving, setSourceImageSaving] = useState(false);
   /** После успешной гидратации для `projectId` не подставляем saved.* повторно при refresh. */
   const hydratedProjectIdRef = useRef<string | null>(null);
+  /** Проект, для которого уже подставили общее фото проекта в card_builder. */
+  const autoSyncedFromProjectRef = useRef<string | null>(null);
   /** Авто-vision уже запущен для проекта (hydrate без saved vision). */
   const hydrateVisionTriggeredRef = useRef<string | null>(null);
   /** Пользователь успел изменить форму до завершения первого fetch — не перезатирать локальный ввод. */
@@ -334,7 +339,15 @@ export function CardBuilderTab({
     [projectId, initDone, markUserEditedForm],
   );
 
-  const hasCardBuilderImage = Boolean(sourceImage?.url?.trim() && sourceImage.fileId?.trim());
+  const hasDedicatedCardBuilderImage = Boolean(
+    sourceImage?.url?.trim() && sourceImage.fileId?.trim(),
+  );
+  const hasProjectImage = Boolean(
+    projectSource?.url?.trim() &&
+      projectSource.fileId?.trim() &&
+      !projectSource.isLocalPreview,
+  );
+  const hasCardBuilderImage = hasDedicatedCardBuilderImage || hasProjectImage;
   const canWork = Boolean(hasCardBuilderImage && projectId && initDone);
   const canUploadCardBuilderImage = Boolean(initDone && !sourceImageSaving);
 
@@ -444,7 +457,7 @@ export function CardBuilderTab({
 
   const fetchCardBuilderBlockForProject = useCallback(
     async (pid: string): Promise<CardBuilderBlockPayload | null> => {
-      if (!initDone || !projectId) return null;
+      if (!initDone) return null;
       const res = await fetch(`/api/product-card-projects/${pid}`);
       const parsed = await readJsonSafe<{ project?: { metadata?: { cardBuilder?: CardBuilderBlockPayload } } }>(
         res,
@@ -452,7 +465,7 @@ export function CardBuilderTab({
       if (!parsed.ok || !res.ok) return null;
       return parsed.data.project?.metadata?.cardBuilder ?? null;
     },
-    [initDone, projectId],
+    [initDone],
   );
 
   const applySlidesAndHistoryFromBlock = useCallback((blk: CardBuilderBlockPayload | null) => {
@@ -644,6 +657,13 @@ export function CardBuilderTab({
           return;
         }
         const d = parsed.data;
+        if (d.analysisFailed) {
+          const msg =
+            d.warnings?.find((w) => typeof w === "string" && w.trim())?.trim() ??
+            "Не удалось распознать товар — заполните данные вручную.";
+          toast.error(msg);
+          hydrateVisionTriggeredRef.current = null;
+        }
         setVisionSummary({
           categoryKey: d.categoryKey,
           productType: d.productType,
@@ -778,14 +798,20 @@ export function CardBuilderTab({
     applySlidesAndHistoryFromBlock(blk);
 
     const img = blk?.sourceImage;
+    const hasDedicatedPhoto = Boolean(img?.url?.trim() && img?.fileId?.trim());
+    const hasProjectPhoto = Boolean(
+      projectSource?.url?.trim() &&
+        projectSource.fileId?.trim() &&
+        !projectSource.isLocalPreview,
+    );
+    const hasPhoto = hasDedicatedPhoto || hasProjectPhoto;
     const hasSavedVision =
       saved &&
       typeof saved === "object" &&
       saved.visionAnalysis &&
       typeof saved.visionAnalysis === "object";
     if (
-      img?.url?.trim() &&
-      img?.fileId?.trim() &&
+      hasPhoto &&
       !hasSavedVision &&
       hydrateVisionTriggeredRef.current !== pid
     ) {
@@ -795,6 +821,7 @@ export function CardBuilderTab({
   }, [
     projectId,
     initDone,
+    projectSource,
     fetchCardBuilderBlockForProject,
     applyHydratedSettingsFromSaved,
     applySlidesAndHistoryFromBlock,
@@ -1081,6 +1108,7 @@ export function CardBuilderTab({
 
   useEffect(() => {
     hydratedProjectIdRef.current = null;
+    autoSyncedFromProjectRef.current = null;
     hydrateVisionTriggeredRef.current = null;
     userEditedFormRef.current = false;
     void Promise.resolve().then(() => {
@@ -1133,6 +1161,25 @@ export function CardBuilderTab({
     void Promise.resolve().then(() => void hydrateFormFromServer());
   }, [projectId, initDone, hydrateFormFromServer]);
 
+  /** Подставить общее фото проекта, если для card_builder ещё нет отдельного снимка. */
+  useEffect(() => {
+    if (!initDone || !projectId || sourceImageSaving) return;
+    if (hasDedicatedCardBuilderImage) return;
+    if (autoSyncedFromProjectRef.current === projectId) return;
+    const ps = projectSource;
+    if (!ps?.url?.trim() || !ps.fileId?.trim() || ps.isLocalPreview) return;
+
+    autoSyncedFromProjectRef.current = projectId;
+    void persistCardBuilderSourceImage(ps);
+  }, [
+    initDone,
+    projectId,
+    hasDedicatedCardBuilderImage,
+    projectSource,
+    sourceImageSaving,
+    persistCardBuilderSourceImage,
+  ]);
+
   const styleReferencePreviewActive =
     styleReferenceEnabled && styleReferenceImages.some((x) => Boolean(x.fileId?.trim()));
   const primaryStyleReferenceThumbUrl =
@@ -1158,12 +1205,16 @@ export function CardBuilderTab({
         <Card className="rounded-2xl border-border">
           <CardContent className="pt-6">
             <SourceImageUpload
-              value={sourceImage}
+              value={sourceImage ?? (hasProjectImage ? projectSource : null)}
               onChange={handleCardBuilderSourceImageChange}
               disabled={!canUploadCardBuilderImage}
               uploadPurpose="product_card_card_builder_source"
               title="Фото для «Создать карточку»"
-              description="Отдельное фото только для этого сценария: распознавание товара и генерация слайдов. Не связано с общим фото проекта выше."
+              description={
+                hasDedicatedCardBuilderImage
+                  ? "Отдельное фото для этого сценария. Можно заменить на другое — оно не меняет общее фото проекта выше."
+                  : "По умолчанию используется фото из блока выше. При необходимости загрузите другое — только для этого сценария."
+              }
             />
           </CardContent>
         </Card>
@@ -1172,7 +1223,7 @@ export function CardBuilderTab({
           <Alert>
             <AlertTitle>Загрузите фото</AlertTitle>
             <AlertDescription>
-              Чтобы распознать товар и собрать карточку, сначала загрузите фото в блоке выше.
+              Загрузите фото товара в блоке вверху страницы или в поле выше — без фото генерация недоступна.
             </AlertDescription>
           </Alert>
         ) : null}

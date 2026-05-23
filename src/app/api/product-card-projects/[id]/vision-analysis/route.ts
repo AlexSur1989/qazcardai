@@ -53,25 +53,27 @@ export async function POST(_req: Request, ctx: Ctx) {
   const publicPayload = toPublicVisionAnalysisPayload(analysis);
   const productFacts = visionAnalysisToProductFacts(analysis);
 
-  const prev = await readCardBuilderBlock(id);
-  const prevSettings =
-    prev?.settings && typeof prev.settings === "object" ? { ...prev.settings } : {};
+  if (!analysis.analysisFailed) {
+    const prev = await readCardBuilderBlock(id);
+    const prevSettings =
+      prev?.settings && typeof prev.settings === "object" ? { ...prev.settings } : {};
 
-  await mergeCardBuilderBlock(id, {
-    settings: {
-      ...prevSettings,
-      visionAnalysis: {
-        ...publicPayload,
-        analyzedAt: new Date().toISOString(),
-      },
-      productFacts,
-      cardBuilderCategoryKey: analysis.categoryKey,
-      productType: analysis.productType,
-      productNameGuess: analysis.productNameGuess,
-      targetPlatform: "universal",
-      updatedAt: new Date().toISOString(),
-    } as unknown as import("@/server/services/productCardCardBuilderMeta").CardBuilderStoredSettings,
-  });
+    await mergeCardBuilderBlock(id, {
+      settings: {
+        ...prevSettings,
+        visionAnalysis: {
+          ...publicPayload,
+          analyzedAt: new Date().toISOString(),
+        },
+        productFacts,
+        cardBuilderCategoryKey: analysis.categoryKey,
+        productType: analysis.productType,
+        productNameGuess: analysis.productNameGuess,
+        targetPlatform: "universal",
+        updatedAt: new Date().toISOString(),
+      } as unknown as import("@/server/services/productCardCardBuilderMeta").CardBuilderStoredSettings,
+    });
+  }
 
   return NextResponse.json(publicPayload);
 }

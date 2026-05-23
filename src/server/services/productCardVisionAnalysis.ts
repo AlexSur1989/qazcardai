@@ -60,6 +60,24 @@ export type AnalyzeProductImageForCardBuilderArgs = {
 
 const PARSE_FAIL = "Не удалось разобрать ответ анализа изображения.";
 
+function kieVisionHttpError(body: unknown, status: number): string {
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    const o = body as Record<string, unknown>;
+    const err = o.error;
+    if (err && typeof err === "object" && !Array.isArray(err)) {
+      const m = (err as Record<string, unknown>).message;
+      if (typeof m === "string" && m.trim()) {
+        return `Ошибка Kie.ai (${status}): ${m.trim().slice(0, 400)}`;
+      }
+    }
+    const msg = o.message ?? o.msg;
+    if (typeof msg === "string" && msg.trim()) {
+      return `Ошибка Kie.ai (${status}): ${msg.trim().slice(0, 400)}`;
+    }
+  }
+  return `Сервис анализа фото вернул код ${status}. Заполните данные вручную.`;
+}
+
 function extractJsonString(raw: string): string {
   const t = raw.trim();
   const fence = /^```(?:json)?\s*([\s\S]*?)```/m.exec(t);
@@ -201,10 +219,17 @@ function mockVisionResult(): ProductCardVisionAnalysisResult {
   };
 }
 
+/** Тот же путь, что у классификатора категории: /{apiModelId}/v1/chat/completions */
 function chatCompletionsPathForKieModel(apiModelIdRaw: string): string {
-  const id = apiModelIdRaw.trim().toLowerCase();
-  if (id.includes("gemini")) return "/v1/chat/completions";
-  return "/v1/chat/completions";
+  const id = assertKieModelIdSet(apiModelIdRaw);
+  const seg = id.startsWith("/") ? id.slice(1) : id;
+  return `/${seg}/v1/chat/completions`;
+}
+
+function classifierModelOverrideFromEnv(): string {
+  const envM = (process.env.PRODUCT_CLASSIFIER_MODEL ?? "").trim();
+  if (envM && envM.toLowerCase() !== "mock") return envM;
+  return "";
 }
 
 export function visionAnalysisToProductFacts(
@@ -276,7 +301,13 @@ async function analyzeWithKieModel(
   imageUrl: string,
   aiModel: AiModel,
 ): Promise<ProductCardVisionAnalysisResult> {
-  const legacyTrim = (process.env.PRODUCT_CARD_VISION_MODEL_SLUG ?? "").trim();
+  if (aiModel.provider !== "KIE_AI") {
+    return emptyFailedResult([
+      "Модель анализа не относится к Kie.ai — проверьте настройки карточки товара.",
+    ]);
+  }
+
+  const legacyTrim = classifierModelOverrideFromEnv();
   const apiModelId = legacyTrim || aiModel.apiModelId;
   const modelField = trimKieApiModelId(apiModelId);
   assertKieModelIdSet(modelField);
@@ -340,17 +371,25 @@ async function analyzeWithKieModel(
       signal: AbortSignal.timeout(90_000),
     });
 
-    const resBody: unknown = await res.json().catch(() => ({}));
+    const text = await res.text();
+    let resBody: unknown;
+    try {
+      resBody = text ? JSON.parse(text) : null;
+    } catch {
+      resBody = { raw: text.slice(0, 2000) };
+    }
+
     if (!res.ok) {
+      const errMsg = kieVisionHttpError(resBody, res.status);
       await createApiLog({
         provider: "KIE_AI",
         endpoint: endpointForLog,
         requestPayload: redactKieLogPayload(body) as unknown,
         responsePayload: resBody,
         statusCode: res.status,
-        errorMessage: `vision analysis http ${res.status}`,
+        errorMessage: errMsg,
       });
-      return emptyFailedResult(["Не удалось проанализировать фото. Заполните данные вручную."]);
+      return emptyFailedResult([errMsg]);
     }
 
     const content =

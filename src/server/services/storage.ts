@@ -8,7 +8,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl as awsGetSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import * as http from "node:http";
 import * as https from "node:https";
 import path from "node:path";
@@ -359,6 +359,44 @@ export async function getSignedUrl(
     return await awsGetSignedUrl(client, cmd, { expiresIn: expiresInSeconds });
   } catch (e) {
     throw new StorageError("UNKNOWN", "S3: presign GetObject", { cause: e });
+  }
+}
+
+/** Чтение файла из local uploads или S3 по storageKey (для vision/classifier на сервере). */
+export async function readStoredFileByKey(key: string): Promise<{
+  buffer: Buffer;
+  contentType: string;
+}> {
+  if (isLocalUploadStorageEffective()) {
+    assertLocalStorageAllowedInThisEnv();
+    const diskPath = localDiskPathFromKey(key);
+    const buffer = await readFile(diskPath);
+    const ext = path.extname(diskPath).toLowerCase();
+    const byExt: Record<string, string> = {
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".png": "image/png",
+      ".webp": "image/webp",
+      ".gif": "image/gif",
+    };
+    return { buffer, contentType: byExt[ext] ?? "image/jpeg" };
+  }
+
+  const client = getClient();
+  try {
+    const res = await client.send(
+      new GetObjectCommand({
+        Bucket: bucket(),
+        Key: key,
+      }),
+    );
+    const bytes = await res.Body?.transformToByteArray();
+    const buffer = Buffer.from(bytes ?? []);
+    const contentType =
+      res.ContentType?.split(";")[0]?.trim() || "application/octet-stream";
+    return { buffer, contentType };
+  } catch (e) {
+    throw new StorageError("DOWNLOAD", `S3: ${describeS3Error(e)}`, { cause: e });
   }
 }
 

@@ -258,6 +258,7 @@ export function ProductCardPage({
               initDone={initDone}
               ensureProjectId={ensureProjectId}
               projectId={projectId}
+              projectSource={source}
               balanceCredits={balanceDisplay}
             />
           </TabsContent>
