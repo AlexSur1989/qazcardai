@@ -1,6 +1,9 @@
 import "server-only";
 
 import {
+  PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA,
+} from "@/config/card-builder-prompts-defaults";
+import {
   type MarketplaceCardStyle,
   PRODUCT_CATEGORY_IDS,
   type ProductCategoryId,
@@ -180,28 +183,7 @@ Rules:
 
 // --- Card builder: анализ фото товара (JSON для «Создать карточку») ---
 
-export const PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA = `{
-  "categoryKey": "clothing_shoes | beauty_care | home_interior | kids_products | sport_fitness | auto_products | jewelry_accessories | food_drinks | gadgets_tech | other",
-  "productType": "string",
-  "productNameGuess": "string",
-  "mainColors": ["string"],
-  "materialGuess": null,
-  "styleGuess": null,
-  "visibleText": ["string"],
-  "packaging": "none | bottle | box | bag | tube | jar | other",
-  "productShape": null,
-  "mainObjects": ["string"],
-  "suggestedProductFacts": [
-    {
-      "label": "string",
-      "value": "string",
-      "type": "benefit | material | dimension | usage | detail | package | feature | ingredient | effect | compatibility | care | other",
-      "confidence": 0.0
-    }
-  ],
-  "confidence": 0.0,
-  "warnings": ["string"]
-}`;
+export { PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA } from "@/config/card-builder-prompts-defaults";
 
 let visionAnalysisPromptCache: string | null = null;
 

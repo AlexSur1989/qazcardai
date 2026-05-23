@@ -1,10 +1,8 @@
-import "server-only";
-
-import { PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA } from "@/config/product-card-prompts";
 import {
   CARD_BUILDER_PROMPTS_DEFAULTS,
   CARD_BUILDER_PROMPTS_SETTING_VERSION,
   CARD_BUILDER_SLIDE_ROLE_TO_CARD_TYPE,
+  PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA,
   type CardBuilderPromptsSetting,
 } from "@/config/card-builder-prompts-defaults";
 import { mergeCardBuilderPromptsWithDefaults } from "@/lib/validations/card-builder-prompts-setting";

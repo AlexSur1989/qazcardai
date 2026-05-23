@@ -110,6 +110,30 @@ JSON должен точно соответствовать схеме:
 - warnings — короткие предупреждения на русском, если данных мало.
 - Не добавляй поля вне схемы.`;
 
+/** JSON-схема ответа vision-анализа (без server-only — нужна и в worker). */
+export const PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA = `{
+  "categoryKey": "clothing_shoes | beauty_care | home_interior | kids_products | sport_fitness | auto_products | jewelry_accessories | food_drinks | gadgets_tech | other",
+  "productType": "string",
+  "productNameGuess": "string",
+  "mainColors": ["string"],
+  "materialGuess": null,
+  "styleGuess": null,
+  "visibleText": ["string"],
+  "packaging": "none | bottle | box | bag | tube | jar | other",
+  "productShape": null,
+  "mainObjects": ["string"],
+  "suggestedProductFacts": [
+    {
+      "label": "string",
+      "value": "string",
+      "type": "benefit | material | dimension | usage | detail | package | feature | ingredient | effect | compatibility | care | other",
+      "confidence": 0.0
+    }
+  ],
+  "confidence": 0.0,
+  "warnings": ["string"]
+}`;
+
 const GALLERY_PLANNER_PROMPT = `Планировщик структуры галереи (детерминированный, без LLM):
 - Базовая галерея 6: hero_clean → benefits_grid → texture_closeup → material_focus → (dimensions_schema или texture_closeup при отсутствии размеров) → lifestyle_card.
 - Галерея 8: добавляет set_contents или feature_callouts и premium_poster.
