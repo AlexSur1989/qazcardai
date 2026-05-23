@@ -1,46 +1,42 @@
+import { getPublicAppUrl } from "@/lib/auth-public-url";
+
 /**
- * Флаги и проверки для входа через Telegram (OIDC). Секреты не экспортируем.
+ * Флаги и проверки для Telegram Login Widget. TELEGRAM_BOT_TOKEN — только server-side.
  */
 
 export function isTelegramAuthEnabledFlag(): boolean {
   return process.env.TELEGRAM_AUTH_ENABLED?.trim().toLowerCase() === "true";
 }
 
-/** OIDC: Client ID + Secret из BotFather (Web Login). */
-export function isTelegramOidcConfigured(): boolean {
-  return Boolean(
-    process.env.TELEGRAM_CLIENT_ID?.trim() &&
-      process.env.TELEGRAM_CLIENT_SECRET?.trim(),
-  );
+export function getTelegramBotToken(): string | null {
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  return token || null;
 }
 
-/** Показывать кнопку и регистрировать провайдер в NextAuth. */
-export function isTelegramAuthConfigured(): boolean {
-  return isTelegramAuthEnabledFlag() && isTelegramOidcConfigured();
+/** Имя бота для виджета (без @). NEXT_PUBLIC_* доступен на клиенте после сборки. */
+export function getTelegramBotUsernameForWidget(): string | null {
+  const raw =
+    process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME?.trim() ||
+    process.env.TELEGRAM_BOT_USERNAME?.trim();
+  if (!raw) return null;
+  return raw.replace(/^@/, "");
 }
 
-/** Для страниц login/register (server components). */
+export function isTelegramWidgetConfigured(): boolean {
+  return Boolean(getTelegramBotToken() && getTelegramBotUsernameForWidget());
+}
+
+/** Показывать кнопку Telegram Login Widget на login/register. */
 export function telegramAuthEnabledForUi(): boolean {
-  return isTelegramAuthConfigured();
+  return isTelegramAuthEnabledFlag() && isTelegramWidgetConfigured();
 }
 
-/**
- * Предупреждение в лог при расхождении с APP_URL (не бросает).
- */
-export function warnIfTelegramAllowedOriginMismatch(): void {
-  const allowed = process.env.TELEGRAM_ALLOWED_ORIGIN?.trim();
-  const base =
-    process.env.AUTH_URL?.trim() ||
-    process.env.NEXTAUTH_URL?.trim() ||
-    process.env.APP_URL?.trim();
-  if (!allowed || !base) return;
-  try {
-    if (new URL(allowed).origin !== new URL(base).origin) {
-      console.warn(
-        "[telegram] TELEGRAM_ALLOWED_ORIGIN не совпадает с origin AUTH_URL/NEXTAUTH_URL/APP_URL",
-      );
-    }
-  } catch {
-    console.warn("[telegram] TELEGRAM_ALLOWED_ORIGIN некорректен");
-  }
+/** Публичный callback URL для data-auth-url виджета (server-side). */
+export function getTelegramWidgetAuthCallbackUrl(callbackPath = "/dashboard"): string {
+  const base = getPublicAppUrl();
+  const safeCallback =
+    callbackPath.startsWith("/") && !callbackPath.startsWith("//")
+      ? callbackPath
+      : "/dashboard";
+  return `${base}/api/auth/telegram/callback?callbackUrl=${encodeURIComponent(safeCallback)}`;
 }

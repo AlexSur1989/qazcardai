@@ -6,7 +6,11 @@ import {
   pickLoginRedirectParam,
   postAuthLandingPath,
 } from "@/lib/auth";
-import { telegramAuthEnabledForUi } from "@/lib/telegram-auth-config";
+import {
+  getTelegramBotUsernameForWidget,
+  getTelegramWidgetAuthCallbackUrl,
+  telegramAuthEnabledForUi,
+} from "@/lib/telegram-auth-config";
 
 import { LoginForm } from "./login-form";
 
@@ -20,15 +24,30 @@ type Props = {
 export default async function LoginPage({ searchParams }: Props) {
   const session = await auth();
   const sp = (await searchParams) ?? {};
+  const redirectParam = pickLoginRedirectParam(
+    firstSearchParam(sp, "next"),
+    firstSearchParam(sp, "callbackUrl"),
+  );
+
   if (session?.user) {
-    const p = pickLoginRedirectParam(
-      firstSearchParam(sp, "next"),
-      firstSearchParam(sp, "callbackUrl"),
-    );
-    redirect(postAuthLandingPath(p, session.user.role));
+    redirect(postAuthLandingPath(redirectParam, session.user.role));
   }
 
   const showTelegram = telegramAuthEnabledForUi();
+  const telegramBotUsername = showTelegram
+    ? getTelegramBotUsernameForWidget() ?? undefined
+    : undefined;
+  const telegramAuthUrl = showTelegram
+    ? getTelegramWidgetAuthCallbackUrl(
+        postAuthLandingPath(redirectParam, undefined),
+      )
+    : undefined;
 
-  return <LoginForm telegramAuthEnabled={showTelegram} />;
+  return (
+    <LoginForm
+      telegramAuthEnabled={showTelegram}
+      telegramBotUsername={telegramBotUsername}
+      telegramAuthUrl={telegramAuthUrl}
+    />
+  );
 }

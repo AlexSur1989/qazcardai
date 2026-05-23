@@ -1,17 +1,11 @@
+import { getPublicAppUrl } from "@/lib/auth-public-url";
+
 /**
  * Публичный origin приложения (для доводки /uploads/... до абсолютного URL для провайдеров).
  * Не содержит секретов; безопасен для import из lib.
  */
 export function getAppBaseUrl(): string {
-  const fromEnv =
-    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-    process.env.APP_URL?.trim() ||
-    process.env.AUTH_URL?.trim();
-  if (fromEnv) return fromEnv.replace(/\/$/, "");
-  if (process.env.VERCEL_URL?.trim()) {
-    return `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
-  }
-  return "http://localhost:3000";
+  return getPublicAppUrl();
 }
 
 /**

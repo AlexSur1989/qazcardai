@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getSession, signIn, useSession } from "next-auth/react";
 
+import { TelegramLoginButton } from "@/components/auth/telegram-login-button";
 import { Button } from "@/components/ui/button";
 import {
   pickLoginRedirectParam,
@@ -18,7 +19,17 @@ function safePathCallback(raw: string | null): string {
   return raw;
 }
 
-function LoginFormInner({ telegramAuthEnabled }: { telegramAuthEnabled: boolean }) {
+type LoginFormProps = {
+  telegramAuthEnabled: boolean;
+  telegramBotUsername?: string;
+  telegramAuthUrl?: string;
+};
+
+function LoginFormInner({
+  telegramAuthEnabled,
+  telegramBotUsername,
+  telegramAuthUrl,
+}: LoginFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawRedirect = pickLoginRedirectParam(
@@ -40,19 +51,6 @@ function LoginFormInner({ telegramAuthEnabled }: { telegramAuthEnabled: boolean 
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [telegramLoading, setTelegramLoading] = useState(false);
-
-  async function loginTelegram() {
-    setError(null);
-    setTelegramLoading(true);
-    try {
-      const target = postAuthLandingPath(rawRedirect, undefined);
-      await signIn("telegram", { callbackUrl: target });
-    } catch {
-      setError("Не удалось войти через Telegram. Попробуйте снова.");
-      setTelegramLoading(false);
-    }
-  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -99,6 +97,9 @@ function LoginFormInner({ telegramAuthEnabled }: { telegramAuthEnabled: boolean 
     }
   }
 
+  const showTelegramWidget =
+    telegramAuthEnabled && telegramBotUsername && telegramAuthUrl;
+
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-12">
       <h1 className="text-2xl font-semibold tracking-tight">Вход</h1>
@@ -128,7 +129,7 @@ function LoginFormInner({ telegramAuthEnabled }: { telegramAuthEnabled: boolean 
 
       {oauthErr ? (
         <p className="text-destructive mt-4 text-sm" role="alert">
-          Не удалось войти через Telegram. Попробуйте снова.
+          Не удалось войти через Telegram. Попробуйте ещё раз.
         </p>
       ) : null}
 
@@ -168,12 +169,12 @@ function LoginFormInner({ telegramAuthEnabled }: { telegramAuthEnabled: boolean 
             {error}
           </p>
         ) : null}
-        <Button type="submit" disabled={loading || telegramLoading}>
+        <Button type="submit" disabled={loading}>
           {loading ? "Вход…" : "Войти"}
         </Button>
       </form>
 
-      {telegramAuthEnabled ? (
+      {showTelegramWidget ? (
         <div className="mt-6 space-y-3">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -183,15 +184,10 @@ function LoginFormInner({ telegramAuthEnabled }: { telegramAuthEnabled: boolean 
               <span className="bg-background text-muted-foreground px-2">или</span>
             </div>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            disabled={loading || telegramLoading}
-            onClick={() => void loginTelegram()}
-          >
-            {telegramLoading ? "Переход в Telegram…" : "Войти через Telegram"}
-          </Button>
+          <TelegramLoginButton
+            botUsername={telegramBotUsername}
+            authUrl={telegramAuthUrl}
+          />
         </div>
       ) : null}
 
@@ -204,7 +200,7 @@ function LoginFormInner({ telegramAuthEnabled }: { telegramAuthEnabled: boolean 
   );
 }
 
-export function LoginForm({ telegramAuthEnabled }: { telegramAuthEnabled: boolean }) {
+export function LoginForm(props: LoginFormProps) {
   return (
     <Suspense
       fallback={
@@ -213,7 +209,7 @@ export function LoginForm({ telegramAuthEnabled }: { telegramAuthEnabled: boolea
         </main>
       }
     >
-      <LoginFormInner telegramAuthEnabled={telegramAuthEnabled} />
+      <LoginFormInner {...props} />
     </Suspense>
   );
 }

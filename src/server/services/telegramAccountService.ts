@@ -5,7 +5,8 @@ import { UserRole as UserRoleEnum, UserStatus } from "@/generated/prisma/enums";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
-import type { TelegramOidcProfile } from "@/auth/providers/telegram-oidc";
+import type { TelegramWidgetProfile } from "@/lib/telegram-profile";
+import { telegramDisplayName } from "@/lib/telegram-profile";
 import { getAppSetting } from "@/server/services/appSettings";
 
 export const TELEGRAM_IDENTITY_PROVIDER = "telegram" as const;
@@ -28,23 +29,11 @@ type ResolvedUser = {
   image?: string | null;
 };
 
-function pickDisplayName(profile: TelegramOidcProfile): string {
-  if (typeof profile.name === "string" && profile.name.trim()) {
-    return profile.name.trim().slice(0, 120);
-  }
-  if (
-    typeof profile.preferred_username === "string" &&
-    profile.preferred_username.trim()
-  ) {
-    return profile.preferred_username.trim().slice(0, 120);
-  }
-  if (typeof profile.sub === "string") {
-    return `Telegram user ${profile.sub}`;
-  }
-  return "Telegram";
+function pickDisplayName(profile: TelegramWidgetProfile): string {
+  return telegramDisplayName(profile);
 }
 
-export async function resolveTelegramOAuthUser(profile: TelegramOidcProfile): Promise<
+export async function resolveTelegramWidgetUser(profile: TelegramWidgetProfile): Promise<
   | {
       ok: true;
       user: ResolvedUser;
@@ -53,33 +42,19 @@ export async function resolveTelegramOAuthUser(profile: TelegramOidcProfile): Pr
     }
   | { ok: false; code: "BLOCKED" | "INACTIVE" | "ERROR" }
 > {
-  const sub =
-    typeof profile.sub === "string" && profile.sub.trim()
-      ? profile.sub.trim()
-      : null;
+  const sub = profile.id.trim();
   if (!sub) {
     return { ok: false, code: "ERROR" };
   }
 
-  const username =
-    typeof profile.preferred_username === "string"
-      ? profile.preferred_username.trim().slice(0, 255) || null
-      : null;
+  const username = profile.username?.slice(0, 255) || null;
   const displayName = pickDisplayName(profile);
   const avatarUrl =
-    typeof profile.picture === "string" && profile.picture.startsWith("http")
-      ? profile.picture.slice(0, 2048)
+    profile.photo_url?.startsWith("http")
+      ? profile.photo_url.slice(0, 2048)
       : null;
 
   const metaUsername = username;
-  const rawEmail =
-    typeof profile.email === "string" && profile.email.includes("@")
-      ? profile.email.toLowerCase().trim()
-      : null;
-  const linkEmail =
-    rawEmail && !isReservedTelegramLocalEmail(rawEmail) ? rawEmail : null;
-  const emailVerified =
-    profile.email_verified === true && Boolean(linkEmail);
 
   let freeCredits = 0;
   try {
@@ -116,6 +91,7 @@ export async function resolveTelegramOAuthUser(profile: TelegramOidcProfile): Pr
             avatarUrl,
             metadata: {
               lastSignInAt: new Date().toISOString(),
+              authDate: profile.auth_date,
             } satisfies Prisma.InputJsonObject,
           },
         });
@@ -130,49 +106,6 @@ export async function resolveTelegramOAuthUser(profile: TelegramOidcProfile): Pr
             image: avatarUrl,
           },
         };
-      }
-
-      if (linkEmail) {
-        const byEmail = await tx.user.findUnique({ where: { email: linkEmail } });
-        if (byEmail) {
-          if (byEmail.status === "BLOCKED") return { kind: "blocked" as const };
-          if (byEmail.status !== "ACTIVE") return { kind: "inactive" as const };
-
-          await tx.userIdentity.create({
-            data: {
-              userId: byEmail.id,
-              provider: TELEGRAM_IDENTITY_PROVIDER,
-              providerUserId: sub,
-              username,
-              displayName,
-              avatarUrl,
-              metadata: {
-                linkedFrom: "telegram_oidc_email_match",
-                emailVerifiedFromProvider: emailVerified,
-              } satisfies Prisma.InputJsonObject,
-            },
-          });
-
-          const nextVerified = byEmail.emailVerified || emailVerified;
-          if (nextVerified !== byEmail.emailVerified) {
-            await tx.user.update({
-              where: { id: byEmail.id },
-              data: { emailVerified: true },
-            });
-          }
-
-          return {
-            kind: "ok" as const,
-            telegramIdentityLinked: true,
-            user: {
-              id: byEmail.id,
-              email: byEmail.email,
-              name: byEmail.name,
-              role: byEmail.role as UserRole,
-              image: avatarUrl,
-            },
-          };
-        }
       }
 
       const syn = syntheticTelegramEmail(sub);
@@ -217,8 +150,8 @@ export async function resolveTelegramOAuthUser(profile: TelegramOidcProfile): Pr
         };
       }
 
-      const oauthOnlySecret = `__oauth_telegram__${randomBytes(32).toString("hex")}`;
-      const passwordHash = await hashPassword(oauthOnlySecret);
+      const widgetOnlySecret = `__widget_telegram__${randomBytes(32).toString("hex")}`;
+      const passwordHash = await hashPassword(widgetOnlySecret);
 
       const created = await tx.user.create({
         data: {
@@ -241,7 +174,8 @@ export async function resolveTelegramOAuthUser(profile: TelegramOidcProfile): Pr
           displayName,
           avatarUrl,
           metadata: {
-            source: "telegram_oidc_register",
+            source: "telegram_widget_register",
+            authDate: profile.auth_date,
           } satisfies Prisma.InputJsonObject,
         },
       });

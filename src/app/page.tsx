@@ -5,7 +5,6 @@
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, CreditCard, ImageIcon, Video, Zap } from "lucide-react";
 
-import { getAppName } from "@/lib/app-name";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -144,19 +143,6 @@ export default function HomePage() {
           </div>
         </section>
       </main>
-
-      {/* Подвал */}
-      <footer className="bg-card/50 border-t py-8">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 sm:flex-row">
-          <p className="text-muted-foreground text-sm">
-            © {new Date().getFullYear()} {getAppName()}. Все права защищены.
-          </p>
-          <div className="flex gap-6 text-sm text-muted-foreground">
-            <Link href="/terms" className="hover:text-foreground transition-colors">Условия использования</Link>
-            <Link href="/privacy" className="hover:text-foreground transition-colors">Конфиденциальность</Link>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

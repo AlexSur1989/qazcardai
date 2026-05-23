@@ -5,23 +5,23 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getSession, signIn } from "next-auth/react";
 
+import { TelegramLoginButton } from "@/components/auth/telegram-login-button";
 import { Button } from "@/components/ui/button";
-import {
-  pickLoginRedirectParam,
-  postAuthLandingPath,
-} from "@/lib/auth";
+import { postAuthLandingPath } from "@/lib/auth";
+
+type RegisterFormProps = {
+  telegramAuthEnabled: boolean;
+  telegramBotUsername?: string;
+  telegramAuthUrl?: string;
+};
 
 function RegisterFormInner({
   telegramAuthEnabled,
-}: {
-  telegramAuthEnabled: boolean;
-}) {
+  telegramBotUsername,
+  telegramAuthUrl,
+}: RegisterFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const rawRedirect = pickLoginRedirectParam(
-    searchParams.get("next"),
-    searchParams.get("callbackUrl"),
-  );
   const oauthErr = searchParams.get("error");
 
   const [email, setEmail] = useState("");
@@ -29,19 +29,6 @@ function RegisterFormInner({
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [telegramLoading, setTelegramLoading] = useState(false);
-
-  async function loginTelegram() {
-    setError(null);
-    setTelegramLoading(true);
-    try {
-      const target = postAuthLandingPath(rawRedirect, undefined);
-      await signIn("telegram", { callbackUrl: target });
-    } catch {
-      setError("Не удалось войти через Telegram. Попробуйте снова.");
-      setTelegramLoading(false);
-    }
-  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -87,6 +74,9 @@ function RegisterFormInner({
     }
   }
 
+  const showTelegramWidget =
+    telegramAuthEnabled && telegramBotUsername && telegramAuthUrl;
+
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-12">
       <h1 className="text-2xl font-semibold tracking-tight">Регистрация</h1>
@@ -102,7 +92,7 @@ function RegisterFormInner({
 
       {oauthErr ? (
         <p className="text-destructive mt-4 text-sm" role="alert">
-          Не удалось войти через Telegram. Попробуйте снова.
+          Не удалось войти через Telegram. Попробуйте ещё раз.
         </p>
       ) : null}
 
@@ -157,12 +147,12 @@ function RegisterFormInner({
             {error}
           </p>
         ) : null}
-        <Button type="submit" disabled={loading || telegramLoading}>
+        <Button type="submit" disabled={loading}>
           {loading ? "Регистрация…" : "Зарегистрироваться"}
         </Button>
       </form>
 
-      {telegramAuthEnabled ? (
+      {showTelegramWidget ? (
         <div className="mt-6 space-y-3">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -172,17 +162,10 @@ function RegisterFormInner({
               <span className="bg-background text-muted-foreground px-2">или</span>
             </div>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            disabled={loading || telegramLoading}
-            onClick={() => void loginTelegram()}
-          >
-            {telegramLoading
-              ? "Переход в Telegram…"
-              : "Зарегистрироваться через Telegram"}
-          </Button>
+          <TelegramLoginButton
+            botUsername={telegramBotUsername}
+            authUrl={telegramAuthUrl}
+          />
         </div>
       ) : null}
 
@@ -195,11 +178,7 @@ function RegisterFormInner({
   );
 }
 
-export function RegisterForm({
-  telegramAuthEnabled,
-}: {
-  telegramAuthEnabled: boolean;
-}) {
+export function RegisterForm(props: RegisterFormProps) {
   return (
     <Suspense
       fallback={
@@ -208,7 +187,7 @@ export function RegisterForm({
         </main>
       }
     >
-      <RegisterFormInner telegramAuthEnabled={telegramAuthEnabled} />
+      <RegisterFormInner {...props} />
     </Suspense>
   );
 }
