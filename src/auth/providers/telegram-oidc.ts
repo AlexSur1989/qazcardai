@@ -24,6 +24,7 @@ export default function Telegram(
     id: "telegram",
     name: "Telegram",
     type: "oidc",
+    issuer: "https://oauth.telegram.org",
     wellKnown: "https://oauth.telegram.org/.well-known/openid-configuration",
     authorization: {
       params: {
