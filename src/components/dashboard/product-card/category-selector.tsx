@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import type { ProductCategory, ProductCategoryId } from "@/config/product-card-categories";
+import { formatProductCategoryClassifierReason } from "@/lib/product-card-classifier-ui";
 
 import type { CategorySourceUi, ClassifyInfo, ClassifyFlowState } from "./use-product-card-project";
 
@@ -22,16 +23,8 @@ type Props = {
   classifyError: string | null;
   classifyInfo: ClassifyInfo;
   onClassify: () => void | Promise<void>;
-  onMockTest: () => void;
   onSelectCategory: (id: ProductCategoryId) => void;
 };
-
-function sourceLabel(s: CategorySourceUi): string {
-  if (s === "ai") return "AI (сервер)";
-  if (s === "mock") return "тест (mock)";
-  if (s === "manual") return "вручную";
-  return "—";
-}
 
 export function CategorySelector({
   hasImage,
@@ -44,7 +37,6 @@ export function CategorySelector({
   classifyError,
   classifyInfo,
   onClassify,
-  onMockTest,
   onSelectCategory,
 }: Props) {
   if (!hasImage) {
@@ -59,9 +51,6 @@ export function CategorySelector({
     );
   }
 
-  const selected = selectedCategory
-    ? categories.find((c) => c.id === selectedCategory)
-    : undefined;
   const showMockProviderHint = classifyInfo?.provider === "mock";
   const showAiSuggestion =
     Boolean(classifyInfo?.label) &&
@@ -95,11 +84,6 @@ export function CategorySelector({
             <AlertDescription>
               Не удалось уверенно распознать категорию — по умолчанию выставлено «Прочее». При
               необходимости выберите другую категорию вручную.
-              {classifyInfo.reason?.trim() ? (
-                <span className="mt-2 block text-sm opacity-90">
-                  {classifyInfo.reason.trim()}
-                </span>
-              ) : null}
             </AlertDescription>
           </Alert>
         )}
@@ -150,9 +134,6 @@ export function CategorySelector({
             {classifyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Определить категорию (AI)
           </Button>
-          <Button type="button" variant="secondary" onClick={onMockTest} disabled={!canPersist}>
-            Тест: «Прочее»
-          </Button>
         </div>
         {!canPersist && (
           <p className="text-muted-foreground text-xs">
@@ -161,17 +142,26 @@ export function CategorySelector({
           </p>
         )}
 
-        {classifyInfo && !classifyLoading && (
+        {classifyInfo && !classifyLoading && !classifyInfo.classifierFailed && (
           <div className="text-muted-foreground text-xs">
             {typeof classifyInfo.confidence === "number" && !showMockProviderHint && (
               <span className="text-foreground font-medium">
                 Уверенность: {Math.round(classifyInfo.confidence * 100)}%
               </span>
             )}
-            {typeof classifyInfo.confidence === "number" && !showMockProviderHint && classifyInfo.reason
-              ? " · "
-              : null}
-            {classifyInfo.reason}
+            {(() => {
+              const userReason = formatProductCategoryClassifierReason(
+                classifyInfo.reason,
+                classifyInfo.classifierFailed,
+              );
+              if (!userReason) return null;
+              return (
+                <>
+                  {typeof classifyInfo.confidence === "number" && !showMockProviderHint ? " · " : null}
+                  {userReason}
+                </>
+              );
+            })()}
           </div>
         )}
 
@@ -196,23 +186,6 @@ export function CategorySelector({
             ))}
           </select>
         </div>
-
-        {selected && (
-          <div className="qaz-surface-muted max-w-2xl space-y-2 p-4">
-            <p className="text-foreground text-sm font-medium">{selected.label}</p>
-            <p className="text-muted-foreground text-sm leading-relaxed">{selected.description}</p>
-            <div className="flex flex-wrap gap-1.5">
-              {selected.subcategories.map((s) => (
-                <Badge key={s} variant="secondary" className="text-xs font-normal">
-                  {s}
-                </Badge>
-              ))}
-            </div>
-            {categorySource && (
-              <p className="text-muted-foreground text-xs">Источник: {sourceLabel(categorySource)}</p>
-            )}
-          </div>
-        )}
       </CardContent>
     </Card>
   );

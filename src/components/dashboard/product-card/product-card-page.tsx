@@ -11,7 +11,6 @@ import type {
   ProductCardScenarioKey,
   ProductCardScenarioToggles,
 } from "@/server/services/productCardSettings";
-import type { ProductCardMarketplaceProfile } from "@/config/product-card-marketplace-profiles";
 
 import { CardBuilderTab } from "./card-builder-tab";
 import { CategorySelector } from "./category-selector";
@@ -65,8 +64,6 @@ type Props = {
   videoPresets: VideoPreset[];
   /** Показать режим разметки оверлея (админ) */
   canMarketplaceLayoutDebug?: boolean;
-  /** Профили маркетплейсов для мастера «Создать карточку» (server merge + AppSetting). */
-  cardBuilderMarketplaceProfiles: ProductCardMarketplaceProfile[];
 };
 
 export function ProductCardPage({
@@ -76,7 +73,6 @@ export function ProductCardPage({
   marketplaceCardSizes,
   videoPresets,
   canMarketplaceLayoutDebug = false,
-  cardBuilderMarketplaceProfiles,
 }: Props) {
   const {
     initDone,
@@ -92,9 +88,9 @@ export function ProductCardPage({
     classifyFlow,
     classifyError,
     canUseBackend,
+    ensureProjectId,
     classifyLoading,
     runClassify,
-    runMockCategory,
     setManualCategory,
   } = useProductCardProject();
 
@@ -189,7 +185,6 @@ export function ProductCardPage({
         classifyError={classifyError}
         classifyInfo={classifyInfo}
         onClassify={runClassify}
-        onMockTest={runMockCategory}
         onSelectCategory={setManualCategory}
       />
 
@@ -217,7 +212,8 @@ export function ProductCardPage({
         <Tabs
           value={resolvedTab}
           onValueChange={(v) => {
-            if (hasImage) setTab(v as TabId);
+            const next = v as TabId;
+            if (hasImage || next === "cardBuilder") setTab(next);
           }}
           className="gap-4"
         >
@@ -229,7 +225,7 @@ export function ProductCardPage({
               <TabsTrigger
                 key={t.id}
                 value={t.id}
-                disabled={!hasImage}
+                disabled={t.id !== "cardBuilder" && !hasImage}
                 className="rounded-lg border border-transparent px-4 py-2.5 text-sm data-active:border-primary data-active:bg-primary/10 data-active:shadow-sm"
               >
                 {tabLabel(t.scenario)}
@@ -259,12 +255,10 @@ export function ProductCardPage({
           </TabsContent>
           <TabsContent value="cardBuilder" className="mt-4">
             <CardBuilderTab
-              hasImage={hasImage}
-              canUseBackend={canUseBackend}
+              initDone={initDone}
+              ensureProjectId={ensureProjectId}
               projectId={projectId}
-              selectedCategory={selectedCategory}
               balanceCredits={balanceDisplay}
-              marketplaceProfiles={cardBuilderMarketplaceProfiles}
             />
           </TabsContent>
           <TabsContent value="video" className="mt-4">

@@ -118,11 +118,12 @@ export async function resolveCardBuilderImageModel(): Promise<{
 
   const dedicated = await resolveStrictProductCardModel("PRODUCT_CARD_BUILDER");
   if (dedicated && dedicated.productCardModelType === "PRODUCT_CARD_BUILDER") {
+    if (!dedicated.supportsImageInput) return null;
     return { model: dedicated, fallbackFromMarketplaceCard: false };
   }
 
   const mp = await resolveStrictProductCardModel("PRODUCT_MARKETPLACE_CARD");
-  if (mp) {
+  if (mp && mp.supportsImageInput) {
     return { model: mp, fallbackFromMarketplaceCard: true };
   }
   return null;
@@ -152,6 +153,36 @@ export async function resolveDefaultProductVideoModel(): Promise<AiModel | null>
 /** Классификатор категории по фото (Product Card). */
 export async function resolveDefaultProductClassifierModel(): Promise<AiModel | null> {
   return resolveStrictProductCardModel("PRODUCT_CLASSIFIER");
+}
+
+/** Модель анализа фото для card_builder; fallback — PRODUCT_CLASSIFIER. */
+export async function resolveProductCardVisionModel(): Promise<AiModel | null> {
+  const envSlug = (process.env.PRODUCT_CARD_VISION_MODEL_SLUG ?? "").trim();
+  if (envSlug) {
+    const wrongScope = await prisma.aiModel.findFirst({
+      where: { slug: envSlug, isActive: true, scope: "GENERAL" },
+      select: { id: true },
+    });
+    if (wrongScope) {
+      throw new ProductCardModelMisconfiguredError(envSlug);
+    }
+    const bySlug = await prisma.aiModel.findFirst({
+      where: {
+        slug: envSlug,
+        scope: "PRODUCT_CARD",
+        isActive: true,
+        supportsImageInput: true,
+      },
+    });
+    if (bySlug) return bySlug;
+  }
+  return resolveDefaultProductClassifierModel();
+}
+
+/** card_builder требует image input для сохранения товара 1:1. */
+export function cardBuilderModelProductImageError(model: AiModel): string | null {
+  if (model.supportsImageInput) return null;
+  return `Модель «${model.slug}» не поддерживает исходное фото товара и не подходит для «Создать карточку».`;
 }
 
 /**

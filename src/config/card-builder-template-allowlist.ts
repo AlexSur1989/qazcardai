@@ -1,9 +1,9 @@
 import type { ProductCardMarketplaceProfile } from "@/config/product-card-marketplace-profiles";
-import type { PlannerBucket } from "@/config/card-builder-gallery-sequences";
+import type { PlannerBucket } from "@/config/card-builder-planner-bucket";
 import {
   inferPlannerBucket,
   type GallerySequenceInput,
-} from "@/config/card-builder-gallery-sequences";
+} from "@/config/card-builder-planner-bucket";
 import {
   type CardBuilderTemplateDefinition,
   getCardBuilderTemplate,

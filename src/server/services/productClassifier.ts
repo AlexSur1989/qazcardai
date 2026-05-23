@@ -104,7 +104,7 @@ function validateClassifierJson(parsed: unknown): Validated | null {
   return { category, confidence, reason };
 }
 
-async function readImageForVision(imageUrl: string): Promise<{
+export async function readImageForVision(imageUrl: string): Promise<{
   mime: string;
   base64: string;
 }> {

@@ -3,23 +3,10 @@
  * Идентификаторы целей должны совпадать с ветвлением в productCardBuilderPlan.
  */
 
-export const CARD_BUILDER_MARKETPLACES = [
-  { id: "kaspi", label: "Kaspi" },
-  { id: "halyk_market", label: "Halyk Market" },
-  { id: "olx", label: "OLX" },
-  { id: "lamoda", label: "Lamoda" },
-  { id: "wildberries", label: "Wildberries" },
-  { id: "ozon", label: "Ozon" },
-  { id: "yandex_market", label: "Яндекс Маркет" },
-  { id: "avito", label: "Avito" },
-  { id: "amazon", label: "Amazon" },
-  { id: "shopify", label: "Shopify" },
-  { id: "instagram_vk", label: "Instagram / VK" },
-  { id: "own_site", label: "Свой сайт" },
-  { id: "other", label: "Другое" },
-] as const;
+/** Legacy id в сохранённых планах; UI card_builder больше не выбирает площадку. */
+export const CARD_BUILDER_DEFAULT_MARKETPLACE_ID = "other" as const;
 
-export type CardBuilderMarketplaceId = (typeof CARD_BUILDER_MARKETPLACES)[number]["id"];
+export type CardBuilderMarketplaceId = typeof CARD_BUILDER_DEFAULT_MARKETPLACE_ID;
 
 /** Цели мастера (id → подпись в UI); совпадают с switch в buildCardBuilderGalleryPlan */
 export const CARD_BUILDER_GOALS = [
@@ -57,30 +44,6 @@ export const CARD_BUILDER_PRESERVE_ASPECTS = [
   { id: "material", label: "материал" },
   { id: "packaging", label: "упаковка" },
   { id: "details", label: "детали" },
-] as const;
-
-export const CARD_BUILDER_BENEFIT_TAGS = [
-  { id: "design", label: "Дизайн" },
-  { id: "material", label: "Материал" },
-  { id: "size", label: "Размер" },
-  { id: "comfort", label: "Комфорт" },
-  { id: "reliability", label: "Надёжность" },
-  { id: "premium_feel", label: "Премиальность" },
-  { id: "gift", label: "Для подарка" },
-  { id: "home", label: "Для дома" },
-  { id: "office", label: "Для офиса" },
-  { id: "sport", label: "Для спорта" },
-  { id: "kitchen", label: "Для кухни" },
-] as const;
-
-export const CARD_BUILDER_MUST_SHOW = [
-  { id: "texture", label: "фактуру" },
-  { id: "scale", label: "масштаб" },
-  { id: "usage", label: "использование" },
-  { id: "packaging", label: "упаковку" },
-  { id: "details", label: "детали" },
-  { id: "color", label: "цвет" },
-  { id: "brand_style", label: "брендовый стиль" },
 ] as const;
 
 export const CARD_BUILDER_AUDIENCES = [
@@ -129,24 +92,3 @@ export const CARD_BUILDER_LANGUAGE_MODES = [
   { id: "mixed", label: "Смешанный" },
 ] as const;
 
-/** Порядок слайдов для полной галереи из 6 (роли изображений Kie-плана) */
-export const CARD_BUILDER_GALLERY_6_ROLES: readonly CardBuilderImageRole[] = [
-  "main_photo",
-  "benefits_infographic",
-  "materials",
-  "dimensions",
-  "lifestyle",
-  "premium_poster",
-];
-
-/** Порядок слайдов для полной галереи из 8 */
-export const CARD_BUILDER_GALLERY_8_ROLES: readonly CardBuilderImageRole[] = [
-  "main_photo",
-  "benefits_infographic",
-  "materials",
-  "dimensions",
-  "detail_closeup",
-  "lifestyle",
-  "packaging",
-  "premium_poster",
-];

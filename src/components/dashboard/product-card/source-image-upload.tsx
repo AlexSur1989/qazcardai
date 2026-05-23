@@ -47,6 +47,12 @@ type Props = {
   disabled?: boolean;
   /** Сообщает родителю о этапе: idle / uploading / uploaded / error */
   onUploadFlowChange?: (state: UploadFlowState) => void;
+  /** purpose для POST /api/uploads */
+  uploadPurpose?:
+    | "product_card_source_image"
+    | "product_card_card_builder_source";
+  title?: string;
+  description?: string;
 };
 
 /**
@@ -58,6 +64,9 @@ export function SourceImageUpload({
   onChange,
   disabled = false,
   onUploadFlowChange,
+  uploadPurpose = "product_card_source_image",
+  title = "Загрузите фото товара",
+  description = "Это фото будет использоваться для определения категории и как основа для генерации.",
 }: Props) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -97,7 +106,7 @@ export function SourceImageUpload({
       try {
         const form = new FormData();
         form.set("file", file);
-        form.set("purpose", "product_card_source_image");
+        form.set("purpose", uploadPurpose);
         const res = await fetch("/api/uploads", { method: "POST", body: form });
         const data = (await res.json()) as {
           url?: string;
@@ -130,7 +139,7 @@ export function SourceImageUpload({
         setUploading(false);
       }
     },
-    [emitFlow, onChange],
+    [emitFlow, onChange, uploadPurpose],
   );
 
   const onPick = () => {
@@ -169,12 +178,8 @@ export function SourceImageUpload({
   return (
     <div className="space-y-3">
       <div>
-        <h2 className="text-foreground text-lg font-semibold tracking-tight">
-          Загрузите фото товара
-        </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Это фото будет использоваться для определения категории и как основа для генерации.
-        </p>
+        <h2 className="text-foreground text-lg font-semibold tracking-tight">{title}</h2>
+        <p className="text-muted-foreground mt-1 text-sm">{description}</p>
       </div>
 
       {has && !value.isLocalPreview && !uploading && !err && (

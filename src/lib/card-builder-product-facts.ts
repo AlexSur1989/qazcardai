@@ -1,0 +1,223 @@
+import type { CardBuilderTemplateSlideRole } from "@/config/card-builder-templates";
+
+export const CARD_BUILDER_PRODUCT_FACT_TYPES = [
+  "benefit",
+  "material",
+  "dimension",
+  "usage",
+  "detail",
+  "package",
+  "feature",
+  "ingredient",
+  "effect",
+  "compatibility",
+  "care",
+  "other",
+] as const;
+
+export type CardBuilderProductFactType = (typeof CARD_BUILDER_PRODUCT_FACT_TYPES)[number];
+
+export const CARD_BUILDER_PRODUCT_FACT_SOURCES = ["vision_ai", "user", "category_field"] as const;
+
+export type CardBuilderProductFactSource =
+  (typeof CARD_BUILDER_PRODUCT_FACT_SOURCES)[number];
+
+export type CardBuilderProductFact = {
+  id: string;
+  label: string;
+  value: string;
+  type: CardBuilderProductFactType;
+  visibleOnCard?: boolean;
+  lockedText?: boolean;
+  source: CardBuilderProductFactSource;
+  confidence?: number;
+  needsReview?: boolean;
+};
+
+const LOW_CONFIDENCE_THRESHOLD = 0.55;
+
+export function newProductFactId(): string {
+  return `pf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function sanitizeProductFact(raw: unknown): CardBuilderProductFact | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const label = typeof o.label === "string" ? o.label.trim().slice(0, 120) : "";
+  const value = typeof o.value === "string" ? o.value.trim().slice(0, 400) : "";
+  if (!label || !value) return null;
+  const typeRaw = typeof o.type === "string" ? o.type.trim() : "other";
+  const type = (CARD_BUILDER_PRODUCT_FACT_TYPES as readonly string[]).includes(typeRaw)
+    ? (typeRaw as CardBuilderProductFactType)
+    : "other";
+  const sourceRaw = typeof o.source === "string" ? o.source.trim() : "user";
+  const source = (CARD_BUILDER_PRODUCT_FACT_SOURCES as readonly string[]).includes(sourceRaw)
+    ? (sourceRaw as CardBuilderProductFactSource)
+    : "user";
+  const id =
+    typeof o.id === "string" && o.id.trim().length >= 4
+      ? o.id.trim().slice(0, 64)
+      : newProductFactId();
+  let confidence: number | undefined;
+  if (typeof o.confidence === "number" && Number.isFinite(o.confidence)) {
+    confidence = Math.min(1, Math.max(0, o.confidence));
+  }
+  const needsReview =
+    o.needsReview === true ||
+    (source === "vision_ai" && confidence != null && confidence < LOW_CONFIDENCE_THRESHOLD);
+  return {
+    id,
+    label,
+    value,
+    type,
+    visibleOnCard: o.visibleOnCard !== false,
+    lockedText: o.lockedText !== false,
+    source,
+    confidence,
+    needsReview,
+  };
+}
+
+export function normalizeProductFactsList(raw: unknown): CardBuilderProductFact[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CardBuilderProductFact[] = [];
+  const seen = new Set<string>();
+  for (const row of raw) {
+    const f = sanitizeProductFact(row);
+    if (!f) continue;
+    const key = `${f.label.toLowerCase()}|${f.value.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(f);
+    if (out.length >= 32) break;
+  }
+  return out;
+}
+
+const SLIDE_FACT_TYPES: Partial<Record<CardBuilderTemplateSlideRole, CardBuilderProductFactType[]>> =
+  {
+    main_photo: [],
+    benefits_infographic: ["benefit", "feature"],
+    detail_closeup: ["detail", "feature"],
+    materials: ["material"],
+    dimensions: ["dimension"],
+    lifestyle: ["usage"],
+    packaging: ["package"],
+    premium_poster: ["benefit", "feature"],
+    ad_banner: ["benefit", "feature"],
+  };
+
+export function productFactsForSlideRole(
+  facts: readonly CardBuilderProductFact[],
+  slideRole: CardBuilderTemplateSlideRole,
+): CardBuilderProductFact[] {
+  const allowed = SLIDE_FACT_TYPES[slideRole] ?? ["other", "detail"];
+  return facts.filter(
+    (f) =>
+      f.visibleOnCard !== false &&
+      (allowed.includes(f.type) || (slideRole === "benefits_infographic" && f.type === "other")),
+  );
+}
+
+/** Есть ли видимые преимущества для слайда benefits_infographic. */
+export function hasBenefitProductFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  return facts.some(
+    (f) =>
+      f.type === "benefit" &&
+      f.visibleOnCard !== false &&
+      f.value.trim().length > 0,
+  );
+}
+
+export const CARD_BUILDER_PRODUCT_FACT_TYPE_LABELS: Record<CardBuilderProductFactType, string> = {
+  benefit: "Преимущество",
+  material: "Материал",
+  dimension: "Размер / объём / вес",
+  usage: "Использование",
+  detail: "Деталь",
+  package: "Упаковка / комплект",
+  feature: "Функция",
+  ingredient: "Состав",
+  effect: "Эффект",
+  compatibility: "Совместимость",
+  care: "Уход",
+  other: "Другое",
+};
+
+export function benefitLinesFromProductFacts(
+  facts: readonly CardBuilderProductFact[],
+): string[] {
+  return facts
+    .filter((f) => f.type === "benefit" && f.value.trim())
+    .map((f) => f.value.trim());
+}
+
+export function benefitTextareaValue(facts: readonly CardBuilderProductFact[]): string {
+  return benefitLinesFromProductFacts(facts).join("\n");
+}
+
+/** Заменяет benefit-факты строками из textarea; остальные facts не трогает. */
+export function mergeBenefitFactsFromTextarea(
+  facts: readonly CardBuilderProductFact[],
+  textarea: string,
+): CardBuilderProductFact[] {
+  const others = facts.filter((f) => f.type !== "benefit");
+  const lines: string[] = [];
+  for (const part of textarea.split(/\r?\n/)) {
+    const v = part.trim();
+    if (!v) continue;
+    lines.push(v.slice(0, 400));
+    if (lines.length >= 12) break;
+  }
+  const benefits: CardBuilderProductFact[] = lines.map((value) => ({
+    id: newProductFactId(),
+    label: "Преимущество",
+    value,
+    type: "benefit",
+    source: "user",
+    visibleOnCard: true,
+    lockedText: true,
+  }));
+  return [...others, ...benefits];
+}
+
+export function nonBenefitProductFacts(
+  facts: readonly CardBuilderProductFact[],
+): CardBuilderProductFact[] {
+  return facts.filter((f) => f.type !== "benefit");
+}
+
+export function hasDimensionProductFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  return facts.some(
+    (f) => f.type === "dimension" && f.visibleOnCard !== false && f.value.trim().length > 0,
+  );
+}
+
+export function hasPackageProductFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  return facts.some(
+    (f) => f.type === "package" && f.visibleOnCard !== false && f.value.trim().length > 0,
+  );
+}
+
+export function lockedTextPhrasesFromFacts(
+  facts: readonly CardBuilderProductFact[],
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const f of facts) {
+    if (f.lockedText === false || !f.value.trim()) continue;
+    const v = f.value.trim();
+    const key = v.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(v);
+  }
+  return out;
+}
+
+export function benefitLinesFromFacts(facts: readonly CardBuilderProductFact[]): string[] {
+  return productFactsForSlideRole(facts, "benefits_infographic")
+    .filter((f) => f.lockedText !== false)
+    .map((f) => f.value.trim())
+    .filter(Boolean);
+}

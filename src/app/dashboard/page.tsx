@@ -17,11 +17,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getDashboardSnapshot } from "@/lib/dashboard-data";
+import { isDashboardSubscriptionPlanUiEnabled } from "@/lib/dashboard-ui-settings";
 import { formatKzt, formatRuDate } from "@/lib/format-kzt";
 import { cn } from "@/lib/utils";
 import { redirect } from "next/navigation";
 import { getUserLastTokenPackage } from "@/server/services/tokenPackages";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
+import { getAppSetting } from "@/server/services/appSettings";
 
 export const metadata = {
   title: "Кабинет — QazCard AI",
@@ -33,10 +35,12 @@ export default async function DashboardPage() {
     redirect("/login?next=/dashboard");
   }
 
-  const [data, lastPack] = await Promise.all([
+  const [data, lastPack, subscriptionPlanUiRaw] = await Promise.all([
     getDashboardSnapshot(current.user.id),
     getUserLastTokenPackage(current.user.id),
+    getAppSetting("DASHBOARD_SUBSCRIPTION_PLAN_UI_ENABLED"),
   ]);
+  const showSubscriptionPlanUi = isDashboardSubscriptionPlanUiEnabled(subscriptionPlanUiRaw);
 
   if (!data.ok) {
     return (
@@ -98,7 +102,12 @@ export default async function DashboardPage() {
         </AlertDescription>
       </Alert>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div
+        className={cn(
+          "grid gap-4",
+          showSubscriptionPlanUi ? "sm:grid-cols-2" : "max-w-md",
+        )}
+      >
         <Card>
           <CardHeader>
             <CardTitle>Баланс</CardTitle>
@@ -109,24 +118,26 @@ export default async function DashboardPage() {
             <p className="text-muted-foreground mt-1 text-xs">токенов</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Тариф</CardTitle>
-            <CardDescription>Активный план, если оформлен</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {activePlan ? (
-              <div>
-                <p className="text-lg font-medium">{activePlan.name}</p>
-              </div>
-            ) : (
-              <DashboardSectionEmpty
-                title="Активный тариф не подключён"
-                description="Когда оформите подписку или пакет, информация отобразится здесь."
-              />
-            )}
-          </CardContent>
-        </Card>
+        {showSubscriptionPlanUi ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Тариф</CardTitle>
+              <CardDescription>Активный план, если оформлен</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {activePlan ? (
+                <div>
+                  <p className="text-lg font-medium">{activePlan.name}</p>
+                </div>
+              ) : (
+                <DashboardSectionEmpty
+                  title="Активный тариф не подключён"
+                  description="Когда оформите подписку, информация отобразится здесь."
+                />
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
 
       <Card>

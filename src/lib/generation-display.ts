@@ -1,5 +1,4 @@
 import type { GenerationStatus, GenerationType } from "@/generated/prisma/enums";
-import { CARD_BUILDER_MARKETPLACES } from "@/config/card-builder-config";
 import { getPublicProductCategories } from "@/config/product-card-categories";
 import { getFirstOutputPreviewUrl, parseOutputFilesList } from "@/lib/generation-output-utils";
 import { sanitizeUserFacingErrorMessage } from "@/lib/user-facing-copy";
@@ -78,8 +77,8 @@ export function getUserFacingMarketplaceLabel(
 ): string | null {
   if (!marketplace?.trim()) return null;
   const id = marketplace.trim();
-  const found = CARD_BUILDER_MARKETPLACES.find((m) => m.id === id);
-  return found?.label ?? id.replace(/_/g, " ");
+  if (id === "other" || id === "universal") return "Универсальная карточка";
+  return id.replace(/_/g, " ");
 }
 
 /** Статус генерации для пользователя. */

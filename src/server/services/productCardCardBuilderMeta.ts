@@ -5,6 +5,15 @@ import type {
   CardBuilderPlanInput,
 } from "@/server/services/productCardBuilderPlan";
 
+/** Отдельное фото товара для сценария «Создать карточку». */
+export type CardBuilderSourceImage = {
+  url: string;
+  fileId: string;
+  fileName?: string;
+  size?: number;
+  updatedAt?: string;
+};
+
 /** Состояние «Создать карточку» внутри ProductCardProject.metadata (изолированно от marketplace_card). */
 export type CardBuilderStoredSettings = CardBuilderPlanInput & {
   updatedAt?: string;
@@ -25,6 +34,8 @@ export type CardBuilderGenerationEntry = {
 };
 
 export type CardBuilderProjectBlock = {
+  /** Отдельное фото товара только для сценария «Создать карточку». */
+  sourceImage?: CardBuilderSourceImage;
   settings?: CardBuilderStoredSettings;
   galleryPlan?: CardBuilderGallerySlide[];
   /** Поля на будущее */

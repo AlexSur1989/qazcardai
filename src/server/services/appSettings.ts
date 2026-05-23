@@ -4,6 +4,11 @@ import { writeAdminAuditLog } from "@/lib/admin-audit";
 import {
   validateAppSettingValueForType,
 } from "@/lib/app-setting-value";
+import { validateCardBuilderPromptsForSave } from "@/lib/validations/card-builder-prompts-setting";
+import {
+  clearCardBuilderPromptsSettingsCache,
+  PRODUCT_CARD_CARD_BUILDER_PROMPTS_KEY,
+} from "@/server/services/cardBuilderPromptsSettings";
 import {
   isMaintenanceAllowAdminEnv,
   isMaintenanceModeEnv,
@@ -190,6 +195,13 @@ export async function setAppSettingFromRegistry(input: {
   if (def.sensitive) {
     return { ok: false, error: "sensitive" };
   }
+  if (def.key === PRODUCT_CARD_CARD_BUILDER_PROMPTS_KEY) {
+    const promptsValid = validateCardBuilderPromptsForSave(input.value);
+    if (!promptsValid.ok) {
+      return { ok: false, error: promptsValid.errors.join("; ") };
+    }
+    input.value = promptsValid.value;
+  }
   const valid = validateAppSettingValueForType(def.type, input.value);
   if (!valid.ok) {
     return { ok: false, error: valid.message };
@@ -224,6 +236,9 @@ export async function setAppSettingFromRegistry(input: {
     newValue: { value: newValue, key: def.key, group: def.group },
     metadata: { key: def.key, group: def.group },
   });
+  if (def.key === PRODUCT_CARD_CARD_BUILDER_PROMPTS_KEY) {
+    clearCardBuilderPromptsSettingsCache();
+  }
   return { ok: true, newValue };
 }
 

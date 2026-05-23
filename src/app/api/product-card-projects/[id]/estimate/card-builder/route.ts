@@ -23,8 +23,7 @@ import {
   cardBuilderGoalToSlideRole,
 } from "@/server/services/productCardBuilderPlan";
 import {
-  marketplaceBenefitsOverLimitMessage,
-  resolveProductCardMarketplaceProfile,
+  resolveCardBuilderPlanMarketplaceProfile,
 } from "@/server/services/productCardMarketplaceProfiles";
 import {
   cardBuilderLivePlanFingerprintInputs,
@@ -136,17 +135,9 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Нужны параметры структуры" }, { status: 400 });
   }
 
-  const mpRes = await resolveProductCardMarketplaceProfile(plan.marketplace);
+  const mpRes = await resolveCardBuilderPlanMarketplaceProfile(plan);
   if (!mpRes.ok) {
     return NextResponse.json({ error: mpRes.error, code: mpRes.code }, { status: mpRes.status });
-  }
-
-  const benefitErr = marketplaceBenefitsOverLimitMessage(plan.benefits, mpRes.profile);
-  if (benefitErr) {
-    return NextResponse.json(
-      { error: benefitErr, code: "CARD_BUILDER_TOO_MANY_BENEFITS" },
-      { status: 400 },
-    );
   }
 
   const model = (await resolveCardBuilderImageModel())?.model ?? null;

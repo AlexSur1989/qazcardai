@@ -24,6 +24,8 @@ export type UploadPurpose =
   | "product_card_source"
   /** Алиас для исходника «карточка товара» (то же поведение, что product_card_source) */
   | "product_card_source_image"
+  /** Исходник только для сценария «Создать карточку» */
+  | "product_card_card_builder_source"
   /** Референс стиля для мастера «Создать карточку» */
   | "product_card_style_reference"
   | "generation_input"
@@ -37,6 +39,7 @@ const ALLOWED_PURPOSES = new Set<string>([
   "kling_motion_video",
   "product_card_source",
   "product_card_source_image",
+  "product_card_card_builder_source",
   "product_card_style_reference",
   "generation_input",
   "seedance_reference_image",
@@ -217,7 +220,11 @@ export async function POST(req: Request) {
     fileType = "audio";
     storageKey = `uploads/${userId}/${ts}-${idPart}-seedance-refaud${extForMime(v.mime)}`;
     metaPurpose = "seedance_reference_audio";
-  } else if (purpose === "product_card_source" || purpose === "product_card_source_image") {
+  } else if (
+    purpose === "product_card_source" ||
+    purpose === "product_card_source_image" ||
+    purpose === "product_card_card_builder_source"
+  ) {
     const v = validateProductCardSourceImageBuffer(
       file.name,
       file.type,
@@ -232,9 +239,17 @@ export async function POST(req: Request) {
     }
     vMime = v.mime;
     fileType = "image";
-    storageKey = `uploads/${userId}/${ts}-${idPart}-product-card${extForMime(v.mime)}`;
+    const suffix =
+      purpose === "product_card_card_builder_source"
+        ? "-card-builder-src"
+        : "-product-card";
+    storageKey = `uploads/${userId}/${ts}-${idPart}${suffix}${extForMime(v.mime)}`;
     metaPurpose =
-      purpose === "product_card_source_image" ? "product_card_source_image" : "product_card_source";
+      purpose === "product_card_source_image"
+        ? "product_card_source_image"
+        : purpose === "product_card_card_builder_source"
+          ? "product_card_card_builder_source"
+          : "product_card_source";
   } else if (purpose === "product_card_style_reference") {
     const v = validateProductCardSourceImageBuffer(file.name, file.type, file.size, buf);
     if (!v.ok) {

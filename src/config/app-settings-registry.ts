@@ -1,4 +1,5 @@
 import type { AppSettingTypeName } from "@/lib/app-setting-value";
+import { CARD_BUILDER_PROMPTS_DEFAULTS } from "@/config/card-builder-prompts-defaults";
 
 export type AppSettingGroupId =
   | "general"
@@ -74,6 +75,17 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
     description: "Сколько токенов начислять новым пользователям.",
     type: "number",
     defaultValue: 0,
+    editable: true,
+    sensitive: false,
+  },
+  {
+    key: "DASHBOARD_SUBSCRIPTION_PLAN_UI_ENABLED",
+    group: "credits",
+    label: "DASHBOARD_SUBSCRIPTION_PLAN_UI_ENABLED / Блок «Тариф» в кабинете",
+    description:
+      "Показывать карточку «Тариф» (подписка) на странице /dashboard. По умолчанию выключено — тарифы пока не реализованы.",
+    type: "boolean",
+    defaultValue: false,
     editable: true,
     sensitive: false,
   },
@@ -645,13 +657,13 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
     sensitive: false,
   },
   {
-    key: "PRODUCT_CARD_MARKETPLACE_PROFILES",
+    key: "PRODUCT_CARD_CARD_BUILDER_PROMPTS",
     group: "productCard",
-    label: "PRODUCT_CARD_MARKETPLACE_PROFILES / Маркетплейсы «Создать карточку»",
+    label: "PRODUCT_CARD_CARD_BUILDER_PROMPTS / Промпты «Создать карточку»",
     description:
-      "JSON-массив профилей (patch поверх кодовых defaults по полю id). Пустой [] или только дефолт из реестра — полный список из кода.",
+      "JSON-набор промптов card_builder (vision, slide base, category/cardType/template, text lock, negative rules). Редактируется в /admin/product-card.",
     type: "json",
-    defaultValue: [],
+    defaultValue: CARD_BUILDER_PROMPTS_DEFAULTS,
     editable: true,
     sensitive: false,
   },

@@ -5,13 +5,13 @@ import {
   PRODUCT_CATEGORY_GROUPS,
   PRODUCT_VIDEO_MOTION_STYLES,
 } from "@/config/product-card-categories";
-import { ProductCardMarketplaceProfilesForm } from "@/components/admin/product-card-marketplace-profiles-form";
 import {
   BASE_PRODUCT_PHOTO_PROMPT,
   MARKETPLACE_CARD_BASE_PROMPT,
 } from "@/config/product-card-prompts";
-import { PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS } from "@/config/product-card-marketplace-profiles";
+import { UNIVERSAL_CARD_BUILDER_PROFILE } from "@/config/universal-card-builder-profile";
 import { ProductCardScenariosForm } from "@/components/admin/product-card-scenarios-form";
+import { ProductCardCardBuilderPromptsPanel } from "@/components/admin/product-card-card-builder-prompts-panel";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getAppSettingsByGroup } from "@/server/services/appSettings";
@@ -25,8 +25,8 @@ import {
   type ProductCardPriceBreakdown,
 } from "@/server/services/productCardPricing";
 import { resolveCardBuilderImageModel } from "@/server/services/productCardModelResolver";
-import { buildCardBuilderSuperPrompt } from "@/server/services/cardBuilderPromptBuilder";
-import { getMergedProductCardMarketplaceProfiles } from "@/server/services/productCardMarketplaceProfiles";
+import { buildCardBuilderSuperPromptWithAppSettings } from "@/server/services/cardBuilderPromptBuilder";
+import { PRODUCT_CARD_CARD_BUILDER_PROMPTS_KEY } from "@/server/services/cardBuilderPromptsSettings";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,10 +57,10 @@ const TABS = [
   ["pricing", "Pricing"],
   ["categories", "Categories"],
   ["concepts", "Concepts"],
-  ["prompts", "Prompts"],
+  ["prompts", "Prompts (legacy)"],
+  ["card-builder-prompts", "Промпты Создать карточку"],
   ["video", "Video"],
   ["calculator", "Price Calculator"],
-  ["marketplaces", "Маркетплейсы"],
 ] as const;
 
 function jsonPreview(value: unknown): string {
@@ -73,14 +73,13 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
 
   const params = await searchParams;
   const active = TABS.some(([id]) => id === params?.tab) ? params?.tab ?? "overview" : "overview";
-  const [settingsRows, productSettings, models, mergedMarketplaceProfiles] = await Promise.all([
+  const [settingsRows, productSettings, models] = await Promise.all([
     getAppSettingsByGroup("productCard"),
     getProductCardSettings(),
     prisma.aiModel.findMany({
       where: { scope: "PRODUCT_CARD" },
       orderBy: [{ productCardModelType: "asc" }, { name: "asc" }],
     }),
-    getMergedProductCardMarketplaceProfiles(),
   ]);
 
   const activeModels = models.filter((m) => m.isActive);
@@ -193,23 +192,29 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
 
   const calculatorRows = await Promise.all(calculatorPromises);
 
-  const ozonMarketplaceProfile =
-    mergedMarketplaceProfiles.find((p) => p.id === "ozon") ??
-    PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "ozon") ??
-    null;
-
-  const cardBuilderSuperPromptSample = buildCardBuilderSuperPrompt({
+  const cardBuilderSuperPromptSample = await buildCardBuilderSuperPromptWithAppSettings({
     productTitle: "Қысқы балақлава",
-    subtitle: "Жаңа топтама",
     selectedCategory: "apparel",
-    marketplace: "ozon",
-    marketplaceProfile: ozonMarketplaceProfile,
+    marketplace: "other",
+    targetPlatform: "universal",
+    marketplaceProfile: UNIVERSAL_CARD_BUILDER_PROFILE,
     slideRole: "benefits_infographic",
     templateId: "benefits_grid",
     layoutPreset: "product_right_text_left",
-    benefits: ["comfort", "material"],
-    additionalBenefits: "Жеңіл материал",
-    mustShow: ["texture"],
+    cardBuilderCategoryKey: "food_grocery",
+    visualStyle: "clean_minimal",
+    productNameGuess: "Балақлава",
+    productFacts: [
+      {
+        id: "fact_1",
+        label: "Состав",
+        value: "Миндаль, мёд",
+        type: "ingredient",
+        source: "vision_ai",
+        lockedText: true,
+        visibleOnCard: true,
+      },
+    ],
     audience: "mass_market",
     priceSegment: "middle",
     salesStyle: "infographic",
@@ -221,6 +226,9 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
   });
 
   const scenariosSetting = settingsRows.find((row) => row.key === "PRODUCT_CARD_SCENARIOS")?.value;
+  const cardBuilderPromptsSetting = settingsRows.find(
+    (row) => row.key === PRODUCT_CARD_CARD_BUILDER_PROMPTS_KEY,
+  )?.value;
   const canPatchSettings = hasPermission(adminUser.role, "settings.manage");
 
   return (
@@ -314,24 +322,6 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
         </Card>
       ) : null}
 
-      {active === "marketplaces" ? (
-        canPatchSettings ? (
-          <ProductCardMarketplaceProfilesForm
-            initialMergedProfiles={mergedMarketplaceProfiles}
-            canPatchSettings={canPatchSettings}
-          />
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Маркетплейсы «Создать карточку»</CardTitle>
-            </CardHeader>
-            <CardContent className="text-muted-foreground text-sm">
-              Редактирование JSON профилей доступно с правом «Настройки — изменение» (settings.manage).
-            </CardContent>
-          </Card>
-        )
-      ) : null}
-
       {active === "models" ? (
         <Card>
           <CardHeader><CardTitle>Product Card Models</CardTitle></CardHeader>
@@ -418,6 +408,13 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
         </Card>
       ) : null}
 
+      {active === "card-builder-prompts" ? (
+        <ProductCardCardBuilderPromptsPanel
+          initialValue={cardBuilderPromptsSetting ?? null}
+          canPatch={canPatchSettings}
+        />
+      ) : null}
+
       {active === "prompts" ? (
         <div className="space-y-4">
           <Card>
@@ -441,9 +438,8 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
                 <>
                   <div className="text-muted-foreground text-xs">
                     {cardBuilderSuperPromptSample.data.promptVersion} ·{" "}
-                    {cardBuilderSuperPromptSample.data.textLockLevel} ·{" "}
-                    {cardBuilderSuperPromptSample.data.textRenderMode} · designFlexible:{" "}
-                    {String(cardBuilderSuperPromptSample.data.designFlexible)} · фразы:{" "}
+                    {cardBuilderSuperPromptSample.data.promptMeta.promptSource} ·{" "}
+                    {cardBuilderSuperPromptSample.data.textLockLevel} · фразы:{" "}
                     {cardBuilderSuperPromptSample.data.exactTextPhrases.join(" | ")}
                   </div>
                   <pre className="bg-muted max-h-[28rem] overflow-auto rounded-lg p-3 text-xs whitespace-pre-wrap">

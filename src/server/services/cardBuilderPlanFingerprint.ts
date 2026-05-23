@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { ProductCategoryId } from "@/config/product-card-categories";
 import { PRODUCT_CARD_MARKETPLACE_PROFILE_VERSION } from "@/config/product-card-marketplace-profiles";
-import { normalizeFlatCategoryFieldRecord } from "@/lib/card-builder-category-fields-runtime";
 import { styleReferenceFingerprintPayload } from "@/lib/card-builder-style-reference";
 
 import type { CardBuilderGallerySlide, CardBuilderPlanInput } from "@/server/services/productCardBuilderPlan";
@@ -14,61 +12,21 @@ export type CardBuilderPlanFingerprintInput = {
   preserveProduct?: boolean;
   preserveAspects: string[];
   allowCreativeStylization?: boolean;
-  benefits: string[];
-  benefitsExtra?: string;
-  subtitle?: string;
-  dimensions?: string;
   languageMode?: string;
-  mustShow: string[];
   audience: string;
   priceSegment: string;
   salesStyle: string;
   textDensity: string;
   marketplaceProfileId?: string;
   marketplaceProfileVersion?: string;
-  categoryFieldsFingerprint?: Record<string, unknown>;
+  targetPlatform?: string;
+  cardBuilderCategoryKey?: string;
+  creationMode?: string;
+  singleCardType?: string;
+  visualStyle?: string;
+  productFactsFingerprint?: string;
   styleReferenceFingerprint?: Record<string, unknown>;
 };
-
-function sortRecordKeys(m: Record<string, string>): Record<string, string> {
-  return [...Object.keys(m)].sort().reduce<Record<string, string>>((acc, key) => {
-    acc[key] = m[key]!;
-    return acc;
-  }, {});
-}
-
-function buildCategoryFieldsFingerprint(plan: CardBuilderPlanInput): Record<string, unknown> | undefined {
-  type CatKey = Extract<ProductCategoryId, string>;
-
-  const snap = plan.categoryFields;
-  const snapNorm =
-    snap?.categoryKey && snap.values && typeof snap.values === "object"
-      ? {
-          categoryKey: String(snap.categoryKey).trim(),
-          values: sortRecordKeys(normalizeFlatCategoryFieldRecord(snap.values as Record<string, unknown>)),
-        }
-      : null;
-
-  const by = plan.categoryFieldsByCategory;
-  const byOut: Record<string, Record<string, string>> = {};
-
-  if (by && typeof by === "object") {
-    for (const k of [...Object.keys(by)].sort()) {
-      const m = by[k as CatKey];
-      if (!m || typeof m !== "object") continue;
-      const norm = normalizeFlatCategoryFieldRecord(m as Record<string, unknown>);
-      if (Object.keys(norm).length) byOut[String(k)] = sortRecordKeys(norm);
-    }
-  }
-
-  const hasBy = Object.keys(byOut).length > 0;
-  if (!snapNorm && !hasBy) return undefined;
-
-  const out: Record<string, unknown> = {};
-  if (snapNorm) out.snapshot = snapNorm;
-  if (hasBy) out.byCategory = byOut;
-  return out;
-}
 
 function slideStrip(slides: CardBuilderGallerySlide[]) {
   return slides.map((s) => ({
@@ -78,6 +36,22 @@ function slideStrip(slides: CardBuilderGallerySlide[]) {
     layoutPreset: s.layoutPreset,
     sourceImageMode: s.sourceImageMode,
   }));
+}
+
+function productFactsFingerprint(plan: CardBuilderPlanInput): string | undefined {
+  const facts = plan.productFacts ?? [];
+  if (!facts.length) return undefined;
+  const norm = facts
+    .map((f) => ({
+      id: f.id,
+      label: f.label.trim(),
+      value: f.value.trim(),
+      type: f.type,
+      visibleOnCard: f.visibleOnCard ?? true,
+      lockedText: f.lockedText ?? false,
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return createHash("sha256").update(JSON.stringify(norm)).digest("hex");
 }
 
 /** Детеминированный отпечаток плана: estimate отдаёт hash, generate сверяет до reserveCredits. */
@@ -92,21 +66,19 @@ export function computeCardBuilderPlanFingerprint(
     preserveProduct: plan.preserveProduct ?? true,
     preserveAspects: [...plan.preserveAspects].sort(),
     allowCreativeStylization: Boolean(plan.allowCreativeStylization),
-    benefits: [...plan.benefits].sort(),
-    benefitsExtra: (plan.benefitsExtra ?? "").trim(),
-    subtitle: (plan.subtitle ?? "").trim(),
-    dimensions: (plan.dimensions ?? "").trim(),
     languageMode: plan.languageMode ?? "auto",
-    mustShow: [...plan.mustShow].sort(),
     audience: plan.audience,
     priceSegment: plan.priceSegment,
     salesStyle: plan.salesStyle,
     textDensity: plan.textDensity,
+    targetPlatform: plan.targetPlatform ?? "universal",
+    cardBuilderCategoryKey: plan.cardBuilderCategoryKey ?? "auto",
+    creationMode: plan.creationMode ?? "full_gallery",
+    singleCardType: plan.singleCardType ?? "auto",
+    visualStyle: plan.visualStyle ?? "auto",
     ...(plan.marketplaceProfileId ? { marketplaceProfileId: plan.marketplaceProfileId } : {}),
     ...(plan.marketplaceProfileVersion ? { marketplaceProfileVersion: plan.marketplaceProfileVersion } : {}),
-    ...(plan.categoryFieldsFingerprint && Object.keys(plan.categoryFieldsFingerprint).length
-      ? { categoryFieldsFingerprint: plan.categoryFieldsFingerprint }
-      : {}),
+    ...(plan.productFactsFingerprint ? { productFactsFingerprint: plan.productFactsFingerprint } : {}),
     ...(plan.styleReferenceFingerprint && Object.keys(plan.styleReferenceFingerprint).length
       ? { styleReferenceFingerprint: plan.styleReferenceFingerprint }
       : {}),
@@ -119,13 +91,12 @@ export function computeCardBuilderPlanFingerprint(
   return createHash("sha256").update(body).digest("hex");
 }
 
-/** Вход fingerprint из актуального плана + id профиля (merge из AppSetting уже в planInput.marketplaceProfileId если сохранено). */
 export function cardBuilderLivePlanFingerprintInputs(
   plan: CardBuilderPlanInput,
   profileId: string,
 ): CardBuilderPlanFingerprintInput {
-  const categoryFieldsFingerprint = buildCategoryFieldsFingerprint(plan);
   const styleReferenceFingerprint = styleReferenceFingerprintPayload(plan.styleReference);
+  const factsFp = productFactsFingerprint(plan);
   return {
     selectedCategory: plan.selectedCategory,
     marketplace: plan.marketplace,
@@ -133,19 +104,19 @@ export function cardBuilderLivePlanFingerprintInputs(
     preserveProduct: plan.preserveProduct ?? true,
     preserveAspects: plan.preserveAspects ?? [],
     allowCreativeStylization: plan.allowCreativeStylization,
-    benefits: plan.benefits ?? [],
-    benefitsExtra: plan.benefitsExtra,
-    subtitle: plan.subtitle,
-    dimensions: plan.dimensions,
     languageMode: plan.languageMode,
-    mustShow: plan.mustShow ?? [],
     audience: plan.audience,
     priceSegment: plan.priceSegment,
     salesStyle: plan.salesStyle,
     textDensity: plan.textDensity,
+    targetPlatform: plan.targetPlatform,
+    cardBuilderCategoryKey: plan.cardBuilderCategoryKey,
+    creationMode: plan.creationMode,
+    singleCardType: plan.singleCardType,
+    visualStyle: plan.visualStyle,
     marketplaceProfileId: profileId,
     marketplaceProfileVersion: PRODUCT_CARD_MARKETPLACE_PROFILE_VERSION,
-    ...(categoryFieldsFingerprint ? { categoryFieldsFingerprint } : {}),
+    ...(factsFp ? { productFactsFingerprint: factsFp } : {}),
     ...(styleReferenceFingerprint ? { styleReferenceFingerprint } : {}),
   };
 }

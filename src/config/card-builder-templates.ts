@@ -385,7 +385,7 @@ export const CARD_BUILDER_TEMPLATES: Record<string, CardBuilderTemplateDefinitio
   feature_callouts: {
     templateId: "feature_callouts",
     label: "Функции и коллауты",
-    slideRole: "detail_closeup",
+    slideRole: "benefits_infographic",
     recommendedFor: ["gadgets_and_tech"],
     layoutPreset: "callouts_over_detail",
     overlayTemplatePreset: "feature_grid",

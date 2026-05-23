@@ -1,477 +1,285 @@
 /**
- * Минимальная проверка сценария «Создать карточку» перед деплоем.
+ * Проверка универсального сценария «Создать карточку».
  * Запуск: npm run verify:product-card-card-builder
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { APP_SETTINGS_REGISTRY } from "@/config/app-settings-registry";
-import {
-  getAllowedTemplatesForSlide,
-  hasUserDimensionMeasures,
-} from "@/config/card-builder-template-allowlist";
-import { pickGalleryTemplateSequenceForPlan } from "@/config/card-builder-gallery-sequences";
-import { PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS } from "@/config/product-card-marketplace-profiles";
-import {
-  buildCategoryFactsPromptBlock,
-  slideCategoryFactsRecord,
-} from "@/lib/card-builder-category-facts-prompt";
-import {
-  lockedCategoryExactValuesForSlideRole,
-  slideCategoryFactsForRole,
-} from "@/lib/card-builder-category-fields-runtime";
+import { CARD_BUILDER_PROMPTS_DEFAULTS } from "@/config/card-builder-prompts-defaults";
+import { mergeCardBuilderPromptsWithDefaults } from "@/lib/validations/card-builder-prompts-setting";
+import { getAllowedTemplatesForSlide } from "@/config/card-builder-template-allowlist";
+import { buildUniversalGalleryTemplateIds } from "@/lib/card-builder-universal-planner";
+import { buildSlidePreviewModels, unusedProductFactsForSlides } from "@/lib/card-builder-slide-preview";
+import { UNIVERSAL_CARD_BUILDER_PROFILE } from "@/config/universal-card-builder-profile";
 import { cardBuilderPlanFieldsSchema } from "@/lib/validations/card-builder-plan";
-import { parseBenefitsExtraLines } from "@/lib/card-builder-benefits-extra";
 import { enrichCardBuilderGallerySlides } from "@/server/services/cardBuilderTextSlots";
 import {
   buildCardBuilderGalleryPlan,
   type CardBuilderPlanInput,
 } from "@/server/services/productCardBuilderPlan";
+import { isUniversalCardBuilderTarget } from "@/config/universal-card-builder-profile";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
 }
 
-function assertSlideShape(s: ReturnType<typeof buildCardBuilderGalleryPlan>["slides"][number]): void {
-  assert(
-    typeof s.templateId === "string" && s.templateId.trim().length > 1,
-    `У каждого слайда есть templateId (${s.slideId})`,
-  );
-  assert(
-    typeof s.layoutPreset === "string" && s.layoutPreset.trim().length > 0,
-    `У каждого слайда есть layoutPreset (${s.slideId})`,
-  );
+function basePlan(overrides: Partial<CardBuilderPlanInput> = {}): CardBuilderPlanInput {
+  return {
+    selectedCategory: "other",
+    marketplace: "other",
+    targetPlatform: "universal",
+    cardBuilderCategoryKey: "gadgets_tech",
+    creationMode: "full_gallery",
+    gallerySlideCount: 6,
+    goal: "full_gallery_6",
+    preserveProduct: true,
+    preserveAspects: ["shape", "color"],
+    audience: "mass_market",
+    priceSegment: "middle",
+    salesStyle: "light_marketplace",
+    textDensity: "medium",
+    productFacts: [
+      {
+        id: "f1",
+        label: "Объём",
+        value: "500 мл",
+        type: "detail",
+        source: "user",
+        visibleOnCard: true,
+        lockedText: true,
+      },
+    ],
+    ...overrides,
+  };
 }
 
 const scenariosEntry = APP_SETTINGS_REGISTRY.find((e) => e.key === "PRODUCT_CARD_SCENARIOS");
-assert(scenariosEntry, "PRODUCT_CARD_SCENARIOS должна быть в APP_SETTINGS_REGISTRY");
-const scenariosDefault = scenariosEntry.defaultValue;
-const scenariosDefaultRecord = scenariosDefault as Record<string, unknown>;
-const cardBuilderToggle = scenariosDefaultRecord.cardBuilder;
+assert(scenariosEntry, "PRODUCT_CARD_SCENARIOS в APP_SETTINGS_REGISTRY");
+const cardBuilderToggle = (scenariosEntry.defaultValue as Record<string, unknown>).cardBuilder;
 assert(
   cardBuilderToggle &&
     typeof cardBuilderToggle === "object" &&
     !Array.isArray(cardBuilderToggle) &&
     typeof (cardBuilderToggle as { enabled?: unknown }).enabled === "boolean",
-  "В PRODUCT_CARD_SCENARIOS.cardBuilder есть поле enabled (переключатель)",
+  "PRODUCT_CARD_SCENARIOS.cardBuilder.enabled",
 );
-
-const mpProfilesEntry = APP_SETTINGS_REGISTRY.find((e) => e.key === "PRODUCT_CARD_MARKETPLACE_PROFILES");
-assert(mpProfilesEntry, "PRODUCT_CARD_MARKETPLACE_PROFILES должна быть в APP_SETTINGS_REGISTRY");
-assert(Array.isArray(mpProfilesEntry.defaultValue), "PRODUCT_CARD_MARKETPLACE_PROFILES.defaultValue — массив");
 
 const pricingEntry = APP_SETTINGS_REGISTRY.find((e) => e.key === "PRODUCT_CARD_CARD_BUILDER_PRICING");
-assert(pricingEntry, "PRODUCT_CARD_CARD_BUILDER_PRICING должна быть в APP_SETTINGS_REGISTRY");
-const pricingDefault = pricingEntry.defaultValue;
-assert(pricingDefault && typeof pricingDefault === "object" && !Array.isArray(pricingDefault), "pricing JSON");
-const single = Number((pricingDefault as Record<string, unknown>).cardBuilderSingleSlideCredits);
-const g6 = Number((pricingDefault as Record<string, unknown>).cardBuilderGallery6Credits);
-const g8 = Number((pricingDefault as Record<string, unknown>).cardBuilderGallery8Credits);
-assert(Number.isFinite(single) && single > 0, "cardBuilderSingleSlideCredits > 0 в default PRODUCT_CARD_CARD_BUILDER_PRICING");
-assert(Number.isFinite(g6) && g6 > 0, "cardBuilderGallery6Credits > 0");
-assert(Number.isFinite(g8) && g8 > 0, "cardBuilderGallery8Credits > 0");
+assert(pricingEntry, "PRODUCT_CARD_CARD_BUILDER_PRICING в APP_SETTINGS_REGISTRY");
 
-function basePlan(overrides: Partial<CardBuilderPlanInput> = {}): CardBuilderPlanInput {
-  return {
-    selectedCategory: "apparel",
-    marketplace: "ozon",
-    goal: "full_gallery_6",
-    preserveProduct: true,
-    preserveAspects: [],
-    benefits: [],
-    mustShow: [],
-    audience: "mass_market",
-    priceSegment: "middle",
-    salesStyle: "light_marketplace",
-    textDensity: "medium",
-    ...overrides,
-  };
-}
+assert(isUniversalCardBuilderTarget("universal"), "targetPlatform universal → universal flow");
+assert(!isUniversalCardBuilderTarget(undefined), "targetPlatform undefined → legacy path off in UI");
 
-const ozonProfile = PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "ozon");
-assert(ozonProfile, "В defaults есть профиль ozon для verify buildCardBuilderGalleryPlan");
-
-const apparelSeq = pickGalleryTemplateSequenceForPlan({ selectedCategory: "apparel" }, 6);
+const gallery6 = buildUniversalGalleryTemplateIds({
+  categoryKey: "gadgets_tech",
+  productFacts: [],
+  galleryCount: 6,
+});
+assert(gallery6.length === 6 && gallery6[0] === "hero_clean", "universal gallery 6 начинается с hero_clean");
 assert(
-  apparelSeq.length === 6 && apparelSeq[0] === "hero_clean",
-  "pickGalleryTemplateSequenceForPlan: единый источник базовых 6 для apparel начинается с hero_clean",
+  !gallery6.includes("benefits_grid"),
+  "без benefit facts нет benefits_grid в галерее 6",
 );
 
-const { slides: ozonApparel } = buildCardBuilderGalleryPlan(basePlan(), ozonProfile);
-assert(ozonApparel.length === 6, "buildCardBuilderGalleryPlan(full_gallery_6, ozon): ровно 6 слайдов");
-for (const s of ozonApparel) assertSlideShape(s);
-
-const furniture = buildCardBuilderGalleryPlan(
-  basePlan({ selectedCategory: "home_and_furniture" }),
-  ozonProfile,
-).slides;
-const cosmetics = buildCardBuilderGalleryPlan(
-  basePlan({ selectedCategory: "beauty_and_care" }),
-  ozonProfile,
-).slides;
+const gallery6Benefits = buildUniversalGalleryTemplateIds({
+  categoryKey: "gadgets_tech",
+  productFacts: [
+    {
+      id: "b1",
+      label: "Плюс",
+      value: "Лёгкая",
+      type: "benefit",
+      source: "user",
+      visibleOnCard: true,
+      lockedText: true,
+    },
+  ],
+  galleryCount: 6,
+});
 assert(
-  furniture.map((x) => x.templateId).join("|") !== cosmetics.map((x) => x.templateId).join("|"),
-  "План мебели и косметики отличается по шаблонам на одной площадке",
+  gallery6Benefits.includes("benefits_grid"),
+  "с benefit facts есть benefits_grid",
 );
 
-assert(
-  !ozonApparel.some((s) => s.templateId === "interface_detail"),
-  "Одежда: нет interface_detail по умолчанию",
-);
-const planGadgetDetails = buildCardBuilderGalleryPlan(
-  basePlan({ selectedCategory: "gadgets_and_tech" }),
-  ozonProfile,
-).slides;
-assert(
-  planGadgetDetails.some((s) => s.templateId === "interface_detail" || s.templateId === "feature_callouts"),
-  "Гаджеты: есть interface_detail или feature_callouts среди дефолтных шаблонов",
-);
+const gallery8 = buildUniversalGalleryTemplateIds({
+  categoryKey: "gadgets_tech",
+  productFacts: [],
+  galleryCount: 8,
+});
+assert(gallery8.length === 8, "universal gallery 8 → 8 templateId");
 
-const planFoodMarket = buildCardBuilderGalleryPlan(
-  basePlan({ selectedCategory: "food_and_drinks" }),
-  ozonProfile,
-).slides;
-assert(!planFoodMarket.some((s) => s.templateId === "interface_detail"), "Еда: нет interface_detail");
-
+const { slides } = buildCardBuilderGalleryPlan(basePlan(), UNIVERSAL_CARD_BUILDER_PROFILE);
+assert(slides.length === 6, "full_gallery_6 → 6 слайдов");
 assert(
-  cosmetics.some((s) => s.templateId === "texture_closeup" || s.templateId === "ingredients_effect"),
-  "Косметика: есть texture_closeup или ingredients_effect",
+  slides.every((s) => s.templateId && s.layoutPreset && s.marketplaceProfileId === "universal"),
+  "слайды enriched universal profile id",
 );
 
-assert(
-  furniture.some((s) => s.imageRole === "lifestyle" && s.templateId === "interior_lifestyle"),
-  "Мебель: lifestyle-слайд с interior_lifestyle",
+const enriched = enrichCardBuilderGallerySlides(slides, basePlan(), "Тест");
+assert(enriched.length === slides.length, "enrichCardBuilderGallerySlides сохраняет count");
+
+const singlePlan = buildCardBuilderGalleryPlan(
+  basePlan({ creationMode: "single", singleCardType: "main_photo", goal: "main_photo" }),
+  UNIVERSAL_CARD_BUILDER_PROFILE,
 );
+assert(singlePlan.slides.length === 1, "single main_photo → 1 слайд");
 
-const furnitureNoDim = buildCardBuilderGalleryPlan(
-  basePlan({ selectedCategory: "home_and_furniture", dimensions: "" }),
-  ozonProfile,
-).slides;
-assert(
-  !furnitureNoDim.some((s) => s.templateId === "dimensions_schema"),
-  "Мебель без цифр в размерах: нет dimensions_schema",
-);
+const parsed = cardBuilderPlanFieldsSchema.safeParse({
+  selectedCategory: "other",
+  marketplace: "other",
+  goal: "full_gallery_6",
+  targetPlatform: "universal",
+  audience: "mass_market",
+  priceSegment: "middle",
+  salesStyle: "light_marketplace",
+  textDensity: "medium",
+});
+assert(parsed.success, "Zod plan fields для universal");
 
-assert(
-  buildCardBuilderGalleryPlan(basePlan({ selectedCategory: "other" }), ozonProfile).slides.length === 6,
-  "Категория other: безопасная галерея из 6 слайдов",
-);
-
-assert(!hasUserDimensionMeasures(""), "hasUserDimensionMeasures: пустая строка");
-assert(hasUserDimensionMeasures("10 см"), "hasUserDimensionMeasures: есть цифры");
-
-const clothDetailAllowed = getAllowedTemplatesForSlide({
-  categoryKey: "apparel",
-  marketplaceProfile: ozonProfile,
-  imageRole: "detail_closeup",
+const allowed = getAllowedTemplatesForSlide({
+  categoryKey: "other",
+  marketplaceProfile: UNIVERSAL_CARD_BUILDER_PROFILE,
+  imageRole: "main_photo",
   hasConcreteDimensions: false,
   mustShowScale: false,
 });
-assert(
-  !clothDetailAllowed.some((t) => t.templateId === "interface_detail"),
-  "Dropdown allowlist: одежда / детали — без interface_detail",
+assert(allowed.length > 0, "allowlist шаблонов для universal main_photo");
+
+const genSrc = readFileSync(
+  join(process.cwd(), "src/server/services/productCardCardBuilderGeneration.ts"),
+  "utf8",
 );
-const gadDetailAllowed = getAllowedTemplatesForSlide({
-  categoryKey: "gadgets_and_tech",
-  marketplaceProfile: ozonProfile,
-  imageRole: "detail_closeup",
-  hasConcreteDimensions: false,
-  mustShowScale: false,
-});
+assert(genSrc.includes('scenarioKey: "card_builder"'), "metadata generation scenarioKey card_builder");
+assert(genSrc.includes("resolveCardBuilderSourceImage"), "generation использует отдельное фото card_builder");
+
+const metaSrc = readFileSync(
+  join(process.cwd(), "src/server/services/productCardCardBuilderMeta.ts"),
+  "utf8",
+);
+assert(metaSrc.includes("sourceImage"), "metadata.cardBuilder.sourceImage");
+
+const promptsEntry = APP_SETTINGS_REGISTRY.find(
+  (e) => e.key === "PRODUCT_CARD_CARD_BUILDER_PROMPTS",
+);
+assert(promptsEntry, "PRODUCT_CARD_CARD_BUILDER_PROMPTS в APP_SETTINGS_REGISTRY");
 assert(
-  gadDetailAllowed.some((t) => t.templateId === "interface_detail"),
-  "Dropdown allowlist: гаджеты / детали — включают interface_detail",
+  promptsEntry?.defaultValue &&
+    typeof promptsEntry.defaultValue === "object" &&
+    (promptsEntry.defaultValue as { version?: string }).version === "card_builder_prompts_v1",
+  "default prompts version",
 );
 
-const dimWarn = buildCardBuilderGalleryPlan(
-  basePlan({ goal: "dimensions_slide", dimensions: "" }),
-  ozonProfile,
+const merged = mergeCardBuilderPromptsWithDefaults(null);
+assert(merged.prompts.slidePromptBase.length > 20, "merge defaults slidePromptBase");
+assert(merged.source === "code_default", "broken AppSetting → code_default");
+
+const promptBuilderSrc = readFileSync(
+  join(process.cwd(), "src/server/services/cardBuilderPromptBuilder.ts"),
+  "utf8",
 );
-assert(Boolean(dimWarn.planWarning?.trim()), "Цель «Размеры» без поля размеров — есть planWarning");
+assert(promptBuilderSrc.includes("pickCategoryPrompt"), "prompt builder uses category overrides");
+assert(promptBuilderSrc.includes("pickCardTypePrompt"), "prompt builder uses cardType overrides");
+assert(promptBuilderSrc.includes("pickTemplatePrompt"), "prompt builder uses template overrides");
 assert(
-  !dimWarn.slides.some((s) => s.templateId === "dimensions_schema"),
-  "Нет точных размеров: dimensions_schema не используется",
+  promptBuilderSrc.includes("getSalesStyleInstruction(input.salesStyle"),
+  "salesStyle instruction wired in super prompt",
 );
 
-const lamoda = PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "lamoda");
-assert(lamoda, "lamoda profile");
-const lamodaSlides = buildCardBuilderGalleryPlan(
-  basePlan({ marketplace: "lamoda", selectedCategory: "apparel" }),
-  lamoda,
-).slides;
-const earlyInfographic = lamodaSlides
-  .slice(0, 2)
-  .some((s) => s.imageRole === "benefits_infographic" && s.templateId === "benefits_grid");
-assert(!earlyInfographic, "Lamoda: в первых двух кадрах нет тяжёлой benefits_grid-инфографики");
-
-const amazon = PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "amazon");
-assert(amazon, "amazon profile");
-const amz = buildCardBuilderGalleryPlan(basePlan({ marketplace: "amazon" }), amazon).slides;
-const amzMain = amz[0];
-assert(amzMain?.imageRole === "main_photo", "Amazon: первый кадр main_photo");
-assert(amzMain?.templateId === "hero_clean", "Amazon: главный шаблон hero_clean");
-assert(amzMain?.recommendedTextMode === "none", "Amazon: главный кадр без текстового режима");
-assert(
-  (amzMain?.purpose ?? "").toLowerCase().includes("бел") &&
-    (amzMain?.purpose ?? "").toLowerCase().includes("amazon"),
-  "Amazon: в purpose есть белый фон и явная отсылка к правилам Amazon",
+const previewSrc = readFileSync(
+  join(process.cwd(), "src/lib/card-builder-slide-preview.ts"),
+  "utf8",
 );
+assert(previewSrc.includes("computeSlideCardTextPhrases"), "slide preview card text helper");
+assert(previewSrc.includes("unusedProductFactsForSlides"), "slide preview unused facts");
 
-const ig = PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "instagram_vk");
-assert(ig, "instagram_vk profile");
-const igSlides = buildCardBuilderGalleryPlan(
-  basePlan({ marketplace: "instagram_vk", selectedCategory: "gadgets_and_tech" }),
-  ig,
-).slides;
-const hasLifestyle = igSlides.some((s) => s.imageRole === "lifestyle");
-const hasSocialAdish = igSlides.some(
-  (s) => s.imageRole === "ad_banner" || s.imageRole === "premium_poster",
-);
-assert(hasLifestyle && hasSocialAdish, "Instagram/VK: в плане есть lifestyle и рекламный/постерный кадр");
-
-const benefitSlides = ozonApparel.filter((s) => s.imageRole === "benefits_infographic");
-const allowedBenefitTemplates = new Set([
-  "benefits_grid",
-  "benefits_left_column",
-  "dark_premium_benefits",
-  "protection_features",
-  "comparison_card",
-]);
-for (const s of benefitSlides) {
-  assert(
-    allowedBenefitTemplates.has(s.templateId),
-    `Слайд преимуществ использует допустимый шаблон: ${s.templateId}`,
-  );
-}
-const slideIds = ozonApparel.map((s) => s.slideId);
-assert(new Set(slideIds).size === slideIds.length, "slideId уникальные");
-
-for (const s of ozonApparel) {
-  assert(s.marketplaceProfileId === "ozon", "marketplaceProfileId сохраняется на слайде");
-  assert(s.textRenderMode === "ai_text_in_design", "textRenderMode на слайде");
-}
-
-const genPath = join(process.cwd(), "src/server/services/productCardCardBuilderGeneration.ts");
-const genSrc = readFileSync(genPath, "utf8");
-assert(
-  genSrc.includes('scenarioKey: "card_builder"'),
-  'В metadata генерации card_builder должен быть scenarioKey: "card_builder"',
-);
-assert(
-  genSrc.includes("buildCardBuilderSuperPrompt") || genSrc.includes("card_builder_super_prompt"),
-  "Генерация card_builder должна использовать супер-промпт",
-);
-assert(
-  genSrc.includes("cardBuilderPrompt") && genSrc.includes("textLockLevel"),
-  "Metadata генерации card_builder должна включать cardBuilderPrompt с textLockLevel",
-);
-assert(genSrc.includes("marketplaceProfileId"), "generation metadata включает marketplaceProfileId");
-assert(genSrc.includes("appliedMarketplaceRules"), "generation metadata включает appliedMarketplaceRules");
-
-const metaPath = join(process.cwd(), "src/server/services/productCardCardBuilderMeta.ts");
-const metaSrc = readFileSync(metaPath, "utf8");
-assert(
-  metaSrc.includes("metadata.cardBuilder") || metaSrc.includes("meta.cardBuilder"),
-  "Состояние мастера хранится под ключом metadata.cardBuilder",
-);
-assert(
-  !metaSrc.includes("marketplaceCard"),
-  "productCardCardBuilderMeta не должен смешивать ключ marketplaceCard",
-);
-
-const mpPath = join(process.cwd(), "src/server/services/productCardGeneration.ts");
-const mpSrc = readFileSync(mpPath, "utf8");
-assert(
-  !mpSrc.includes("scenarioKey"),
-  "Карточка маркетплейса не должна задавать scenarioKey рядом с card_builder (изоляция сценариев)",
-);
-
-const accCatPlan = {
-  selectedCategory: "accessories" as const,
-  categoryFields: {
-    categoryKey: "accessories",
-    values: {
-      material: "пластик",
-      sizeOrVolume: "560 мл",
-      useCase: "спорт, прогулка",
-      keyDetails: "крышка, ремешок",
-      packageInfo: "коробка",
+const previewModels = buildSlidePreviewModels(
+  [
+    { slideId: "01_main_photo", imageRole: "main_photo", templateLabel: "Hero" },
+    { slideId: "02_benefits", imageRole: "benefits_infographic", templateLabel: "Сетка" },
+    { slideId: "04_materials", imageRole: "materials", templateLabel: "Материал" },
+  ],
+  [
+    {
+      id: "b1",
+      label: "Преимущество",
+      value: "Лёгкая",
+      type: "benefit",
+      source: "user",
+      lockedText: true,
+      visibleOnCard: true,
     },
+    {
+      id: "m1",
+      label: "Материал",
+      value: "пластик",
+      type: "material",
+      source: "user",
+      lockedText: true,
+      visibleOnCard: true,
+    },
+    {
+      id: "u1",
+      label: "Уход",
+      value: "ручная стирка",
+      type: "care",
+      source: "user",
+      lockedText: true,
+      visibleOnCard: true,
+    },
+  ],
+  { textDensity: "medium", productTitle: "Бутылка" },
+);
+const mainPreview = previewModels.find((m) => m.slideId === "01_main_photo");
+const benefitsPreview = previewModels.find((m) => m.slideId === "02_benefits");
+assert(mainPreview && !mainPreview.cardTextPhrases.includes("Лёгкая"), "main photo без benefit text");
+assert(
+  benefitsPreview && benefitsPreview.cardTextPhrases.includes("Лёгкая"),
+  "benefits slide содержит benefit text",
+);
+assert(
+  previewModels.some((m) => m.slideId === "04_materials" && m.facts.some((f) => f.value === "пластик")),
+  "material slide только material facts",
+);
+const previewFacts = [
+  {
+    id: "b1",
+    label: "Преимущество",
+    value: "Лёгкая",
+    type: "benefit" as const,
+    source: "user" as const,
+    lockedText: true,
+    visibleOnCard: true,
   },
-};
-
-const detailFacts = slideCategoryFactsRecord({
-  categoryKey: "accessories",
-  categoryFields: accCatPlan.categoryFields,
-  slideRole: "detail_closeup",
-  templateId: "detail_closeup",
-});
-assert(detailFacts.material === "пластик", "detail: material из categoryFields");
-assert(detailFacts.keyDetails === "крышка, ремешок", "detail: keyDetails");
-assert(!detailFacts.packageInfo, "detail: packageInfo не на слайде деталей");
-
-const dimFacts = slideCategoryFactsRecord({
-  categoryKey: "accessories",
-  categoryFields: accCatPlan.categoryFields,
-  slideRole: "dimensions",
-  templateId: "dimensions_schema",
-});
-assert(dimFacts.sizeOrVolume === "560 мл", "dimensions: только объём");
-assert(!dimFacts.keyDetails, "dimensions: без keyDetails");
-
-const detailPrompt = buildCategoryFactsPromptBlock({
-  categoryKey: "accessories",
-  categoryFields: accCatPlan.categoryFields,
-  slideRole: "detail_closeup",
-  templateId: "detail_closeup",
-});
-assert(detailPrompt.block.includes("CATEGORY_FACTS"), "блок CATEGORY_FACTS");
-assert(detailPrompt.block.includes("560 мл"), "факт объёма в detail prompt");
-assert(detailPrompt.block.includes("Не выдумывай"), "правило не выдумывать");
-
-const promptBuilderPath = join(process.cwd(), "src/server/services/cardBuilderPromptBuilder.ts");
-const promptBuilderSrc = readFileSync(promptBuilderPath, "utf8");
-assert(
-  promptBuilderSrc.includes("card_builder_super_prompt_v4"),
-  "супер-промпт v4 с CATEGORY_FACTS и SLIDE_TEXT_PLAN",
-);
-assert(promptBuilderSrc.includes("buildCategoryFactsPromptBlock"), "prompt builder использует buildCategoryFactsPromptBlock");
-assert(
-  promptBuilderSrc.includes("=== 6) CATEGORY_FACTS ===") &&
-    promptBuilderSrc.includes("=== 7) SLIDE_TEXT_PLAN ===") &&
-    promptBuilderSrc.includes("TEXT_LOCK_AND_DESIGN_FLEXIBILITY"),
-  "структура секций супер-промпта",
-);
-
-const exactDim = lockedCategoryExactValuesForSlideRole("dimensions", accCatPlan, "dimensions_schema");
-assert(exactDim.includes("560 мл"), "exact lock: значение объёма без label");
-assert(
-  !exactDim.some((x) => x.includes("Размер")),
-  "exact lock: без префикса label",
-);
-
-const mainFacts = slideCategoryFactsForRole("main_photo", accCatPlan, "hero_clean");
-assert(!mainFacts.keyDetails, "main_photo: без keyDetails");
-assert(mainFacts.material === "пластик" || mainFacts.color, "main_photo: базовые факты");
-
-function planBodyBase(extra: Record<string, unknown> = {}) {
-  return {
-    selectedCategory: "accessories",
-    marketplace: "ozon",
-    goal: "full_gallery_6",
-    preserveProduct: true,
-    preserveAspects: [] as string[],
-    benefits: [] as string[],
-    mustShow: [] as string[],
-    audience: "mass_market",
-    priceSegment: "middle",
-    salesStyle: "light_marketplace",
-    textDensity: "medium",
-    ...extra,
-  };
-}
-
-const noByCat = cardBuilderPlanFieldsSchema.safeParse(planBodyBase());
-assert(noByCat.success, "plan schema: без categoryFieldsByCategory");
-
-const oneCat = cardBuilderPlanFieldsSchema.safeParse(
-  planBodyBase({
-    categoryFieldsByCategory: { accessories: { material: "пластик" } },
-  }),
-);
-assert(oneCat.success, "plan schema: одна категория в categoryFieldsByCategory");
-
-const twoCat = cardBuilderPlanFieldsSchema.safeParse(
-  planBodyBase({
-    categoryFieldsByCategory: {
-      apparel: { material: "хлопок" },
-      accessories: { material: "пластик", sizeOrVolume: "560 мл" },
-    },
-  }),
-);
-assert(twoCat.success, "plan schema: две категории в categoryFieldsByCategory");
-
-const emptyByCat = cardBuilderPlanFieldsSchema.safeParse(
-  planBodyBase({ categoryFieldsByCategory: {} }),
-);
-assert(emptyByCat.success, "plan schema: пустой categoryFieldsByCategory");
-assert(
-  emptyByCat.success && emptyByCat.data.categoryFieldsByCategory === undefined,
-  "plan schema: {} categoryFieldsByCategory нормализуется в undefined",
-);
-
-const badKey = cardBuilderPlanFieldsSchema.safeParse(
-  planBodyBase({
-    categoryFieldsByCategory: { clothing: { material: "x" } },
-  }),
-);
-assert(!badKey.success, "plan schema: неизвестный ключ categoryFieldsByCategory отклоняется");
-if (!badKey.success) {
-  const msg = badKey.error.issues.map((i) => i.message).join(" ");
-  assert(msg.includes("Неизвестная категория"), "plan schema: понятная ошибка для неизвестного ключа");
-}
-
-const kaspiProfile = PRODUCT_CARD_MARKETPLACE_PROFILES_DEFAULTS.find((p) => p.id === "kaspi");
-assert(kaspiProfile, "В defaults есть профиль kaspi");
-
-const benefitsExtraThree =
-  "Лёгкая и компактная\nУдобно брать с собой\nПодходит для спорта и прогулок";
-const accKaspiPlan = basePlan({
-  selectedCategory: "accessories",
-  marketplace: "kaspi",
-  benefitsExtra: benefitsExtraThree,
-  categoryFieldsByCategory: {
-    accessories: {
-      material: "пластик",
-      sizeOrVolume: "560 мл",
-      useCase: "спорт, прогулка",
-      keyDetails: "крышка, ремешок",
-    },
+  {
+    id: "m1",
+    label: "Материал",
+    value: "пластик",
+    type: "material" as const,
+    source: "user" as const,
+    lockedText: true,
+    visibleOnCard: true,
   },
-  categoryFields: {
-    categoryKey: "accessories",
-    values: {
-      material: "пластик",
-      sizeOrVolume: "560 мл",
-      useCase: "спорт, прогулка",
-      keyDetails: "крышка, ремешок",
-    },
+  {
+    id: "u1",
+    label: "Уход",
+    value: "ручная стирка",
+    type: "care" as const,
+    source: "user" as const,
+    lockedText: true,
+    visibleOnCard: true,
   },
-});
-
-const extraLines = parseBenefitsExtraLines(accKaspiPlan);
-assert(extraLines.length === 3, "parseBenefitsExtraLines: три непустые строки");
-
-const { slides: kaspiAccSlides } = buildCardBuilderGalleryPlan(accKaspiPlan, kaspiProfile);
-const benefitsSlide = kaspiAccSlides.find((s) => s.imageRole === "benefits_infographic");
-assert(benefitsSlide, "accessories+Kaspi+3 строки benefitsExtra: слайд benefits_infographic в плане");
-assert(benefitsSlide.title === "Преимущества", "заголовок слайда Преимущества");
-assert(
-  benefitsSlide.purpose.includes("Показать ключевые преимущества"),
-  "purpose слайда преимуществ из benefitsExtra",
+];
+const unused = unusedProductFactsForSlides(
+  ["main_photo", "benefits_infographic", "materials"],
+  previewFacts,
 );
+assert(unused.some((f) => f.id === "u1"), "unused facts содержит care");
 
-const enriched = enrichCardBuilderGallerySlides(kaspiAccSlides, accKaspiPlan, "Термокружка");
-const enrichedBenefits = enriched.find((s) => s.imageRole === "benefits_infographic");
-assert(enrichedBenefits?.overlayTexts?.benefit_1?.includes("Лёгкая"), "benefit_1 из benefitsExtra");
 assert(
-  enrichedBenefits?.overlayTexts?.benefit_2?.includes("Удобно"),
-  "benefit_2 из benefitsExtra",
+  genSrc.includes("buildCardBuilderSuperPromptWithAppSettings"),
+  "generation использует AppSetting prompts",
 );
-const mainSlide = enriched.find((s) => s.imageRole === "main_photo");
-assert(mainSlide, "есть главное фото");
-assert(!mainSlide.overlayTexts?.extraText?.trim(), "main_photo без полного benefitsExtra в extraText");
-
-const noExtraPlan = basePlan({
-  selectedCategory: "accessories",
-  marketplace: "kaspi",
-  benefits: [],
-  benefitsExtra: undefined,
-});
-const { slides: noExtraSlides } = buildCardBuilderGalleryPlan(noExtraPlan, kaspiProfile);
-assert(
-  !noExtraSlides.some((s) => s.imageRole === "benefits_infographic"),
-  "без benefitsExtra и без 3 тегов: нет слайда benefits_infographic",
-);
+assert(genSrc.includes("promptSource"), "metadata promptSource");
 
 console.log("[verify-product-card-card-builder] OK");

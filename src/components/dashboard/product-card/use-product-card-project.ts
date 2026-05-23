@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { getProductCategoryById, type ProductCategoryId } from "@/config/product-card-categories";
 import { readJsonSafe } from "@/lib/fetch-json-safe";
+import { formatProductCategoryClassifierReason } from "@/lib/product-card-classifier-ui";
 
 import type { SourceImageValue } from "./source-image-upload";
 import type {
@@ -483,10 +484,7 @@ export function useProductCardProject() {
       }
       setClassifyFlow("success");
       if (d.classifierFailed) {
-        const detail =
-          typeof d.reason === "string" && d.reason.trim().length > 0
-            ? d.reason.trim()
-            : "Не удалось определить категорию автоматически. Выберите категорию вручную.";
+        const detail = formatProductCategoryClassifierReason(d.reason, true);
         setClassifyError(detail);
         toast.error(detail);
       } else {
@@ -498,12 +496,6 @@ export function useProductCardProject() {
       setClassifyError("Сеть или сервер недоступен");
     }
   }, [projectId]);
-
-  const runMockCategory = useCallback(() => {
-    setSelectedCategory("other");
-    setCategorySource("mock");
-    if (projectId) void patchProject({ selectedCategory: "other", categorySource: "mock" });
-  }, [patchProject, projectId]);
 
   const setManualCategory = useCallback(
     (id: ProductCategoryId) => {
@@ -518,6 +510,11 @@ export function useProductCardProject() {
     if (!projectId) return false;
     return loadProject(projectId);
   }, [loadProject, projectId]);
+
+  const ensureProjectId = useCallback(async (): Promise<string | null> => {
+    if (projectId) return projectId;
+    return createEmptyProject();
+  }, [projectId, createEmptyProject]);
 
   return {
     initDone,
@@ -534,9 +531,9 @@ export function useProductCardProject() {
     classifyFlow,
     classifyError,
     canUseBackend: Boolean(projectId && source && !source.isLocalPreview),
+    ensureProjectId,
     classifyLoading: classifyFlow === "loading",
     runClassify,
-    runMockCategory,
     setManualCategory,
     reloadProject,
   };

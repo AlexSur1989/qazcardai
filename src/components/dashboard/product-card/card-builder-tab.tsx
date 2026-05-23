@@ -5,41 +5,34 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 
 import {
   CARD_BUILDER_AUDIENCES,
-  CARD_BUILDER_BENEFIT_TAGS,
-  CARD_BUILDER_GOALS,
+  CARD_BUILDER_DEFAULT_MARKETPLACE_ID,
   CARD_BUILDER_LANGUAGE_MODES,
-  CARD_BUILDER_MARKETPLACES,
-  CARD_BUILDER_MUST_SHOW,
-  CARD_BUILDER_PRESERVE_ASPECTS,
   CARD_BUILDER_PRICE_SEGMENTS,
   CARD_BUILDER_SALES_STYLES,
   CARD_BUILDER_TEXT_DENSITY,
 } from "@/config/card-builder-config";
-import type { ProductCardMarketplaceProfile } from "@/config/product-card-marketplace-profiles";
-import type { ProductCategoryId } from "@/config/product-card-categories";
 import {
-  getCategoryFieldsSafetyBullets,
-  getProductCardCategoryFieldsConfig,
-  isProductCategoryId,
-} from "@/config/product-card-category-fields";
+  CARD_BUILDER_DEFAULT_TARGET_PLATFORM,
+  type CardBuilderCreationModeId,
+  type CardBuilderSingleCardTypeId,
+  type CardBuilderUniversalCategoryId,
+  type CardBuilderVisualStyleId,
+} from "@/config/card-builder-universal";
+import { UNIVERSAL_CARD_BUILDER_PROFILE } from "@/config/universal-card-builder-profile";
 import {
-  listTemplatesForSlideRole,
-  type CardBuilderTemplateSlideRole,
-} from "@/config/card-builder-templates";
+  normalizeProductFactsList,
+  type CardBuilderProductFact,
+} from "@/lib/card-builder-product-facts";
+import { mapUniversalCategoryToPlannerCategory } from "@/lib/card-builder-universal-planner";
 import {
-  getAllowedTemplatesForSlide,
-} from "@/config/card-builder-template-allowlist";
-import {
-  CATEGORY_FIELD_VALUE_MAX_CHARS,
-  hasMeasuresFromCategoryPlan,
-  sanitizeCategoryFieldValue,
-} from "@/lib/card-builder-category-fields-runtime";
+  CardBuilderUniversalPanel,
+  type VisionSummary,
+} from "@/components/dashboard/product-card/card-builder-universal-panel";
+import { readJsonSafe } from "@/lib/fetch-json-safe";
 import {
   DEFAULT_CARD_BUILDER_STYLE_REFERENCE,
   type CardBuilderStyleReferenceStrength,
 } from "@/lib/card-builder-style-reference";
-import { cardBuilderGoalToSlideRole } from "@/server/services/productCardBuilderPlan";
-import { readJsonSafe } from "@/lib/fetch-json-safe";
 import {
   IMAGE_GENERATION_POLL_INTERVAL_MS,
   IMAGE_GENERATION_POLL_MAX_ITERATIONS,
@@ -49,19 +42,23 @@ import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import {
   getUserFacingGenerationStatusFromRaw,
-  getUserFacingMarketplaceLabel,
   getUserFacingSlideLabel,
   mapGenerationErrorToUserMessage,
 } from "@/lib/generation-display";
+import {
+  SourceImageUpload,
+  type SourceImageValue,
+} from "@/components/dashboard/product-card/source-image-upload";
+import { CardBuilderGalleryPreview } from "@/components/dashboard/product-card/card-builder-gallery-preview";
 
 const nativeFieldClass =
   "h-10 w-full min-w-0 rounded-xl border border-input bg-card px-2.5 text-sm text-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
+
+/** Фиксированные значения плана (поля убраны из UI). */
+const CARD_BUILDER_FIXED_PRESERVE_ASPECTS = ["shape", "color", "logo", "proportions"];
 
 type StyleReferenceRow = {
   url: string;
@@ -126,47 +123,48 @@ type CardBuilderGenHistoryRow = {
   createdAt?: string;
   status?: string;
   errorMessage?: string;
+  finalUrl?: string;
 };
 
 type CardBuilderBlockPayload = {
+  sourceImage?: {
+    url?: string;
+    fileId?: string;
+    fileName?: string;
+    size?: number;
+  };
   galleryPlan?: GallerySlide[];
   generations?: unknown;
   settings?: Record<string, unknown>;
 };
 
 type Props = {
-  hasImage: boolean;
-  canUseBackend: boolean;
+  initDone: boolean;
+  ensureProjectId: () => Promise<string | null>;
   projectId: string | null;
-  selectedCategory: ProductCategoryId | null;
   balanceCredits: number;
-  marketplaceProfiles: ProductCardMarketplaceProfile[];
 };
 
 export function CardBuilderTab({
-  hasImage,
-  canUseBackend,
+  initDone,
+  ensureProjectId,
   projectId,
-  selectedCategory,
   balanceCredits,
-  marketplaceProfiles,
 }: Props) {
-  const [marketplace, setMarketplace] = useState("ozon");
-  const [goal, setGoal] = useState("full_gallery_6");
-  const [preserveProduct, setPreserveProduct] = useState(true);
-  const [preserveAspects, setPreserveAspects] = useState<string[]>([
-    "shape",
-    "color",
-    "logo",
-    "proportions",
-  ]);
-  const [creativeStyle, setCreativeStyle] = useState(false);
-  const [benefitsSel, setBenefitsSel] = useState<string[]>([]);
-  const [benefitsExtra, setBenefitsExtra] = useState("");
-  const [subtitle, setSubtitle] = useState("");
-  const [dimensionsUser, setDimensionsUser] = useState("");
+  const templateProfile = UNIVERSAL_CARD_BUILDER_PROFILE;
   const [languageMode, setLanguageMode] = useState("auto");
-  const [mustSel, setMustSel] = useState<string[]>(["texture", "details"]);
+  const [categoryKey, setCategoryKey] = useState<CardBuilderUniversalCategoryId>("auto");
+  const [categoryManuallyOverridden, setCategoryManuallyOverridden] = useState(false);
+  const [productType, setProductType] = useState("");
+  const [productNameGuess, setProductNameGuess] = useState("");
+  const [productFacts, setProductFacts] = useState<CardBuilderProductFact[]>([]);
+  const [visionAnalysis, setVisionAnalysis] = useState<Record<string, unknown> | null>(null);
+  const [visionSummary, setVisionSummary] = useState<VisionSummary | null>(null);
+  const [visionLoading, setVisionLoading] = useState(false);
+  const [creationMode, setCreationMode] = useState<CardBuilderCreationModeId>("full_gallery");
+  const [singleCardType, setSingleCardType] = useState<CardBuilderSingleCardTypeId>("auto");
+  const [visualStyle, setVisualStyle] = useState<CardBuilderVisualStyleId>("auto");
+  const [gallerySlideCount, setGallerySlideCount] = useState<6 | 8>(6);
   const [audience, setAudience] = useState("mass_market");
   const [priceSegment, setPriceSegment] = useState("middle");
   const [salesStyle, setSalesStyle] = useState("light_marketplace");
@@ -199,10 +197,6 @@ export function CardBuilderTab({
   const [genHistory, setGenHistory] = useState<CardBuilderGenHistoryRow[]>([]);
   const [tplBusySlideId, setTplBusySlideId] = useState<string | null>(null);
 
-  /** Архив полей категории по ключу ProductCategoryId; при переключении категории не теряем ввод. */
-  const [categoryFieldsByCategory, setCategoryFieldsByCategory] = useState<
-    Partial<Record<ProductCategoryId, Record<string, string>>>
-  >({});
   const [styleReferenceEnabled, setStyleReferenceEnabled] = useState(false);
   const [styleReferenceStrength, setStyleReferenceStrength] =
     useState<CardBuilderStyleReferenceStrength>("medium");
@@ -218,8 +212,12 @@ export function CardBuilderTab({
   });
   const [styleReferenceImages, setStyleReferenceImages] = useState<StyleReferenceRow[]>([]);
   const [styleReferenceUploading, setStyleReferenceUploading] = useState(false);
+  const [sourceImage, setSourceImage] = useState<SourceImageValue>(null);
+  const [sourceImageSaving, setSourceImageSaving] = useState(false);
   /** После успешной гидратации для `projectId` не подставляем saved.* повторно при refresh. */
   const hydratedProjectIdRef = useRef<string | null>(null);
+  /** Авто-vision уже запущен для проекта (hydrate без saved vision). */
+  const hydrateVisionTriggeredRef = useRef<string | null>(null);
   /** Пользователь успел изменить форму до завершения первого fetch — не перезатирать локальный ввод. */
   const userEditedFormRef = useRef(false);
   const styleReferenceFileInputRef = useRef<HTMLInputElement>(null);
@@ -229,128 +227,26 @@ export function CardBuilderTab({
     userEditedFormRef.current = true;
   }, []);
 
-  const enabledMpIndex = useMemo(() => {
-    const m = new Map<string, ProductCardMarketplaceProfile>();
-    for (const p of marketplaceProfiles) m.set(p.id, p);
-    return m;
-  }, [marketplaceProfiles]);
+  const resetVisionState = useCallback(() => {
+    setVisionAnalysis(null);
+    setVisionSummary(null);
+    setVisionLoading(false);
+    setProductFacts([]);
+    setCategoryKey("auto");
+    setCategoryManuallyOverridden(false);
+    setProductType("");
+    setProductNameGuess("");
+  }, []);
 
-  const coercedMarketplace = useMemo(() => {
-    const p = enabledMpIndex.get(marketplace);
-    if (p && p.enabled !== false) return marketplace;
-    return (
-      CARD_BUILDER_MARKETPLACES.find((x) => enabledMpIndex.get(x.id)?.enabled !== false)?.id ?? "ozon"
-    );
-  }, [marketplace, enabledMpIndex]);
-
-  const goalChoices = useMemo(() => {
-    const profile = enabledMpIndex.get(coercedMarketplace);
-    if (!profile) return [...CARD_BUILDER_GOALS];
-    return CARD_BUILDER_GOALS.filter((g) => {
-      const role = cardBuilderGoalToSlideRole(g.id);
-      if (!role) return true;
-      return (profile.allowedSlideTypes as string[]).includes(role as string);
-    });
-  }, [enabledMpIndex, coercedMarketplace]);
-
-  const effectiveGoal = useMemo(() => {
-    if (goalChoices.some((g) => g.id === goal)) return goal;
-    return goalChoices[0]?.id ?? "full_gallery_6";
-  }, [goal, goalChoices]);
-
-  const densityChoices = useMemo(() => {
-    const profile = enabledMpIndex.get(coercedMarketplace);
-    if (!profile || effectiveGoal !== "main_photo" || profile.mainPhotoTextAllowed) {
-      return [...CARD_BUILDER_TEXT_DENSITY];
-    }
-    return CARD_BUILDER_TEXT_DENSITY.filter((t) => t.id === "none" || t.id === "minimal");
-  }, [enabledMpIndex, effectiveGoal, coercedMarketplace]);
-
-  const benefitLimit = enabledMpIndex.get(coercedMarketplace)?.maxBenefitBadges ?? 11;
-
-  const profileForDensity = enabledMpIndex.get(coercedMarketplace);
   const recommendedTextDensity =
-    profileForDensity?.mainPhotoRules.recommendedTextDensity ?? "medium";
-  const densityRecoKey = `${coercedMarketplace}|${recommendedTextDensity}`;
+    templateProfile.mainPhotoRules.recommendedTextDensity ?? "medium";
+  const densityRecoKey = `${CARD_BUILDER_DEFAULT_MARKETPLACE_ID}|${recommendedTextDensity}`;
 
   const effectiveTextDensity = useMemo(() => {
     const rawPick = densityStash.key === densityRecoKey ? densityStash.value : recommendedTextDensity;
-    let out = rawPick;
-    if (effectiveGoal === "main_photo" && profileForDensity && !profileForDensity.mainPhotoTextAllowed) {
-      if (out !== "none" && out !== "minimal") out = "none";
-    }
-    if (!densityChoices.some((c) => c.id === out)) {
-      out = densityChoices[0]?.id ?? recommendedTextDensity;
-    }
-    return out;
-  }, [
-    densityStash,
-    densityRecoKey,
-    recommendedTextDensity,
-    effectiveGoal,
-    profileForDensity,
-    densityChoices,
-  ]);
-
-  const categoryConfig = useMemo(
-    () => (selectedCategory ? getProductCardCategoryFieldsConfig(selectedCategory) : null),
-    [selectedCategory],
-  );
-
-  const measuresPlanFinger = useMemo(() => {
-    const cat = selectedCategory ?? "other";
-    const row =
-      cat in categoryFieldsByCategory
-        ? categoryFieldsByCategory[cat as ProductCategoryId]
-        : undefined;
-    const hasRow = row && Object.keys(row).length > 0;
-    return {
-      selectedCategory: cat,
-      dimensions: dimensionsUser.trim() || undefined,
-      categoryFields:
-        selectedCategory && hasRow
-          ? { categoryKey: selectedCategory, values: row ?? {} }
-          : undefined,
-      categoryFieldsByCategory:
-        Object.keys(categoryFieldsByCategory).length > 0 ? categoryFieldsByCategory : undefined,
-    };
-  }, [selectedCategory, dimensionsUser, categoryFieldsByCategory]);
-
-  const updateCategoryFieldValue = useCallback(
-    (fieldKey: string, raw: string) => {
-      if (!selectedCategory) return;
-      markUserEditedForm();
-      const v = sanitizeCategoryFieldValue(raw);
-      setCategoryFieldsByCategory((prev) => {
-        const cur = { ...(prev[selectedCategory] ?? {}) };
-        if (!v) delete cur[fieldKey];
-        else cur[fieldKey] = v;
-        const next: Partial<Record<ProductCategoryId, Record<string, string>>> = { ...prev };
-        if (Object.keys(cur).length === 0) delete next[selectedCategory];
-        else next[selectedCategory] = cur;
-        return next;
-      });
-    },
-    [selectedCategory, markUserEditedForm],
-  );
-
-  const validateClientCategoryRows = useCallback(
-    (rows: Record<string, string> | undefined): string | null => {
-      if (!rows) return null;
-      for (const [k, raw] of Object.entries(rows)) {
-        if (!raw.trim()) continue;
-        if (raw.includes("<")) {
-          return `Поле «${k}»: удалите HTML и символ "<".`;
-        }
-        const s = sanitizeCategoryFieldValue(raw);
-        if (s.length > CATEGORY_FIELD_VALUE_MAX_CHARS) {
-          return `Поле «${k}»: сократите текст (максимум ${CATEGORY_FIELD_VALUE_MAX_CHARS} символов).`;
-        }
-      }
-      return null;
-    },
-    [],
-  );
+    if (CARD_BUILDER_TEXT_DENSITY.some((c) => c.id === rawPick)) return rawPick;
+    return recommendedTextDensity;
+  }, [densityStash, densityRecoKey, recommendedTextDensity]);
 
   const removeStyleReferenceAt = useCallback(
     (idx: number) => {
@@ -365,7 +261,7 @@ export function CardBuilderTab({
       const list = e.target.files;
       e.target.value = "";
       if (!list?.length) return;
-      if (!projectId || !canUseBackend) {
+      if (!projectId || !initDone) {
         toast.error("Чтобы загрузить референс, нужен сохранённый проект с доступом к загрузкам.");
         return;
       }
@@ -435,44 +331,28 @@ export function CardBuilderTab({
         setStyleReferenceUploading(false);
       }
     },
-    [projectId, canUseBackend, markUserEditedForm],
+    [projectId, initDone, markUserEditedForm],
   );
 
-  const ensureCategoryFieldsValid = useCallback((): boolean => {
-    for (const row of Object.values(categoryFieldsByCategory)) {
-      if (!row) continue;
-      const msg = validateClientCategoryRows(row);
-      if (msg) {
-        setPlanError(msg);
-        return false;
-      }
-    }
-    return true;
-  }, [categoryFieldsByCategory, validateClientCategoryRows]);
+  const hasCardBuilderImage = Boolean(sourceImage?.url?.trim() && sourceImage.fileId?.trim());
+  const canWork = Boolean(hasCardBuilderImage && projectId && initDone);
+  const canUploadCardBuilderImage = Boolean(initDone && !sourceImageSaving);
 
-  const canWork = Boolean(hasImage && canUseBackend && projectId && selectedCategory);
+  const resolvedPlannerCategory = mapUniversalCategoryToPlannerCategory(
+    categoryKey === "auto" && visionSummary?.categoryKey
+      ? visionSummary.categoryKey
+      : categoryKey,
+  );
+
+  const planGoal =
+    creationMode === "single"
+      ? "main_photo"
+      : gallerySlideCount === 8
+        ? "full_gallery_8"
+        : "full_gallery_6";
 
   const planPayload = useMemo(() => {
-    const cat = selectedCategory ?? "other";
-    const rowRaw = selectedCategory ? categoryFieldsByCategory[selectedCategory] : undefined;
-    const pruned: Record<string, string> = {};
-    if (rowRaw) {
-      for (const [k, val] of Object.entries(rowRaw)) {
-        const s = String(val).trim();
-        if (s) pruned[k] = s;
-      }
-    }
-
-    const byOut: Partial<Record<ProductCategoryId, Record<string, string>>> = {};
-    for (const [ck, m] of Object.entries(categoryFieldsByCategory)) {
-      if (!m || typeof m !== "object") continue;
-      const sub: Record<string, string> = {};
-      for (const [k, val] of Object.entries(m)) {
-        const s = String(val).trim();
-        if (s) sub[k] = s;
-      }
-      if (Object.keys(sub).length) byOut[ck as ProductCategoryId] = sub;
-    }
+    const cat = resolvedPlannerCategory;
 
     const styleReferenceIds = styleReferenceEnabled
       ? styleReferenceImages
@@ -495,41 +375,43 @@ export function CardBuilderTab({
 
     return {
       selectedCategory: cat,
-      marketplace: coercedMarketplace,
-      goal: effectiveGoal,
-      preserveProduct,
-      preserveAspects,
-      allowCreativeStylization: creativeStyle,
-      benefits: benefitsSel,
-      benefitsExtra: benefitsExtra.trim() || undefined,
-      subtitle: subtitle.trim() || undefined,
-      dimensions: dimensionsUser.trim() || undefined,
+      marketplace: CARD_BUILDER_DEFAULT_MARKETPLACE_ID,
+      targetPlatform: CARD_BUILDER_DEFAULT_TARGET_PLATFORM,
+      cardBuilderCategoryKey: categoryKey,
+      categoryManuallyOverridden,
+      creationMode,
+      singleCardType,
+      visualStyle,
+      productType: productType.trim() || undefined,
+      productNameGuess: productNameGuess.trim() || undefined,
+      productFacts,
+      visionAnalysis: visionAnalysis ?? undefined,
+      gallerySlideCount,
+      goal: planGoal,
+      preserveProduct: true,
+      preserveAspects: [...CARD_BUILDER_FIXED_PRESERVE_ASPECTS],
+      allowCreativeStylization: false,
       languageMode,
-      mustShow: mustSel,
       audience,
       priceSegment,
       salesStyle,
       textDensity: effectiveTextDensity,
-      ...(Object.keys(byOut).length ? { categoryFieldsByCategory: byOut } : {}),
-      ...(selectedCategory && Object.keys(pruned).length
-        ? { categoryFields: { categoryKey: selectedCategory, values: pruned } }
-        : {}),
       ...styleReferenceBlock,
     };
   }, [
-    selectedCategory,
-    categoryFieldsByCategory,
-    coercedMarketplace,
-    effectiveGoal,
-    preserveProduct,
-    preserveAspects,
-    creativeStyle,
-    benefitsSel,
-    benefitsExtra,
-    subtitle,
-    dimensionsUser,
+    resolvedPlannerCategory,
+    categoryKey,
+    categoryManuallyOverridden,
+    creationMode,
+    singleCardType,
+    visualStyle,
+    productType,
+    productNameGuess,
+    productFacts,
+    visionAnalysis,
+    gallerySlideCount,
+    planGoal,
     languageMode,
-    mustSel,
     audience,
     priceSegment,
     salesStyle,
@@ -540,9 +422,29 @@ export function CardBuilderTab({
     styleReferenceFlags,
   ]);
 
+  const applySourceImageFromBlock = useCallback((blk: CardBuilderBlockPayload | null) => {
+    const raw = blk?.sourceImage;
+    if (!raw || typeof raw !== "object") {
+      setSourceImage(null);
+      return;
+    }
+    const url = typeof raw.url === "string" ? raw.url.trim() : "";
+    const fileId = typeof raw.fileId === "string" ? raw.fileId.trim() : "";
+    if (!url || !fileId) {
+      setSourceImage(null);
+      return;
+    }
+    setSourceImage({
+      url,
+      fileId,
+      fileName: typeof raw.fileName === "string" ? raw.fileName : "Фото товара",
+      size: typeof raw.size === "number" && Number.isFinite(raw.size) ? raw.size : 0,
+    });
+  }, []);
+
   const fetchCardBuilderBlockForProject = useCallback(
     async (pid: string): Promise<CardBuilderBlockPayload | null> => {
-      if (!canUseBackend) return null;
+      if (!initDone || !projectId) return null;
       const res = await fetch(`/api/product-card-projects/${pid}`);
       const parsed = await readJsonSafe<{ project?: { metadata?: { cardBuilder?: CardBuilderBlockPayload } } }>(
         res,
@@ -550,7 +452,7 @@ export function CardBuilderTab({
       if (!parsed.ok || !res.ok) return null;
       return parsed.data.project?.metadata?.cardBuilder ?? null;
     },
-    [canUseBackend],
+    [initDone, projectId],
   );
 
   const applySlidesAndHistoryFromBlock = useCallback((blk: CardBuilderBlockPayload | null) => {
@@ -563,6 +465,7 @@ export function CardBuilderTab({
       });
     }
     const rawGens = blk?.generations;
+    const slideGenRestore: Record<string, { status: string; url: string | null }> = {};
     if (Array.isArray(rawGens)) {
       const rows: CardBuilderGenHistoryRow[] = [];
       for (const x of rawGens) {
@@ -581,52 +484,68 @@ export function CardBuilderTab({
         if (typeof r.errorMessage === "string" && r.errorMessage.trim()) {
           row.errorMessage = r.errorMessage.trim().slice(0, 320);
         }
+        const finalUrl = typeof r.finalUrl === "string" ? r.finalUrl.trim() : "";
+        if (finalUrl) {
+          row.finalUrl = finalUrl;
+          const st = (row.status ?? "").toLowerCase();
+          if (st === "done" || st === "completed" || !row.status) {
+            slideGenRestore[slideId] = { status: "done", url: finalUrl };
+          }
+        }
         rows.push(row);
       }
       setGenHistory(rows);
+      setSlideGen((prev) => ({ ...prev, ...slideGenRestore }));
     } else {
       setGenHistory([]);
+      setSlideGen({});
     }
   }, []);
 
   const applyHydratedSettingsFromSaved = useCallback(
-    (saved: Record<string, unknown>, mpIndex: Map<string, ProductCardMarketplaceProfile>) => {
+    (saved: Record<string, unknown>) => {
       if (typeof saved.languageMode === "string" && saved.languageMode.trim()) {
         setLanguageMode(saved.languageMode.trim());
       }
-      if (typeof saved.subtitle === "string") setSubtitle(saved.subtitle);
-      if (typeof saved.dimensions === "string") setDimensionsUser(saved.dimensions);
-
-      if (typeof saved.marketplace === "string" && saved.marketplace.trim()) {
-        setMarketplace(saved.marketplace.trim());
+      if (typeof saved.cardBuilderCategoryKey === "string" && saved.cardBuilderCategoryKey.trim()) {
+        setCategoryKey(saved.cardBuilderCategoryKey.trim() as CardBuilderUniversalCategoryId);
       }
-      if (typeof saved.goal === "string" && saved.goal.trim()) setGoal(saved.goal.trim());
-
-      if (typeof saved.preserveProduct === "boolean") setPreserveProduct(saved.preserveProduct);
-      if (Array.isArray(saved.preserveAspects)) {
-        setPreserveAspects(saved.preserveAspects.filter((x): x is string => typeof x === "string"));
+      if (saved.categoryManuallyOverridden === true) {
+        setCategoryManuallyOverridden(true);
       }
-      if (typeof saved.allowCreativeStylization === "boolean") {
-        setCreativeStyle(saved.allowCreativeStylization);
+      if (typeof saved.productType === "string") setProductType(saved.productType);
+      if (typeof saved.productNameGuess === "string") setProductNameGuess(saved.productNameGuess);
+      if (Array.isArray(saved.productFacts)) {
+        setProductFacts(normalizeProductFactsList(saved.productFacts));
       }
-
-      if (Array.isArray(saved.benefits)) {
-        setBenefitsSel(saved.benefits.filter((x): x is string => typeof x === "string"));
-      } else if (Array.isArray(saved.semanticBenefits)) {
-        setBenefitsSel(saved.semanticBenefits.filter((x): x is string => typeof x === "string"));
+      if (saved.visionAnalysis && typeof saved.visionAnalysis === "object") {
+        const va = saved.visionAnalysis as Record<string, unknown>;
+        setVisionAnalysis(va);
+        setVisionSummary({
+          categoryKey: typeof va.categoryKey === "string" ? va.categoryKey : undefined,
+          productType: typeof va.productType === "string" ? va.productType : undefined,
+          productNameGuess: typeof va.productNameGuess === "string" ? va.productNameGuess : undefined,
+          mainColors: Array.isArray(va.mainColors)
+            ? va.mainColors.filter((x): x is string => typeof x === "string")
+            : undefined,
+          styleGuess: typeof va.styleGuess === "string" ? va.styleGuess : null,
+          materialGuess: typeof va.materialGuess === "string" ? va.materialGuess : null,
+          analysisFailed: va.analysisFailed === true,
+          warnings: Array.isArray(va.warnings)
+            ? va.warnings.filter((x): x is string => typeof x === "string")
+            : undefined,
+        });
       }
-
-      const extra =
-        typeof saved.benefitsExtra === "string"
-          ? saved.benefitsExtra
-          : typeof saved.additionalBenefits === "string"
-            ? saved.additionalBenefits
-            : "";
-      if (extra.trim()) setBenefitsExtra(extra);
-
-      if (Array.isArray(saved.mustShow)) {
-        setMustSel(saved.mustShow.filter((x): x is string => typeof x === "string"));
+      if (saved.creationMode === "single" || saved.creationMode === "full_gallery") {
+        setCreationMode(saved.creationMode);
       }
+      if (typeof saved.singleCardType === "string" && saved.singleCardType.trim()) {
+        setSingleCardType(saved.singleCardType.trim() as CardBuilderSingleCardTypeId);
+      }
+      if (typeof saved.visualStyle === "string" && saved.visualStyle.trim()) {
+        setVisualStyle(saved.visualStyle.trim() as CardBuilderVisualStyleId);
+      }
+      if (saved.gallerySlideCount === 8) setGallerySlideCount(8);
       if (typeof saved.audience === "string" && saved.audience.trim()) {
         setAudience(saved.audience.trim());
       }
@@ -638,53 +557,12 @@ export function CardBuilderTab({
       }
 
       if (typeof saved.textDensity === "string" && saved.textDensity.trim()) {
-        const mpKey =
-          typeof saved.marketplace === "string" && saved.marketplace.trim()
-            ? saved.marketplace.trim()
-            : "ozon";
-        const prof = mpIndex.get(mpKey);
-        const reco = prof?.mainPhotoRules.recommendedTextDensity ?? "medium";
+        const reco = UNIVERSAL_CARD_BUILDER_PROFILE.mainPhotoRules.recommendedTextDensity ?? "medium";
         setDensityStash({
-          key: `${mpKey}|${reco}`,
+          key: `${CARD_BUILDER_DEFAULT_MARKETPLACE_ID}|${reco}`,
           value: saved.textDensity.trim(),
         });
       }
-
-      const mergedArchive: Partial<Record<ProductCategoryId, Record<string, string>>> = {};
-      const rawBy = saved.categoryFieldsByCategory;
-      if (rawBy && typeof rawBy === "object" && !Array.isArray(rawBy)) {
-        for (const [ck, mv] of Object.entries(rawBy)) {
-          if (!isProductCategoryId(ck)) continue;
-          if (!mv || typeof mv !== "object" || Array.isArray(mv)) continue;
-          const row: Record<string, string> = {};
-          for (const [fk, val] of Object.entries(mv as Record<string, unknown>)) {
-            if (typeof val !== "string") continue;
-            const s = sanitizeCategoryFieldValue(val);
-            if (s) row[fk] = s;
-          }
-          if (Object.keys(row).length) mergedArchive[ck] = row;
-        }
-      }
-
-      const snap = saved.categoryFields;
-      if (snap && typeof snap === "object" && !Array.isArray(snap)) {
-        const r = snap as Record<string, unknown>;
-        const ck = typeof r.categoryKey === "string" ? r.categoryKey.trim() : "";
-        const vals = r.values;
-        if (isProductCategoryId(ck) && vals && typeof vals === "object" && !Array.isArray(vals)) {
-          const row: Record<string, string> = {};
-          for (const [fk, val] of Object.entries(vals as Record<string, unknown>)) {
-            if (typeof val !== "string") continue;
-            const s = sanitizeCategoryFieldValue(val);
-            if (s) row[fk] = s;
-          }
-          if (Object.keys(row).length) {
-            mergedArchive[ck] = { ...(mergedArchive[ck] ?? {}), ...row };
-          }
-        }
-      }
-
-      setCategoryFieldsByCategory(mergedArchive);
 
       const rawSr = saved.styleReference;
       if (rawSr && typeof rawSr === "object" && !Array.isArray(rawSr)) {
@@ -736,45 +614,199 @@ export function CardBuilderTab({
     [],
   );
 
+  /** Обновление плана галереи и истории генераций без перезаписи полей формы. */
+  const refreshHistoryAndPlanStatus = useCallback(async () => {
+    const pid = projectId;
+    if (!pid || !initDone) return;
+    const blk = await fetchCardBuilderBlockForProject(pid);
+    if (pid !== projectId) return;
+    applySlidesAndHistoryFromBlock(blk);
+  }, [projectId, initDone, fetchCardBuilderBlockForProject, applySlidesAndHistoryFromBlock]);
+
+  const runVisionAnalysis = useCallback(
+    async (options?: { projectId?: string; force?: boolean; manual?: boolean }) => {
+      const pid = options?.projectId ?? projectId;
+      if (!pid || !initDone) return;
+      if (!options?.force && !options?.manual && !hasCardBuilderImage) return;
+      if (options?.manual) {
+        hydrateVisionTriggeredRef.current = null;
+      }
+      setVisionLoading(true);
+      try {
+        const res = await fetch(`/api/product-card-projects/${pid}/vision-analysis`, {
+          method: "POST",
+        });
+        const parsed = await readJsonSafe<VisionSummary & { productFacts?: CardBuilderProductFact[] }>(
+          res,
+        );
+        if (!parsed.ok || !res.ok) {
+          toast.error(parsed.ok ? "Не удалось распознать товар" : parsed.message);
+          return;
+        }
+        const d = parsed.data;
+        setVisionSummary({
+          categoryKey: d.categoryKey,
+          productType: d.productType,
+          productNameGuess: d.productNameGuess,
+          mainColors: d.mainColors,
+          styleGuess: d.styleGuess,
+          materialGuess: d.materialGuess,
+          analysisFailed: d.analysisFailed,
+          warnings: d.warnings,
+        });
+        setVisionAnalysis(d as unknown as Record<string, unknown>);
+        if (d.productType?.trim()) setProductType(d.productType.trim());
+        if (d.productNameGuess?.trim()) setProductNameGuess(d.productNameGuess.trim());
+        if (!categoryManuallyOverridden && d.categoryKey) {
+          setCategoryKey(d.categoryKey as CardBuilderUniversalCategoryId);
+        }
+        if (Array.isArray(d.productFacts) && d.productFacts.length) {
+          setProductFacts((prev) => {
+            const merged = normalizeProductFactsList(d.productFacts);
+            const userBenefits = prev.filter((f) => f.type === "benefit" && f.source === "user");
+            if (userBenefits.length === 0) return merged;
+            const mergedNonBenefits = merged.filter((f) => f.type !== "benefit");
+            return normalizeProductFactsList([...mergedNonBenefits, ...userBenefits]);
+          });
+        }
+      } finally {
+        setVisionLoading(false);
+      }
+    },
+    [projectId, initDone, hasCardBuilderImage, categoryManuallyOverridden],
+  );
+
+  const persistCardBuilderSourceImage = useCallback(
+    async (next: SourceImageValue): Promise<boolean> => {
+      if (!initDone) {
+        toast.error("Страница ещё загружается — подождите секунду.");
+        return false;
+      }
+      setSourceImageSaving(true);
+      try {
+        const pid = projectId ?? (await ensureProjectId());
+        if (!pid) {
+          toast.error("Не удалось создать проект. Повторите попытку.");
+          return false;
+        }
+
+        if (!next?.url?.trim() || !next.fileId?.trim()) {
+          if (!projectId) {
+            setSourceImage(null);
+            resetVisionState();
+            return true;
+          }
+          const res = await fetch(
+            `/api/product-card-projects/${pid}/card-builder/source-image`,
+            { method: "DELETE" },
+          );
+          const parsed = await readJsonSafe<{ error?: string }>(res);
+          if (!parsed.ok || !res.ok) {
+            toast.error(parsed.ok ? "Не удалось удалить фото" : parsed.message);
+            return false;
+          }
+          setSourceImage(null);
+          resetVisionState();
+          setSlides([]);
+          setActiveSlideId(null);
+          cbPricingSnapRef.current = { lastPlanHash: null, singleCredits: null, galleryCredits: null };
+          return true;
+        }
+
+        const res = await fetch(
+          `/api/product-card-projects/${pid}/card-builder/source-image`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url: next.url.trim(),
+              fileId: next.fileId.trim(),
+              fileName: next.fileName,
+              size: next.size,
+            }),
+          },
+        );
+        const parsed = await readJsonSafe<{ error?: string }>(res);
+        if (!parsed.ok || !res.ok) {
+          toast.error(
+            parsed.ok
+              ? typeof parsed.data.error === "string"
+                ? parsed.data.error
+                : "Не удалось сохранить фото"
+              : parsed.message,
+          );
+          return false;
+        }
+        setSourceImage(next);
+        resetVisionState();
+        hydrateVisionTriggeredRef.current = null;
+        setSlides([]);
+        setActiveSlideId(null);
+        setSlideGen({});
+        cbPricingSnapRef.current = { lastPlanHash: null, singleCredits: null, galleryCredits: null };
+        void runVisionAnalysis({ projectId: pid, force: true });
+        return true;
+      } finally {
+        setSourceImageSaving(false);
+      }
+    },
+    [initDone, projectId, ensureProjectId, resetVisionState, runVisionAnalysis],
+  );
+
+  const handleCardBuilderSourceImageChange = useCallback(
+    (next: SourceImageValue) => {
+      void persistCardBuilderSourceImage(next);
+    },
+    [persistCardBuilderSourceImage],
+  );
+
   /** Гидратация полей формы только при первом заходе на проект или после смены projectId. */
   const hydrateFormFromServer = useCallback(async () => {
     const pid = projectId;
-    if (!pid || !canUseBackend) return;
+    if (!pid || !initDone) return;
     const blk = await fetchCardBuilderBlockForProject(pid);
     if (pid !== projectId) return;
     const saved = blk?.settings;
     const needsFormHydrate = hydratedProjectIdRef.current !== pid;
     if (needsFormHydrate && saved && typeof saved === "object" && !userEditedFormRef.current) {
-      applyHydratedSettingsFromSaved(saved, enabledMpIndex);
+      applyHydratedSettingsFromSaved(saved);
     }
     if (needsFormHydrate) {
       hydratedProjectIdRef.current = pid;
     }
+    applySourceImageFromBlock(blk);
     applySlidesAndHistoryFromBlock(blk);
+
+    const img = blk?.sourceImage;
+    const hasSavedVision =
+      saved &&
+      typeof saved === "object" &&
+      saved.visionAnalysis &&
+      typeof saved.visionAnalysis === "object";
+    if (
+      img?.url?.trim() &&
+      img?.fileId?.trim() &&
+      !hasSavedVision &&
+      hydrateVisionTriggeredRef.current !== pid
+    ) {
+      hydrateVisionTriggeredRef.current = pid;
+      void runVisionAnalysis({ projectId: pid, force: true });
+    }
   }, [
     projectId,
-    canUseBackend,
+    initDone,
     fetchCardBuilderBlockForProject,
-    enabledMpIndex,
     applyHydratedSettingsFromSaved,
     applySlidesAndHistoryFromBlock,
+    applySourceImageFromBlock,
+    runVisionAnalysis,
   ]);
 
-  /** Обновление плана галереи и истории генераций без перезаписи полей формы. */
-  const refreshHistoryAndPlanStatus = useCallback(async () => {
-    const pid = projectId;
-    if (!pid || !canUseBackend) return;
-    const blk = await fetchCardBuilderBlockForProject(pid);
-    if (pid !== projectId) return;
-    applySlidesAndHistoryFromBlock(blk);
-  }, [projectId, canUseBackend, fetchCardBuilderBlockForProject, applySlidesAndHistoryFromBlock]);
-
   const runPlan = useCallback(async () => {
-    if (!projectId || !selectedCategory) return;
+    if (!projectId) return;
     setPlanLoading(true);
     setPlanError(null);
     try {
-      if (!ensureCategoryFieldsValid()) return;
       const res = await fetch(`/api/product-card-projects/${projectId}/card-builder/plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -805,14 +837,13 @@ export function CardBuilderTab({
     } finally {
       setPlanLoading(false);
     }
-  }, [projectId, selectedCategory, planPayload, refreshHistoryAndPlanStatus, ensureCategoryFieldsValid]);
+  }, [projectId, planPayload, refreshHistoryAndPlanStatus]);
 
   const runEstimate = useCallback(
     async (mode: "single_slide" | "full_gallery") => {
       if (!projectId) return;
       setEstimating(true);
       try {
-        if (!ensureCategoryFieldsValid()) return;
         const res = await fetch(`/api/product-card-projects/${projectId}/estimate/card-builder`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -860,7 +891,7 @@ export function CardBuilderTab({
         setEstimating(false);
       }
     },
-    [projectId, planPayload, slides, activeSlideId, ensureCategoryFieldsValid],
+    [projectId, planPayload, slides, activeSlideId],
   );
 
   const pollGen = useCallback(async (generationId: string) => {
@@ -924,7 +955,6 @@ export function CardBuilderTab({
       if (!projectId) return;
       setGenBusy(true);
       try {
-        if (!ensureCategoryFieldsValid()) return;
         const hash = cbPricingSnapRef.current.lastPlanHash;
         const cred = cbPricingSnapRef.current.singleCredits;
         if (!hash || cred == null) {
@@ -982,7 +1012,7 @@ export function CardBuilderTab({
         setGenBusy(false);
       }
     },
-    [projectId, pollGen, refreshHistoryAndPlanStatus, ensureCategoryFieldsValid],
+    [projectId, pollGen, refreshHistoryAndPlanStatus],
   );
 
   const generateAll = useCallback(async () => {
@@ -1051,19 +1081,22 @@ export function CardBuilderTab({
 
   useEffect(() => {
     hydratedProjectIdRef.current = null;
+    hydrateVisionTriggeredRef.current = null;
     userEditedFormRef.current = false;
     void Promise.resolve().then(() => {
-      setMarketplace("ozon");
-      setGoal("full_gallery_6");
-      setPreserveProduct(true);
-      setPreserveAspects(["shape", "color", "logo", "proportions"]);
-      setCreativeStyle(false);
-      setBenefitsSel([]);
-      setBenefitsExtra("");
-      setSubtitle("");
-      setDimensionsUser("");
       setLanguageMode("auto");
-      setMustSel(["texture", "details"]);
+      setCategoryKey("auto");
+      setCategoryManuallyOverridden(false);
+      setProductType("");
+      setProductNameGuess("");
+      setProductFacts([]);
+      setVisionAnalysis(null);
+      setVisionSummary(null);
+      setVisionLoading(false);
+      setCreationMode("full_gallery");
+      setSingleCardType("auto");
+      setVisualStyle("auto");
+      setGallerySlideCount(6);
       setAudience("mass_market");
       setPriceSegment("middle");
       setSalesStyle("light_marketplace");
@@ -1075,7 +1108,6 @@ export function CardBuilderTab({
       setEstimateGallery(null);
       setSlideGen({});
       setGenHistory([]);
-      setCategoryFieldsByCategory({});
       setStyleReferenceEnabled(false);
       setStyleReferenceStrength("medium");
       setStyleReferenceFlags({
@@ -1090,23 +1122,16 @@ export function CardBuilderTab({
       });
       setStyleReferenceImages([]);
       setStyleReferenceUploading(false);
+      setSourceImage(null);
+      setSourceImageSaving(false);
       cbPricingSnapRef.current = { lastPlanHash: null, singleCredits: null, galleryCredits: null };
     });
   }, [projectId]);
 
   useEffect(() => {
-    if (!projectId || !canUseBackend) return;
+    if (!projectId || !initDone) return;
     void Promise.resolve().then(() => void hydrateFormFromServer());
-  }, [projectId, canUseBackend, enabledMpIndex, hydrateFormFromServer]);
-
-  const categorySafetyBullets = useMemo(
-    () => (selectedCategory ? getCategoryFieldsSafetyBullets(selectedCategory) : []),
-    [selectedCategory],
-  );
-
-  if (!hasImage) return null;
-
-  const selProfile = enabledMpIndex.get(coercedMarketplace);
+  }, [projectId, initDone, hydrateFormFromServer]);
 
   const styleReferencePreviewActive =
     styleReferenceEnabled && styleReferenceImages.some((x) => Boolean(x.fileId?.trim()));
@@ -1116,13 +1141,6 @@ export function CardBuilderTab({
   return (
     <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
       <div className="space-y-4">
-        {!selectedCategory && (
-          <Alert>
-            <AlertTitle>Категория</AlertTitle>
-            <AlertDescription>Сначала определите категорию товара выше.</AlertDescription>
-          </Alert>
-        )}
-
         {planError && (
           <Alert variant="destructive">
             <AlertTitle>Ошибка</AlertTitle>
@@ -1133,345 +1151,100 @@ export function CardBuilderTab({
         <Alert>
           <AlertTitle>Текст на изображении</AlertTitle>
           <AlertDescription>
-            Лимиты для одного слайда: одна текстовая фраза до ~400 символов; суммарно не больше 16 значимых фраз
-            (название, подзаголовок, дополнительный текст, размеры, поля категории).
+            Лимиты для одного слайда: одна текстовая фраза до ~400 символов; суммарно не больше 16 значимых фраз.
           </AlertDescription>
         </Alert>
 
         <Card className="rounded-2xl border-border">
-          <CardHeader>
-            <CardTitle className="text-base">Маркетплейс и задача</CardTitle>
-            <CardDescription>Канал размещения и что нужно получить</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="pc-marketplace">Маркетплейс / канал</Label>
-              <select
-                id="pc-marketplace"
-                className={nativeFieldClass}
-                value={coercedMarketplace}
-                onChange={(e) => {
-                  markUserEditedForm();
-                  setMarketplace(e.target.value);
-                }}
-              >
-                {CARD_BUILDER_MARKETPLACES.filter((m) => enabledMpIndex.get(m.id)?.enabled !== false).map(
-                  (m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label}
-                    </option>
-                  ),
-                )}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pc-goal">Что создать</Label>
-              <select
-                id="pc-goal"
-                className={nativeFieldClass}
-                value={effectiveGoal}
-                onChange={(e) => {
-                  markUserEditedForm();
-                  setGoal(e.target.value);
-                }}
-              >
-                {goalChoices.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {selProfile ? (
-              <div className="sm:col-span-2 space-y-3">
-                <Alert>
-                  <AlertTitle>Для выбранной площадки рекомендуем</AlertTitle>
-                  <AlertDescription className="space-y-2">
-                    <p>{selProfile.userHint}</p>
-                    <ul className="text-muted-foreground list-inside list-disc text-sm">
-                      {selProfile.complianceHints.slice(0, 5).map((h) => (
-                        <li key={h}>{h}</li>
-                      ))}
-                    </ul>
-                    {selProfile.needsVerification ? (
-                      <p className="text-xs">
-                        Для этой площадки профиль требует дополнительной проверки перед публикацией.
-                      </p>
-                    ) : null}
-                    <p className="text-muted-foreground text-xs">
-                      Целевой формат: {selProfile.defaultSize} · {selProfile.defaultAspectRatio}.
-                    </p>
-                  </AlertDescription>
-                </Alert>
-              </div>
-            ) : null}
+          <CardContent className="pt-6">
+            <SourceImageUpload
+              value={sourceImage}
+              onChange={handleCardBuilderSourceImageChange}
+              disabled={!canUploadCardBuilderImage}
+              uploadPurpose="product_card_card_builder_source"
+              title="Фото для «Создать карточку»"
+              description="Отдельное фото только для этого сценария: распознавание товара и генерация слайдов. Не связано с общим фото проекта выше."
+            />
           </CardContent>
         </Card>
 
-        {selectedCategory && categoryConfig ? (
-          <Card className="rounded-2xl border-border">
-            <CardHeader>
-              <CardTitle className="text-base">Данные для категории</CardTitle>
-              <CardDescription className="space-y-3">
-                <div>
-                  <p className="text-foreground text-sm font-medium">
-                    Дополните данные товара — это поможет сделать карточку точнее
-                  </p>
-                  <p className="text-muted-foreground mt-2 text-sm">
-                    Можно пропустить. AI будет использовать только то, что вы указали, и не должен выдумывать
-                    характеристики.
-                  </p>
-                </div>
-                {categorySafetyBullets.length ? (
-                  <ul className="text-muted-foreground list-inside list-disc text-xs leading-relaxed">
-                    {categorySafetyBullets.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-muted-foreground text-xs">
-                Категория: <span className="text-foreground font-medium">{categoryConfig.label}</span>
-              </p>
-              {categoryConfig.fields.map((field) => {
-                const row = categoryFieldsByCategory[selectedCategory] ?? {};
-                const val = row[field.key] ?? "";
-                const inputId = `pc-catfield-${selectedCategory}-${field.key}`;
-                const optionalSuffix = field.optional ? (
-                  <span className="text-muted-foreground font-normal"> (необязательно)</span>
-                ) : null;
-                const control =
-                  field.type === "textarea" || field.type === "multi_select" ? (
-                    <Textarea
-                      id={inputId}
-                      value={val}
-                      onChange={(e) => {
-                        updateCategoryFieldValue(field.key, e.target.value);
-                      }}
-                      rows={field.type === "multi_select" ? 3 : 2}
-                      maxLength={CATEGORY_FIELD_VALUE_MAX_CHARS}
-                      className="rounded-xl"
-                      placeholder={field.placeholder}
-                    />
-                  ) : field.type === "select" ? (
-                    <Input
-                      id={inputId}
-                      value={val}
-                      onChange={(e) => updateCategoryFieldValue(field.key, e.target.value)}
-                      maxLength={CATEGORY_FIELD_VALUE_MAX_CHARS}
-                      className="rounded-xl"
-                      placeholder={field.placeholder}
-                    />
-                  ) : (
-                    <Input
-                      id={inputId}
-                      value={val}
-                      onChange={(e) => updateCategoryFieldValue(field.key, e.target.value)}
-                      maxLength={CATEGORY_FIELD_VALUE_MAX_CHARS}
-                      className="rounded-xl"
-                      placeholder={field.placeholder}
-                      inputMode={field.type === "number" ? "decimal" : undefined}
-                    />
-                  );
-
-                return (
-                  <div key={field.key} className="space-y-2">
-                    <Label htmlFor={inputId}>
-                      {field.label}
-                      {optionalSuffix}
-                    </Label>
-                    {control}
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
+        {!hasCardBuilderImage ? (
+          <Alert>
+            <AlertTitle>Загрузите фото</AlertTitle>
+            <AlertDescription>
+              Чтобы распознать товар и собрать карточку, сначала загрузите фото в блоке выше.
+            </AlertDescription>
+          </Alert>
         ) : null}
 
-        <Card className="rounded-2xl border-border">
-          <CardHeader>
-            <CardTitle className="text-base">Товар 1:1</CardTitle>
-            <CardDescription>Сохранять исходный товар без искажений</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center gap-2">
-              <input
-                id="pc-preserve"
-                type="checkbox"
-                checked={preserveProduct}
-                onChange={(e) => {
-                  markUserEditedForm();
-                  setPreserveProduct(e.target.checked);
-                }}
-                className="border-input accent-primary size-4 shrink-0 rounded border"
-              />
-              <Label htmlFor="pc-preserve">Сохранять товар без изменений</Label>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {CARD_BUILDER_PRESERVE_ASPECTS.map((a) => (
-                <label
-                  key={a.id}
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs"
-                >
-                  <input
-                    type="checkbox"
-                    checked={preserveAspects.includes(a.id)}
-                    onChange={(e) => {
-                      markUserEditedForm();
-                      const on = e.target.checked;
-                      setPreserveAspects((prev) =>
-                        on ? [...prev, a.id] : prev.filter((x) => x !== a.id),
-                      );
-                    }}
-                    className="border-input accent-primary size-4 shrink-0 rounded border"
-                  />
-                  {a.label}
-                </label>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                id="pc-creative"
-                type="checkbox"
-                checked={creativeStyle}
-                onChange={(e) => {
-                  markUserEditedForm();
-                  setCreativeStyle(e.target.checked);
-                }}
-                className="border-input accent-primary size-4 shrink-0 rounded border"
-              />
-              <Label htmlFor="pc-creative">Разрешить креативную стилизацию</Label>
-            </div>
-          </CardContent>
-        </Card>
+        <CardBuilderUniversalPanel
+          visionLoading={visionLoading}
+          visionSummary={visionSummary}
+          categoryKey={categoryKey}
+          productType={productType}
+          productFacts={productFacts}
+          creationMode={creationMode}
+          singleCardType={singleCardType}
+          visualStyle={visualStyle}
+          onCategoryKeyChange={(v) => {
+            markUserEditedForm();
+            setCategoryManuallyOverridden(true);
+            setCategoryKey(v);
+          }}
+          onProductTypeChange={(v) => {
+            markUserEditedForm();
+            setProductType(v);
+          }}
+          onProductFactsChange={(facts) => {
+            markUserEditedForm();
+            setProductFacts(facts);
+          }}
+          onCreationModeChange={(v) => {
+            markUserEditedForm();
+            setCreationMode(v);
+          }}
+          onSingleCardTypeChange={(v) => {
+            markUserEditedForm();
+            setSingleCardType(v);
+          }}
+          onVisualStyleChange={(v) => {
+            markUserEditedForm();
+            setVisualStyle(v);
+          }}
+          onRetryAnalysis={() => void runVisionAnalysis({ manual: true })}
+          canRetryAnalysis={canWork}
+          gallerySlideCount={gallerySlideCount}
+          onGallerySlideCountChange={(v) => {
+            markUserEditedForm();
+            setGallerySlideCount(v);
+          }}
+        />
 
         <Card className="rounded-2xl border-border">
           <CardHeader>
-            <CardTitle className="text-base">Преимущества и акценты</CardTitle>
+            <CardTitle className="text-base">Язык текста для подсказок модели</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {benefitsSel.length > benefitLimit ? (
-              <Alert variant="destructive">
-                <AlertTitle>Слишком много акцентов</AlertTitle>
-                <AlertDescription>
-                  Для этой площадки можно перенести в текст слайда преимуществ не больше {benefitLimit}{" "}
-                  акцентов. При генерации будут использованы первые {benefitLimit} — добавьте самые важные
-                  в начало списка.
-                </AlertDescription>
-              </Alert>
-            ) : null}
-            <div className="flex flex-wrap gap-2">
-              {CARD_BUILDER_BENEFIT_TAGS.map((b) => (
-                <label
-                  key={b.id}
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs"
-                >
-                  <input
-                    type="checkbox"
-                    checked={benefitsSel.includes(b.id)}
-                    onChange={(e) => {
-                      markUserEditedForm();
-                      const on = e.target.checked;
-                      setBenefitsSel((prev) =>
-                        on ? [...prev, b.id] : prev.filter((x) => x !== b.id),
-                      );
-                    }}
-                    className="border-input accent-primary size-4 shrink-0 rounded border"
-                  />
-                  {b.label}
-                </label>
+          <CardContent className="space-y-2">
+            <Label htmlFor="pc-lang">Язык</Label>
+            <select
+              id="pc-lang"
+              className={nativeFieldClass}
+              value={languageMode}
+              onChange={(e) => {
+                markUserEditedForm();
+                setLanguageMode(e.target.value);
+              }}
+            >
+              {CARD_BUILDER_LANGUAGE_MODES.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
               ))}
-            </div>
-            <div className="space-y-2">
-              <Label>Дополнительные преимущества</Label>
-              <Textarea
-                value={benefitsExtra}
-                onChange={(e) => {
-                  markUserEditedForm();
-                  setBenefitsExtra(e.target.value);
-                }}
-                rows={2}
-                className="rounded-xl"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pc-subtitle">Подзаголовок на карточке (необязательно)</Label>
-              <Input
-                id="pc-subtitle"
-                value={subtitle}
-                onChange={(e) => {
-                  markUserEditedForm();
-                  setSubtitle(e.target.value);
-                }}
-                maxLength={300}
-                className="rounded-xl"
-                placeholder="Короткая подпись"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pc-dimensions">Размеры / характеристики для слайда (необязательно)</Label>
-              <Textarea
-                id="pc-dimensions"
-                value={dimensionsUser}
-                onChange={(e) => {
-                  markUserEditedForm();
-                  setDimensionsUser(e.target.value);
-                }}
-                rows={2}
-                maxLength={500}
-                className="rounded-xl"
-                placeholder="Только то, что можно показать; не выдумывайте цифры"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pc-lang">Язык текста для подсказок модели</Label>
-              <select
-                id="pc-lang"
-                className={nativeFieldClass}
-                value={languageMode}
-                onChange={(e) => {
-                  markUserEditedForm();
-                  setLanguageMode(e.target.value);
-                }}
-              >
-                {CARD_BUILDER_LANGUAGE_MODES.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                AI может менять дизайн, плашки, иконки и стиль карточки, но мы просим сохранить ваш
-                русский/казахский текст точно. После генерации обязательно проверьте текст перед публикацией.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>Что обязательно показать</Label>
-              <div className="flex flex-wrap gap-2">
-                {CARD_BUILDER_MUST_SHOW.map((m) => (
-                  <label
-                    key={m.id}
-                    className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={mustSel.includes(m.id)}
-                      onChange={(e) => {
-                        markUserEditedForm();
-                        const on = e.target.checked;
-                        setMustSel((prev) =>
-                          on ? [...prev, m.id] : prev.filter((x) => x !== m.id),
-                        );
-                      }}
-                      className="border-input accent-primary size-4 shrink-0 rounded border"
-                    />
-                    {m.label}
-                  </label>
-                ))}
-              </div>
-            </div>
+            </select>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              AI может менять дизайн, плашки, иконки и стиль карточки, но мы просим сохранить ваш
+              русский/казахский текст точно. После генерации обязательно проверьте текст перед публикацией.
+            </p>
           </CardContent>
         </Card>
 
@@ -1557,7 +1330,7 @@ export function CardBuilderTab({
                   variant="outline"
                   className="rounded-xl"
                   disabled={
-                    !canUseBackend || !projectId || styleReferenceUploading || styleReferenceImages.length >= 3
+                    !initDone || !projectId || styleReferenceUploading || styleReferenceImages.length >= 3
                   }
                   onClick={() => styleReferenceFileInputRef.current?.click()}
                 >
@@ -1682,24 +1455,13 @@ export function CardBuilderTab({
                   setDensityStash({ key: densityRecoKey, value: e.target.value });
                 }}
               >
-                {densityChoices.map((t) => (
+                {CARD_BUILDER_TEXT_DENSITY.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.label}
                   </option>
                 ))}
               </select>
             </div>
-            {effectiveGoal === "main_photo" && selProfile && !selProfile.mainPhotoTextAllowed ? (
-              <div className="sm:col-span-2">
-                <Alert>
-                  <AlertTitle>Главное фото без текста</AlertTitle>
-                  <AlertDescription>
-                    Для главного фото этой площадки лучше не использовать текст на кадре. Подпись и акценты
-                    удобнее вынести на слайд «Преимущества».
-                  </AlertDescription>
-                </Alert>
-              </div>
-            ) : null}
           </CardContent>
         </Card>
 
@@ -1710,7 +1472,7 @@ export function CardBuilderTab({
             disabled={!canWork || planLoading}
             onClick={() => void runPlan()}
           >
-            {planLoading ? "Сохранение…" : "Сгенерировать структуру"}
+            {planLoading ? "Сохранение…" : creationMode === "single" ? "Сгенерировать карточку" : "Сгенерировать структуру"}
           </Button>
           <Button
             type="button"
@@ -1776,8 +1538,8 @@ export function CardBuilderTab({
                 const slideTitle = slide?.title ?? "Слайд";
                 const slideLabel =
                   getUserFacingSlideLabel(g.imageRole ?? slide?.imageRole) ?? slideTitle;
-                const marketplaceLabel = getUserFacingMarketplaceLabel(coercedMarketplace);
-                const previewUrl = slideGen[g.slideId]?.url ?? null;
+                const previewUrl =
+                  slideGen[g.slideId]?.url ?? g.finalUrl ?? null;
                 const statusLabel = g.status
                   ? getUserFacingGenerationStatusFromRaw(g.status)
                   : null;
@@ -1802,10 +1564,7 @@ export function CardBuilderTab({
                       ) : null}
                       <div className="min-w-0">
                         <div className="font-medium">Создать карточку</div>
-                        <div className="text-muted-foreground text-xs">
-                          Слайд: {slideLabel}
-                          {marketplaceLabel ? ` · ${marketplaceLabel}` : null}
-                        </div>
+                        <div className="text-muted-foreground text-xs">Слайд: {slideLabel}</div>
                         <div className="text-muted-foreground text-xs">
                           {g.createdAt
                             ? new Date(g.createdAt).toLocaleString("ru-RU", {
@@ -1849,133 +1608,27 @@ export function CardBuilderTab({
       </div>
 
       <div className="lg:sticky lg:top-24 space-y-3">
-        <Card className="rounded-2xl border-primary/30 bg-gradient-to-b from-[#e8f8fb] to-white">
-          <CardHeader>
-            <CardTitle className="text-base">Предпросмотр галереи</CardTitle>
-            <CardDescription>Порядок и статус слайдов</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              Стиль будет ориентироваться на загруженный референс.
-            </p>
-            {styleReferencePreviewActive ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-xs">
-                {primaryStyleReferenceThumbUrl.trim() ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={primaryStyleReferenceThumbUrl}
-                      alt=""
-                      className="h-10 w-10 shrink-0 rounded-md border object-cover"
-                    />
-                  </>
-                ) : null}
-                <div className="min-w-0">
-                  <div className="font-medium text-primary">Style reference active</div>
-                  <div className="text-muted-foreground leading-snug">
-                    Товар остаётся с исходного фото; референс влияет только на верстку и визуальную подачу.
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            {slides.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
-                После нажатия «Сгенерировать структуру» здесь появится план из 6–8 кадров.
-              </p>
-            ) : (
-              slides.map((s) => {
-                const st = slideGen[s.slideId]?.status ?? "не сгенерировано";
-                const url = slideGen[s.slideId]?.url;
-                const active = activeSlideId === s.slideId;
-                const mpProf = enabledMpIndex.get(coercedMarketplace);
-                const tplOptions = mpProf
-                  ? getAllowedTemplatesForSlide({
-                      categoryKey: selectedCategory ?? "other",
-                      marketplaceProfile: mpProf,
-                      imageRole: s.imageRole as CardBuilderTemplateSlideRole,
-                      currentTemplateId: s.templateId,
-                      hasConcreteDimensions: hasMeasuresFromCategoryPlan(measuresPlanFinger),
-                      mustShowScale: mustSel.includes("scale"),
-                    })
-                  : listTemplatesForSlideRole(s.imageRole as CardBuilderTemplateSlideRole);
-                const tplBusy = tplBusySlideId === s.slideId;
-                return (
-                  <div
-                    key={s.slideId}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setActiveSlideId(s.slideId)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") setActiveSlideId(s.slideId);
-                    }}
-                    className={cn(
-                      "cursor-pointer rounded-xl border p-3 transition-colors",
-                      active ? "border-primary bg-primary/5" : "border-border bg-white",
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-sm">{s.title}</div>
-                        {s.previewCaption ? (
-                          <div className="text-muted-foreground mt-0.5 text-xs leading-snug">
-                            {s.previewCaption}
-                          </div>
-                        ) : null}
-                        <div className="text-muted-foreground mt-1 text-[11px]">
-                          Статус: {slideProgressLabel(st)}
-                        </div>
-                        <div className="mt-2 space-y-1">
-                          <Label className="text-[11px] text-muted-foreground">Изменить шаблон</Label>
-                          <select
-                            className={`${nativeFieldClass} h-9 max-w-full text-xs`}
-                            value={s.templateId ?? tplOptions[0]?.templateId ?? ""}
-                            disabled={!canWork || tplBusy || tplOptions.length < 2}
-                            aria-busy={tplBusy}
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => e.stopPropagation()}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              if (!v || v === s.templateId) return;
-                              void changeSlideTemplate(s.slideId, v);
-                            }}
-                          >
-                            {tplOptions.map((t) => (
-                              <option key={t.templateId} value={t.templateId}>
-                                {t.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="rounded-lg shrink-0 text-xs"
-                        disabled={!canWork || genBusy || batchBusy}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void generateOne(s.slideId);
-                        }}
-                      >
-                        Сгенерировать
-                      </Button>
-                    </div>
-                    {url ? (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={url} alt="" className="max-h-40 rounded-lg border object-contain" />
-                        <a href={url} download className="text-primary text-xs underline">
-                          Скачать
-                        </a>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
+        <CardBuilderGalleryPreview
+          slides={slides}
+          productFacts={productFacts}
+          productTitle={productNameGuess}
+          textDensity={effectiveTextDensity}
+          mainPhotoTextAllowed={templateProfile.mainPhotoTextAllowed}
+          slideGen={slideGen}
+          activeSlideId={activeSlideId}
+          onSelectSlide={setActiveSlideId}
+          canWork={canWork}
+          genBusy={genBusy}
+          batchBusy={batchBusy}
+          tplBusySlideId={tplBusySlideId}
+          resolvedPlannerCategory={resolvedPlannerCategory}
+          templateProfile={templateProfile}
+          onChangeTemplate={changeSlideTemplate}
+          onGenerateSlide={(slideId) => void generateOne(slideId)}
+          styleReferencePreviewActive={styleReferencePreviewActive}
+          primaryStyleReferenceThumbUrl={primaryStyleReferenceThumbUrl}
+          slideProgressLabel={slideProgressLabel}
+        />
       </div>
     </div>
   );

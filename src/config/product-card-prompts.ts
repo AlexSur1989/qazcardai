@@ -178,6 +178,72 @@ Rules:
   return classifierPromptCache;
 }
 
+// --- Card builder: анализ фото товара (JSON для «Создать карточку») ---
+
+export const PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA = `{
+  "categoryKey": "clothing_shoes | beauty_care | home_interior | kids_products | sport_fitness | auto_products | jewelry_accessories | food_drinks | gadgets_tech | other",
+  "productType": "string",
+  "productNameGuess": "string",
+  "mainColors": ["string"],
+  "materialGuess": null,
+  "styleGuess": null,
+  "visibleText": ["string"],
+  "packaging": "none | bottle | box | bag | tube | jar | other",
+  "productShape": null,
+  "mainObjects": ["string"],
+  "suggestedProductFacts": [
+    {
+      "label": "string",
+      "value": "string",
+      "type": "benefit | material | dimension | usage | detail | package | feature | ingredient | effect | compatibility | care | other",
+      "confidence": 0.0
+    }
+  ],
+  "confidence": 0.0,
+  "warnings": ["string"]
+}`;
+
+let visionAnalysisPromptCache: string | null = null;
+
+export function getProductCardVisionAnalysisPrompt(): string {
+  if (visionAnalysisPromptCache) return visionAnalysisPromptCache;
+  visionAnalysisPromptCache = `Ты анализируешь фото товара для генератора карточек товара.
+
+Твоя задача:
+- определить тип товара;
+- определить категорию;
+- описать видимые цвета;
+- определить материал только если он очевиден визуально;
+- извлечь видимый текст, если он есть;
+- предложить факты товара, которые помогут создать карточку.
+
+Не выдумывай:
+- размер;
+- вес;
+- объём;
+- состав;
+- материал (если не очевиден);
+- функции;
+- гарантию;
+- совместимость;
+- лечебные или медицинские свойства;
+- сертификаты;
+- бренд, если он не виден.
+
+Верни только валидный JSON без markdown и без лишних ключей.
+JSON должен точно соответствовать схеме:
+${PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA}
+
+Правила:
+- categoryKey — одна из перечисленных категорий.
+- materialGuess — null, если материал не очевиден.
+- productShape — null, если форма неясна.
+- suggestedProductFacts — только то, что можно обосновать визуально; confidence 0.0–1.0.
+- warnings — короткие предупреждения на русском, если данных мало.
+- Не добавляй поля вне схемы.`;
+  return visionAnalysisPromptCache;
+}
+
 // --- Concept helpers ---
 
 function resolveConceptId(categoryId: ProductCategoryId, conceptId: string): string {
@@ -396,119 +462,4 @@ export function buildProductVideoPrompt(
       .join("\n\n");
   }
   return buildProductVideoPrompt({ motionStyle: a, userPrompt: b });
-}
-
-// --- Card builder (product_card / card_builder) — отдельно от marketplace_card ---
-
-export type CardBuilderPromptInput = {
-  categoryId: string;
-  marketplace: string;
-  imageRole: string;
-  slideTitle: string;
-  slidePurpose: string;
-  recommendedTextMode: string;
-  benefits: string[];
-  benefitsExtra?: string;
-  mustShow: string[];
-  audience: string;
-  priceSegment: string;
-  salesStyle: string;
-  textDensity: string;
-  preserveProduct: boolean;
-  preserveAspects: string[];
-  allowCreativeStylization?: boolean;
-  /** После Kie текст накладывается сервером — усиливаем запрет читаемого текста в растре */
-  overlayRequired?: boolean;
-  templateId?: string;
-};
-
-const CARD_BUILDER_ROLE_DIRECTIVE: Record<string, string> = {
-  main_photo:
-    "Scene: flagship hero catalog frame. Neutral or soft gradient backdrop, pristine lighting, razor-sharp product edges, truthful scale.",
-  lifestyle:
-    "Scene: credible lifestyle context aligned with audience; tidy background, daylight or soft studio mix, hero product unmistakable.",
-  benefits_infographic:
-    "Scene: structured selling layout ready for overlays — quiet bands, grids, badges zones; NEVER bake readable letters/numbers in pixels.",
-  dimensions:
-    "Scene: dimensional storytelling — ruler hints, proportional comparison props (without fake measurements), truthful geometry.",
-  materials:
-    "Scene: material fidelity — weave, gloss, brushed metal, glass; honest macro cues without swapping the SKU.",
-  detail_closeup:
-    "Scene: macro hero emphasizing anchor detail; razor micro-contrast without inventing logos or text.",
-  packaging:
-    "Scene: packaging/kit completeness; labels legible shapes only — no counterfeit or invented brand marks.",
-  premium_poster:
-    "Scene: premium cinematic still with bold negative space, luxe tonal grade, restrained flares.",
-  ad_banner:
-    "Scene: high-energy retail banner composition; strong silhouette separation, saturated but clean palette.",
-};
-
-export function buildCardBuilderSlidePrompt(input: CardBuilderPromptInput): string {
-  const roleLine =
-    CARD_BUILDER_ROLE_DIRECTIVE[input.imageRole] ??
-    CARD_BUILDER_ROLE_DIRECTIVE.main_photo!;
-  const benefitLine =
-    input.overlayRequired === true
-      ? ""
-      : input.benefits.length > 0
-        ? `Highlight benefits visually (no readable text baked in): ${input.benefits.join(", ")}.`
-        : "";
-  const extraBen =
-    input.overlayRequired === true
-      ? ""
-      : input.benefitsExtra?.trim()
-        ? `Extra selling angle: ${input.benefitsExtra.trim()}.`
-        : "";
-  const must = input.mustShow.length
-    ? `Must visually communicate: ${input.mustShow.join(", ")}.`
-    : "";
-  const audience = `Target audience vibe: ${input.audience}.`;
-  const price = `Price positioning: ${input.priceSegment}.`;
-  const motion = `Sales visual language: ${input.salesStyle}.`;
-  const overlayRasterRules =
-    input.overlayRequired === true
-      ? [
-          "OVERLAY PIPELINE: Readable Russian headlines, bullets, badges with icons, dimensions and titles will be composited server-side after this render.",
-          "Raster MUST stay clean: no legible Cyrillic or Latin letters, no numeric spec tables, SKU codes, QR codes, marketplace stamps, watermark typography, or sticker labels painted by the model.",
-          "Infographic zones may only use abstract shapes, soft gradients, solids and negative space — never semantic lettering.",
-          input.templateId?.trim()
-            ? `Visual zoning hint only (scene/light/composition): template "${input.templateId.trim()}".`
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" ")
-      : "";
-  const textMode =
-    input.overlayRequired === true
-      ? overlayRasterRules
-      : `Text-on-image expectation (respect without rendering glyphs): ${input.recommendedTextMode} — user prefers ${input.textDensity}. Absolutely NO readable typography or fake UI stickers in raster.`;
-  const preserve = input.preserveProduct
-    ? `Preserve product geometry, SKU identity${input.preserveAspects?.length ? `, focus fidelity on: ${input.preserveAspects.join(", ")}` : ""}.`
-    : "Keep product recognizable but allow refined restyling of background and grading.";
-  const creative =
-    input.allowCreativeStylization === true && input.preserveProduct
-      ? "Allow tasteful cinematic grade and staging while keeping SKU identity untouched."
-      : "";
-  const market = `Market/channel cues: ${input.marketplace.replaceAll("_", " ")} optimized composition.`;
-
-  const parts = [
-    BASE_PRODUCT_PHOTO_PROMPT,
-    roleLine,
-    `Goal title: ${input.slideTitle}`,
-    `Intent: ${input.slidePurpose}`,
-    market,
-    `Category hint: ${input.categoryId}.`,
-    benefitLine,
-    extraBen,
-    must,
-    audience,
-    price,
-    motion,
-    textMode,
-    preserve,
-    creative,
-    "Professional commercial ecommerce photography.",
-  ].filter(Boolean);
-
-  return parts.join("\n\n");
 }
