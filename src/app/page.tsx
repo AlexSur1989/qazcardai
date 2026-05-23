@@ -3,7 +3,7 @@
  * Если корень сайта — статика с CDN/хостинга, правьте также `qazcard-landing/` и перезаливайте её.
  */
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, CreditCard, ImageIcon, Sparkles, Video, Zap } from "lucide-react";
+import { ArrowRight, CheckCircle2, CreditCard, ImageIcon, Video, Zap } from "lucide-react";
 
 import { getAppName } from "@/lib/app-name";
 import { Button } from "@/components/ui/button";
@@ -22,23 +22,7 @@ export default function HomePage() {
         aria-hidden
       />
       
-      {/* Шапка */}
-      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-6">
-        <div className="flex items-center gap-2 text-lg font-bold tracking-tight">
-          <Sparkles className="text-primary size-5" aria-hidden />
-          {getAppName()}
-        </div>
-        <div className="flex items-center gap-4">
-          <Link href="/login" className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
-            Войти
-          </Link>
-          <Button nativeButton={false} render={<Link href="/register" />} size="sm">
-            Регистрация
-          </Button>
-        </div>
-      </header>
-
-      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 pt-12 pb-24 md:pt-20">
+      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 pt-12 pb-24 md:pt-16">
         {/* Главный экран (Hero) */}
         <section className="mx-auto max-w-4xl space-y-8 text-center">
           <div className="border-primary/20 bg-primary/10 text-primary inline-flex items-center rounded-full border px-3 py-1 text-sm font-medium">
