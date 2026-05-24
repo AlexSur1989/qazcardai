@@ -59,6 +59,7 @@ export function buildWhatsAppUrlForManualPayment(args: {
   amountKzt: number;
   creditsAmount: number;
   userEmail: string;
+  userTelegram?: string | null;
 }): string | null {
   if (!args.settings.whatsappEnabled || !args.settings.whatsappPhone) {
     return null;
@@ -69,8 +70,18 @@ export function buildWhatsAppUrlForManualPayment(args: {
     amountKzt: args.amountKzt,
     creditsAmount: args.creditsAmount,
     userEmail: args.userEmail,
+    userTelegram: args.userTelegram,
   });
   return buildWhatsAppTopUpUrl(args.settings.whatsappPhone, message);
+}
+
+export async function getUserTelegramUsername(userId: string): Promise<string | null> {
+  const row = await prisma.userIdentity.findFirst({
+    where: { userId, provider: "telegram" },
+    select: { username: true },
+  });
+  const username = row?.username?.trim().replace(/^@/, "");
+  return username || null;
 }
 
 export type ManualPaymentClientRow = {
@@ -99,6 +110,7 @@ export function serializeManualPaymentForClient(args: {
   payment: Payment & { tokenPackage?: Pick<TokenPackage, "name"> | null };
   settings: KaspiManualSettings;
   userEmail: string;
+  userTelegram?: string | null;
 }): ManualPaymentClientRow {
   const meta = readPaymentMetadata(args.payment.metadata);
   const expired = isManualPaymentExpired(meta);
@@ -124,6 +136,7 @@ export function serializeManualPaymentForClient(args: {
           amountKzt,
           creditsAmount: args.payment.credits,
           userEmail: args.userEmail,
+          userTelegram: args.userTelegram,
         })
       : null;
   const canCancel =
@@ -188,6 +201,7 @@ export type CreateManualPaymentResult =
 export async function createManualPaymentRequest(args: {
   userId: string;
   userEmail: string;
+  userTelegram?: string | null;
   packageId: string;
   contactChannel?: ManualPaymentContactChannel;
 }): Promise<CreateManualPaymentResult> {
@@ -272,6 +286,7 @@ export async function createManualPaymentRequest(args: {
           payment,
           settings,
           userEmail: args.userEmail,
+          userTelegram: args.userTelegram,
         }),
       };
     } catch (e) {

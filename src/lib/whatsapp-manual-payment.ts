@@ -9,7 +9,19 @@ export type WhatsAppMessageVars = {
   amountKzt: number;
   creditsAmount: number;
   userEmail: string;
+  /** Telegram @username без @ или null — см. formatUserTelegramForWhatsApp */
+  userTelegram?: string | null;
 };
+
+/** @username для шаблона; без username — fallback на userEmail (не оставляем literal). */
+export function formatUserTelegramForWhatsApp(
+  username: string | null | undefined,
+  fallbackEmail: string,
+): string {
+  const raw = username?.trim().replace(/^@/, "");
+  if (raw) return `@${raw}`;
+  return fallbackEmail.trim();
+}
 
 /** Только цифры, без + пробелов скобок. */
 export function normalizeWhatsAppPhone(raw: string): string {
@@ -38,12 +50,14 @@ export function interpolateWhatsAppTemplate(
   const creditsStr = Number.isFinite(vars.creditsAmount)
     ? String(Math.round(vars.creditsAmount))
     : "0";
+  const userTelegram = formatUserTelegramForWhatsApp(vars.userTelegram, vars.userEmail);
   return template
     .replaceAll("{{paymentCode}}", vars.paymentCode)
     .replaceAll("{{packageLabel}}", vars.packageLabel)
     .replaceAll("{{amountKzt}}", amountStr)
     .replaceAll("{{creditsAmount}}", creditsStr)
-    .replaceAll("{{userEmail}}", vars.userEmail);
+    .replaceAll("{{userEmail}}", vars.userEmail)
+    .replaceAll("{{userTelegram}}", userTelegram);
 }
 
 export function buildWhatsAppTopUpUrl(

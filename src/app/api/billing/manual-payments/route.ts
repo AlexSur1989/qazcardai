@@ -9,6 +9,7 @@ import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import {
   createManualPaymentRequest,
   findUserOpenManualPayment,
+  getUserTelegramUsername,
   listUserManualPayments,
   serializeManualPaymentForClient,
 } from "@/server/services/manualPaymentService";
@@ -35,9 +36,10 @@ export async function GET() {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
 
-  const [rows, active] = await Promise.all([
+  const [rows, active, userTelegram] = await Promise.all([
     listUserManualPayments(current.user.id, 30),
     findUserOpenManualPayment(current.user.id),
+    getUserTelegramUsername(current.user.id),
   ]);
 
   const requests = rows.map((p) =>
@@ -45,6 +47,7 @@ export async function GET() {
       payment: p,
       settings,
       userEmail: current.user.email,
+      userTelegram,
     }),
   );
 
@@ -53,6 +56,7 @@ export async function GET() {
         payment: active,
         settings,
         userEmail: current.user.email,
+        userTelegram,
       })
     : null;
 
@@ -90,9 +94,12 @@ export async function POST(req: Request) {
     );
   }
 
+  const userTelegram = await getUserTelegramUsername(current.user.id);
+
   const result = await createManualPaymentRequest({
     userId: current.user.id,
     userEmail: current.user.email,
+    userTelegram,
     packageId: parsed.data.packageId,
     contactChannel: parsed.data.contactChannel,
   });

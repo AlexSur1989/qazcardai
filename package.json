@@ -47,7 +47,8 @@
     "verify:product-card-card-builder": "npx tsx scripts/verify-product-card-card-builder.ts",
     "verify:dashboard-user-copy": "npx tsx scripts/verify-dashboard-user-copy.ts",
     "verify:telegram-auth": "npx tsx scripts/verify-telegram-auth.ts",
-    "verify:manual-payments": "npx tsx scripts/verify-manual-payments.ts"
+    "verify:manual-payments": "npx tsx scripts/verify-manual-payments.ts",
+    "verify:pricing": "npx tsx scripts/verify-pricing.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1045.0",

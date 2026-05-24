@@ -12,6 +12,7 @@ import {
 import {
   buildWhatsAppTopUpUrl,
   DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+  formatUserTelegramForWhatsApp,
   formatWhatsAppPhoneDisplay,
   interpolateWhatsAppTemplate,
   normalizeWhatsAppPhone,
@@ -45,6 +46,42 @@ function testTemplateInterpolation() {
   assert.match(msg, /3500 ₸/);
   assert.match(msg, /user@mail.com/);
   assert.match(msg, /Прикрепляю чек/);
+  assert.doesNotMatch(msg, /\{\{userTelegram\}\}/);
+}
+
+function testUserTelegramInterpolation() {
+  const withUsername = interpolateWhatsAppTemplate("TG: {{userTelegram}}", {
+    paymentCode: "X",
+    packageLabel: "P",
+    amountKzt: 1,
+    creditsAmount: 1,
+    userEmail: "user@mail.com",
+    userTelegram: "myuser",
+  });
+  assert.equal(withUsername, "TG: @myuser");
+
+  const withAtPrefix = interpolateWhatsAppTemplate("TG: {{userTelegram}}", {
+    paymentCode: "X",
+    packageLabel: "P",
+    amountKzt: 1,
+    creditsAmount: 1,
+    userEmail: "user@mail.com",
+    userTelegram: "@myuser",
+  });
+  assert.equal(withAtPrefix, "TG: @myuser");
+
+  const withoutUsername = interpolateWhatsAppTemplate("TG: {{userTelegram}}", {
+    paymentCode: "X",
+    packageLabel: "P",
+    amountKzt: 1,
+    creditsAmount: 1,
+    userEmail: "fallback@mail.com",
+  });
+  assert.equal(withoutUsername, "TG: fallback@mail.com");
+  assert.doesNotMatch(withoutUsername, /\{\{userTelegram\}\}/);
+
+  assert.equal(formatUserTelegramForWhatsApp("alice", "a@b.c"), "@alice");
+  assert.equal(formatUserTelegramForWhatsApp(null, "a@b.c"), "a@b.c");
 }
 
 function testPaymentCodeFormat() {
@@ -82,6 +119,7 @@ function main() {
   testWhatsAppPhoneNormalization();
   testWhatsAppUrlEncoding();
   testTemplateInterpolation();
+  testUserTelegramInterpolation();
   testPaymentCodeFormat();
   testUserStatusLabels();
   testKaspiManualProviderConstant();
