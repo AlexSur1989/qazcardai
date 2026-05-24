@@ -10,7 +10,7 @@ import {
   type KaspiManualPricingApi,
 } from "@/lib/pricing-admin/kaspi-manual";
 import { formatWhatsAppPhoneDisplay } from "@/lib/whatsapp-manual-payment";
-import type { AppSettingMeta } from "@/server/services/adminPricingEditor";
+import type { AppSettingMeta } from "@/lib/pricing-admin/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

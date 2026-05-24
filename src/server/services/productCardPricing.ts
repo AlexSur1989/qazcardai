@@ -1,11 +1,14 @@
 
 import type { AiModel } from "@/generated/prisma/client";
 import { isAdminPricingPinned } from "@/lib/admin-pricing-pinned";
+import { computeCardBuilderCreditsBeforeMargin } from "@/lib/card-builder-pricing-math";
 import {
   getProductCardSettings,
   type ProductCardSettings,
   type ProductCardCardBuilderPricing,
 } from "@/server/services/productCardSettings";
+
+export { computeCardBuilderCreditsBeforeMargin };
 
 export type ProductCardPricingScenario =
   | "concept_image"
@@ -458,26 +461,6 @@ export function calculateProductCardVideoCredits(
     scenario: "video",
     settings,
   });
-}
-
-export function computeCardBuilderCreditsBeforeMargin(
-  kind: "slide" | "gallery6" | "gallery8",
-  cardBuilderPricing: ProductCardCardBuilderPricing,
-  opts: { premiumStyle?: boolean; heavyText?: boolean },
-): number {
-  let n =
-    kind === "slide"
-      ? cardBuilderPricing.cardBuilderSingleSlideCredits
-      : kind === "gallery6"
-        ? cardBuilderPricing.cardBuilderGallery6Credits
-        : cardBuilderPricing.cardBuilderGallery8Credits;
-  if (opts.premiumStyle) {
-    n = Math.ceil(n * cardBuilderPricing.multipliers.premiumStyle);
-  }
-  if (opts.heavyText) {
-    n = Math.ceil(n * cardBuilderPricing.multipliers.heavyTextInfographic);
-  }
-  return Math.max(1, Math.round(n));
 }
 
 function isPremiumSalesStyle(id: string): boolean {

@@ -12,7 +12,7 @@ import {
   DEFAULT_CARD_BUILDER_PRICING_API,
   type CardBuilderPricingApi,
 } from "@/lib/pricing-admin/card-builder";
-import type { AppSettingMeta } from "@/server/services/adminPricingEditor";
+import type { AppSettingMeta } from "@/lib/pricing-admin/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

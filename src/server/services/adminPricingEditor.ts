@@ -24,10 +24,9 @@ import {
   type ProductCardCardBuilderPricing,
 } from "@/server/services/productCardSettings";
 
-export type AppSettingMeta = {
-  updatedAt: string | null;
-  updatedByEmail: string | null;
-};
+import type { AppSettingMeta } from "@/lib/pricing-admin/types";
+
+export type { AppSettingMeta };
 
 export async function getAppSettingMeta(key: string): Promise<AppSettingMeta | null> {
   const row = await prisma.appSetting.findUnique({

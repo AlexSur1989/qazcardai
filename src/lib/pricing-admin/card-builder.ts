@@ -1,7 +1,9 @@
 import { z } from "zod";
 
-import type { ProductCardCardBuilderPricing } from "@/server/services/productCardSettings";
-import { computeCardBuilderCreditsBeforeMargin } from "@/server/services/productCardPricing";
+import {
+  computeCardBuilderCreditsBeforeMargin,
+  type CardBuilderPricingShape,
+} from "@/lib/card-builder-pricing-math";
 
 export const CARD_BUILDER_PRICING_SETTING_KEY = "PRODUCT_CARD_CARD_BUILDER_PRICING";
 
@@ -30,7 +32,7 @@ export const cardBuilderPricingPatchSchema = z.object({
 export type CardBuilderPricingApi = z.infer<typeof cardBuilderPricingPatchSchema>;
 
 export function storageToCardBuilderPricingApi(
-  raw: ProductCardCardBuilderPricing,
+  raw: CardBuilderPricingShape,
 ): CardBuilderPricingApi {
   return {
     planCredits: raw.cardBuilderPlanCredits,
@@ -67,7 +69,7 @@ export function cardBuilderPricingApiToStorage(
 
 export function cardBuilderPricingToProductCardShape(
   api: CardBuilderPricingApi,
-): ProductCardCardBuilderPricing {
+): CardBuilderPricingShape {
   return {
     cardBuilderPlanCredits: api.planCredits,
     cardBuilderSingleSlideCredits: api.singleSlideCredits,
@@ -84,7 +86,7 @@ export type CardBuilderPricingPreviewLine = {
 };
 
 export function buildCardBuilderPricingPreview(
-  pricing: ProductCardCardBuilderPricing,
+  pricing: CardBuilderPricingShape,
 ): CardBuilderPricingPreviewLine[] {
   const prem = { premiumStyle: true, heavyText: false };
   const premHeavy = { premiumStyle: true, heavyText: true };
