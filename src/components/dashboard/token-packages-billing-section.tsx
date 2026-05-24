@@ -165,7 +165,7 @@ export function TokenPackagesBillingSection({
             ? "Kaspi Pay: токены только после подтверждения на сервере (webhook), а не со страницы «успех» в браузере."
             : null}
           {kaspiManual.enabled
-            ? " Kaspi перевод: токены только после ручной проверки администратором."
+            ? " Kaspi / WhatsApp: токены только после ручной проверки администратором."
             : null}
           {!stripeReady && kaspiReady
             ? "Сейчас доступна тестовая оплата Kaspi Pay (mock)."

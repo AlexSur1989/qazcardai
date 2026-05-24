@@ -1,13 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useState, startTransition } from "react";
-import { Loader2 } from "lucide-react";
+import { ExternalLink, Loader2, MessageCircle } from "lucide-react";
 
 import type { KaspiManualBillingPublic } from "@/lib/kaspi-manual-config";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { formatKzt } from "@/lib/format-kzt";
+import { formatAdminDateTime } from "@/lib/admin-format";
 
 type PackageRow = {
   id: string;
@@ -15,21 +23,24 @@ type PackageRow = {
   priceKzt: number;
 };
 
-type ActivePayment = {
-  id: string;
+type ManualPaymentRow = {
+  requestId: string;
+  paymentCode: string;
   status: string;
-  amount: number;
-  credits: number;
-  providerPaymentId: string | null;
-  instructionCode: string;
-  recipientName: string;
+  statusLabel: string;
+  amountKzt: number;
+  creditsAmount: number;
+  packageLabel: string;
   kaspiRecipientPhoneMasked: string;
+  recipientName: string;
   instructionText: string;
+  whatsappUrl: string | null;
+  whatsappEnabled: boolean;
+  createdAt: string;
   expiresAt: string | null;
   expired: boolean;
-  userComment: string;
-  userReceiptUrl: string;
-  tokenPackageName: string;
+  canCancel: boolean;
+  canOpenWhatsApp: boolean;
 };
 
 type Props = {
@@ -38,36 +49,37 @@ type Props = {
 };
 
 export function KaspiManualBillingPanel({ packages, publicSettings }: Props) {
-  const [active, setActive] = useState<ActivePayment | null>(null);
-  const [settings, setSettings] = useState<KaspiManualBillingPublic>(publicSettings);
+  const settings = publicSettings;
+  const [active, setActive] = useState<ManualPaymentRow | null>(null);
+  const [history, setHistory] = useState<ManualPaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [creating, setCreating] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [comment, setComment] = useState("");
-  const [receiptUrl, setReceiptUrl] = useState("");
-  const [uploading, setUploading] = useState(false);
 
   const refresh = useCallback(async () => {
     setErr(null);
     try {
-      const res = await fetch("/api/billing/payments/kaspi-manual/active", {
-        cache: "no-store",
-      });
+      const res = await fetch("/api/billing/manual-payments", { cache: "no-store" });
       const data = (await res.json()) as {
         enabled?: boolean;
-        settings?: KaspiManualBillingPublic;
-        payment?: ActivePayment | null;
+        activeRequest?: ManualPaymentRow | null;
+        requests?: ManualPaymentRow[];
         error?: string;
       };
       if (!res.ok) {
-        setErr(data.error ?? "Не удалось загрузить статус");
+        setErr(data.error ?? "Не удалось загрузить заявки");
         return;
       }
-      if (data.settings) setSettings(data.settings);
-      setActive(data.payment ?? null);
+      if (data.enabled === false) {
+        setActive(null);
+        setHistory([]);
+        return;
+      }
+      setActive(data.activeRequest ?? null);
+      setHistory(data.requests ?? []);
     } catch {
-      setErr("Сеть: не удалось загрузить заявку");
+      setErr("Сеть: не удалось загрузить заявки");
     } finally {
       setLoading(false);
     }
@@ -79,14 +91,17 @@ export function KaspiManualBillingPanel({ packages, publicSettings }: Props) {
     });
   }, [refresh]);
 
-  async function createManual(packageId: string) {
+  async function createRequest(packageId: string) {
     setErr(null);
     setCreating(packageId);
     try {
-      const res = await fetch("/api/billing/payments/kaspi-manual/create", {
+      const res = await fetch("/api/billing/manual-payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tokenPackageId: packageId }),
+        body: JSON.stringify({
+          packageId,
+          contactChannel: settings.whatsappEnabled ? "whatsapp" : "kaspi",
+        }),
       });
       const data = (await res.json()) as {
         error?: string;
@@ -104,44 +119,12 @@ export function KaspiManualBillingPanel({ packages, publicSettings }: Props) {
     }
   }
 
-  async function markPaid() {
-    if (!active) return;
-    setBusyId("mark");
+  async function cancelRequest(requestId: string) {
+    setBusyId(requestId);
     setErr(null);
     try {
       const res = await fetch(
-        `/api/billing/payments/kaspi-manual/${encodeURIComponent(active.id)}/mark-paid`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userComment: comment.trim() || undefined,
-            userReceiptUrl: receiptUrl.trim() || undefined,
-          }),
-        },
-      );
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        setErr(data.error ?? `Ошибка ${res.status}`);
-        return;
-      }
-      setComment("");
-      setReceiptUrl("");
-      await refresh();
-    } catch {
-      setErr("Сеть: не удалось отправить");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function cancelPayment() {
-    if (!active) return;
-    setBusyId("cancel");
-    setErr(null);
-    try {
-      const res = await fetch(
-        `/api/billing/payments/kaspi-manual/${encodeURIComponent(active.id)}/cancel`,
+        `/api/billing/manual-payments/${encodeURIComponent(requestId)}/cancel`,
         { method: "POST" },
       );
       const data = (await res.json()) as { error?: string };
@@ -157,26 +140,84 @@ export function KaspiManualBillingPanel({ packages, publicSettings }: Props) {
     }
   }
 
-  async function onPickReceipt(file: File | null) {
-    if (!file) return;
-    setUploading(true);
-    setErr(null);
-    try {
-      const form = new FormData();
-      form.set("file", file);
-      form.set("purpose", "kaspi_manual_receipt");
-      const res = await fetch("/api/uploads", { method: "POST", body: form });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok) {
-        setErr(data.error ?? "Не удалось загрузить файл");
-        return;
-      }
-      if (data.url) setReceiptUrl(data.url);
-    } catch {
-      setErr("Сеть: загрузка не удалась");
-    } finally {
-      setUploading(false);
-    }
+  function openWhatsApp(url: string) {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  function renderActiveCard(row: ManualPaymentRow) {
+    return (
+      <Alert className={row.expired ? "border-amber-500/50" : undefined}>
+        <AlertTitle>
+          {row.expired ? "Заявка просрочена" : "Заявка на пополнение"}
+        </AlertTitle>
+        <AlertDescription className="space-y-2 text-sm">
+          <p>
+            Пакет: <strong>{row.packageLabel}</strong>
+          </p>
+          <p>
+            Сумма: <strong>{formatKzt(row.amountKzt)}</strong> · токенов:{" "}
+            <strong>{row.creditsAmount}</strong>
+          </p>
+          <p>
+            Kaspi: <strong>{row.kaspiRecipientPhoneMasked}</strong>
+          </p>
+          <p>
+            Получатель: <strong>{row.recipientName}</strong>
+          </p>
+          <p>
+            Код заявки:{" "}
+            <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+              {row.paymentCode}
+            </code>
+          </p>
+          <p className="text-muted-foreground">{row.instructionText}</p>
+          <p className="text-muted-foreground text-xs">
+            Укажите код заявки в комментарии к переводу. Мы проверим поступление и
+            начислим токены вручную. Обычно проверка занимает некоторое время после
+            отправки чека.
+          </p>
+          {row.expiresAt && (
+            <p className="text-muted-foreground text-xs">
+              Действует до: {new Date(row.expiresAt).toLocaleString("ru-RU")}
+            </p>
+          )}
+          <p className="text-muted-foreground text-xs">
+            Статус: <strong>{row.statusLabel}</strong>
+          </p>
+          {row.canCancel && (
+            <div className="flex flex-wrap gap-2 pt-2">
+              {row.canOpenWhatsApp && row.whatsappUrl ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => openWhatsApp(row.whatsappUrl!)}
+                >
+                  <MessageCircle className="size-3.5" aria-hidden />
+                  Написать в WhatsApp
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={busyId !== null}
+                onClick={() => void cancelRequest(row.requestId)}
+              >
+                {busyId === row.requestId ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Отмена…
+                  </>
+                ) : (
+                  "Отменить заявку"
+                )}
+              </Button>
+            </div>
+          )}
+        </AlertDescription>
+      </Alert>
+    );
   }
 
   if (loading) {
@@ -199,177 +240,104 @@ export function KaspiManualBillingPanel({ packages, publicSettings }: Props) {
         </Alert>
       )}
 
-      {active && (
-        <Alert className={active.expired ? "border-amber-500/50" : undefined}>
-          <AlertTitle>
-            {active.expired ? "Заявка просрочена" : "Перевод Kaspi (ожидает проверки)"}
-          </AlertTitle>
-          <AlertDescription className="space-y-2 text-sm">
-            <p>
-              Пакет: <strong>{active.tokenPackageName}</strong>
-            </p>
-            <p>
-              Сумма: <strong>{formatKzt(active.amount)}</strong> · токенов:{" "}
-              <strong>{active.credits}</strong>
-            </p>
-            <p>
-              Kaspi: <strong>{active.kaspiRecipientPhoneMasked}</strong>
-            </p>
-            <p>
-              Получатель: <strong>{active.recipientName}</strong>
-            </p>
-            <p>
-              Код в комментарии:{" "}
-              <code className="bg-muted rounded px-1.5 py-0.5 text-xs font-mono">
-                {active.instructionCode}
-              </code>
-            </p>
-            <p className="text-muted-foreground">{active.instructionText}</p>
-            {active.expiresAt && (
-              <p className="text-muted-foreground text-xs">
-                Действует до: {new Date(active.expiresAt).toLocaleString("ru-RU")}
-              </p>
-            )}
-            {active.status === "PENDING" && !active.expired && (
-              <div className="space-y-2 pt-2">
-                <label className="text-muted-foreground text-xs">
-                  Комментарий (необязательно)
-                </label>
-                <Textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  rows={2}
-                  className="text-sm"
-                  placeholder="Например, время перевода или ФИО отправителя"
-                />
-                {settings.requireReceiptUpload && (
-                  <div className="space-y-1">
-                    <label className="text-muted-foreground text-xs">
-                      Скрин или квитанция обязательны
-                    </label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={uploading}
-                      onChange={(e) => void onPickReceipt(e.target.files?.[0] ?? null)}
-                      className="text-xs"
-                    />
-                    {receiptUrl && (
-                      <p className="text-xs">
-                        <a
-                          className="text-primary underline"
-                          href={receiptUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Открыть загруженный файл
-                        </a>
-                      </p>
-                    )}
-                  </div>
-                )}
-                {!settings.requireReceiptUpload && (
-                  <div className="space-y-1">
-                    <label className="text-muted-foreground text-xs">
-                      Скрин или квитанция (по желанию)
-                    </label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={uploading}
-                      onChange={(e) => void onPickReceipt(e.target.files?.[0] ?? null)}
-                      className="text-xs"
-                    />
-                    {receiptUrl && (
-                      <p className="text-xs">
-                        <a
-                          className="text-primary underline"
-                          href={receiptUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Открыть загруженный файл
-                        </a>
-                      </p>
-                    )}
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={busyId !== null || uploading}
-                    onClick={() => void markPaid()}
-                  >
-                    {busyId === "mark" ? (
-                      <>
-                        <Loader2 className="size-3.5 animate-spin" />
-                        Отправляем…
-                      </>
-                    ) : (
-                      "Я оплатил"
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    disabled={busyId !== null}
-                    onClick={() => void cancelPayment()}
-                  >
-                    {busyId === "cancel" ? (
-                      <>
-                        <Loader2 className="size-3.5 animate-spin" />
-                        Отмена…
-                      </>
-                    ) : (
-                      "Отменить заявку"
-                    )}
-                  </Button>
-                </div>
-              </div>
-            )}
-            {active.status === "PROCESSING" && (
-              <p className="text-muted-foreground pt-2 text-xs">
-                Заявка передана на проверку. Токены начислятся после подтверждения администратором.
-              </p>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
+      <div className="space-y-1">
+        <p className="text-foreground text-sm font-medium">
+          Пополнить через Kaspi / WhatsApp
+        </p>
+        <p className="text-muted-foreground text-xs">
+          Выберите пакет, переведите сумму на Kaspi с кодом заявки и отправьте чек в
+          WhatsApp. Токены начисляются только после проверки администратором.
+        </p>
+      </div>
+
+      {active ? renderActiveCard(active) : null}
 
       {!active && packages.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {packages.map((p) => (
+            <li key={p.id} className="flex flex-wrap items-center gap-2">
+              <span className="text-sm">
+                {p.name} — {formatKzt(p.priceKzt)}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={creating !== null}
+                onClick={() => void createRequest(p.id)}
+              >
+                {creating === p.id ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Создаём…
+                  </>
+                ) : (
+                  "Создать заявку"
+                )}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {history.length > 0 && (
         <div className="space-y-2">
-          <p className="text-foreground text-sm font-medium">Kaspi перевод</p>
-          <p className="text-muted-foreground text-xs">
-            После создания заявки вы получите код для поля комментария к переводу. Токены начисляются
-            только после проверки администратором.
-          </p>
-          <ul className="flex flex-col gap-2">
-            {packages.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center gap-2">
-                <span className="text-sm">
-                  {p.name} — {formatKzt(p.priceKzt)}
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={creating !== null}
-                  onClick={() => void createManual(p.id)}
-                >
-                  {creating === p.id ? (
-                    <>
-                      <Loader2 className="size-3.5 animate-spin" />
-                      Создаём…
-                    </>
-                  ) : (
-                    "Оплатить через Kaspi перевод"
-                  )}
-                </Button>
-              </li>
-            ))}
-          </ul>
+          <p className="text-foreground text-sm font-medium">Мои заявки на пополнение</p>
+          <div className="overflow-x-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Код</TableHead>
+                  <TableHead>Сумма</TableHead>
+                  <TableHead>Токены</TableHead>
+                  <TableHead>Статус</TableHead>
+                  <TableHead>Дата</TableHead>
+                  <TableHead className="text-right">Действия</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {history.map((row) => (
+                  <TableRow key={row.requestId}>
+                    <TableCell className="font-mono text-xs">{row.paymentCode}</TableCell>
+                    <TableCell>{formatKzt(row.amountKzt)}</TableCell>
+                    <TableCell>{row.creditsAmount}</TableCell>
+                    <TableCell>{row.statusLabel}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
+                      {formatAdminDateTime(new Date(row.createdAt))}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex flex-wrap justify-end gap-1">
+                        {row.canOpenWhatsApp && row.whatsappUrl ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 gap-1 text-xs"
+                            onClick={() => openWhatsApp(row.whatsappUrl!)}
+                          >
+                            <ExternalLink className="size-3" aria-hidden />
+                            WhatsApp
+                          </Button>
+                        ) : null}
+                        {row.canCancel ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 text-xs"
+                            disabled={busyId !== null}
+                            onClick={() => void cancelRequest(row.requestId)}
+                          >
+                            Отменить
+                          </Button>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
     </div>

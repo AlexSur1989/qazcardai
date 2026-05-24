@@ -26,6 +26,7 @@ import { creditTypeLabel } from "@/lib/credit-labels";
 import { paymentStatusLabel } from "@/lib/payment-labels";
 import { cn } from "@/lib/utils";
 import { KASPI_MANUAL_PAYMENT_PROVIDER } from "@/lib/kaspi-manual-config";
+import { manualPaymentContactChannelLabel } from "@/lib/manual-payment-labels";
 import { hasPermission } from "@/lib/permissions";
 import { AdminKaspiManualPaymentActions } from "@/components/admin/admin-kaspi-manual-payment-actions";
 import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
@@ -110,9 +111,10 @@ export default async function AdminPaymentDetailPage({ params }: Props) {
         {p.provider === KASPI_MANUAL_PAYMENT_PROVIDER ? (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Ручной Kaspi перевод</CardTitle>
+              <CardTitle className="text-base">Ручное пополнение Kaspi / WhatsApp</CardTitle>
               <CardDescription>
-                Код для комментария к переводу и данные от пользователя.
+                Код заявки, канал связи и данные от пользователя. Подтверждайте только после
+                проверки поступления.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
@@ -123,6 +125,8 @@ export default async function AdminPaymentDetailPage({ params }: Props) {
                   !Array.isArray(p.metadata)
                     ? (p.metadata as Record<string, unknown>)
                     : {};
+                const contactChannel =
+                  typeof meta.contactChannel === "string" ? meta.contactChannel : "kaspi";
                 const userComment =
                   typeof meta.userComment === "string" ? meta.userComment : null;
                 const userReceiptUrl =
@@ -133,6 +137,10 @@ export default async function AdminPaymentDetailPage({ params }: Props) {
                     : p.providerPaymentId;
                 return (
                   <>
+                    <p>
+                      <span className="text-muted-foreground">Канал связи: </span>
+                      {manualPaymentContactChannelLabel(contactChannel)}
+                    </p>
                     <p>
                       <span className="text-muted-foreground">Код платежа: </span>
                       <code className="rounded bg-muted px-1 font-mono text-xs">

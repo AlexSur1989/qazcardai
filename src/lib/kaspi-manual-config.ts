@@ -4,6 +4,8 @@
  */
 export const KASPI_MANUAL_PAYMENT_PROVIDER = "kaspi_manual" as const;
 
+export type ManualPaymentContactChannel = "whatsapp" | "kaspi";
+
 export type KaspiManualBillingPublic = {
   enabled: boolean;
   recipientName: string;
@@ -11,4 +13,15 @@ export type KaspiManualBillingPublic = {
   instructionText: string;
   requireReceiptUpload: boolean;
   expiresMinutes: number;
+  whatsappEnabled: boolean;
+  whatsappPhoneDisplay: string;
+};
+
+export type ManualPaymentSettingsPublic = KaspiManualBillingPublic & {
+  packages: Array<{
+    id: string;
+    label: string;
+    amountKzt: number;
+    credits: number;
+  }>;
 };

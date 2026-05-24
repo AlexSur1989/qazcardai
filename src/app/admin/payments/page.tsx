@@ -99,7 +99,15 @@ export default async function AdminPaymentsPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Платежи</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Платежи</h1>
+          <Link
+            href="/admin/payments/manual"
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+          >
+            Ручные заявки Kaspi / WhatsApp
+          </Link>
+        </div>
         <p className="text-muted-foreground mt-1 text-sm">
           Все транзакции. Кредиты начисляются по webhook, не по redirect с Stripe.
         </p>

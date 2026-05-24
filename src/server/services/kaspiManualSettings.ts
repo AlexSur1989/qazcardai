@@ -1,5 +1,11 @@
-import type { KaspiManualBillingPublic } from "@/lib/kaspi-manual-config";
+import type { KaspiManualBillingPublic, ManualPaymentSettingsPublic } from "@/lib/kaspi-manual-config";
+import {
+  DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+  formatWhatsAppPhoneDisplay,
+  normalizeWhatsAppPhone,
+} from "@/lib/whatsapp-manual-payment";
 import { getAppSetting } from "@/server/services/appSettings";
+import { listActiveTokenPackagesForBilling } from "@/server/services/token-packages-catalog";
 
 export type KaspiManualSettings = {
   kaspiManualEnabled: boolean;
@@ -9,16 +15,23 @@ export type KaspiManualSettings = {
   requireReceiptUpload: boolean;
   paymentCodePrefix: string;
   expiresMinutes: number;
+  whatsappEnabled: boolean;
+  whatsappPhone: string;
+  whatsappMessageTemplate: string;
 };
 
 const DEFAULTS: KaspiManualSettings = {
   kaspiManualEnabled: false,
   recipientName: "QazCard AI",
   recipientPhone: "+7XXXXXXXXXX",
-  instructionText: "Переведите сумму на Kaspi и укажите код в комментарии.",
+  instructionText:
+    "Переведите сумму на Kaspi, укажите код заявки в комментарии и отправьте чек в WhatsApp.",
   requireReceiptUpload: false,
-  paymentCodePrefix: "QAZ",
+  paymentCodePrefix: "QAZCARD",
   expiresMinutes: 1440,
+  whatsappEnabled: true,
+  whatsappPhone: "77001234567",
+  whatsappMessageTemplate: DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -48,6 +61,15 @@ export function mergeKaspiManualSettings(raw: unknown): KaspiManualSettings {
   }
   if (typeof raw.expiresMinutes === "number" && Number.isFinite(raw.expiresMinutes)) {
     base.expiresMinutes = Math.max(5, Math.min(10080, Math.round(raw.expiresMinutes)));
+  }
+  if (typeof raw.whatsappEnabled === "boolean") {
+    base.whatsappEnabled = raw.whatsappEnabled;
+  }
+  if (typeof raw.whatsappPhone === "string" && raw.whatsappPhone.trim()) {
+    base.whatsappPhone = normalizeWhatsAppPhone(raw.whatsappPhone);
+  }
+  if (typeof raw.whatsappMessageTemplate === "string" && raw.whatsappMessageTemplate.trim()) {
+    base.whatsappMessageTemplate = raw.whatsappMessageTemplate.trim();
   }
   return base;
 }
@@ -79,5 +101,25 @@ export async function getKaspiManualBillingPublic(): Promise<KaspiManualBillingP
     instructionText: s.instructionText,
     requireReceiptUpload: s.requireReceiptUpload,
     expiresMinutes: s.expiresMinutes,
+    whatsappEnabled: s.whatsappEnabled && Boolean(s.whatsappPhone),
+    whatsappPhoneDisplay: s.whatsappPhone
+      ? formatWhatsAppPhoneDisplay(s.whatsappPhone)
+      : "",
+  };
+}
+
+export async function getManualPaymentSettingsPublic(): Promise<ManualPaymentSettingsPublic> {
+  const [billing, packages] = await Promise.all([
+    getKaspiManualBillingPublic(),
+    listActiveTokenPackagesForBilling(),
+  ]);
+  return {
+    ...billing,
+    packages: packages.map((p) => ({
+      id: p.id,
+      label: p.name,
+      amountKzt: p.priceKzt,
+      credits: p.totalTokens,
+    })),
   };
 }

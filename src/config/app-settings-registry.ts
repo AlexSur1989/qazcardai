@@ -134,16 +134,21 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
     group: "credits",
     label: "KASPI_MANUAL_SETTINGS / Ручной перевод Kaspi",
     description:
-      "Временный сценарий: пользователь переводит на карту/Kaspi по инструкции, админ подтверждает вручную. JSON: kaspiManualEnabled, recipientName, recipientPhone, instructionText, requireReceiptUpload, paymentCodePrefix, expiresMinutes.",
+      "Временный сценарий: пользователь переводит на Kaspi по инструкции, отправляет чек в WhatsApp, админ подтверждает вручную. JSON: kaspiManualEnabled, recipientName, recipientPhone, instructionText, requireReceiptUpload, paymentCodePrefix, expiresMinutes, whatsappEnabled, whatsappPhone, whatsappMessageTemplate.",
     type: "json",
     defaultValue: {
       kaspiManualEnabled: false,
       recipientName: "QazCard AI",
       recipientPhone: "+7XXXXXXXXXX",
-      instructionText: "Переведите сумму на Kaspi и укажите код в комментарии.",
+      instructionText:
+        "Переведите сумму на Kaspi, укажите код заявки в комментарии и отправьте чек в WhatsApp.",
       requireReceiptUpload: false,
-      paymentCodePrefix: "QAZ",
+      paymentCodePrefix: "QAZCARD",
       expiresMinutes: 1440,
+      whatsappEnabled: true,
+      whatsappPhone: "77001234567",
+      whatsappMessageTemplate:
+        "Здравствуйте! Я оплатил пополнение QazCard AI.\\n\\nКод заявки: {{paymentCode}}\\nПакет: {{packageLabel}}\\nСумма: {{amountKzt}} ₸\\nТокены: {{creditsAmount}}\\nАккаунт: {{userEmail}}\\n\\nПрикрепляю чек.",
     },
     editable: true,
     sensitive: false,
