@@ -60,14 +60,14 @@ const Z_STYLE_REFERENCE = z
     enabled: z.boolean().optional().default(false),
     referenceAssetIds: z.array(z.string().trim().min(1).max(96)).max(3).optional().default([]),
     strength: z.enum(["low", "medium", "high"]).optional().default("medium"),
-    useComposition: z.boolean().optional().default(false),
-    useBackground: z.boolean().optional().default(false),
-    useColors: z.boolean().optional().default(false),
-    useTypography: z.boolean().optional().default(false),
-    useBadges: z.boolean().optional().default(false),
-    useIcons: z.boolean().optional().default(false),
-    useMood: z.boolean().optional().default(false),
-    useOverallPresentation: z.boolean().optional().default(false),
+    useComposition: z.boolean().optional().default(true),
+    useBackground: z.boolean().optional().default(true),
+    useColors: z.boolean().optional().default(true),
+    useTypography: z.boolean().optional().default(true),
+    useBadges: z.boolean().optional().default(true),
+    useIcons: z.boolean().optional().default(true),
+    useMood: z.boolean().optional().default(true),
+    useOverallPresentation: z.boolean().optional().default(true),
   })
   .strict();
 

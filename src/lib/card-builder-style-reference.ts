@@ -84,20 +84,24 @@ export function normalizeStyleReferencePlan(
       )
     : [];
 
-  const bool = (k: string) => r[k] === true;
+  const flag = (key: keyof Omit<CardBuilderStyleReferencePlan, "enabled" | "referenceAssetIds" | "strength">) => {
+    if (r[key] === false) return false;
+    if (r[key] === true) return true;
+    return DEFAULT_CARD_BUILDER_STYLE_REFERENCE[key];
+  };
 
   return {
     enabled,
     referenceAssetIds,
     strength,
-    useComposition: bool("useComposition"),
-    useBackground: bool("useBackground"),
-    useColors: bool("useColors"),
-    useTypography: bool("useTypography"),
-    useBadges: bool("useBadges"),
-    useIcons: bool("useIcons"),
-    useMood: bool("useMood"),
-    useOverallPresentation: bool("useOverallPresentation"),
+    useComposition: flag("useComposition"),
+    useBackground: flag("useBackground"),
+    useColors: flag("useColors"),
+    useTypography: flag("useTypography"),
+    useBadges: flag("useBadges"),
+    useIcons: flag("useIcons"),
+    useMood: flag("useMood"),
+    useOverallPresentation: flag("useOverallPresentation"),
   };
 }
 

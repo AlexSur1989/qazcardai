@@ -4,20 +4,42 @@ import type { TelegramLoginWidgetPayload } from "@/lib/telegram-profile";
 
 export const TELEGRAM_LOGIN_MAX_AGE_SEC = 86_400;
 
-export type TelegramLoginVerifyResult =
-  | { ok: true; payload: TelegramLoginWidgetPayload & { id: string; auth_date: string; hash: string } }
-  | { ok: false; reason: string };
+export type TelegramLoginVerifyReason =
+  | "missing_id"
+  | "missing_hash"
+  | "missing_auth_date"
+  | "invalid_auth_date"
+  | "expired_auth_date"
+  | "future_auth_date"
+  | "invalid_payload"
+  | "invalid_hash"
+  | "ok";
 
-function buildDataCheckString(
-  fields: Record<string, string>,
-): string {
+export type TelegramLoginVerifyResult =
+  | {
+      ok: true;
+      payload: TelegramLoginWidgetPayload & {
+        id: string;
+        auth_date: string;
+        hash: string;
+      };
+    }
+  | {
+      ok: false;
+      reason: Exclude<TelegramLoginVerifyReason, "ok">;
+      /** Имена полей data_check_string (без значений) — только для server debug. */
+      fieldKeys?: string[];
+    };
+
+function buildDataCheckString(fields: Record<string, string>): string {
   return Object.keys(fields)
     .sort()
     .map((key) => `${key}=${fields[key]}`)
     .join("\n");
 }
 
-function payloadToCheckFields(
+/** Поля для data_check_string: все кроме hash; пустые/undefined пропускаем. */
+export function payloadToCheckFields(
   payload: TelegramLoginWidgetPayload,
 ): Record<string, string> | null {
   if (!payload.id?.trim() || !payload.auth_date?.trim() || !payload.hash?.trim()) {
@@ -46,6 +68,19 @@ export function computeTelegramLoginHash(
   return createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
 }
 
+function compareTelegramHashes(computed: string, expectedRaw: string): boolean {
+  const expected = expectedRaw.trim().toLowerCase();
+  const actual = computed.toLowerCase();
+  try {
+    const a = Buffer.from(actual, "utf8");
+    const b = Buffer.from(expected, "utf8");
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
 /** Проверка hash и auth_date для Telegram Login Widget. */
 export function verifyTelegramLoginPayload(
   payload: TelegramLoginWidgetPayload,
@@ -65,7 +100,7 @@ export function verifyTelegramLoginPayload(
     return { ok: false, reason: "missing_auth_date" };
   }
 
-  const authDate = Number.parseInt(payload.auth_date, 10);
+  const authDate = Number.parseInt(payload.auth_date.trim(), 10);
   if (!Number.isFinite(authDate) || authDate <= 0) {
     return { ok: false, reason: "invalid_auth_date" };
   }
@@ -81,18 +116,10 @@ export function verifyTelegramLoginPayload(
     return { ok: false, reason: "invalid_payload" };
   }
 
+  const fieldKeys = Object.keys(fields);
   const computed = computeTelegramLoginHash(fields, botToken);
-  const expected = payload.hash.trim().toLowerCase();
-  const actual = computed.toLowerCase();
-
-  try {
-    const a = Buffer.from(actual, "utf8");
-    const b = Buffer.from(expected, "utf8");
-    if (a.length !== b.length || !timingSafeEqual(a, b)) {
-      return { ok: false, reason: "invalid_hash" };
-    }
-  } catch {
-    return { ok: false, reason: "invalid_hash" };
+  if (!compareTelegramHashes(computed, payload.hash)) {
+    return { ok: false, reason: "invalid_hash", fieldKeys };
   }
 
   return {

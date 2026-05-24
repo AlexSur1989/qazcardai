@@ -40,7 +40,7 @@ export async function resolveTelegramWidgetUser(profile: TelegramWidgetProfile):
       /** Создана новая строка UserIdentity telegram в этом запросе (для аудита привязки). */
       telegramIdentityLinked: boolean;
     }
-  | { ok: false; code: "BLOCKED" | "INACTIVE" | "ERROR" }
+  | { ok: false; code: "BLOCKED" | "INACTIVE" | "ERROR"; debugCode?: string }
 > {
   const sub = profile.id.trim();
   if (!sub) {
@@ -200,7 +200,12 @@ export async function resolveTelegramWidgetUser(profile: TelegramWidgetProfile):
       user: result.user,
       telegramIdentityLinked: result.telegramIdentityLinked,
     };
-  } catch {
-    return { ok: false, code: "ERROR" };
+  } catch (err) {
+    const debugCode =
+      err instanceof Prisma.PrismaClientKnownRequestError
+        ? `prisma_${err.code}`
+        : "unknown";
+    console.warn(`[telegram] user_resolve_error: ${debugCode}`);
+    return { ok: false, code: "ERROR", debugCode };
   }
 }

@@ -12,7 +12,12 @@ import {
   normalizePublicAppUrlRaw,
 } from "../src/lib/auth-public-url";
 import {
+  classifyTelegramCallbackFlow,
+  safeCallbackQueryKeys,
+} from "../src/lib/telegram-auth-debug";
+import {
   computeTelegramLoginHash,
+  payloadToCheckFields,
   verifyTelegramLoginPayload,
 } from "../src/lib/telegram-login-verify";
 import {
@@ -21,6 +26,7 @@ import {
   isTelegramWidgetConfigured,
   telegramAuthEnabledForUi,
 } from "../src/lib/telegram-auth-config";
+import { mapTelegramSignInFailureToDebugReason } from "../src/lib/telegram-auth-debug";
 
 const TEST_BOT_TOKEN = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11";
 const TEST_NOW = 1_700_000_000;
@@ -72,6 +78,11 @@ function testVerifyHash(): void {
   });
   assert.equal(ok.ok, true, "valid payload must pass");
 
+  const fields = payloadToCheckFields(payload);
+  assert.ok(fields);
+  assert.deepEqual(Object.keys(fields!).sort(), ["auth_date", "first_name", "id", "username"]);
+  assert.ok(!("hash" in fields!));
+
   const badHash = verifyTelegramLoginPayload(
     { ...payload, hash: "deadbeef".repeat(8) },
     TEST_BOT_TOKEN,
@@ -79,6 +90,7 @@ function testVerifyHash(): void {
   );
   assert.equal(badHash.ok, false);
   assert.equal(badHash.reason, "invalid_hash");
+  assert.ok(badHash.fieldKeys?.length);
 
   const noHash = verifyTelegramLoginPayload(
     { ...payload, hash: undefined },
@@ -96,11 +108,63 @@ function testVerifyHash(): void {
   assert.equal(noId.ok, false);
   assert.equal(noId.reason, "missing_id");
 
+  const noAuthDate = verifyTelegramLoginPayload(
+    { ...payload, auth_date: undefined },
+    TEST_BOT_TOKEN,
+    { nowSec: TEST_NOW },
+  );
+  assert.equal(noAuthDate.ok, false);
+  assert.equal(noAuthDate.reason, "missing_auth_date");
+
   const expired = verifyTelegramLoginPayload(payload, TEST_BOT_TOKEN, {
     nowSec: TEST_NOW + 86_401,
   });
   assert.equal(expired.ok, false);
   assert.equal(expired.reason, "expired_auth_date");
+
+  const future = verifyTelegramLoginPayload(payload, TEST_BOT_TOKEN, {
+    nowSec: TEST_NOW - 120,
+  });
+  assert.equal(future.ok, false);
+  assert.equal(future.reason, "future_auth_date");
+
+  withEnv({ TELEGRAM_BOT_TOKEN: undefined }, () => {
+    assert.equal(isTelegramWidgetConfigured(), false);
+  });
+}
+
+function testCallbackFlowDetection(): void {
+  const legacy = new URLSearchParams({
+    id: "1",
+    auth_date: "123",
+    hash: "abc",
+    first_name: "A",
+    username: "u",
+  });
+  assert.equal(classifyTelegramCallbackFlow(legacy), "legacy_widget");
+  assert.deepEqual(safeCallbackQueryKeys(legacy).sort(), [
+    "auth_date",
+    "first_name",
+    "hash",
+    "id",
+    "username",
+  ]);
+
+  const oidc = new URLSearchParams({
+    code: "x",
+    state: "y",
+    scope: "openid",
+  });
+  assert.equal(classifyTelegramCallbackFlow(oidc), "oidc");
+
+  const unknown = new URLSearchParams({ foo: "bar" });
+  assert.equal(classifyTelegramCallbackFlow(unknown), "unknown");
+}
+
+function testSignInFailureMapping(): void {
+  assert.equal(mapTelegramSignInFailureToDebugReason("ERROR"), "user_create_failed");
+  assert.equal(mapTelegramSignInFailureToDebugReason("BLOCKED"), "db_error");
+  assert.equal(mapTelegramSignInFailureToDebugReason("INACTIVE"), "db_error");
 }
 
 function testPublicAppUrl(): void {
@@ -169,7 +233,11 @@ function testBotTokenNotInClientBundle(): void {
   );
   assert.match(callbackRoute, /getTelegramBotToken/);
   assert.match(callbackRoute, /buildPublicAppRedirect/);
+  assert.match(callbackRoute, /logTelegramCallbackReceived/);
+  assert.match(callbackRoute, /wrong_telegram_flow_payload/);
+  assert.match(callbackRoute, /session_create_failed/);
   assert.doesNotMatch(callbackRoute, /new URL\([^,]+,\s*req\.url\)/);
+  assert.doesNotMatch(callbackRoute, /console\.(log|warn).*hash/i);
 }
 
 function testNoOidcFlowInUi(): void {
@@ -204,8 +272,8 @@ function testCallbackRoute(): void {
   assert.match(callbackRoute, /completeTelegramWidgetSignIn/);
   assert.match(callbackRoute, /setAuthJwtSession/);
   assert.match(callbackRoute, /telegram_auth_failed/);
-  assert.match(callbackRoute, /wrong_telegram_flow_oidc_payload/);
   assert.match(callbackRoute, /logTelegramAuthFailure/);
+  assert.match(callbackRoute, /user_create_failed|mapTelegramSignInFailureToDebugReason/);
 }
 
 function testConfigHelpers(): void {
@@ -227,6 +295,8 @@ function testConfigHelpers(): void {
 
 async function main(): Promise<void> {
   testVerifyHash();
+  testCallbackFlowDetection();
+  testSignInFailureMapping();
   testPublicAppUrl();
   testBotTokenNotInClientBundle();
   testNoOidcFlowInUi();

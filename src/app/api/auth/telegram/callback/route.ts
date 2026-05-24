@@ -4,17 +4,25 @@ import { buildPublicAppRedirect } from "@/lib/auth-public-url";
 import { postAuthLandingPath } from "@/lib/auth";
 import { setAuthJwtSession } from "@/lib/auth-jwt-session";
 import {
-  detectWrongTelegramOidcPayload,
+  classifyTelegramCallbackFlow,
   logTelegramAuthFailure,
+  logTelegramAuthSuccess,
+  logTelegramBotConfigDebug,
+  logTelegramCallbackReceived,
+  logTelegramHashVerifyFieldKeys,
 } from "@/lib/telegram-auth-debug";
 import {
   getTelegramBotToken,
+  getTelegramBotUsernameForWidget,
   isTelegramWidgetConfigured,
 } from "@/lib/telegram-auth-config";
 import type { TelegramLoginWidgetPayload } from "@/lib/telegram-profile";
 import { telegramWidgetProfileFromPayload } from "@/lib/telegram-profile";
 import { verifyTelegramLoginPayload } from "@/lib/telegram-login-verify";
-import { completeTelegramWidgetSignIn } from "@/server/services/telegramWidgetSignIn";
+import {
+  completeTelegramWidgetSignIn,
+} from "@/server/services/telegramWidgetSignIn";
+import { mapTelegramSignInFailureToDebugReason } from "@/lib/telegram-auth-debug";
 
 export const dynamic = "force-dynamic";
 
@@ -47,17 +55,23 @@ function parseWidgetPayload(req: NextRequest): TelegramLoginWidgetPayload {
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
+  logTelegramCallbackReceived(sp);
 
-  if (detectWrongTelegramOidcPayload(sp)) {
-    return fail("wrong_telegram_flow_oidc_payload");
-  }
-
-  if (!isTelegramWidgetConfigured()) {
-    return fail("missing_bot_token");
+  const flowType = classifyTelegramCallbackFlow(sp);
+  if (flowType !== "legacy_widget") {
+    return fail(
+      flowType === "oidc" ? "wrong_telegram_flow_payload" : "wrong_telegram_flow_payload",
+    );
   }
 
   const botToken = getTelegramBotToken();
-  if (!botToken) {
+  const botUsername = getTelegramBotUsernameForWidget();
+  logTelegramBotConfigDebug({
+    hasBotToken: Boolean(botToken),
+    hasBotUsername: Boolean(botUsername),
+  });
+
+  if (!isTelegramWidgetConfigured() || !botToken) {
     return fail("missing_bot_token");
   }
 
@@ -66,6 +80,9 @@ export async function GET(req: NextRequest) {
 
   const verified = verifyTelegramLoginPayload(payload, botToken);
   if (!verified.ok) {
+    if (verified.fieldKeys?.length) {
+      logTelegramHashVerifyFieldKeys(verified.fieldKeys);
+    }
     return fail(verified.reason);
   }
 
@@ -81,18 +98,20 @@ export async function GET(req: NextRequest) {
 
   const signIn = await completeTelegramWidgetSignIn(profile);
   if (!signIn.ok) {
-    const reason =
-      signIn.failureReason === "BLOCKED" || signIn.failureReason === "INACTIVE"
-        ? "db_error"
-        : "db_error";
-    return fail(reason);
+    return fail(mapTelegramSignInFailureToDebugReason(signIn.failureReason));
   }
 
   try {
     await setAuthJwtSession(signIn.user);
-  } catch {
-    return fail("session_error");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("AUTH_SECRET")) {
+      return fail("session_create_failed");
+    }
+    console.warn("[telegram] session_set_error: unknown");
+    return fail("session_create_failed");
   }
 
+  logTelegramAuthSuccess(callbackPath);
   return NextResponse.redirect(buildPublicAppRedirect(callbackPath));
 }

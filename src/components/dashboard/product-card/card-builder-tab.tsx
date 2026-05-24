@@ -193,9 +193,9 @@ export function CardBuilderTab({
     useComposition: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useComposition,
     useBackground: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useBackground,
     useColors: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useColors,
-    useTypography: false,
-    useBadges: false,
-    useIcons: false,
+    useTypography: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useTypography,
+    useBadges: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useBadges,
+    useIcons: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useIcons,
     useMood: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useMood,
     useOverallPresentation: DEFAULT_CARD_BUILDER_STYLE_REFERENCE.useOverallPresentation,
   });
@@ -217,6 +217,89 @@ export function CardBuilderTab({
   const markUserEditedForm = useCallback(() => {
     userEditedFormRef.current = true;
   }, []);
+
+  const invalidateStyleReferencePricing = useCallback(() => {
+    cbPricingSnapRef.current = {
+      lastPlanHash: null,
+      singleCredits: null,
+      galleryCredits: null,
+    };
+    setEstimateSingle(null);
+    setEstimateGallery(null);
+  }, []);
+
+  const resolveStyleReferenceAssets = useCallback(
+    async (pid: string, ids: string[]) => {
+      const clean = ids.map((x) => x.trim()).filter(Boolean).slice(0, 3);
+      if (!clean.length) return;
+      const q = clean.map((id) => `id=${encodeURIComponent(id)}`).join("&");
+      const res = await fetch(
+        `/api/product-card-projects/${pid}/card-builder/style-reference?${q}`,
+      );
+      const parsed = await readJsonSafe<{
+        assets?: Array<{ fileId?: string; url?: string; fileName?: string; size?: number }>;
+      }>(res);
+      if (!parsed.ok || !res.ok || !Array.isArray(parsed.data.assets)) return;
+      setStyleReferenceImages((prev) => {
+        const byId = new Map(parsed.data.assets!.map((a) => [a.fileId, a] as const));
+        return prev.map((row, idx) => {
+          const hit = row.fileId ? byId.get(row.fileId) : undefined;
+          if (!hit?.url?.trim()) return row;
+          return {
+            ...row,
+            url: hit.url.trim(),
+            fileName: hit.fileName?.trim() || row.fileName || `Референс ${idx + 1}`,
+            size: typeof hit.size === "number" && Number.isFinite(hit.size) ? hit.size : row.size,
+          };
+        });
+      });
+    },
+    [],
+  );
+
+  const persistStyleReferenceSettings = useCallback(
+    async (input: {
+      enabled: boolean;
+      strength: CardBuilderStyleReferenceStrength;
+      images: StyleReferenceRow[];
+      flags: typeof styleReferenceFlags;
+    }): Promise<boolean> => {
+      if (!projectId || !initDone) return false;
+      const referenceAssetIds = input.enabled
+        ? input.images
+            .map((x) => x.fileId?.trim())
+            .filter((x): x is string => Boolean(x))
+            .slice(0, 3)
+        : [];
+      const res = await fetch(
+        `/api/product-card-projects/${projectId}/card-builder/style-reference`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enabled: input.enabled && referenceAssetIds.length > 0,
+            referenceAssetIds,
+            strength: input.strength,
+            ...input.flags,
+          }),
+        },
+      );
+      const parsed = await readJsonSafe<{ error?: string }>(res);
+      if (!parsed.ok || !res.ok) {
+        toast.error(
+          parsed.ok
+            ? typeof parsed.data.error === "string"
+              ? parsed.data.error
+              : "Не удалось сохранить референс стиля"
+            : parsed.message,
+        );
+        return false;
+      }
+      invalidateStyleReferencePricing();
+      return true;
+    },
+    [projectId, initDone, invalidateStyleReferencePricing],
+  );
 
   const resetVisionState = useCallback(() => {
     setVisionAnalysis(null);
@@ -252,9 +335,23 @@ export function CardBuilderTab({
   const removeStyleReferenceAt = useCallback(
     (idx: number) => {
       markUserEditedForm();
-      setStyleReferenceImages((prev) => prev.filter((_, i) => i !== idx));
+      const next = styleReferenceImages.filter((_, i) => i !== idx);
+      setStyleReferenceImages(next);
+      void persistStyleReferenceSettings({
+        enabled: styleReferenceEnabled,
+        strength: styleReferenceStrength,
+        images: next,
+        flags: styleReferenceFlags,
+      });
     },
-    [markUserEditedForm],
+    [
+      markUserEditedForm,
+      persistStyleReferenceSettings,
+      styleReferenceEnabled,
+      styleReferenceStrength,
+      styleReferenceImages,
+      styleReferenceFlags,
+    ],
   );
 
   const handleStyleReferenceFileInputChange = useCallback(
@@ -269,8 +366,14 @@ export function CardBuilderTab({
       markUserEditedForm();
       const files = [...list];
       setStyleReferenceUploading(true);
+      let uploadedAny = false;
+      let nextImages = styleReferenceImages;
       try {
         for (const file of files) {
+          if (nextImages.length >= 3) {
+            toast.message("Уже загружено максимум три референса.");
+            break;
+          }
           if (!isValidStyleRefImage(file)) {
             toast.error("Референс: нужен файл PNG, JPG, JPEG или WebP.");
             continue;
@@ -304,35 +407,49 @@ export function CardBuilderTab({
             continue;
           }
 
-          let atCap = false;
-          setStyleReferenceImages((prev) => {
-            if (prev.length >= 3) {
-              atCap = true;
-              return prev;
-            }
-            const sizeNum =
-              typeof data.size === "number" && Number.isFinite(data.size) ? data.size : file.size;
-            return [
-              ...prev,
-              {
-                url: data.url!.trim(),
-                fileName: file.name,
-                size: sizeNum,
-                fileId: data.fileId!.trim(),
-              },
-            ];
-          });
+          const sizeNum =
+            typeof data.size === "number" && Number.isFinite(data.size) ? data.size : file.size;
+          nextImages = [
+            ...nextImages,
+            {
+              url: data.url!.trim(),
+              fileName: file.name,
+              size: sizeNum,
+              fileId: data.fileId!.trim(),
+            },
+          ];
+          uploadedAny = true;
+        }
 
-          if (atCap) {
-            toast.message("Уже загружено максимум три референса.");
-            break;
+        if (uploadedAny) {
+          setStyleReferenceEnabled(true);
+          setStyleReferenceImages(nextImages);
+          const saved = await persistStyleReferenceSettings({
+            enabled: true,
+            strength: styleReferenceStrength,
+            images: nextImages,
+            flags: styleReferenceFlags,
+          });
+          if (saved) {
+            toast.message(
+              "Референс сохранён. Нажмите «Оценить» перед генерацией, если ещё не оценивали.",
+              { duration: 8000 },
+            );
           }
         }
       } finally {
         setStyleReferenceUploading(false);
       }
     },
-    [projectId, initDone, markUserEditedForm],
+    [
+      projectId,
+      initDone,
+      markUserEditedForm,
+      styleReferenceImages,
+      styleReferenceStrength,
+      styleReferenceFlags,
+      persistStyleReferenceSettings,
+    ],
   );
 
   const hasDedicatedCardBuilderImage = Boolean(
@@ -779,6 +896,19 @@ export function CardBuilderTab({
     const needsFormHydrate = hydratedProjectIdRef.current !== pid;
     if (needsFormHydrate && saved && typeof saved === "object" && !userEditedFormRef.current) {
       applyHydratedSettingsFromSaved(saved);
+      const rawSr = saved.styleReference;
+      if (rawSr && typeof rawSr === "object" && !Array.isArray(rawSr)) {
+        const sr = rawSr as Record<string, unknown>;
+        const idsRaw = sr.referenceAssetIds;
+        const ids = Array.isArray(idsRaw)
+          ? idsRaw
+              .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+              .slice(0, 3)
+          : [];
+        if (ids.length) {
+          void resolveStyleReferenceAssets(pid, ids);
+        }
+      }
     }
     if (needsFormHydrate) {
       hydratedProjectIdRef.current = pid;
@@ -816,6 +946,7 @@ export function CardBuilderTab({
     applySlidesAndHistoryFromBlock,
     applySourceImageFromBlock,
     runVisionAnalysis,
+    resolveStyleReferenceAssets,
   ]);
 
   const runPlan = useCallback(async () => {
@@ -1268,8 +1399,8 @@ export function CardBuilderTab({
           <CardHeader>
             <CardTitle className="text-base">Референс стиля (необязательно)</CardTitle>
             <CardDescription>
-              Загрузите пример карточки или фото в желаемом стиле. Мы используем его как ориентир по дизайну, но
-              не будем копировать чужой товар или текст.
+              Загрузите пример карточки или фото в желаемом стиле — референс включается автоматически.
+              После загрузки или изменения нажмите «Оценить» перед генерацией слайда.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1280,7 +1411,14 @@ export function CardBuilderTab({
                 checked={styleReferenceEnabled}
                 onChange={(e) => {
                   markUserEditedForm();
-                  setStyleReferenceEnabled(e.target.checked);
+                  const checked = e.target.checked;
+                  setStyleReferenceEnabled(checked);
+                  void persistStyleReferenceSettings({
+                    enabled: checked,
+                    strength: styleReferenceStrength,
+                    images: styleReferenceImages,
+                    flags: styleReferenceFlags,
+                  });
                 }}
                 className="border-input accent-primary size-4 shrink-0 rounded border"
               />
@@ -1296,7 +1434,15 @@ export function CardBuilderTab({
                 onChange={(e) => {
                   markUserEditedForm();
                   const v = e.target.value;
-                  if (v === "low" || v === "medium" || v === "high") setStyleReferenceStrength(v);
+                  if (v === "low" || v === "medium" || v === "high") {
+                    setStyleReferenceStrength(v);
+                    void persistStyleReferenceSettings({
+                      enabled: styleReferenceEnabled,
+                      strength: v,
+                      images: styleReferenceImages,
+                      flags: styleReferenceFlags,
+                    });
+                  }
                 }}
               >
                 <option value="low">Низкая</option>

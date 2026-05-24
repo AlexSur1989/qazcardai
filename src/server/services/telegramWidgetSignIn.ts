@@ -10,11 +10,13 @@ export type TelegramWidgetSessionUser = {
   image?: string | null;
 };
 
+export type TelegramWidgetSignInFailureReason = "BLOCKED" | "INACTIVE" | "ERROR";
+
 export async function completeTelegramWidgetSignIn(
   profile: TelegramWidgetProfile,
 ): Promise<
   | { ok: true; user: TelegramWidgetSessionUser }
-  | { ok: false; failureReason: "BLOCKED" | "INACTIVE" | "ERROR" }
+  | { ok: false; failureReason: TelegramWidgetSignInFailureReason }
 > {
   const res = await resolveTelegramWidgetUser(profile);
   if (!res.ok) {
@@ -29,6 +31,7 @@ export async function completeTelegramWidgetSignIn(
       metadata: {
         code: res.code,
         telegramUserId: profile.id,
+        ...(res.debugCode ? { debugCode: res.debugCode } : {}),
       },
     });
     return { ok: false, failureReason: res.code };
