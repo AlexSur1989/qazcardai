@@ -31,11 +31,14 @@ type ManualPaymentRow = {
   amountKzt: number;
   creditsAmount: number;
   packageLabel: string;
-  kaspiRecipientPhoneMasked: string;
+  kaspiRecipientPhoneMasked?: string;
+  kaspiPhoneDisplay: string;
   recipientName: string;
   instructionText: string;
   whatsappUrl: string | null;
   whatsappEnabled: boolean;
+  whatsappPhoneDisplay: string;
+  whatsappUnavailable?: boolean;
   createdAt: string;
   expiresAt: string | null;
   expired: boolean;
@@ -144,59 +147,97 @@ export function KaspiManualBillingPanel({ packages, publicSettings }: Props) {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  function renderWhatsAppBlock(row: ManualPaymentRow) {
+    if (!row.whatsappEnabled) return null;
+
+    if (row.whatsappUnavailable || !row.whatsappPhoneDisplay) {
+      return (
+        <div className="space-y-1 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+          <p className="text-sm font-medium">WhatsApp для отправки чека</p>
+          <p className="text-muted-foreground text-xs">
+            WhatsApp временно недоступен. Используйте инструкцию по Kaspi выше.
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2 rounded-md border p-3">
+        <p className="text-sm font-medium">WhatsApp для отправки чека</p>
+        <p className="text-base font-semibold tracking-wide">{row.whatsappPhoneDisplay}</p>
+        <p className="text-muted-foreground text-xs">
+          После оплаты отправьте чек в WhatsApp.
+        </p>
+        {row.canOpenWhatsApp && row.whatsappUrl ? (
+          <Button
+            type="button"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => openWhatsApp(row.whatsappUrl!)}
+          >
+            <MessageCircle className="size-3.5" aria-hidden />
+            Написать в WhatsApp
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
   function renderActiveCard(row: ManualPaymentRow) {
     return (
       <Alert className={row.expired ? "border-amber-500/50" : undefined}>
         <AlertTitle>
           {row.expired ? "Заявка просрочена" : "Заявка на пополнение"}
         </AlertTitle>
-        <AlertDescription className="space-y-2 text-sm">
-          <p>
-            Пакет: <strong>{row.packageLabel}</strong>
-          </p>
-          <p>
-            Сумма: <strong>{formatKzt(row.amountKzt)}</strong> · токенов:{" "}
-            <strong>{row.creditsAmount}</strong>
-          </p>
-          <p>
-            Kaspi: <strong>{row.kaspiRecipientPhoneMasked}</strong>
-          </p>
-          <p>
-            Получатель: <strong>{row.recipientName}</strong>
-          </p>
-          <p>
-            Код заявки:{" "}
-            <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+        <AlertDescription className="space-y-3 text-sm">
+          <div className="space-y-1">
+            <p>
+              Пакет: <strong>{row.packageLabel}</strong>
+            </p>
+            <p>
+              Сумма: <strong>{formatKzt(row.amountKzt)}</strong>
+            </p>
+            <p>
+              Токены: <strong>{row.creditsAmount}</strong>
+            </p>
+          </div>
+
+          <div className="space-y-1 rounded-md border p-3">
+            <p className="font-medium">Kaspi для перевода</p>
+            <p className="text-base font-semibold tracking-wide">{row.kaspiPhoneDisplay}</p>
+            <p>
+              Получатель: <strong>{row.recipientName}</strong>
+            </p>
+            <p className="text-muted-foreground text-xs">
+              Переведите сумму на Kaspi и укажите код заявки в комментарии.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <p className="font-medium">Код заявки</p>
+            <code className="bg-muted inline-block rounded px-2 py-1 font-mono text-sm">
               {row.paymentCode}
             </code>
-          </p>
-          <p className="text-muted-foreground">{row.instructionText}</p>
-          <p className="text-muted-foreground text-xs">
-            Укажите код заявки в комментарии к переводу. Мы проверим поступление и
-            начислим токены вручную. Обычно проверка занимает некоторое время после
-            отправки чека.
-          </p>
-          {row.expiresAt && (
+          </div>
+
+          {renderWhatsAppBlock(row)}
+
+          {row.instructionText ? (
+            <p className="text-muted-foreground text-xs">{row.instructionText}</p>
+          ) : null}
+
+          {row.expiresAt ? (
             <p className="text-muted-foreground text-xs">
               Действует до: {new Date(row.expiresAt).toLocaleString("ru-RU")}
             </p>
-          )}
+          ) : null}
+
           <p className="text-muted-foreground text-xs">
             Статус: <strong>{row.statusLabel}</strong>
           </p>
-          {row.canCancel && (
-            <div className="flex flex-wrap gap-2 pt-2">
-              {row.canOpenWhatsApp && row.whatsappUrl ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => openWhatsApp(row.whatsappUrl!)}
-                >
-                  <MessageCircle className="size-3.5" aria-hidden />
-                  Написать в WhatsApp
-                </Button>
-              ) : null}
+
+          {row.canCancel ? (
+            <div className="flex flex-wrap gap-2 pt-1">
               <Button
                 type="button"
                 size="sm"
@@ -214,7 +255,7 @@ export function KaspiManualBillingPanel({ packages, publicSettings }: Props) {
                 )}
               </Button>
             </div>
-          )}
+          ) : null}
         </AlertDescription>
       </Alert>
     );

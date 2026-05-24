@@ -28,16 +28,22 @@ export function normalizeWhatsAppPhone(raw: string): string {
   return raw.replace(/\D/g, "");
 }
 
-/** Красивый формат для KZ: +7 700 123 45 67 */
-export function formatWhatsAppPhoneDisplay(digits: string): string {
-  const d = normalizeWhatsAppPhone(digits);
+/** Readable KZ format: 77001234567 → +7 700 123 45 67 */
+export function formatKazakhstanPhoneForDisplay(raw: string): string {
+  const d = normalizeWhatsAppPhone(raw);
+  if (!d) return raw.trim();
   if (d.length === 11 && d.startsWith("7")) {
     return `+7 ${d.slice(1, 4)} ${d.slice(4, 7)} ${d.slice(7, 9)} ${d.slice(9, 11)}`;
   }
   if (d.length >= 10) {
     return `+${d}`;
   }
-  return d ? `+${d}` : "";
+  return d ? `+${d}` : raw.trim();
+}
+
+/** @deprecated alias — используйте formatKazakhstanPhoneForDisplay */
+export function formatWhatsAppPhoneDisplay(digits: string): string {
+  return formatKazakhstanPhoneForDisplay(digits);
 }
 
 export function interpolateWhatsAppTemplate(

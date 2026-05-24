@@ -9,6 +9,7 @@ import { manualPaymentUserStatusLabel } from "@/lib/manual-payment-labels";
 import { prisma } from "@/lib/prisma";
 import {
   buildWhatsAppTopUpUrl,
+  formatKazakhstanPhoneForDisplay,
   interpolateWhatsAppTemplate,
 } from "@/lib/whatsapp-manual-payment";
 import {
@@ -94,11 +95,18 @@ export type ManualPaymentClientRow = {
   packageId: string | null;
   packageLabel: string;
   contactChannel: ManualPaymentContactChannel;
+  /** Маска для списков / audit; на активной заявке не использовать. */
   kaspiRecipientPhoneMasked: string;
+  /** Полный номер Kaspi для перевода (formatted). */
+  kaspiPhoneDisplay: string;
   recipientName: string;
   instructionText: string;
   whatsappUrl: string | null;
   whatsappEnabled: boolean;
+  /** Formatted WhatsApp номер; пусто если канал выключен или номер не задан. */
+  whatsappPhoneDisplay: string;
+  /** whatsappEnabled=true, но номер не настроен. */
+  whatsappUnavailable: boolean;
   createdAt: string;
   expiresAt: string | null;
   expired: boolean;
@@ -127,8 +135,15 @@ export function serializeManualPaymentForClient(args: {
     args.payment.tokenPackage?.name ??
     (typeof meta.tokenPackageName === "string" ? meta.tokenPackageName : "Пакет");
   const amountKzt = Number(args.payment.amount.toString());
+  const whatsappEnabledSetting = args.settings.whatsappEnabled;
+  const whatsappPhoneDigits = args.settings.whatsappPhone;
+  const whatsappPhoneDisplay =
+    whatsappEnabledSetting && whatsappPhoneDigits
+      ? formatKazakhstanPhoneForDisplay(whatsappPhoneDigits)
+      : "";
+  const whatsappUnavailable = whatsappEnabledSetting && !whatsappPhoneDigits;
   const whatsappUrl =
-    contactChannel === "whatsapp"
+    whatsappEnabledSetting && whatsappPhoneDigits
       ? buildWhatsAppUrlForManualPayment({
           settings: args.settings,
           paymentCode,
@@ -155,18 +170,21 @@ export function serializeManualPaymentForClient(args: {
       typeof meta.kaspiRecipientPhoneMasked === "string"
         ? meta.kaspiRecipientPhoneMasked
         : maskKaspiRecipientPhone(args.settings.recipientPhone),
+    kaspiPhoneDisplay: formatKazakhstanPhoneForDisplay(args.settings.recipientPhone),
     recipientName:
       typeof meta.kaspiRecipientName === "string"
         ? meta.kaspiRecipientName
         : args.settings.recipientName,
     instructionText: args.settings.instructionText,
     whatsappUrl,
-    whatsappEnabled: args.settings.whatsappEnabled && Boolean(args.settings.whatsappPhone),
+    whatsappEnabled: whatsappEnabledSetting,
+    whatsappPhoneDisplay,
+    whatsappUnavailable,
     createdAt: args.payment.createdAt.toISOString(),
     expiresAt: typeof meta.expiresAt === "string" ? meta.expiresAt : null,
     expired,
     canCancel,
-    canOpenWhatsApp: canCancel && contactChannel === "whatsapp" && Boolean(whatsappUrl),
+    canOpenWhatsApp: canCancel && Boolean(whatsappUrl),
   };
 }
 

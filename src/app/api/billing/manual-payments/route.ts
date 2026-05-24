@@ -128,8 +128,12 @@ export async function POST(req: Request) {
     statusLabel: row.statusLabel,
     contactChannel: row.contactChannel,
     kaspiRecipientPhoneMasked: row.kaspiRecipientPhoneMasked,
+    kaspiPhoneDisplay: row.kaspiPhoneDisplay,
     recipientName: row.recipientName,
     instructionText: row.instructionText,
+    whatsappEnabled: row.whatsappEnabled,
+    whatsappPhoneDisplay: row.whatsappPhoneDisplay,
+    whatsappUnavailable: row.whatsappUnavailable,
     expiresAt: row.expiresAt,
   });
 }

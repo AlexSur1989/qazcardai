@@ -1,7 +1,7 @@
 import type { KaspiManualBillingPublic, ManualPaymentSettingsPublic } from "@/lib/kaspi-manual-config";
 import {
   DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
-  formatWhatsAppPhoneDisplay,
+  formatKazakhstanPhoneForDisplay,
   normalizeWhatsAppPhone,
 } from "@/lib/whatsapp-manual-payment";
 import { getAppSetting } from "@/server/services/appSettings";
@@ -103,7 +103,7 @@ export async function getKaspiManualBillingPublic(): Promise<KaspiManualBillingP
     expiresMinutes: s.expiresMinutes,
     whatsappEnabled: s.whatsappEnabled && Boolean(s.whatsappPhone),
     whatsappPhoneDisplay: s.whatsappPhone
-      ? formatWhatsAppPhoneDisplay(s.whatsappPhone)
+      ? formatKazakhstanPhoneForDisplay(s.whatsappPhone)
       : "",
   };
 }
