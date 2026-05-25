@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -7,24 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-type ScenarioKey = "conceptPhoto" | "marketplaceCard" | "cardBuilder" | "productVideo";
+import { PRODUCT_CARD_SCENARIO_CATALOG } from "@/lib/product-card-admin-meta";
+import type { ProductCardScenarioKey } from "@/server/services/productCardSettings";
 
 type ScenarioToggle = { enabled: boolean; label: string };
 
-const DEFAULT_SCENARIOS: Record<ScenarioKey, ScenarioToggle> = {
-  conceptPhoto: { enabled: true, label: "Фото с концепциями" },
-  marketplaceCard: { enabled: true, label: "Карточка для маркетплейса" },
-  cardBuilder: { enabled: true, label: "Создать карточку" },
-  productVideo: { enabled: true, label: "Видео товара" },
-};
-
-const KEYS: ScenarioKey[] = [
-  "conceptPhoto",
-  "marketplaceCard",
-  "cardBuilder",
-  "productVideo",
-];
+const DEFAULT_BY_KEY = Object.fromEntries(
+  PRODUCT_CARD_SCENARIO_CATALOG.map((m) => [
+    m.id,
+    { enabled: true, label: m.title },
+  ]),
+) as Record<ProductCardScenarioKey, ScenarioToggle>;
 
 function readToggle(raw: unknown, fb: ScenarioToggle): ScenarioToggle {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return fb;
@@ -40,12 +34,12 @@ function readToggle(raw: unknown, fb: ScenarioToggle): ScenarioToggle {
   return { enabled, label };
 }
 
-function normalizeScenarios(initial: unknown): Record<ScenarioKey, ScenarioToggle> {
-  const out = { ...DEFAULT_SCENARIOS };
+function normalizeScenarios(initial: unknown): Record<ProductCardScenarioKey, ScenarioToggle> {
+  const out = { ...DEFAULT_BY_KEY };
   if (!initial || typeof initial !== "object" || Array.isArray(initial)) return out;
   const root = initial as Record<string, unknown>;
-  for (const k of KEYS) {
-    out[k] = readToggle(root[k], DEFAULT_SCENARIOS[k]);
+  for (const meta of PRODUCT_CARD_SCENARIO_CATALOG) {
+    out[meta.id] = readToggle(root[meta.id], DEFAULT_BY_KEY[meta.id]);
   }
   return out;
 }
@@ -58,7 +52,7 @@ export function ProductCardScenariosForm({
   canPatch: boolean;
 }) {
   const start = useMemo(() => normalizeScenarios(initialJson), [initialJson]);
-  const [state, setState] = useState<Record<ScenarioKey, ScenarioToggle>>(start);
+  const [state, setState] = useState<Record<ProductCardScenarioKey, ScenarioToggle>>(start);
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -81,83 +75,107 @@ export function ProductCardScenariosForm({
         toast.error(typeof data.error === "string" ? data.error : "Не удалось сохранить");
         return;
       }
-      toast.success("Видимость сценариев обновлена");
+      toast.success("Сценарии обновлены");
     } finally {
       setSaving(false);
     }
   }
 
-  const rows: Array<{ key: ScenarioKey; title: string; hint: string }> = [
-    { key: "conceptPhoto", title: "Фото с концепциями", hint: "Вкладка концептов в кабинете." },
-    { key: "marketplaceCard", title: "Карточка для маркетплейса", hint: "Витринная карточка маркетплейса." },
-    { key: "cardBuilder", title: "Создать карточку", hint: "Мастер продающей галереи." },
-    { key: "productVideo", title: "Видео товара", hint: "Видео по исходному фото." },
-  ];
+  const ordered = [...PRODUCT_CARD_SCENARIO_CATALOG].sort(
+    (a, b) => a.overviewOrder - b.overviewOrder,
+  );
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Видимость сценариев Product Card</CardTitle>
+        <CardTitle>Сценарии AI-карточек товара</CardTitle>
         <CardDescription>
-          Управляет вкладками в разделе «Создать карточку товара». Отключённые сценарии не резервируют
-          токены через соответствующие API.
+          Включение сценариев, названия для клиента и видимость вкладок в кабинете. Цены — в{" "}
+          <Link href="/admin/pricing" className="underline">
+            Цены и тарифы
+          </Link>
+          .
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!canPatch ? (
           <p className="text-muted-foreground text-sm">
-            Недостаточно прав для записи ключей приложения — посмотрите значение ниже или откройте{" "}
-            <span className="font-medium">Общие настройки</span> под учёткой с правом управления настройками.
+            Для сохранения нужно право settings.manage. Включение/выключение без смены подписей —
+            через API сценариев ниже на странице или у администратора с правом настроек.
           </p>
         ) : null}
         <div className="space-y-4">
-          {rows.map((row) => (
+          {ordered.map((meta, index) => (
             <div
-              key={row.key}
-              className="flex flex-col gap-3 rounded-xl border border-border bg-background p-3 sm:flex-row sm:items-start"
+              key={meta.id}
+              className="flex flex-col gap-3 rounded-xl border border-border bg-background p-4"
             >
-              <div className="flex flex-1 items-start gap-3">
-                <input
-                  id={`scenario-${row.key}`}
-                  type="checkbox"
-                  className="border-input mt-0.5 size-4 shrink-0 rounded border"
-                  checked={state[row.key].enabled}
-                  disabled={!canPatch}
-                  onChange={(e) =>
-                    setState((prev) => ({
-                      ...prev,
-                      [row.key]: { ...prev[row.key], enabled: e.target.checked },
-                    }))
-                  }
-                />
-                <div className="min-w-0 space-y-1">
-                  <Label htmlFor={`scenario-${row.key}`} className="text-sm font-medium">
-                    {row.title}
-                  </Label>
-                  <p className="text-muted-foreground text-xs">{row.hint}</p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                <div className="flex flex-1 items-start gap-3">
+                  <input
+                    id={`scenario-${meta.id}`}
+                    type="checkbox"
+                    className="border-input mt-1 size-4 shrink-0 rounded border"
+                    checked={state[meta.id].enabled}
+                    disabled={!canPatch}
+                    onChange={(e) =>
+                      setState((prev) => ({
+                        ...prev,
+                        [meta.id]: { ...prev[meta.id], enabled: e.target.checked },
+                      }))
+                    }
+                  />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div>
+                      <Label htmlFor={`scenario-${meta.id}`} className="text-sm font-semibold">
+                        {meta.title}
+                      </Label>
+                      <p className="text-muted-foreground mt-1 text-sm">{meta.description}</p>
+                      <p className="text-muted-foreground mt-1 text-xs">{meta.clientHint}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                      <Link href={meta.pricingHref} className="text-primary underline">
+                        {meta.pricingLabel}
+                      </Link>
+                      {meta.id === "cardBuilder" ? (
+                        <Link
+                          href="/admin/product-card?tab=card-builder-prompts&advanced=1"
+                          className="text-muted-foreground underline"
+                        >
+                          AI-промпты (расшир.)
+                        </Link>
+                      ) : null}
+                    </div>
+                    <details className="text-muted-foreground text-xs">
+                      <summary className="cursor-pointer select-none">Технические детали</summary>
+                      <p className="mt-1 font-mono">internal id: {meta.id}</p>
+                      <p className="font-mono">AppSetting: PRODUCT_CARD_SCENARIOS.{meta.id}</p>
+                      <p>Порядок в обзоре: {index + 1}</p>
+                    </details>
+                  </div>
                 </div>
-              </div>
-              <div className="w-full space-y-1 sm:w-56">
-                <Label className="text-xs text-muted-foreground">Подпись вкладки</Label>
-                <Input
-                  value={state[row.key].label}
-                  disabled={!canPatch}
-                  onChange={(e) =>
-                    setState((prev) => ({
-                      ...prev,
-                      [row.key]: {
-                        ...prev[row.key],
-                        label: e.target.value,
-                      },
-                    }))
-                  }
-                />
+                <div className="w-full space-y-1 sm:w-56">
+                  <Label className="text-xs text-muted-foreground">Название для клиента</Label>
+                  <Input
+                    value={state[meta.id].label}
+                    disabled={!canPatch}
+                    onChange={(e) =>
+                      setState((prev) => ({
+                        ...prev,
+                        [meta.id]: {
+                          ...prev[meta.id],
+                          label: e.target.value,
+                        },
+                      }))
+                    }
+                  />
+                </div>
               </div>
             </div>
           ))}
         </div>
         <Button type="button" disabled={!canPatch || saving} onClick={() => void save()}>
-          {saving ? "Сохраняем…" : "Сохранить PRODUCT_CARD_SCENARIOS"}
+          {saving ? "Сохраняем…" : "Сохранить сценарии"}
         </Button>
       </CardContent>
     </Card>

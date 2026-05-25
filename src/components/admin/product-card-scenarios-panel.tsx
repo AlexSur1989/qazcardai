@@ -11,6 +11,8 @@ import type {
 
 type Props = {
   initial: ProductCardScenarioToggles;
+  /** Скрыть internal id (основной режим). */
+  hideTechnicalIds?: boolean;
 };
 
 const ORDER: ProductCardScenarioKey[] = [
@@ -20,7 +22,7 @@ const ORDER: ProductCardScenarioKey[] = [
   "productVideo",
 ];
 
-export function ProductCardScenariosPanel({ initial }: Props) {
+export function ProductCardScenariosPanel({ initial, hideTechnicalIds = false }: Props) {
   const [scenarios, setScenarios] = useState<ProductCardScenarioToggles>(initial);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -72,7 +74,9 @@ export function ProductCardScenariosPanel({ initial }: Props) {
               <Label className="text-base font-medium" htmlFor={`scenario-${key}`}>
                 {scenarios[key].label}
               </Label>
-              <p className="text-muted-foreground font-mono text-xs">{key}</p>
+              {hideTechnicalIds ? null : (
+                <p className="text-muted-foreground font-mono text-xs">{key}</p>
+              )}
             </div>
             <input
               id={`scenario-${key}`}
