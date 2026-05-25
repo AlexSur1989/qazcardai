@@ -39,10 +39,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ProductCardScenariosPanel } from "@/components/admin/product-card-scenarios-panel";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
 export const metadata = {
-  title: "Product Card — админка",
+  title: "AI-карточки товара — админка",
 };
 
 type Props = {
@@ -50,17 +51,17 @@ type Props = {
 };
 
 const TABS = [
-  ["overview", "Overview"],
+  ["overview", "Обзор"],
   ["scenarios", "Сценарии"],
-  ["settings", "Settings"],
-  ["models", "Models"],
-  ["pricing", "Pricing"],
-  ["categories", "Categories"],
-  ["concepts", "Concepts"],
-  ["prompts", "Prompts (legacy)"],
-  ["card-builder-prompts", "Промпты Создать карточку"],
-  ["video", "Video"],
-  ["calculator", "Price Calculator"],
+  ["settings", "Настройки"],
+  ["models", "Модели"],
+  ["pricing", "Цены"],
+  ["categories", "Категории"],
+  ["concepts", "Концепции"],
+  ["prompts", "Промпты (legacy)"],
+  ["card-builder-prompts", "Промпты «Создать карточку»"],
+  ["video", "Видео товара"],
+  ["calculator", "Калькулятор цен"],
 ] as const;
 
 function jsonPreview(value: unknown): string {
@@ -234,11 +235,22 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Product Card / Карточка товара</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">AI-карточки товара</h1>
         <p className="text-muted-foreground text-sm">
-          Отдельные модели, настройки, pricing и launch checks для Product Card flow.
+          Раздел для сценариев AI-карточек товара: модели, промпты и диагностика.
         </p>
       </div>
+
+      <Alert>
+        <AlertTitle>Цены и тарифы</AlertTitle>
+        <AlertDescription>
+          Цены для клиентов редактируются в{" "}
+          <Link href="/admin/pricing" className="underline">
+            Цены и тарифы
+          </Link>
+          , а не в этом разделе.
+        </AlertDescription>
+      </Alert>
 
       <div className="flex flex-wrap gap-2">
         {TABS.map(([id, label]) => (
@@ -263,7 +275,7 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle>Сценарии Product Card</CardTitle>
+              <CardTitle>Сценарии AI-карточек</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-muted-foreground text-sm">

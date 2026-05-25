@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,6 +15,10 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  getAppSettingUiMeta,
+  isLegacyAppSettingKey,
+} from "@/lib/app-settings-ui-meta";
 import { cn } from "@/lib/utils";
 
 type SettingRow = {
@@ -64,6 +70,7 @@ export function AdminSettingsCenter({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [message, setMessage] = useState<{
     type: "ok" | "err";
     text: string;
@@ -92,7 +99,34 @@ export function AdminSettingsCenter({
     return o;
   });
 
+  const visibleGroups = useMemo(() => {
+    return initialGroups
+      .map((g) => ({
+        ...g,
+        settings: g.settings.filter((s) => {
+          const meta = getAppSettingUiMeta(s.key);
+          if (showAdvanced) return true;
+          if (meta.hideInBasic) return false;
+          if (isLegacyAppSettingKey(s.key)) return false;
+          return true;
+        }),
+      }))
+      .filter((g) => g.settings.length > 0);
+  }, [initialGroups, showAdvanced]);
+
   const firstGroup = initialGroups[0]?.group ?? "general";
+  const firstVisibleGroup = visibleGroups[0]?.group ?? firstGroup;
+
+  const hiddenAdvancedCount = useMemo(() => {
+    let n = 0;
+    for (const g of initialGroups) {
+      for (const s of g.settings) {
+        const meta = getAppSettingUiMeta(s.key);
+        if (meta.hideInBasic || isLegacyAppSettingKey(s.key)) n += 1;
+      }
+    }
+    return n;
+  }, [initialGroups]);
 
   const byKey = useMemo(() => {
     const m = new Map<string, SettingRow>();
@@ -201,27 +235,54 @@ export function AdminSettingsCenter({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-muted-foreground text-sm">
-          Settings from database + registry defaults / Настройки в БД и значения
-          по умолчанию из реестра.
+          Настройки в базе данных и значения по умолчанию из реестра.
         </p>
-        {canEditCritical ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            disabled={seeding || pending}
-            onClick={() => void seedDefaults()}
-            className="shrink-0"
-          >
-            Создать настройки по умолчанию / Seed defaults
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {hiddenAdvancedCount > 0 ? (
+            <Button
+              type="button"
+              size="sm"
+              variant={showAdvanced ? "secondary" : "outline"}
+              onClick={() => setShowAdvanced((v) => !v)}
+            >
+              {showAdvanced
+                ? "Базовый режим"
+                : `Расширенные настройки (${hiddenAdvancedCount})`}
+            </Button>
+          ) : null}
+          {canEditCritical ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={seeding || pending}
+              onClick={() => void seedDefaults()}
+              className="shrink-0"
+            >
+              Создать настройки по умолчанию
+            </Button>
+          ) : null}
+        </div>
       </div>
 
-      <Tabs defaultValue={firstGroup} className="w-full">
+      {!showAdvanced && hiddenAdvancedCount > 0 ? (
+        <Alert>
+          <AlertTitle>Базовый режим</AlertTitle>
+          <AlertDescription className="text-sm">
+            Legacy-ключи card_builder и часть технических параметров скрыты. Тарифы «Создать
+            карточку» редактируются в{" "}
+            <Link href="/admin/pricing?tab=card-builder" className="underline">
+              Цены и тарифы → Создать карточку
+            </Link>
+            .
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <Tabs defaultValue={firstVisibleGroup} className="w-full">
         <div className="mb-4 overflow-x-auto">
           <TabsList className="inline-flex h-auto w-max min-w-full flex-wrap justify-start gap-1 bg-muted/50 p-1">
-            {initialGroups.map((g) => (
+            {visibleGroups.map((g) => (
               <TabsTrigger
                 key={g.group}
                 value={g.group}
@@ -232,24 +293,43 @@ export function AdminSettingsCenter({
             ))}
           </TabsList>
         </div>
-        {initialGroups.map((g) => (
+        {visibleGroups.map((g) => (
           <TabsContent key={g.group} value={g.group} className="mt-0 space-y-4">
             {g.settings.map((s) => {
               const val = values[s.key];
               const rowWritable = canChangeRow(s, canEdit, canEditCritical);
+              const uiMeta = getAppSettingUiMeta(s.key);
+              const isLegacy = isLegacyAppSettingKey(s.key);
               return (
                 <div
                   key={s.key}
                   className={cn(
                     "space-y-2 rounded-2xl border border-[#b8dce6] bg-white p-4 shadow-sm",
                     !s.inDatabase && "ring-1 ring-amber-200/60",
+                    isLegacy && "border-dashed border-amber-300/80 bg-amber-50/30",
                   )}
                 >
                   <div>
-                    <p className="text-foreground text-sm font-medium leading-snug">
-                      {s.label}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-foreground text-sm font-medium leading-snug">
+                        {s.label}
+                      </p>
+                      {isLegacy ? (
+                        <Badge variant="outline" className="text-[10px]">
+                          Legacy
+                        </Badge>
+                      ) : null}
+                      <code className="text-muted-foreground text-[10px]">{s.key}</code>
+                    </div>
                     <p className="text-muted-foreground text-xs">{s.description}</p>
+                    {uiMeta.canonicalHref ? (
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        {uiMeta.canonicalHint ?? "Рекомендуемый раздел:"}{" "}
+                        <Link href={uiMeta.canonicalHref} className="text-primary underline">
+                          открыть
+                        </Link>
+                      </p>
+                    ) : null}
                     {!s.inDatabase ? (
                       <p className="text-amber-900/80 mt-1 text-xs">
                         Пока показано значение по умолчанию; запись в БД появится

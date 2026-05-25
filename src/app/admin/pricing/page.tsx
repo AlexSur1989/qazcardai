@@ -1,8 +1,11 @@
+import Link from "next/link";
+
 import {
   AdminPricingTabNav,
   isAdminPricingTab,
 } from "@/components/admin/pricing/admin-pricing-tab-nav";
 import { AdminPricingTabPanels } from "@/components/admin/pricing/admin-pricing-tab-panels";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { hasPermission } from "@/lib/permissions";
 import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 import { buildAdminPricingOverview } from "@/server/services/adminPricingOverview";
@@ -13,8 +16,8 @@ import {
 import { loadProductCardVideoPricingForAdmin } from "@/server/services/adminProductCardVideoPricingEditor";
 
 export const metadata = {
-  title: "Цены — админка QazCard AI",
-  description: "Scenario-first hub: обзор цен, inline-редактирование тарифов и warnings.",
+  title: "Цены и тарифы — админка QazCard AI",
+  description: "Обзор цен, inline-редактирование тарифов и warnings.",
 };
 
 type PageProps = {
@@ -48,10 +51,9 @@ export default async function AdminPricingHubPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Цены и токены</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Цены и тарифы</h1>
         <p className="text-muted-foreground mt-1 text-sm max-w-3xl">
-          Единый обзор по сценариям и безопасное редактирование ключевых тарифов: card_builder,
-          пакеты пополнения и Kaspi/WhatsApp. AI-модели и matrix pricing — через Pricing Studio.
+          Здесь меняются цены, которые видит клиент.
         </p>
         {errorWarnings > 0 ? (
           <p className="text-destructive mt-2 text-sm font-medium">
@@ -59,6 +61,25 @@ export default async function AdminPricingHubPage({ searchParams }: PageProps) {
           </p>
         ) : null}
       </div>
+
+      <Alert>
+        <AlertTitle>Подсказки по разделам</AlertTitle>
+        <AlertDescription className="space-y-1 text-sm">
+          <p>AI-модели — технические цены и себестоимость.</p>
+          <p>
+            <Link href="/admin/pricing?tab=card-builder" className="underline">
+              Создать карточку
+            </Link>{" "}
+            — тарифы слайдов и галерей.
+          </p>
+          <p>
+            <Link href="/admin/pricing?tab=topup" className="underline">
+              Пополнение
+            </Link>{" "}
+            — пакеты токенов, Kaspi и WhatsApp.
+          </p>
+        </AlertDescription>
+      </Alert>
 
       <AdminPricingTabNav active={tab} warningCount={warningCount} />
       <AdminPricingTabPanels

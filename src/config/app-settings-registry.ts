@@ -366,24 +366,25 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
   {
     key: "PRODUCT_CARD_DEFAULT_CARD_BUILDER_MODEL_SLUG",
     group: "productCard",
-    label: "PRODUCT_CARD_DEFAULT_CARD_BUILDER_MODEL_SLUG / Создать карточку (мастер галереи)",
-    description: "Product Card IMAGE модель для сценария «Создать карточку». При отсутствии отдельной модели допускается тот же slug, что и карточка витрины (fallback помечается в метаданных).",
+    label: "Модель «Создать карточку» (slug)",
+    description:
+      "IMAGE-модель scope PRODUCT_CARD с типом PRODUCT_CARD_BUILDER. Пустое значение — fallback на карточку маркетплейса.",
     type: "string",
-    defaultValue: "gpt-image-2-product-card",
+    defaultValue: "",
     editable: true,
     sensitive: false,
   },
   {
     key: "PRODUCT_CARD_SCENARIOS",
     group: "productCard",
-    label: "PRODUCT_CARD_SCENARIOS / Видимость сценариев карточки товара",
-    description: "Переключатели вкладок: фото с концепциями, карточка маркетплейса, мастер «Создать карточку», видео.",
+    label: "Сценарии AI-карточек товара",
+    description: "Переключатели вкладок: фото с концепциями, карточка для маркетплейса, «Создать карточку», видео товара.",
     type: "json",
     defaultValue: {
       conceptPhoto: { enabled: true, label: "Фото с концепциями" },
-      marketplaceCard: { enabled: true, label: "Карточка товара" },
+      marketplaceCard: { enabled: true, label: "Карточка для маркетплейса" },
       cardBuilder: { enabled: true, label: "Создать карточку" },
-      productVideo: { enabled: true, label: "Видео" },
+      productVideo: { enabled: true, label: "Видео товара" },
     },
     editable: true,
     sensitive: false,
@@ -391,8 +392,8 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
   {
     key: "PRODUCT_CARD_BUILDER_PLAN_CREDITS",
     group: "productCard",
-    label: "PRODUCT_CARD_BUILDER_PLAN_CREDITS / Мастер: стоимость «структура» (токены)",
-    description: "Списание за автосборку структуры галереи (0 = бесплатно на первом этапе).",
+    label: "[Legacy] Мастер: стоимость «структура» (токены)",
+    description: "Устарело. Runtime не читает. Каноничный источник — PRODUCT_CARD_CARD_BUILDER_PRICING или /admin/pricing → Создать карточку.",
     type: "number",
     defaultValue: 0,
     editable: true,
@@ -401,8 +402,8 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
   {
     key: "PRODUCT_CARD_BUILDER_SLIDE_CREDITS",
     group: "productCard",
-    label: "PRODUCT_CARD_BUILDER_SLIDE_CREDITS / Мастер: один слайд (токены)",
-    description: "Базовая стоимость одного слайда «Создать карточку» до множителей.",
+    label: "[Legacy] Мастер: один слайд (токены)",
+    description: "Устарело. Runtime не читает. Каноничный источник — PRODUCT_CARD_CARD_BUILDER_PRICING.",
     type: "number",
     defaultValue: 150,
     editable: true,
@@ -411,8 +412,8 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
   {
     key: "PRODUCT_CARD_BUILDER_GALLERY_6_CREDITS",
     group: "productCard",
-    label: "PRODUCT_CARD_BUILDER_GALLERY_6_CREDITS / Мастер: галерея из 6 (токены)",
-    description: "Пакет 6 слайдов до множителей.",
+    label: "[Legacy] Мастер: галерея из 6 (токены)",
+    description: "Устарело. Runtime не читает. Каноничный источник — PRODUCT_CARD_CARD_BUILDER_PRICING.",
     type: "number",
     defaultValue: 750,
     editable: true,
@@ -421,8 +422,8 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
   {
     key: "PRODUCT_CARD_BUILDER_GALLERY_8_CREDITS",
     group: "productCard",
-    label: "PRODUCT_CARD_BUILDER_GALLERY_8_CREDITS / Мастер: галерея из 8 (токены)",
-    description: "Пакет 8 слайдов до множителей.",
+    label: "[Legacy] Мастер: галерея из 8 (токены)",
+    description: "Устарело. Runtime не читает. Каноничный источник — PRODUCT_CARD_CARD_BUILDER_PRICING.",
     type: "number",
     defaultValue: 950,
     editable: true,
@@ -431,8 +432,8 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
   {
     key: "PRODUCT_CARD_BUILDER_PRICE_MULTIPLIERS",
     group: "productCard",
-    label: "PRODUCT_CARD_BUILDER_PRICE_MULTIPLIERS / Мастер: множители цены",
-    description: "Дополнительные коэффициенты (премиум-стиль, тяжёлая инфографика/текст).",
+    label: "[Legacy] Мастер: множители цены",
+    description: "Устарело. Runtime не читает. Каноничный источник — PRODUCT_CARD_CARD_BUILDER_PRICING.",
     type: "json",
     defaultValue: {
       premiumStyle: 1.2,
@@ -618,38 +619,11 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
     sensitive: false,
   },
   {
-    key: "PRODUCT_CARD_SCENARIOS",
-    group: "productCard",
-    label: "PRODUCT_CARD_SCENARIOS / Включённые сценарии Product Card",
-    description:
-      "JSON { conceptPhoto, marketplaceCard, cardBuilder, productVideo } → { enabled, label }.",
-    type: "json",
-    defaultValue: {
-      conceptPhoto: { enabled: true, label: "Фото с концепциями" },
-      marketplaceCard: { enabled: true, label: "Карточка товара" },
-      cardBuilder: { enabled: true, label: "Создать карточку" },
-      productVideo: { enabled: true, label: "Видео" },
-    },
-    editable: true,
-    sensitive: false,
-  },
-  {
-    key: "PRODUCT_CARD_DEFAULT_CARD_BUILDER_MODEL_SLUG",
-    group: "productCard",
-    label: "PRODUCT_CARD_DEFAULT_CARD_BUILDER_MODEL_SLUG / Модель «Создать карточку»",
-    description:
-      "IMAGE-модель scope PRODUCT_CARD с типом PRODUCT_CARD_BUILDER (или пусто — fallback на карточку маркетплейса).",
-    type: "string",
-    defaultValue: "",
-    editable: true,
-    sensitive: false,
-  },
-  {
     key: "PRODUCT_CARD_CARD_BUILDER_PRICING",
     group: "productCard",
-    label: "PRODUCT_CARD_CARD_BUILDER_PRICING / Тарифы «Создать карточку»",
+    label: "Тарифы «Создать карточку»",
     description:
-      "Фиксированные кредиты: plan, слайд, галерея 6/8, множители premiumStyle и heavyTextInfographic.",
+      "Каноничный JSON тарифов card_builder. Рекомендуется редактировать в /admin/pricing → вкладка «Создать карточку».",
     type: "json",
     defaultValue: {
       cardBuilderPlanCredits: 0,

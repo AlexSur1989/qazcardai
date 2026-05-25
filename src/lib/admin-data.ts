@@ -4,12 +4,32 @@ import type {
   GenerationType,
   PaymentStatus,
 } from "@/generated/prisma/enums";
+import { KASPI_MANUAL_PAYMENT_PROVIDER } from "@/lib/kaspi-manual-config";
 import { prisma } from "@/lib/prisma";
+import { buildAdminPricingOverview } from "@/server/services/adminPricingOverview";
+
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function hoursAgo24(): Date {
+  return new Date(Date.now() - 24 * 60 * 60 * 1000);
+}
 
 const LIST_LIMIT = 50;
 const ADMIN_GENERATIONS_LIMIT = 200;
 const ADMIN_PAYMENTS_LIMIT = 200;
 const SNAPSHOT = 5;
+
+export type AdminOverviewOwnerWidgets = {
+  pendingManualPayments: number;
+  failedGenerations24h: number;
+  revenueTodayKzt: number;
+  newUsersToday: number;
+  pricingWarnings: number | null;
+};
 
 export type AdminOverviewData = {
   counts: {
@@ -18,6 +38,7 @@ export type AdminOverviewData = {
     payments: number;
     activeModels: number;
   };
+  ownerWidgets: AdminOverviewOwnerWidgets;
   recentApiErrors: {
     id: string;
     provider: string;
@@ -48,16 +69,48 @@ export type AdminDataResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: "database" };
 
-export async function getAdminOverview(): Promise<
-  AdminDataResult<AdminOverviewData>
-> {
+export type GetAdminOverviewOptions = {
+  includePricingWarnings?: boolean;
+};
+
+export async function getAdminOverview(
+  options: GetAdminOverviewOptions = {},
+): Promise<AdminDataResult<AdminOverviewData>> {
   try {
-    const [users, generations, payments, activeModels, apiErrors, webhooks, audits] =
-      await Promise.all([
+    const d0 = startOfToday();
+    const h24 = hoursAgo24();
+
+    const [
+      users,
+      generations,
+      payments,
+      activeModels,
+      pendingManualPayments,
+      failedGenerations24h,
+      revenueTodayAgg,
+      newUsersToday,
+      apiErrors,
+      webhooks,
+      audits,
+    ] = await Promise.all([
         prisma.user.count(),
         prisma.generation.count(),
         prisma.payment.count(),
         prisma.aiModel.count({ where: { isActive: true } }),
+        prisma.payment.count({
+          where: {
+            provider: KASPI_MANUAL_PAYMENT_PROVIDER,
+            status: { in: ["PENDING", "PROCESSING"] },
+          },
+        }),
+        prisma.generation.count({
+          where: { status: "FAILED", updatedAt: { gte: h24 } },
+        }),
+        prisma.payment.aggregate({
+          where: { status: "COMPLETED", createdAt: { gte: d0 } },
+          _sum: { amount: true },
+        }),
+        prisma.user.count({ where: { createdAt: { gte: d0 } } }),
         prisma.apiLog.findMany({
           where: {
             OR: [
@@ -95,6 +148,20 @@ export async function getAdminOverview(): Promise<
         }),
       ]);
 
+    let pricingWarnings: number | null = null;
+    if (options.includePricingWarnings) {
+      try {
+        const pricingOverview = await buildAdminPricingOverview();
+        pricingWarnings = pricingOverview.warnings.length;
+      } catch {
+        pricingWarnings = null;
+      }
+    }
+
+    const revenueTodayRaw = revenueTodayAgg._sum.amount;
+    const revenueTodayKzt =
+      revenueTodayRaw != null ? Number(revenueTodayRaw) : 0;
+
     return {
       ok: true,
       data: {
@@ -103,6 +170,13 @@ export async function getAdminOverview(): Promise<
           generations,
           payments,
           activeModels,
+        },
+        ownerWidgets: {
+          pendingManualPayments,
+          failedGenerations24h,
+          revenueTodayKzt,
+          newUsersToday,
+          pricingWarnings,
         },
         recentApiErrors: apiErrors,
         recentWebhooks: webhooks,

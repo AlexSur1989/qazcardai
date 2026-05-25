@@ -8,9 +8,9 @@ const TABS: { id: AdminPricingTabId; label: string }[] = [
   { id: "overview", label: "Обзор" },
   { id: "models", label: "AI-модели" },
   { id: "card-builder", label: "Создать карточку" },
-  { id: "marketplace", label: "Карточка товара" },
-  { id: "video", label: "Видео" },
-  { id: "concepts", label: "Фото / концепты" },
+  { id: "marketplace", label: "Карточка для маркетплейса" },
+  { id: "video", label: "Видео товара" },
+  { id: "concepts", label: "Фото с концепциями" },
   { id: "topup", label: "Пополнение" },
   { id: "warnings", label: "Warnings" },
 ];

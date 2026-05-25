@@ -14,9 +14,9 @@ type ScenarioToggle = { enabled: boolean; label: string };
 
 const DEFAULT_SCENARIOS: Record<ScenarioKey, ScenarioToggle> = {
   conceptPhoto: { enabled: true, label: "Фото с концепциями" },
-  marketplaceCard: { enabled: true, label: "Карточка товара" },
+  marketplaceCard: { enabled: true, label: "Карточка для маркетплейса" },
   cardBuilder: { enabled: true, label: "Создать карточку" },
-  productVideo: { enabled: true, label: "Видео" },
+  productVideo: { enabled: true, label: "Видео товара" },
 };
 
 const KEYS: ScenarioKey[] = [
@@ -89,9 +89,9 @@ export function ProductCardScenariosForm({
 
   const rows: Array<{ key: ScenarioKey; title: string; hint: string }> = [
     { key: "conceptPhoto", title: "Фото с концепциями", hint: "Вкладка концептов в кабинете." },
-    { key: "marketplaceCard", title: "Карточка товара", hint: "Витринная карточка маркетплейса." },
-    { key: "cardBuilder", title: "Создать карточку", hint: "Мастер продающей галереи (отдельный сценарий)." },
-    { key: "productVideo", title: "Видео", hint: "Видео по исходному фото." },
+    { key: "marketplaceCard", title: "Карточка для маркетплейса", hint: "Витринная карточка маркетплейса." },
+    { key: "cardBuilder", title: "Создать карточку", hint: "Мастер продающей галереи." },
+    { key: "productVideo", title: "Видео товара", hint: "Видео по исходному фото." },
   ];
 
   return (

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { getAdminOverview } from "@/lib/admin-data";
 import { formatAdminDateTime, truncate } from "@/lib/admin-format";
+import { hasPermission } from "@/lib/permissions";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
@@ -33,27 +34,46 @@ function StatCard({
   title,
   value,
   hint,
+  href,
+  valueClassName,
 }: {
   title: string;
-  value: number;
+  value: string | number;
   hint?: string;
+  href?: string;
+  valueClassName?: string;
 }) {
-  return (
-    <Card className="border-border/80 shadow-sm">
+  const content = (
+    <>
       <CardHeader className="pb-2">
         <CardDescription>{title}</CardDescription>
-        <CardTitle className="text-3xl font-semibold tabular-nums">
+        <CardTitle
+          className={cn("text-3xl font-semibold tabular-nums", valueClassName)}
+        >
           {value}
         </CardTitle>
       </CardHeader>
       {hint ? <CardContent className="pt-0 text-xs">{hint}</CardContent> : null}
-    </Card>
+    </>
+  );
+
+  if (!href) {
+    return (
+      <Card className="border-border/80 shadow-sm">{content}</Card>
+    );
+  }
+
+  return (
+    <Link href={href} className="block transition-opacity hover:opacity-90">
+      <Card className="border-border/80 shadow-sm">{content}</Card>
+    </Link>
   );
 }
 
 export default async function AdminHomePage() {
-  await requireAdminPagePermission("overview.view");
-  const res = await getAdminOverview();
+  const adminUser = await requireAdminPagePermission("overview.view");
+  const includePricingWarnings = hasPermission(adminUser.role, "models.pricing.manage");
+  const res = await getAdminOverview({ includePricingWarnings });
   if (!res.ok) {
     return (
       <div className="space-y-4">
@@ -73,23 +93,76 @@ export default async function AdminHomePage() {
   }
 
   const d = res.data;
+  const w = d.ownerWidgets;
+  const revenueFormatted = new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 0,
+  }).format(w.revenueTodayKzt);
+
   return (
     <div className="space-y-8">
       <PageHeader
         title="Обзор"
-        description="Счётчики, недавние ошибки API, вебхуки и записи аудита. Данные в реальном времени из базы."
+        description="Операционные показатели, счётчики и последние события из базы."
         breadcrumbs={[{ label: "Админ", href: "/admin" }, { label: "Обзор" }]}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Пользователей" value={d.counts.users} />
-        <StatCard title="Генераций" value={d.counts.generations} />
-        <StatCard title="Платежей" value={d.counts.payments} />
-        <StatCard
-          title="Активных моделей"
-          value={d.counts.activeModels}
-          hint="Только isActive = true"
-        />
+      <div>
+        <h2 className="text-muted-foreground mb-3 text-xs font-semibold tracking-wide uppercase">
+          Операции
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+          <StatCard
+            title="Заявки на пополнение"
+            value={w.pendingManualPayments}
+            hint="Ожидают проверки (Kaspi / WhatsApp)"
+            href="/admin/payments/manual"
+            valueClassName={w.pendingManualPayments > 0 ? "text-amber-600" : undefined}
+          />
+          <StatCard
+            title="Ошибки генераций"
+            value={w.failedGenerations24h}
+            hint="За последние 24 часа"
+            href="/admin/generations?status=FAILED"
+            valueClassName={w.failedGenerations24h > 0 ? "text-destructive" : undefined}
+          />
+          <StatCard
+            title="Выручка сегодня"
+            value={`${revenueFormatted} ₸`}
+            hint="Завершённые платежи"
+            href="/admin/finance"
+          />
+          <StatCard
+            title="Новые пользователи"
+            value={w.newUsersToday}
+            hint="Зарегистрированы сегодня"
+            href="/admin/users"
+          />
+          {w.pricingWarnings != null ? (
+            <StatCard
+              title="Предупреждения цен"
+              value={w.pricingWarnings}
+              hint="Warnings в разделе цен"
+              href="/admin/pricing?tab=warnings"
+              valueClassName={w.pricingWarnings > 0 ? "text-amber-600" : undefined}
+            />
+          ) : null}
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-muted-foreground mb-3 text-xs font-semibold tracking-wide uppercase">
+          Сводка
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard title="Пользователей" value={d.counts.users} />
+          <StatCard title="Генераций" value={d.counts.generations} />
+          <StatCard title="Платежей" value={d.counts.payments} />
+          <StatCard
+            title="Активных моделей"
+            value={d.counts.activeModels}
+            hint="Только isActive = true"
+          />
+        </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">

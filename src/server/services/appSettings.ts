@@ -128,6 +128,7 @@ export async function getAllAppSettingsForAdminResponse(): Promise<{
     const row = byKey.get(def.key);
     const list = byGroup.get(def.group);
     if (!list) continue;
+    if (list.some((item) => item.key === def.key)) continue;
     list.push({
       key: def.key,
       group: def.group,

@@ -1,6 +1,7 @@
 
 import { AdminSettingsCenter } from "@/components/admin/admin-settings-center";
 import { PageHeader } from "@/components/layout/page-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Card,
   CardContent,
@@ -13,7 +14,7 @@ import { MODERATION_APP_SETTING_KEY } from "@/lib/moderation-defaults";
 import { getAllAppSettingsForAdminResponse } from "@/server/services/appSettings";
 import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
-export const metadata = { title: "Настройки / Settings — QazCard AI" };
+export const metadata = { title: "Настройки системы — QazCard AI" };
 
 export default async function AdminSettingsPage() {
   const user = await requireAdminPagePermission("settings.view");
@@ -27,13 +28,25 @@ export default async function AdminSettingsPage() {
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Настройки / Settings"
-        description="Управление параметрами приложения QazCard AI."
+        title="Настройки системы"
+        description="Расширенные параметры приложения. Изменение некоторых значений может повлиять на генерации и биллинг."
         breadcrumbs={[
           { label: "Админ", href: "/admin" },
-          { label: "Настройки" },
+          { label: "Настройки системы" },
         ]}
       />
+
+      <Alert>
+        <AlertTitle>Для разработчиков и суперадминов</AlertTitle>
+        <AlertDescription>
+          Расширенные настройки. Изменение некоторых параметров может сломать генерации.
+          Тарифы и цены для клиентов — в разделе{" "}
+          <a href="/admin/pricing" className="underline">
+            Цены и тарифы
+          </a>
+          .
+        </AlertDescription>
+      </Alert>
 
       <Card className="border-border/80 shadow-sm">
         <CardHeader>
