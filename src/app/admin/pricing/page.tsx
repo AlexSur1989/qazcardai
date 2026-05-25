@@ -10,6 +10,7 @@ import {
   loadCardBuilderPricingForAdmin,
   loadKaspiManualForAdmin,
 } from "@/server/services/adminPricingEditor";
+import { loadProductCardVideoPricingForAdmin } from "@/server/services/adminProductCardVideoPricingEditor";
 
 export const metadata = {
   title: "Цены — админка QazCard AI",
@@ -27,16 +28,18 @@ export default async function AdminPricingHubPage({ searchParams }: PageProps) {
   const tabRaw = sp.tab?.trim();
   const tab = isAdminPricingTab(tabRaw) ? tabRaw : "overview";
 
-  const [data, cardBuilderEditor, kaspiEditor] = await Promise.all([
+  const [data, cardBuilderEditor, kaspiEditor, productCardVideoEditor] = await Promise.all([
     buildAdminPricingOverview(),
     loadCardBuilderPricingForAdmin(),
     loadKaspiManualForAdmin(),
+    loadProductCardVideoPricingForAdmin(),
   ]);
 
   const editPermissions = {
     cardBuilder: hasPermission(adminUser.role, "models.pricing.manage"),
     tokenPackages: hasPermission(adminUser.role, "token_packages.manage"),
     manualTopUp: hasPermission(adminUser.role, "settings.manage"),
+    productCardVideo: hasPermission(adminUser.role, "models.pricing.manage"),
   };
 
   const errorWarnings = data.warnings.filter((w) => w.severity === "error").length;
@@ -65,6 +68,7 @@ export default async function AdminPricingHubPage({ searchParams }: PageProps) {
         editor={{
           cardBuilder: cardBuilderEditor,
           kaspi: kaspiEditor,
+          productCardVideo: productCardVideoEditor,
         }}
       />
     </div>

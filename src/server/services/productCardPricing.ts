@@ -3,6 +3,10 @@ import type { AiModel } from "@/generated/prisma/client";
 import { isAdminPricingPinned } from "@/lib/admin-pricing-pinned";
 import { computeCardBuilderCreditsBeforeMargin } from "@/lib/card-builder-pricing-math";
 import {
+  entryForProductCardMatrixKeys,
+  pickProductCardPricingKeys,
+} from "@/lib/product-card-matrix-keys";
+import {
   getProductCardSettings,
   type ProductCardSettings,
   type ProductCardCardBuilderPricing,
@@ -112,37 +116,11 @@ function scenarioMinTokens(
 }
 
 function pickKeys(settings: Record<string, unknown>): string[] {
-  const keys: string[] = [];
-  for (const name of [
-    "size",
-    "cardSize",
-    "preset",
-    "templatePreset",
-    "resolution",
-    "quality",
-    "aspectRatio",
-    "duration",
-    "style",
-  ]) {
-    const value = settings[name];
-    if (typeof value === "string" || typeof value === "number") {
-      keys.push(`${name}:${String(value)}`);
-      keys.push(String(value));
-    }
-  }
-  return keys;
+  return pickProductCardPricingKeys(settings);
 }
 
 function entryForKeys(source: unknown, keys: string[]): Record<string, unknown> | null {
-  const obj = asRecord(source);
-  if (!obj) return null;
-  for (const key of keys) {
-    const entry = asRecord(obj[key]);
-    if (entry) return entry;
-    const direct = obj[key];
-    if (typeof direct === "number") return { tokens: direct };
-  }
-  return null;
+  return entryForProductCardMatrixKeys(source, keys);
 }
 
 function multiplierForSettings(source: unknown, settings: Record<string, unknown>): number {

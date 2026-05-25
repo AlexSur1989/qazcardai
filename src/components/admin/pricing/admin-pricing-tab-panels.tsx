@@ -4,6 +4,7 @@ import { CardBuilderPricingEditor } from "@/components/admin/pricing/card-builde
 import { ManualTopUpPricingEditor } from "@/components/admin/pricing/manual-topup-pricing-editor";
 import { AdminPricingModelsTable } from "@/components/admin/pricing/admin-pricing-models-table";
 import { TokenPackagesPricingEditor } from "@/components/admin/pricing/token-packages-pricing-editor";
+import { ProductCardVideoPricingEditor } from "@/components/admin/pricing/product-card-video-pricing-editor";
 import { AdminVideoPricingCalculator } from "@/components/admin/pricing/video-calculator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +31,9 @@ import type {
 } from "@/server/services/adminPricingOverview";
 import type { CardBuilderPricingApi } from "@/lib/pricing-admin/card-builder";
 import type { KaspiManualPricingApi } from "@/lib/pricing-admin/kaspi-manual";
-import type { AppSettingMeta } from "@/server/services/adminPricingEditor";
+import type { ProductCardVideoPricingApi } from "@/lib/pricing-admin/product-card-video";
+import type { ProductCardVideoMatrixCellPreview } from "@/lib/pricing-admin/product-card-video";
+import type { AppSettingMeta } from "@/lib/pricing-admin/types";
 import { cn } from "@/lib/utils";
 
 function statusBadge(status: string) {
@@ -60,11 +63,17 @@ type PricingEditPermissions = {
   cardBuilder: boolean;
   tokenPackages: boolean;
   manualTopUp: boolean;
+  productCardVideo: boolean;
 };
 
 type PricingEditorProps = {
   cardBuilder: { pricing: CardBuilderPricingApi; meta: AppSettingMeta | null };
   kaspi: { settings: KaspiManualPricingApi; meta: AppSettingMeta | null };
+  productCardVideo: {
+    pricing: ProductCardVideoPricingApi | null;
+    formula: string;
+    cellPreviews: ProductCardVideoMatrixCellPreview[];
+  };
 };
 
 type Props = {
@@ -84,6 +93,7 @@ export function AdminPricingTabPanels({
     cardBuilder: false,
     tokenPackages: false,
     manualTopUp: false,
+    productCardVideo: false,
   };
 
   if (tab === "overview") {
@@ -364,50 +374,12 @@ export function AdminPricingTabPanels({
         )}
 
         <h2 className="text-lg font-medium">B. Видео товара (Product Card)</h2>
-        {data.productVideoModel ? (
-          <>
-            <p className="text-sm">
-              Модель: <strong>{data.productVideoModel.name}</strong>
-            </p>
-            {data.productVideoFlatPrice ? (
-              <Alert variant="destructive">
-                <AlertTitle>Flat price warning</AlertTitle>
-                <AlertDescription>
-                  Текущая матрица не меняет цену по duration/resolution — все presets дают одну
-                  сумму.
-                </AlertDescription>
-              </Alert>
-            ) : null}
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Resolution</TableHead>
-                  <TableHead className="text-right">Credits</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.productVideoSamples.map((s) => (
-                  <TableRow key={`${s.duration}-${s.resolution}`}>
-                    <TableCell>{s.duration}s</TableCell>
-                    <TableCell>{s.resolution}</TableCell>
-                    <TableCell className="text-right tabular-nums">{s.credits}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Link
-              href={`/admin/models/${data.productVideoModel.id}/edit`}
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-            >
-              Редактировать pricing модели
-            </Link>
-          </>
-        ) : (
-          <Alert>
-            <AlertDescription>Модель видео товара не настроена.</AlertDescription>
-          </Alert>
-        )}
+        <ProductCardVideoPricingEditor
+          initialPricing={editor?.productCardVideo?.pricing ?? null}
+          initialFormula={editor?.productCardVideo?.formula ?? ""}
+          initialCellPreviews={editor?.productCardVideo?.cellPreviews ?? []}
+          canEdit={perms.productCardVideo}
+        />
 
         <AdminVideoPricingCalculator
           generalModels={generalVideoModels}
