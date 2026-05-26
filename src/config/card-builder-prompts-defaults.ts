@@ -1,6 +1,10 @@
-import { CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS } from "@/config/card-builder-universal";
+import {
+  buildCardBuilderV2CardTypePromptsWithLegacy,
+  buildCardBuilderV2TemplatePrompts,
+  CARD_BUILDER_V2_CATEGORY_PROMPTS,
+} from "@/lib/card-builder-prompt-v2-content";
 
-export const CARD_BUILDER_PROMPTS_SETTING_VERSION = "card_builder_prompts_v1" as const;
+export const CARD_BUILDER_PROMPTS_SETTING_VERSION = "card_builder_prompts_v2.2" as const;
 
 export const CARD_BUILDER_PROMPTS_KNOWN_CATEGORY_KEYS = [
   "clothing_shoes",
@@ -17,6 +21,20 @@ export const CARD_BUILDER_PROMPTS_KNOWN_CATEGORY_KEYS = [
 
 export const CARD_BUILDER_PROMPTS_KNOWN_CARD_TYPE_KEYS = [
   "main_photo",
+  "benefits_infographic",
+  "benefits_card",
+  "comparison_card",
+  "dimensions_card",
+  "package_contents",
+  "usage_instruction",
+  "premium_poster",
+  "lifestyle_card",
+  "detail_closeup",
+  "material_texture",
+  "specs_card",
+  "before_after",
+  "social_proof",
+  "offer_card",
   "infographic",
   "benefits",
   "comparison",
@@ -30,12 +48,21 @@ export const CARD_BUILDER_PROMPTS_KNOWN_CARD_TYPE_KEYS = [
 ] as const;
 
 export const CARD_BUILDER_PROMPTS_KNOWN_TEMPLATE_KEYS = [
+  "main_photo",
+  "benefits_infographic",
+  "materials_texture",
+  "dimensions_size",
+  "packaging_set",
+  "instruction_steps",
+  "lifestyle_scene",
+  "universal",
   "hero_clean",
   "product_packshot",
   "fashion_catalog",
   "beauty_packshot",
   "benefits_grid",
   "benefits_left_column",
+  "comparison_card",
   "feature_callouts",
   "texture_closeup",
   "material_focus",
@@ -58,6 +85,11 @@ export const CARD_BUILDER_PROMPTS_KNOWN_TEMPLATE_KEYS = [
   "editorial_poster",
   "ad_banner",
   "brand_hero",
+  "protection_features",
+  "ingredients_effect",
+  "dark_premium",
+  "dark_premium_benefits",
+  "realistic_listing",
 ] as const;
 
 export type CardBuilderPromptsSetting = {
@@ -77,26 +109,23 @@ export type CardBuilderPromptsSetting = {
 
 const VISION_PROMPT_BASE = `Ты анализируешь фото товара для генератора карточек товара.
 
-Твоя задача:
-- определить тип товара;
-- определить категорию;
-- описать видимые цвета;
-- определить материал только если он очевиден визуально;
-- извлечь видимый текст, если он есть;
-- предложить факты товара, которые помогут создать карточку.
+Твоя задача — ТОЛЬКО то, что видно на изображении (vision_ai):
+- бренд (brandGuess), если читается на упаковке;
+- название/тип товара (productNameGuess, productType);
+- категорию (categoryKey);
+- видимые цвета, форму, тип упаковки;
+- видимый текст (visibleText) — дословно;
+- видимые заявления на упаковке (visibleClaims) — дословно, без интерпретации;
+- материал (materialGuess) — только если очевиден визуально;
+- suggestedProductFacts — только detail/package/dimension/material/product_purpose с confidence, если это видно на фото.
 
-Не выдумывай:
-- размер;
-- вес;
-- объём;
-- состав;
-- материал (если не очевиден);
-- функции;
-- гарантию;
-- совместимость;
-- лечебные или медицинские свойства;
-- сертификаты;
-- бренд, если он не виден.
+НЕ выдумывай и НЕ добавляй в suggestedProductFacts:
+- преимущества (benefit), эффекты (effect), состав (ingredient);
+- размер/объём/вес, если не написаны на фото;
+- функции, совместимость, сертификаты, медицинские свойства;
+- характеристики «из общих знаний о товаре».
+
+Web Research выполняется отдельно — здесь только vision.
 
 Верни только валидный JSON без markdown и без лишних ключей.
 JSON должен точно соответствовать схеме:
@@ -117,10 +146,12 @@ export const PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA = `{
   "categoryKey": "clothing_shoes | beauty_care | home_interior | kids_products | sport_fitness | auto_products | jewelry_accessories | food_drinks | gadgets_tech | other",
   "productType": "string",
   "productNameGuess": "string",
+  "brandGuess": null,
   "mainColors": ["string"],
   "materialGuess": null,
   "styleGuess": null,
   "visibleText": ["string"],
+  "visibleClaims": ["string"],
   "packaging": "none | bottle | box | bag | tube | jar | other",
   "productShape": null,
   "mainObjects": ["string"],
@@ -128,7 +159,7 @@ export const PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA = `{
     {
       "label": "string",
       "value": "string",
-      "type": "benefit | product_purpose | material | dimension | usage | detail | package | feature | ingredient | effect | compatibility | care | other",
+      "type": "product_purpose | material | dimension | usage | detail | package | feature | other",
       "confidence": 0.0
     }
   ],
@@ -159,86 +190,16 @@ const PRESERVE_PRODUCT_PROMPT = `=== PRESERVE_PRODUCT ===
 Не подменяй SKU другим объектом. Не добавляй случайных деталей к продукту.`;
 
 const NEGATIVE_RULES_PROMPT = `=== NEGATIVE RULES ===
-НЕ выдумывай размеры, состав, функции, сертификаты и медицинские обещания.
+НЕ выдумывай размеры, состав, функции, сертификаты, отзывы, скидки и медицинские обещания.
 НЕ меняй товар и логотип с исходного фото.
-НЕ добавляй водяные знаки и чужие бренды.
-НЕ добавляй нечитаемый мелкий текст.`;
+НЕ добавляй водяные знаки, чужие бренды, fake badges, rating stars, certificates.
+НЕ добавляй нечитаемый мелкий текст.
+Если фактов нет — лучше нейтральная карточка без claims, чем ложный текст.`;
 
 const STYLE_REFERENCE_PROMPT = `=== STYLE_REFERENCE ===
 Референс — только источник стиля оформления, не источник фактов о SKU.
 Не копируй чужой товар, логотипы, бренды, читаемый текст и водяные знаки с референса.
 Товар на выходе = товар с фото товара; locked-текст пользователя не изменять.`;
-
-function categoryDefaults(): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const key of CARD_BUILDER_PROMPTS_KNOWN_CATEGORY_KEYS) {
-    const hint =
-      key in CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS
-        ? CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS[
-            key as keyof typeof CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS
-          ]
-        : CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS.other;
-    out[key] = `=== CATEGORY ===\nКатегория: ${key}.\n${hint}`;
-  }
-  return out;
-}
-
-const CARD_TYPE_DEFAULTS: Record<string, string> = {
-  main_photo:
-    "=== CARD TYPE: MAIN ===\nГлавное фото: чистый каталожный кадр, товар узнаваем, фон спокойный.",
-  infographic:
-    "=== CARD TYPE: INFOGRAPHIC ===\nИнфографика: плашки и иконки; текст только из locked phrases.",
-  benefits:
-    "=== CARD TYPE: BENEFITS ===\nСлайд преимуществ: плашки и иконки; не менять текст клиента.",
-  comparison:
-    "=== CARD TYPE: COMPARISON ===\nСравнение только по фактам пользователя; без ложных claims.",
-  dimensions:
-    "=== CARD TYPE: DIMENSIONS ===\nРазмеры только из locked phrases; не выдумывать цифры.",
-  package:
-    "=== CARD TYPE: PACKAGE ===\nУпаковка/комплект честно по референсу; не придумывать состав.",
-  instruction:
-    "=== CARD TYPE: INSTRUCTION ===\nИнструкция/детали: акцент на видимых деталях без выдуманных шагов.",
-  premium_banner:
-    "=== CARD TYPE: PREMIUM BANNER ===\nПремиальный рекламный кадр; текст только locked phrases.",
-  lifestyle:
-    "=== CARD TYPE: LIFESTYLE ===\nLifestyle-сцена; товар главный; без выдуманных свойств.",
-  details:
-    "=== CARD TYPE: DETAILS ===\nКрупный план детали; не подменять символы текста.",
-  materials:
-    "=== CARD TYPE: MATERIALS ===\nМатериал и фактура; не выдумывать состав.",
-};
-
-const TEMPLATE_DEFAULTS: Record<string, string> = {
-  hero_clean: "Чистый каталожный кадр: товар узнаваем, фон спокойный.",
-  product_packshot: "Packshot на нейтральном фоне, честная идентичность SKU.",
-  fashion_catalog: "Fashion/catalog без тяжёлой инфографики.",
-  beauty_packshot: "Косметика: чистый premium packshot, мягкий свет.",
-  benefits_grid: "Инфографика преимуществ только по locked phrases клиента.",
-  benefits_left_column: "Преимущества в колонке; текст только locked.",
-  comparison_card: "Сравнение только по фактам пользователя; без ложных claims.",
-  feature_callouts: "Выноски функций только из locked phrases.",
-  texture_closeup: "Фактура и поверхность крупным планом.",
-  material_focus: "Акцент на материале без выдуманного состава.",
-  fabric_closeup: "Ткань, швы, фактура; не выдумывать состав.",
-  detail_closeup: "Крупный план детали товара.",
-  interface_detail: "Экран/кнопка/разъём; не выдумывать функции.",
-  dimensions_schema: "Размеры только если указаны пользователем.",
-  size_range: "Размерный ряд только из текста пользователя.",
-  scale_comparison: "Масштаб визуально без выдуманных цифр.",
-  lifestyle_card: "Естественный lifestyle без выдуманных свойств.",
-  usage_scenario: "Сценарий использования; товар узнаваем.",
-  interior_lifestyle: "Интерьерный контекст без перегруженной инфографики.",
-  fashion_lifestyle: "Fashion lifestyle, акцент на товар.",
-  beauty_lifestyle: "Beauty lifestyle, чистая подача.",
-  food_lifestyle: "Food lifestyle, аппетитная подача.",
-  package_card: "Упаковка честно по референсу.",
-  gift_packaging: "Подарочная упаковка без выдуманных маркировок.",
-  set_contents: "Состав комплекта только если указан пользователем.",
-  premium_poster: "Премиальный постер без неподтверждённых claims.",
-  editorial_poster: "Editorial-подача с негативным пространством.",
-  ad_banner: "Рекламный баннер; текст только locked phrases.",
-  brand_hero: "Hero-кадр бренда без чужих логотипов.",
-};
 
 export const CARD_BUILDER_PROMPTS_DEFAULTS: CardBuilderPromptsSetting = {
   version: CARD_BUILDER_PROMPTS_SETTING_VERSION,
@@ -250,20 +211,20 @@ export const CARD_BUILDER_PROMPTS_DEFAULTS: CardBuilderPromptsSetting = {
   preserveProductPrompt: PRESERVE_PRODUCT_PROMPT,
   negativeRulesPrompt: NEGATIVE_RULES_PROMPT,
   styleReferencePrompt: STYLE_REFERENCE_PROMPT,
-  categoryPrompts: categoryDefaults(),
-  cardTypePrompts: { ...CARD_TYPE_DEFAULTS },
-  templatePrompts: { ...TEMPLATE_DEFAULTS },
+  categoryPrompts: { ...CARD_BUILDER_V2_CATEGORY_PROMPTS },
+  cardTypePrompts: buildCardBuilderV2CardTypePromptsWithLegacy(),
+  templatePrompts: buildCardBuilderV2TemplatePrompts(),
 };
 
-/** slideRole из плана → ключ cardTypePrompts. */
+/** slideRole из плана → ключ cardTypePrompts (канонические v2.2). */
 export const CARD_BUILDER_SLIDE_ROLE_TO_CARD_TYPE: Record<string, string> = {
   main_photo: "main_photo",
-  benefits_infographic: "benefits",
-  dimensions: "dimensions",
-  materials: "materials",
-  lifestyle: "lifestyle",
-  detail_closeup: "details",
-  packaging: "package",
-  premium_poster: "premium_banner",
-  ad_banner: "premium_banner",
+  benefits_infographic: "benefits_infographic",
+  dimensions: "dimensions_card",
+  materials: "material_texture",
+  lifestyle: "lifestyle_card",
+  detail_closeup: "detail_closeup",
+  packaging: "package_contents",
+  premium_poster: "premium_poster",
+  ad_banner: "premium_poster",
 };

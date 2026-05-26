@@ -18,12 +18,33 @@ export const CARD_BUILDER_PRODUCT_FACT_TYPES = [
 
 export type CardBuilderProductFactType = (typeof CARD_BUILDER_PRODUCT_FACT_TYPES)[number];
 
-export const CARD_BUILDER_PRODUCT_FACT_SOURCES = ["vision_ai", "user", "category_field"] as const;
+export const CARD_BUILDER_PRODUCT_FACT_SOURCES = [
+  "vision_ai",
+  "web_suggested",
+  "user",
+  "category_field",
+] as const;
 
 export type CardBuilderProductFactSource =
   (typeof CARD_BUILDER_PRODUCT_FACT_SOURCES)[number];
 
+export const CARD_BUILDER_FACT_CONFIDENCE_LEVELS = ["high", "medium", "low"] as const;
+
+export type CardBuilderFactConfidenceLevel =
+  (typeof CARD_BUILDER_FACT_CONFIDENCE_LEVELS)[number];
+
+export const CARD_BUILDER_FACT_EVIDENCE_KINDS = [
+  "visible_on_image",
+  "web_page",
+  "user_input",
+] as const;
+
+export type CardBuilderFactEvidenceKind =
+  (typeof CARD_BUILDER_FACT_EVIDENCE_KINDS)[number];
+
 export type CardBuilderProductFact = {
+  /** Стабильный ключ fact (slug), опционально. */
+  key?: string;
   id: string;
   label: string;
   value: string;
@@ -31,11 +52,51 @@ export type CardBuilderProductFact = {
   visibleOnCard?: boolean;
   lockedText?: boolean;
   source: CardBuilderProductFactSource;
+  /** 0..1 legacy numeric confidence from vision. */
   confidence?: number;
+  confidenceLevel?: CardBuilderFactConfidenceLevel;
   needsReview?: boolean;
+  verifiedByUser?: boolean;
+  evidence?: CardBuilderFactEvidenceKind;
+  evidenceUrl?: string;
+  evidenceTitle?: string;
 };
 
 const LOW_CONFIDENCE_THRESHOLD = 0.55;
+
+export function confidenceLevelFromNumeric(n: number): CardBuilderFactConfidenceLevel {
+  if (n >= 0.75) return "high";
+  if (n >= 0.55) return "medium";
+  return "low";
+}
+
+export function numericConfidenceFromLevel(
+  level: CardBuilderFactConfidenceLevel | undefined,
+): number | undefined {
+  if (!level) return undefined;
+  if (level === "high") return 0.85;
+  if (level === "medium") return 0.65;
+  return 0.4;
+}
+
+export function isWebSuggestedFact(fact: CardBuilderProductFact): boolean {
+  return fact.source === "web_suggested";
+}
+
+export function productFactSourceLabel(source: CardBuilderProductFactSource): string {
+  switch (source) {
+    case "vision_ai":
+      return "С фото";
+    case "web_suggested":
+      return "Найдено в интернете";
+    case "user":
+      return "Добавлено вами";
+    case "category_field":
+      return "Категория";
+    default:
+      return source;
+  }
+}
 
 export function newProductFactId(): string {
   return `pf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -59,14 +120,50 @@ export function sanitizeProductFact(raw: unknown): CardBuilderProductFact | null
     typeof o.id === "string" && o.id.trim().length >= 4
       ? o.id.trim().slice(0, 64)
       : newProductFactId();
+  const key =
+    typeof o.key === "string" && o.key.trim().length >= 2
+      ? o.key.trim().slice(0, 64)
+      : undefined;
   let confidence: number | undefined;
   if (typeof o.confidence === "number" && Number.isFinite(o.confidence)) {
     confidence = Math.min(1, Math.max(0, o.confidence));
   }
+  let confidenceLevel: CardBuilderFactConfidenceLevel | undefined;
+  if (
+    typeof o.confidenceLevel === "string" &&
+    (CARD_BUILDER_FACT_CONFIDENCE_LEVELS as readonly string[]).includes(o.confidenceLevel)
+  ) {
+    confidenceLevel = o.confidenceLevel as CardBuilderFactConfidenceLevel;
+  } else if (confidence != null) {
+    confidenceLevel = confidenceLevelFromNumeric(confidence);
+  }
+  const evidenceRaw = typeof o.evidence === "string" ? o.evidence.trim() : "";
+  const evidence = (CARD_BUILDER_FACT_EVIDENCE_KINDS as readonly string[]).includes(
+    evidenceRaw,
+  )
+    ? (evidenceRaw as CardBuilderFactEvidenceKind)
+    : source === "vision_ai"
+      ? "visible_on_image"
+      : source === "user"
+        ? "user_input"
+        : undefined;
+  const evidenceUrl =
+    typeof o.evidenceUrl === "string" && o.evidenceUrl.trim()
+      ? o.evidenceUrl.trim().slice(0, 2048)
+      : undefined;
+  const evidenceTitle =
+    typeof o.evidenceTitle === "string" && o.evidenceTitle.trim()
+      ? o.evidenceTitle.trim().slice(0, 200)
+      : undefined;
+  const verifiedByUser = o.verifiedByUser === true;
   const needsReview =
     o.needsReview === true ||
+    (source === "web_suggested" && !verifiedByUser) ||
+    (source === "vision_ai" &&
+      confidenceLevel === "low") ||
     (source === "vision_ai" && confidence != null && confidence < LOW_CONFIDENCE_THRESHOLD);
   return {
+    key,
     id,
     label,
     value,
@@ -75,7 +172,12 @@ export function sanitizeProductFact(raw: unknown): CardBuilderProductFact | null
     lockedText: o.lockedText !== false,
     source,
     confidence,
+    confidenceLevel,
     needsReview,
+    verifiedByUser: verifiedByUser || source === "user" || source === "category_field",
+    evidence,
+    evidenceUrl,
+    evidenceTitle,
   };
 }
 

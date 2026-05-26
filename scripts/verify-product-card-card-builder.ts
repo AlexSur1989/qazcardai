@@ -24,7 +24,15 @@ import {
 import { derivePlanStyleFields } from "@/lib/card-builder-style-choice";
 import { UNIVERSAL_CARD_BUILDER_PROFILE } from "@/config/universal-card-builder-profile";
 import { cardBuilderPlanFieldsSchema } from "@/lib/validations/card-builder-plan";
+import {
+  filterFactsForGeneration,
+  isFactEligibleForGeneration,
+} from "@/lib/card-builder-fact-eligibility";
+import { visionAnalysisToProductFacts } from "@/lib/card-builder-vision-facts";
 import { enrichCardBuilderGallerySlides } from "@/server/services/cardBuilderTextSlots";
+import { buildCardBuilderSuperPrompt } from "@/server/services/cardBuilderPromptBuilder";
+import { resolveCardBuilderTemplatePromptKey } from "@/lib/card-builder-template-prompt-aliases";
+import { CARD_BUILDER_PROMPT_MAX_LEN } from "@/lib/validations/card-builder-prompts-setting";
 import {
   buildCardBuilderGalleryPlan,
   type CardBuilderPlanInput,
@@ -177,8 +185,8 @@ assert(promptsEntry, "PRODUCT_CARD_CARD_BUILDER_PROMPTS в APP_SETTINGS_REGISTRY
 assert(
   promptsEntry?.defaultValue &&
     typeof promptsEntry.defaultValue === "object" &&
-    (promptsEntry.defaultValue as { version?: string }).version === "card_builder_prompts_v1",
-  "default prompts version",
+    (promptsEntry.defaultValue as { version?: string }).version === "card_builder_prompts_v2.2",
+  "default prompts version v2.2",
 );
 
 const merged = mergeCardBuilderPromptsWithDefaults(null);
@@ -193,12 +201,16 @@ assert(promptBuilderSrc.includes("pickCategoryPrompt"), "prompt builder uses cat
 assert(promptBuilderSrc.includes("pickCardTypePrompt"), "prompt builder uses cardType overrides");
 assert(promptBuilderSrc.includes("pickTemplatePrompt"), "prompt builder uses template overrides");
 assert(
-  promptBuilderSrc.includes("computeEffectiveCardBuilderSettings"),
-  "prompt builder uses effective settings layer",
+  promptBuilderSrc.includes("buildCardBuilderGlobalRulesSection"),
+  "prompt builder inserts global rules once",
 );
 assert(
-  promptBuilderSrc.includes("mergedCategoryStyleSection"),
-  "prompt builder deduplicated category/style block",
+  !promptBuilderSrc.includes("mergedCategoryStyleSection("),
+  "prompt builder uses pickCategoryPrompt instead of hardcoded category hints",
+);
+assert(
+  promptBuilderSrc.includes("computeEffectiveCardBuilderSettings"),
+  "prompt builder uses effective settings layer",
 );
 
 function assertSnippet(
@@ -583,5 +595,245 @@ assert(
     clearMenEffective.effectiveSalesStyle === "premium",
   "Clear Men lifestyle effective settings без infographic",
 );
+
+const webFact = {
+  id: "w1",
+  label: "Объём",
+  value: "500 мл",
+  type: "dimension" as const,
+  source: "web_suggested" as const,
+  needsReview: true,
+  verifiedByUser: false,
+  visibleOnCard: true,
+  lockedText: true,
+};
+assert(!isFactEligibleForGeneration(webFact, "beauty_care"), "web_suggested без confirm blocked");
+assert(
+  isFactEligibleForGeneration({ ...webFact, verifiedByUser: true, needsReview: false }, "other"),
+  "web_suggested после confirm allowed",
+);
+
+const visionOnly = visionAnalysisToProductFacts({
+  categoryKey: "other",
+  productType: "кружка",
+  productNameGuess: "Termo",
+  brandGuess: "BrandX",
+  materialGuess: null,
+  visibleText: ["500 ml"],
+  visibleClaims: [],
+  suggestedProductFacts: [
+    { label: "Преимущество", value: "Лёгкая", type: "benefit", confidence: 0.9 },
+  ],
+  confidence: 0.8,
+});
+assert(
+  !visionOnly.some((f) => f.type === "benefit"),
+  "visionAnalysisToProductFacts не добавляет benefit из suggested",
+);
+assert(visionOnly.some((f) => f.source === "vision_ai"), "vision facts имеют source vision_ai");
+
+// --- v2.2 template aliases ---
+assert(
+  resolveCardBuilderTemplatePromptKey("set_contents") === "packaging_set",
+  "alias set_contents → packaging_set",
+);
+assert(
+  resolveCardBuilderTemplatePromptKey("size_scale") === "scale_comparison",
+  "alias size_scale → scale_comparison",
+);
+assert(
+  resolveCardBuilderTemplatePromptKey("hero_clean") === "main_photo",
+  "alias hero_clean → main_photo",
+);
+assert(
+  resolveCardBuilderTemplatePromptKey("benefits_grid") === "benefits_infographic",
+  "alias benefits_grid → benefits_infographic",
+);
+
+function baseSuperPrompt(
+  overrides: Partial<Parameters<typeof buildCardBuilderSuperPrompt>[0]> = {},
+): Parameters<typeof buildCardBuilderSuperPrompt>[0] {
+  return {
+    selectedCategory: "other",
+    marketplace: "other",
+    preserveProduct: true,
+    slideRole: "main_photo",
+    ...overrides,
+  };
+}
+
+function assertSuperPrompt(
+  label: string,
+  input: Parameters<typeof buildCardBuilderSuperPrompt>[0],
+  mustContain: string[],
+  mustNotContain: string[],
+) {
+  const built = buildCardBuilderSuperPrompt(input);
+  assert(built.ok, `${label}: super prompt build failed`);
+  const p = built.data!.prompt.toLowerCase();
+  for (const s of mustContain) {
+    assert(p.includes(s.toLowerCase()), `${label}: must contain «${s}»`);
+  }
+  for (const s of mustNotContain) {
+    assert(!p.includes(s.toLowerCase()), `${label}: must not contain «${s}»`);
+  }
+}
+
+// TZ test case 1: beauty_care + lifestyle_scene
+assertSuperPrompt(
+  "beauty_care lifestyle",
+  baseSuperPrompt({
+    slideRole: "lifestyle",
+    templateId: "beauty_lifestyle",
+    cardBuilderCategoryKey: "beauty_care",
+    salesStyle: "premium",
+    textDensity: "minimal",
+    visualStyle: "premium",
+    productFacts: [
+      {
+        id: "pp1",
+        label: "Назначение",
+        value: "Шампунь для ежедневного ухода",
+        type: "product_purpose",
+        source: "user",
+        visibleOnCard: true,
+        lockedText: true,
+      },
+    ],
+    productTitle: "Clear Men",
+  }),
+  ["global product truth rules", "lifestyle_scene", "beauty_care", "global category rules"],
+  ["3–5 преимуществ", "плашки, иконки, выноски, сетка"],
+);
+
+// TZ test case 2: gadgets_tech + specs (dimensions slide as specs proxy)
+assertSuperPrompt(
+  "gadgets specs",
+  baseSuperPrompt({
+    slideRole: "dimensions",
+    templateId: "dimensions_schema",
+    cardBuilderCategoryKey: "gadgets_tech",
+    salesStyle: "clean_catalog",
+    textDensity: "medium",
+    productFacts: [
+      {
+        id: "d1",
+        label: "Объём",
+        value: "256 ГБ",
+        type: "dimension",
+        source: "user",
+        visibleOnCard: true,
+        lockedText: true,
+      },
+    ],
+    productTitle: "Phone X",
+  }),
+  ["256 гб", "dimensions_size", "gadgets_tech"],
+  ["512 гб", "гарантия 2 года"],
+);
+
+// TZ test case 3: food_drinks + benefits_infographic
+assertSuperPrompt(
+  "food benefits",
+  baseSuperPrompt({
+    slideRole: "benefits_infographic",
+    templateId: "benefits_grid",
+    cardBuilderCategoryKey: "food_drinks",
+    salesStyle: "infographic",
+    textDensity: "medium",
+    visualStyle: "infographic",
+    productFacts: [
+      {
+        id: "b1",
+        label: "Вкус",
+        value: "Нежный шоколад",
+        type: "benefit",
+        source: "user",
+        visibleOnCard: true,
+        lockedText: true,
+      },
+    ],
+    productTitle: "Батончик",
+  }),
+  ["food_drinks", "benefits_infographic"],
+  [],
+);
+
+// TZ test case 4: home_interior + dimensions without dimensions
+assertSuperPrompt(
+  "interior dimensions soft scale",
+  baseSuperPrompt({
+    slideRole: "dimensions",
+    templateId: "scale_comparison",
+    cardBuilderCategoryKey: "home_interior",
+    salesStyle: "clean_catalog",
+    textDensity: "medium",
+    productFacts: [],
+    productTitle: "Ваза",
+  }),
+  ["без числовых размеров", "scale_comparison", "home_interior"],
+  [],
+);
+
+// TZ test case 5: kids comparison_card blocked without facts
+const kidsComparisonBlocked = computeEffectiveCardBuilderSettingsForSlide({
+  slideRole: "benefits_infographic",
+  templateId: "comparison_card",
+  categoryKey: "kids_products",
+  rawSalesStyle: "infographic",
+  rawTextDensity: "medium",
+  productFacts: [],
+  exactTextPhrases: ["Игрушка"],
+});
+assert(kidsComparisonBlocked.blockGeneration, "kids comparison_card без facts блокируется");
+
+// TZ test case 6: packaging_set without package facts blocked
+const packagingBlocked = computeEffectiveCardBuilderSettingsForSlide({
+  slideRole: "packaging",
+  templateId: "set_contents",
+  categoryKey: "gadgets_tech",
+  rawSalesStyle: "clean_catalog",
+  rawTextDensity: "medium",
+  productFacts: [],
+  exactTextPhrases: ["Набор"],
+});
+assert(packagingBlocked.blockGeneration, "packaging/set_contents без package facts блокируется");
+
+// TZ test case 7: social_proof card type blocked
+const socialBlocked = computeEffectiveCardBuilderSettingsForSlide({
+  slideRole: "social_proof",
+  rawSalesStyle: "clean_catalog",
+  rawTextDensity: "medium",
+  productFacts: [],
+  exactTextPhrases: [],
+});
+assert(socialBlocked.blockGeneration, "social_proof без reviews блокируется");
+
+// TZ test case 8: offer_card blocked
+const offerBlocked = computeEffectiveCardBuilderSettingsForSlide({
+  slideRole: "offer_card",
+  rawSalesStyle: "bold_ad",
+  rawTextDensity: "medium",
+  productFacts: [],
+  exactTextPhrases: ["Товар"],
+});
+assert(offerBlocked.blockGeneration, "offer_card без offer facts блокируется");
+
+const samplePrompt = buildCardBuilderSuperPrompt(
+  baseSuperPrompt({
+    slideRole: "main_photo",
+    templateId: "hero_clean",
+    cardBuilderCategoryKey: "beauty_care",
+    salesStyle: "clean_catalog",
+    textDensity: "minimal",
+    productFacts: [],
+    productTitle: "Test SKU",
+  }),
+);
+assert(samplePrompt.ok, "sample super prompt builds");
+const promptLen = samplePrompt.data!.prompt.length;
+assert(promptLen <= CARD_BUILDER_PROMPT_MAX_LEN, `prompt size ${promptLen} <= ${CARD_BUILDER_PROMPT_MAX_LEN}`);
+const globalCount = (samplePrompt.data!.prompt.match(/GLOBAL PRODUCT TRUTH RULES/gi) ?? []).length;
+assert(globalCount === 1, "GLOBAL PRODUCT TRUTH RULES inserted once");
 
 console.log("[verify-product-card-card-builder] OK");

@@ -10,6 +10,7 @@ import {
   MARKETPLACE_CARD_BASE_PROMPT,
 } from "@/config/product-card-prompts";
 import { ProductCardCardBuilderPromptsPanel } from "@/components/admin/product-card-card-builder-prompts-panel";
+import { ProductCardWebResearchAdminPanel } from "@/components/admin/product-card-web-research-admin-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ProductCardAdvancedTabId } from "@/lib/product-card-admin-meta";
+import type { ProductCardWebResearchSettings } from "@/lib/product-card-web-research-config";
 import type { ProductCardPriceBreakdown } from "@/server/services/productCardPricing";
 import type { ProductCardSettings } from "@/server/services/productCardSettings";
 import type { Prisma } from "@/generated/prisma/client";
@@ -68,6 +70,7 @@ type Props = {
   cardBuilderPromptsSetting: unknown;
   cardBuilderSuperPromptSample: CardBuilderPromptResult;
   canPatchSettings: boolean;
+  webResearchSettings: ProductCardWebResearchSettings;
 };
 
 function jsonPreview(value: unknown): string {
@@ -84,6 +87,7 @@ export function ProductCardAdminAdvancedPanel({
   cardBuilderPromptsSetting,
   cardBuilderSuperPromptSample,
   canPatchSettings,
+  webResearchSettings,
 }: Props) {
   const isPromptTab = tab === "prompts" || tab === "card-builder-prompts";
 
@@ -250,6 +254,13 @@ export function ProductCardAdminAdvancedPanel({
         <ProductCardCardBuilderPromptsPanel
           initialValue={cardBuilderPromptsSetting ?? null}
           canPatch={canPatchSettings}
+        />
+      ) : null}
+
+      {tab === "web-research" ? (
+        <ProductCardWebResearchAdminPanel
+          initialSettings={webResearchSettings}
+          canEdit={canPatchSettings}
         />
       ) : null}
 

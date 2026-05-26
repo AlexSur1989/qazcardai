@@ -25,6 +25,7 @@ import {
   type CardBuilderTextAmountToggle,
 } from "@/lib/card-builder-style-choice";
 import { mapUniversalCategoryToPlannerCategory } from "@/lib/card-builder-universal-planner";
+import type { ProductCardWebResearchMeta } from "@/lib/product-card-web-research-config";
 import {
   CardBuilderUniversalPanel,
   type VisionSummary,
@@ -154,6 +155,9 @@ export function CardBuilderTab({
   const [visionAnalysis, setVisionAnalysis] = useState<Record<string, unknown> | null>(null);
   const [visionSummary, setVisionSummary] = useState<VisionSummary | null>(null);
   const [visionLoading, setVisionLoading] = useState(false);
+  const [webResearchLoading, setWebResearchLoading] = useState(false);
+  const [webResearchMeta, setWebResearchMeta] = useState<ProductCardWebResearchMeta | null>(null);
+  const [factsConfirming, setFactsConfirming] = useState(false);
   const [creationMode, setCreationMode] = useState<CardBuilderCreationModeId>("full_gallery");
   const [singleCardType, setSingleCardType] = useState<CardBuilderSingleCardTypeId>("auto");
   const [visualStyle, setVisualStyle] = useState<CardBuilderVisualStyleId>("auto");
@@ -644,6 +648,9 @@ export function CardBuilderTab({
       if (Array.isArray(saved.productFacts)) {
         setProductFacts(normalizeProductFactsList(saved.productFacts));
       }
+      if (saved.webResearch && typeof saved.webResearch === "object") {
+        setWebResearchMeta(saved.webResearch as ProductCardWebResearchMeta);
+      }
       if (saved.visionAnalysis && typeof saved.visionAnalysis === "object") {
         const va = saved.visionAnalysis as Record<string, unknown>;
         setVisionAnalysis(va);
@@ -800,6 +807,68 @@ export function CardBuilderTab({
     },
     [projectId, initDone, hasCardBuilderImage, categoryManuallyOverridden],
   );
+
+  const confirmProductFacts = useCallback(
+    async (confirmIds: string[], deleteIds?: string[]) => {
+      const pid = projectId;
+      if (!pid) return;
+      setFactsConfirming(true);
+      try {
+        const res = await fetch(`/api/product-card-projects/${pid}/product-facts/confirm`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ facts: productFacts, confirmIds, deleteIds }),
+        });
+        const parsed = await readJsonSafe<{ productFacts?: CardBuilderProductFact[]; error?: string }>(
+          res,
+        );
+        if (!parsed.ok || !res.ok) {
+          toast.error(parsed.ok ? "Не удалось сохранить" : parsed.message);
+          return;
+        }
+        if (Array.isArray(parsed.data.productFacts)) {
+          setProductFacts(normalizeProductFactsList(parsed.data.productFacts));
+        }
+      } finally {
+        setFactsConfirming(false);
+      }
+    },
+    [projectId, productFacts],
+  );
+
+  const runWebResearch = useCallback(async () => {
+    const pid = projectId;
+    if (!pid || !initDone) return;
+    setWebResearchLoading(true);
+    try {
+      const res = await fetch(
+        `/api/product-card-projects/${pid}/product-analysis/web-research`,
+        { method: "POST" },
+      );
+      const parsed = await readJsonSafe<{
+        productFacts?: CardBuilderProductFact[];
+        meta?: ProductCardWebResearchMeta;
+        message?: string;
+        error?: string;
+        uncertainMatch?: boolean;
+      }>(res);
+      if (!parsed.ok || !res.ok) {
+        toast.error(
+          parsed.ok
+            ? (parsed.data.error ?? "Не удалось найти характеристики")
+            : parsed.message,
+        );
+        return;
+      }
+      if (Array.isArray(parsed.data.productFacts)) {
+        setProductFacts(normalizeProductFactsList(parsed.data.productFacts));
+      }
+      if (parsed.data.meta) setWebResearchMeta(parsed.data.meta);
+      toast.message(parsed.data.message ?? "Проверьте предложенные характеристики.");
+    } finally {
+      setWebResearchLoading(false);
+    }
+  }, [projectId, initDone]);
 
   const persistCardBuilderSourceImage = useCallback(
     async (next: SourceImageValue): Promise<boolean> => {
@@ -1388,6 +1457,14 @@ export function CardBuilderTab({
           }}
           onRetryAnalysis={() => void runVisionAnalysis({ manual: true })}
           canRetryAnalysis={canWork}
+          webResearchLoading={webResearchLoading}
+          webResearchMeta={webResearchMeta}
+          onWebResearch={() => void runWebResearch()}
+          canWebResearch={canWork && !!visionSummary && !visionSummary.analysisFailed}
+          onConfirmFacts={(confirmIds, deleteIds) =>
+            void confirmProductFacts(confirmIds, deleteIds)
+          }
+          factsConfirming={factsConfirming}
           gallerySlideCount={gallerySlideCount}
           onGallerySlideCountChange={(v) => {
             markUserEditedForm();

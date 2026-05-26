@@ -8,21 +8,18 @@ import type { CardBuilderTemplateSlideRole } from "@/config/card-builder-templat
 import type { ProductCardMarketplaceProfile } from "@/config/product-card-marketplace-profiles";
 import { PRODUCT_CATEGORY_GROUPS } from "@/config/product-card-categories";
 import type { CardBuilderStyleReferencePlan } from "@/lib/card-builder-style-reference";
+import {
+  filterFactsForGeneration,
+  productFactsForSlideGeneration,
+} from "@/lib/card-builder-fact-eligibility";
 import type { CardBuilderProductFact } from "@/lib/card-builder-product-facts";
-import {
-  labelForUniversalCategory,
-  CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS,
-  type CardBuilderUniversalCategoryId,
-} from "@/config/card-builder-universal";
-import {
-  lockedTextPhrasesFromFacts,
-  productFactsForSlideRole,
-} from "@/lib/card-builder-product-facts";
+import { lockedTextPhrasesFromFacts } from "@/lib/card-builder-product-facts";
 import {
   computeEffectiveCardBuilderSettings,
   type CardBuilderEffectiveSettings,
 } from "@/lib/card-builder-effective-settings";
 import { categoryNegativeRulesBlock } from "@/lib/card-builder-category-negatives";
+import { buildCardBuilderGlobalRulesSection } from "@/lib/card-builder-global-prompt-rules";
 import {
   getSalesStyleInstruction,
   getTextDensityInstruction,
@@ -1001,8 +998,9 @@ function productVisionContextSection(input: CardBuilderSuperPromptInput): string
 function productFactsForSlideSection(
   facts: readonly CardBuilderProductFact[],
   slideRole: CardBuilderTemplateSlideRole,
+  categoryKey?: string,
 ): string {
-  const slideFacts = productFactsForSlideRole(facts, slideRole);
+  const slideFacts = productFactsForSlideGeneration(facts, slideRole, categoryKey);
   if (!slideFacts.length) return "";
   const body = slideFacts
     .map((f) => `— ${f.label}: ${f.value}`)
@@ -1023,32 +1021,17 @@ function slideRoleConstraintsSection(lines: readonly string[]): string {
   ].join("\n");
 }
 
-function mergedCategoryStyleSection(
-  categoryKey: string | undefined,
-  visualStyle: string | undefined,
-): string {
-  const cat = (categoryKey ?? "other").trim() as CardBuilderUniversalCategoryId;
-  const resolvedCat = cat === "auto" ? "other" : cat;
-  const catHint =
-    resolvedCat in CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS
-      ? CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS[
-          resolvedCat as Exclude<CardBuilderUniversalCategoryId, "auto">
-        ]
-      : CARD_BUILDER_CATEGORY_VISUAL_STYLE_HINTS.other;
+function categoryStyleSupplementSection(visualStyle: string | undefined): string {
   const styleMap: Record<string, string> = {
-    minimalism: "Минимализм: много воздуха, простые формы, спокойная палитра.",
-    premium: "Premium: дорогой свет, аккуратная типографика, премиальная подача.",
-    bold_ad: "Яркая реклама: контраст, динамика, заметные акценты без перегруза текста.",
-    lifestyle: "Lifestyle: реалистичная сцена использования, товар в контексте.",
-    infographic: "Инфографика: структурированные плашки и иконки; текст только locked.",
+    minimalism: "Visual style: minimalism — много воздуха, простые формы, спокойная палитра.",
+    premium: "Visual style: premium — дорогой свет, аккуратная типографика.",
+    bold_ad: "Visual style: bold ad — контраст и динамика без перегруза текста.",
+    lifestyle: "Visual style: lifestyle — реалистичная сцена использования.",
+    infographic: "Visual style: infographic — структурированная подача; текст только locked.",
   };
   const stylePick = visualStyle && visualStyle !== "auto" ? styleMap[visualStyle] : null;
-  return [
-    "=== CATEGORY_AND_STYLE ===",
-    `Категория: ${labelForUniversalCategory(resolvedCat)}.`,
-    catHint,
-    stylePick ?? "Стиль подбирай по категории и типу слайда; сохраняй товар 1:1.",
-  ].join("\n\n");
+  if (!stylePick) return "";
+  return ["=== VISUAL_STYLE ===", stylePick].join("\n");
 }
 
 function mergedNegativeRulesSection(
@@ -1092,9 +1075,14 @@ export function buildCardBuilderSuperPrompt(
   });
 
   const slideRoleTyped = input.slideRole as CardBuilderTemplateSlideRole;
-  const slideFactPhrases = lockedTextPhrasesFromFacts(
-    productFactsForSlideRole(input.productFacts ?? [], slideRoleTyped),
+  const categoryKey = input.cardBuilderCategoryKey;
+  const generationFacts = filterFactsForGeneration(input.productFacts ?? [], categoryKey);
+  const slideFacts = productFactsForSlideGeneration(
+    input.productFacts ?? [],
+    slideRoleTyped,
+    categoryKey,
   );
+  const slideFactPhrases = lockedTextPhrasesFromFacts(slideFacts);
 
   const titleForPhrases =
     input.productTitle?.trim() ||
@@ -1127,8 +1115,12 @@ export function buildCardBuilderSuperPrompt(
     rawVisualStyle,
     audience: input.audience,
     priceSegment: input.priceSegment,
-    productFactsForSlide: productFactsForSlideRole(input.productFacts ?? [], slideRoleTyped),
-    allProductFacts: input.productFacts ?? [],
+    productFactsForSlide: productFactsForSlideGeneration(
+      input.productFacts ?? [],
+      slideRoleTyped,
+      categoryKey,
+    ),
+    allProductFacts: generationFacts,
     exactTextPhrases: phrases,
     creationMode: undefined,
   });
@@ -1167,6 +1159,8 @@ export function buildCardBuilderSuperPrompt(
 
   const cardTypeBlock = pickCardTypePrompt(prompts, input.slideRole);
   const templateBlock = pickTemplatePrompt(prompts, input.templateId, input.slideRole);
+  const categoryBlock = pickCategoryPrompt(prompts, input.cardBuilderCategoryKey ?? "other");
+  const globalRulesBlock = buildCardBuilderGlobalRulesSection();
 
   const templateInstructionBlock =
     templateBlock.trim().length > 0
@@ -1220,16 +1214,18 @@ export function buildCardBuilderSuperPrompt(
     prompts.slidePromptBase.trim(),
     inputRolesBlock,
     productVisionContextSection(input),
-    cardTypeBlock.trim(),
+    globalRulesBlock,
     templateInstructionBlock,
-    productFactsForSlideSection(input.productFacts ?? [], slideRoleTyped),
+    cardTypeBlock.trim(),
+    categoryBlock.trim(),
+    productFactsForSlideSection(generationFacts, slideRoleTyped, categoryKey),
     styleRefBlock,
     slideTextPlanSection(finalPhrases),
     roleConstraints,
     preserveBlock,
     prompts.textLockPrompt.trim(),
     languagePreservationSection(languageProbePhrases, languageMode),
-    mergedCategoryStyleSection(input.cardBuilderCategoryKey, effective.effectiveVisualStyle),
+    categoryStyleSupplementSection(effective.effectiveVisualStyle),
     textDensityParts.join("\n\n"),
     negativeBlock,
   ].filter((x) => x && String(x).trim() !== "");

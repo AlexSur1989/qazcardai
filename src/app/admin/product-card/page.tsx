@@ -30,6 +30,7 @@ import {
   type ProductCardPriceBreakdown,
 } from "@/server/services/productCardPricing";
 import { resolveCardBuilderImageModel } from "@/server/services/productCardModelResolver";
+import { getProductCardWebResearchSettings } from "@/server/services/productCardWebResearch";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
 
 export const metadata = {
@@ -53,13 +54,14 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
     isSuperAdmin(adminUser.role) || adminUser.role === "ADMIN";
   const showAdvancedSection = showAdvanced && canToggleAdvanced;
 
-  const [settingsRows, productSettings, models] = await Promise.all([
+  const [settingsRows, productSettings, models, webResearchSettings] = await Promise.all([
     getAppSettingsByGroup("productCard"),
     getProductCardSettings(),
     prisma.aiModel.findMany({
       where: { scope: "PRODUCT_CARD" },
       orderBy: [{ productCardModelType: "asc" }, { name: "asc" }],
     }),
+    getProductCardWebResearchSettings(),
   ]);
 
   const scenariosSetting = settingsRows.find((row) => row.key === "PRODUCT_CARD_SCENARIOS")?.value;
@@ -219,6 +221,7 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
         <ProductCardAdminOverview
           scenarios={productSettings.scenarios}
           productCardEnabled={productSettings.enabled}
+          webResearchEnabled={webResearchSettings.enabled}
         />
       ) : null}
 
@@ -260,6 +263,7 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
           cardBuilderPromptsSetting={cardBuilderPromptsSetting}
           cardBuilderSuperPromptSample={cardBuilderSuperPromptSample}
           canPatchSettings={canPatchSettings}
+          webResearchSettings={webResearchSettings}
         />
       ) : null}
 

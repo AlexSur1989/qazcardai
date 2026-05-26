@@ -1,5 +1,6 @@
 import type { AppSettingTypeName } from "@/lib/app-setting-value";
 import { CARD_BUILDER_PROMPTS_DEFAULTS } from "@/config/card-builder-prompts-defaults";
+import { DEFAULT_PRODUCT_CARD_WEB_RESEARCH_SETTINGS } from "@/lib/product-card-web-research-config";
 
 export type AppSettingGroupId =
   | "general"
@@ -643,6 +644,17 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
       "JSON-набор промптов card_builder (vision, slide base, category/cardType/template, text lock, negative rules). Редактируется в /admin/product-card.",
     type: "json",
     defaultValue: CARD_BUILDER_PROMPTS_DEFAULTS,
+    editable: true,
+    sensitive: false,
+  },
+  {
+    key: "PRODUCT_CARD_WEB_RESEARCH_SETTINGS",
+    group: "productCard",
+    label: "PRODUCT_CARD_WEB_RESEARCH_SETTINGS / Web Research характеристик",
+    description:
+      "Настройки поиска характеристик товара в интернете для card_builder (Tavily). Редактируется в /admin/product-card → Advanced.",
+    type: "json",
+    defaultValue: DEFAULT_PRODUCT_CARD_WEB_RESEARCH_SETTINGS,
     editable: true,
     sensitive: false,
   },

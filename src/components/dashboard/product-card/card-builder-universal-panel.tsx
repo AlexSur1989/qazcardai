@@ -16,16 +16,15 @@ import {
 import type { CardBuilderTextAmountToggle } from "@/lib/card-builder-style-choice";
 import {
   benefitTextareaValue,
-  CARD_BUILDER_PRODUCT_FACT_TYPE_LABELS,
-  CARD_BUILDER_PRODUCT_FACT_TYPES,
   mergeBenefitFactsFromTextarea,
   mergeProductPurposeFromTextarea,
   newProductFactId,
-  nonBenefitProductFacts,
   productPurposeTextareaValue,
   type CardBuilderProductFact,
-  type CardBuilderProductFactType,
 } from "@/lib/card-builder-product-facts";
+import { hasUnverifiedWebSuggestedFacts } from "@/lib/card-builder-fact-eligibility";
+import type { ProductCardWebResearchMeta } from "@/lib/product-card-web-research-config";
+import { CardBuilderFactsReviewPanel } from "@/components/dashboard/product-card/card-builder-facts-review-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,6 +72,12 @@ type Props = {
   onGallerySlideCountChange: (v: 6 | 8) => void;
   onRetryAnalysis?: () => void;
   canRetryAnalysis?: boolean;
+  webResearchLoading?: boolean;
+  webResearchMeta?: ProductCardWebResearchMeta | null;
+  onWebResearch?: () => void;
+  canWebResearch?: boolean;
+  onConfirmFacts?: (confirmIds: string[], deleteIds?: string[]) => void;
+  factsConfirming?: boolean;
 };
 
 export function CardBuilderUniversalPanel({
@@ -96,46 +101,19 @@ export function CardBuilderUniversalPanel({
   onGallerySlideCountChange,
   onRetryAnalysis,
   canRetryAnalysis,
+  webResearchLoading,
+  webResearchMeta,
+  onWebResearch,
+  canWebResearch,
+  onConfirmFacts,
+  factsConfirming,
 }: Props) {
-  const detailFacts = useMemo(
-    () => nonBenefitProductFacts(productFacts).filter((f) => f.type !== "product_purpose"),
-    [productFacts],
-  );
   const benefitsText = useMemo(() => benefitTextareaValue(productFacts), [productFacts]);
   const productPurposeText = useMemo(() => productPurposeTextareaValue(productFacts), [productFacts]);
-
-  const updateFact = useCallback(
-    (id: string, patch: Partial<CardBuilderProductFact>) => {
-      onProductFactsChange(
-        productFacts.map((f) =>
-          f.id === id ? { ...f, ...patch, source: f.source === "vision_ai" ? "user" : f.source } : f,
-        ),
-      );
-    },
-    [onProductFactsChange, productFacts],
+  const hasPendingWebFacts = useMemo(
+    () => hasUnverifiedWebSuggestedFacts(productFacts),
+    [productFacts],
   );
-
-  const removeFact = useCallback(
-    (id: string) => {
-      onProductFactsChange(productFacts.filter((f) => f.id !== id));
-    },
-    [onProductFactsChange, productFacts],
-  );
-
-  const addFact = useCallback(() => {
-    onProductFactsChange([
-      ...productFacts,
-      {
-        id: newProductFactId(),
-        label: "Характеристика",
-        value: "",
-        type: "detail",
-        source: "user",
-        visibleOnCard: true,
-        lockedText: true,
-      },
-    ]);
-  }, [onProductFactsChange, productFacts]);
 
   const handleBenefitsTextChange = useCallback(
     (text: string) => {
@@ -157,7 +135,7 @@ export function CardBuilderUniversalPanel({
         <CardHeader>
           <CardTitle className="text-base">Мы распознали товар</CardTitle>
           <CardDescription>
-            Эти данные помогут точнее создать карточку. Проверьте и при необходимости исправьте.
+            Распознаём только то, что видно на фото. Для характеристик из интернета — отдельный шаг ниже.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
@@ -215,14 +193,37 @@ export function CardBuilderUniversalPanel({
               Обновить распознавание
             </Button>
           ) : null}
+          {canWebResearch && onWebResearch ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="rounded-xl"
+              disabled={webResearchLoading || visionLoading || visionSummary?.analysisFailed}
+              onClick={onWebResearch}
+            >
+              {webResearchLoading ? "Ищем…" : "Найти характеристики в интернете"}
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
 
       <Card className="rounded-2xl border-border">
         <CardHeader>
           <CardTitle className="text-base">Проверьте данные товара</CardTitle>
+          <CardDescription>
+            В генерацию попадают только подтверждённые или видимые на фото данные.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {hasPendingWebFacts ? (
+            <Alert>
+              <AlertTitle>Есть неподтверждённые характеристики</AlertTitle>
+              <AlertDescription>
+                Добавьте преимущества вручную или подтвердите найденные характеристики из интернета.
+              </AlertDescription>
+            </Alert>
+          ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="cb-category">Категория</Label>
@@ -288,86 +289,38 @@ export function CardBuilderUniversalPanel({
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <Label>Характеристики и детали</Label>
-              <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={addFact}>
-                Добавить
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-xl"
+                onClick={() =>
+                  onProductFactsChange([
+                    ...productFacts,
+                    {
+                      id: newProductFactId(),
+                      label: "Характеристика",
+                      value: "",
+                      type: "detail",
+                      source: "user",
+                      visibleOnCard: true,
+                      lockedText: true,
+                      verifiedByUser: true,
+                      evidence: "user_input",
+                    },
+                  ])
+                }
+              >
+                Добавить вручную
               </Button>
             </div>
-            {detailFacts.length === 0 ? (
-              <p className="text-muted-foreground text-xs">
-                Материал, объём, детали — добавьте вручную или дождитесь распознавания фото. Для назначения
-                товара используйте тип «Назначение / описание товара».
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {detailFacts.map((f) => (
-                  <div key={f.id} className="rounded-xl border border-border p-3 space-y-2">
-                    {f.needsReview ? (
-                      <p className="text-amber-700 text-xs">Проверьте: {f.label}</p>
-                    ) : null}
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <div className="space-y-1 sm:col-span-2">
-                        <Label className="text-xs text-muted-foreground">Тип</Label>
-                        <select
-                          className={`${nativeFieldClass} h-9 text-xs`}
-                          value={f.type}
-                          onChange={(e) =>
-                            updateFact(f.id, { type: e.target.value as CardBuilderProductFactType })
-                          }
-                        >
-                          {CARD_BUILDER_PRODUCT_FACT_TYPES.map((t) => (
-                            <option key={t} value={t}>
-                              {CARD_BUILDER_PRODUCT_FACT_TYPE_LABELS[t]}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <Input
-                        value={f.label}
-                        onChange={(e) => updateFact(f.id, { label: e.target.value })}
-                        className="rounded-xl text-sm"
-                        placeholder="Подпись"
-                      />
-                      <Textarea
-                        value={f.value}
-                        onChange={(e) => updateFact(f.id, { value: e.target.value })}
-                        rows={2}
-                        className="rounded-xl text-sm sm:col-span-2"
-                        placeholder="Значение"
-                      />
-                    </div>
-                    <div className="flex flex-wrap gap-4 text-xs">
-                      <label className="flex cursor-pointer items-center gap-2">
-                        <input
-                          type="checkbox"
-                          className="size-4 rounded border-input"
-                          checked={f.visibleOnCard !== false}
-                          onChange={(e) => updateFact(f.id, { visibleOnCard: e.target.checked })}
-                        />
-                        Показывать на карточке
-                      </label>
-                      <label className="flex cursor-pointer items-center gap-2">
-                        <input
-                          type="checkbox"
-                          className="size-4 rounded border-input"
-                          checked={f.lockedText !== false}
-                          onChange={(e) => updateFact(f.id, { lockedText: e.target.checked })}
-                        />
-                        Сохранить текст точно
-                      </label>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive"
-                      onClick={() => removeFact(f.id)}
-                    >
-                      Удалить
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
+            <CardBuilderFactsReviewPanel
+              facts={productFacts}
+              webResearchMeta={webResearchMeta}
+              onFactsChange={onProductFactsChange}
+              onConfirmFacts={(confirmIds, deleteIds) => onConfirmFacts?.(confirmIds, deleteIds)}
+              confirming={factsConfirming}
+            />
           </div>
         </CardContent>
       </Card>

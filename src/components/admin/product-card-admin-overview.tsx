@@ -10,9 +10,14 @@ import type { ProductCardScenarioToggles } from "@/server/services/productCardSe
 type Props = {
   scenarios: ProductCardScenarioToggles;
   productCardEnabled: boolean;
+  webResearchEnabled?: boolean;
 };
 
-export function ProductCardAdminOverview({ scenarios, productCardEnabled }: Props) {
+export function ProductCardAdminOverview({
+  scenarios,
+  productCardEnabled,
+  webResearchEnabled,
+}: Props) {
   const cards = [...PRODUCT_CARD_SCENARIO_CATALOG].sort(
     (a, b) => a.overviewOrder - b.overviewOrder,
   );
@@ -28,9 +33,12 @@ export function ProductCardAdminOverview({ scenarios, productCardEnabled }: Prop
               : "Раздел выключен — клиенты не видят сценарии карточки товара."}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-2">
           <Badge variant={productCardEnabled ? "default" : "secondary"}>
             {productCardEnabled ? "Включено" : "Выключено"}
+          </Badge>
+          <Badge variant={webResearchEnabled ? "default" : "outline"}>
+            Умное заполнение товара: {webResearchEnabled ? "включено" : "выключено"}
           </Badge>
         </CardContent>
       </Card>

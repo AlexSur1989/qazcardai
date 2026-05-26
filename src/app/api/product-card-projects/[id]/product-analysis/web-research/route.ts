@@ -1,16 +1,13 @@
-import { NextResponse } from "next/server";
-
 import {
   guardProductCardAnalysisUser,
-  handleProductCardVisionAnalysis,
+  handleProductCardWebResearch,
 } from "@/server/services/productCardAnalysisHandlers";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-/** @deprecated Используйте POST .../product-analysis/vision */
 export async function POST(req: Request, ctx: Ctx) {
   const gate = await guardProductCardAnalysisUser(req);
   if (!gate.ok) return gate.response;
   const { id } = await ctx.params;
-  return handleProductCardVisionAnalysis(id, gate.userId);
+  return handleProductCardWebResearch(id, gate.userId);
 }

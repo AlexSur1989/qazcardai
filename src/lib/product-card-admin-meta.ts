@@ -78,6 +78,7 @@ export const PRODUCT_CARD_ADVANCED_TABS = [
   { id: "concepts", label: "Концепции" },
   { id: "prompts", label: "Промпты (legacy)" },
   { id: "card-builder-prompts", label: "Промпты «Создать карточку»" },
+  { id: "web-research", label: "Web Research" },
   { id: "video", label: "Видео (техн.)" },
   { id: "calculator", label: "Калькулятор" },
 ] as const;

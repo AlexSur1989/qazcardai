@@ -71,17 +71,27 @@ const Z_STYLE_REFERENCE = z
   })
   .strict();
 
+const Z_FACT_SOURCE = z.enum(["vision_ai", "web_suggested", "user", "category_field"]);
+const Z_CONFIDENCE_LEVEL = z.enum(["high", "medium", "low"]);
+const Z_EVIDENCE = z.enum(["visible_on_image", "web_page", "user_input"]);
+
 const Z_PRODUCT_FACT = z
   .object({
+    key: z.string().trim().min(2).max(64).optional(),
     id: z.string().trim().min(4).max(64),
     label: z.string().trim().min(1).max(120),
     value: z.string().trim().min(1).max(400),
     type: Z_FACT_TYPE,
     visibleOnCard: z.boolean().optional(),
     lockedText: z.boolean().optional(),
-    source: z.enum(["vision_ai", "user", "category_field"]).optional().default("user"),
+    source: Z_FACT_SOURCE.optional().default("user"),
     confidence: z.number().min(0).max(1).optional(),
+    confidenceLevel: Z_CONFIDENCE_LEVEL.optional(),
     needsReview: z.boolean().optional(),
+    verifiedByUser: z.boolean().optional(),
+    evidence: Z_EVIDENCE.optional(),
+    evidenceUrl: z.string().max(2048).optional(),
+    evidenceTitle: z.string().max(200).optional(),
   })
   .strict();
 

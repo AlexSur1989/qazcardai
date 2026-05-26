@@ -136,6 +136,7 @@ export function slidePreviewWarning(
   slideRole: CardBuilderTemplateSlideRole,
   factsForSlide: readonly SlidePreviewFactRow[],
   allFacts: readonly CardBuilderProductFact[],
+  templateId?: string,
 ): string | null {
   if (slideRole === "benefits_infographic" && !hasBenefitProductFacts(allFacts)) {
     return "Нет данных о преимуществах — проверьте структуру карточки.";
@@ -158,7 +159,31 @@ export function slidePreviewWarning(
       (f) => f.type === "package" && f.visibleOnCard !== false && f.value.trim(),
     );
     if (!hasPkg) {
-      return "Добавьте состав комплекта или упаковку, если хотите показать их на карточке.";
+      return "Добавьте состав комплекта или упаковку — без данных слайд комплектации не сгенерируется.";
+    }
+  }
+  const tid = templateId?.trim();
+  if (tid === "comparison_card") {
+    const comparisonCount = allFacts.filter(
+      (f) =>
+        f.visibleOnCard !== false &&
+        f.value.trim() &&
+        (f.type === "feature" ||
+          f.type === "benefit" ||
+          f.type === "compatibility" ||
+          f.type === "dimension" ||
+          f.type === "material"),
+    ).length;
+    if (comparisonCount < 2) {
+      return "Добавьте минимум два факта для сравнения — иначе слайд сравнения не сгенерируется.";
+    }
+  }
+  if (tid === "set_contents") {
+    const hasPkg = allFacts.some(
+      (f) => f.type === "package" && f.visibleOnCard !== false && f.value.trim(),
+    );
+    if (!hasPkg) {
+      return "Добавьте состав комплекта — без данных set_contents не сгенерируется.";
     }
   }
   if (slideRole === "lifestyle") {
@@ -181,6 +206,7 @@ export function slidePreviewWarning(
 export type BuildSlidePreviewInput = {
   slideId: string;
   imageRole: string;
+  templateId?: string;
   templateLabel?: string;
   title?: string;
 };
@@ -205,7 +231,7 @@ export function buildSlidePreviewModels(
       templateLabel: slide.templateLabel?.trim() || slide.title?.trim() || "Шаблон карточки",
       cardTextPhrases: computeSlideCardTextPhrases(role, productFacts, opts),
       facts,
-      warning: slidePreviewWarning(role, facts, productFacts),
+      warning: slidePreviewWarning(role, facts, productFacts, slide.templateId),
     };
   });
 }

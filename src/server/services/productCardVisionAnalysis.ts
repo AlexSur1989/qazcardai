@@ -11,10 +11,11 @@ import {
 } from "@/config/card-builder-universal";
 import {
   CARD_BUILDER_PRODUCT_FACT_TYPES,
-  newProductFactId,
   type CardBuilderProductFact,
   type CardBuilderProductFactType,
 } from "@/lib/card-builder-product-facts";
+import { visionAnalysisToProductFacts } from "@/lib/card-builder-vision-facts";
+export { visionAnalysisToProductFacts } from "@/lib/card-builder-vision-facts";
 import { isMockKie } from "@/lib/kie-mock";
 import { createApiLog } from "@/server/services/api-log";
 import { readImageForVision } from "@/server/services/productClassifier";
@@ -38,10 +39,12 @@ export type ProductCardVisionAnalysisResult = {
   categoryKey: CardBuilderUniversalCategoryId;
   productType: string;
   productNameGuess: string;
+  brandGuess: string | null;
   mainColors: string[];
   materialGuess: string | null;
   styleGuess: string | null;
   visibleText: string[];
+  visibleClaims: string[];
   packaging: CardBuilderPackagingType;
   productShape: string | null;
   mainObjects: string[];
@@ -173,6 +176,10 @@ function validateVisionJson(parsed: unknown): ProductCardVisionAnalysisResult | 
     typeof o.materialGuess === "string" && o.materialGuess.trim()
       ? o.materialGuess.trim().slice(0, 200)
       : null;
+  const brandGuess =
+    typeof o.brandGuess === "string" && o.brandGuess.trim()
+      ? o.brandGuess.trim().slice(0, 120)
+      : null;
   const styleGuess =
     typeof o.styleGuess === "string" && o.styleGuess.trim()
       ? o.styleGuess.trim().slice(0, 200)
@@ -188,10 +195,12 @@ function validateVisionJson(parsed: unknown): ProductCardVisionAnalysisResult | 
       typeof o.productType === "string" ? o.productType.trim().slice(0, 200) : "",
     productNameGuess:
       typeof o.productNameGuess === "string" ? o.productNameGuess.trim().slice(0, 200) : "",
+    brandGuess,
     mainColors: parseStringList(o.mainColors, 8),
     materialGuess,
     styleGuess,
     visibleText: parseStringList(o.visibleText, 12),
+    visibleClaims: parseStringList(o.visibleClaims, 8),
     packaging: parsePackaging(o.packaging),
     productShape,
     mainObjects: parseStringList(o.mainObjects, 8),
@@ -206,10 +215,12 @@ function emptyFailedResult(warnings: string[]): ProductCardVisionAnalysisResult 
     categoryKey: "other",
     productType: "",
     productNameGuess: "",
+    brandGuess: null,
     mainColors: [],
     materialGuess: null,
     styleGuess: null,
     visibleText: [],
+    visibleClaims: [],
     packaging: "none",
     productShape: null,
     mainObjects: [],
@@ -225,10 +236,12 @@ function mockVisionResult(): ProductCardVisionAnalysisResult {
     categoryKey: "other",
     productType: "товар",
     productNameGuess: "",
+    brandGuess: null,
     mainColors: ["нейтральный"],
     materialGuess: null,
     styleGuess: "универсальный",
     visibleText: [],
+    visibleClaims: [],
     packaging: "none",
     productShape: null,
     mainObjects: ["товар"],
@@ -249,56 +262,6 @@ function classifierModelOverrideFromEnv(): string {
   const envM = (process.env.PRODUCT_CLASSIFIER_MODEL ?? "").trim();
   if (envM && envM.toLowerCase() !== "mock") return envM;
   return "";
-}
-
-export function visionAnalysisToProductFacts(
-  analysis: ProductCardVisionAnalysisResult,
-): CardBuilderProductFact[] {
-  const out: CardBuilderProductFact[] = [];
-  const push = (fact: Omit<CardBuilderProductFact, "id">) => {
-    out.push({ id: newProductFactId(), ...fact });
-  };
-
-  for (const row of analysis.suggestedProductFacts) {
-    push({
-      label: row.label,
-      value: row.value,
-      type: row.type,
-      source: "vision_ai",
-      confidence: row.confidence,
-      needsReview: row.confidence < 0.55,
-      lockedText: true,
-      visibleOnCard: true,
-    });
-  }
-
-  if (analysis.materialGuess) {
-    push({
-      label: "Материал",
-      value: analysis.materialGuess,
-      type: "material",
-      source: "vision_ai",
-      confidence: analysis.confidence,
-      needsReview: analysis.confidence < 0.6,
-      lockedText: true,
-      visibleOnCard: true,
-    });
-  }
-
-  for (const line of analysis.visibleText) {
-    push({
-      label: "Текст на упаковке",
-      value: line,
-      type: "detail",
-      source: "vision_ai",
-      confidence: 0.7,
-      needsReview: true,
-      lockedText: true,
-      visibleOnCard: true,
-    });
-  }
-
-  return out.slice(0, 24);
 }
 
 /** Публичный DTO для UI (без provider/model). */

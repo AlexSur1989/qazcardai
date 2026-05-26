@@ -1,4 +1,5 @@
 import type { CardBuilderTemplateSlideRole } from "@/config/card-builder-templates";
+import { filterFactsForGeneration } from "@/lib/card-builder-fact-eligibility";
 import type { CardBuilderProductFact } from "@/lib/card-builder-product-facts";
 import {
   hasBenefitProductFacts,
@@ -100,6 +101,64 @@ function hasBenefitOrFeatureFacts(facts: readonly CardBuilderProductFact[]): boo
   );
 }
 
+function hasPackageFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  return facts.some(
+    (f) => f.type === "package" && f.visibleOnCard !== false && f.value.trim().length > 0,
+  );
+}
+
+function hasComparisonFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  const eligible = facts.filter(
+    (f) =>
+      f.visibleOnCard !== false &&
+      f.value.trim().length > 0 &&
+      (f.type === "feature" ||
+        f.type === "benefit" ||
+        f.type === "compatibility" ||
+        f.type === "dimension" ||
+        f.type === "material"),
+  );
+  return eligible.length >= 2;
+}
+
+function hasUsageOrCareFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  return facts.some(
+    (f) =>
+      (f.type === "usage" || f.type === "care") &&
+      f.visibleOnCard !== false &&
+      f.value.trim().length > 0,
+  );
+}
+
+function hasSpecFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  const specTypes = new Set(["feature", "dimension", "material", "compatibility", "package"]);
+  return (
+    facts.filter(
+      (f) => specTypes.has(f.type) && f.visibleOnCard !== false && f.value.trim().length > 0,
+    ).length >= 2
+  );
+}
+
+function hasOfferFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  return facts.some((f) => {
+    if (f.visibleOnCard === false || !f.value.trim()) return false;
+    const blob = `${f.label} ${f.value}`.toLowerCase();
+    return (
+      /скидк|акци|промо|бонус|%-|₸|руб|тенге|deadline|до \d|цена|price|discount|promo/i.test(
+        blob,
+      ) || f.type === "package"
+    );
+  });
+}
+
+function hasSocialProofFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  return facts.some((f) => {
+    if (f.visibleOnCard === false || !f.value.trim()) return false;
+    const blob = `${f.label} ${f.value}`.toLowerCase();
+    return /отзыв|review|rating|рейтинг|★|звезд|звёзд|оценк|продаж|заказ/i.test(blob);
+  });
+}
+
 export function computeEffectiveCardBuilderSettings(
   input: CardBuilderEffectiveSettingsInput,
 ): CardBuilderEffectiveSettings {
@@ -124,7 +183,10 @@ export function computeEffectiveCardBuilderSettings(
   const phraseCount = input.exactTextPhrases.length;
   let maxVisibleTextBlocks = Math.max(phraseCount, 1);
 
-  const allFacts = input.allProductFacts ?? input.productFactsForSlide;
+  const allFacts = filterFactsForGeneration(
+    input.allProductFacts ?? input.productFactsForSlide,
+    input.categoryKey,
+  );
   const slideFacts = input.productFactsForSlide;
   void slideFacts;
 
@@ -214,9 +276,25 @@ export function computeEffectiveCardBuilderSettings(
       break;
     }
     case "detail_closeup":
-    case "packaging":
     case "premium_poster":
     case "ad_banner":
+      break;
+    case "packaging": {
+      effectiveSalesStyle =
+        effectiveSalesStyle === "infographic" ? "clean_catalog" : effectiveSalesStyle;
+      effectiveTextDensity = capTextDensity(effectiveTextDensity, "medium");
+      suppressInfographicInstructions = true;
+      if (!hasPackageFacts(allFacts)) {
+        blockGeneration = true;
+        blockGenerationMessage =
+          "Добавьте состав комплекта или упаковку — без данных слайд комплектации не генерируем.";
+        warnings.push("Нет package facts для packaging.");
+        constraintLines.push(
+          "Комплектация не указана: не добавляй кабели, аксессуары, подарки и лишние предметы в набор.",
+        );
+      }
+      break;
+    }
     default: {
       if (effectiveSalesStyle === "infographic") {
         if (role === "premium_poster" || role === "ad_banner") {
@@ -241,6 +319,45 @@ export function computeEffectiveCardBuilderSettings(
 
   if (phraseCount <= 2 && role === "benefits_infographic" && hasBenefitOrFeatureFacts(allFacts)) {
     if (phraseCount < 3) suppressHeavyTextInstructions = true;
+  }
+
+  const templateId = input.templateId?.trim();
+  if (templateId === "comparison_card" && !hasComparisonFacts(allFacts)) {
+    blockGeneration = true;
+    blockGenerationMessage =
+      "Добавьте минимум два подтверждённых факта для сравнения — без данных слайд сравнения не генерируем.";
+    warnings.push("comparison_card без comparison facts.");
+  }
+  if (templateId === "set_contents" && !hasPackageFacts(allFacts)) {
+    blockGeneration = true;
+    blockGenerationMessage =
+      "Добавьте состав комплекта — без данных слайд set_contents не генерируем.";
+    warnings.push("set_contents без package facts.");
+  }
+
+  const cardTypeKey = input.slideRole.trim();
+  if (cardTypeKey === "usage_instruction" && !hasUsageOrCareFacts(allFacts)) {
+    blockGeneration = true;
+    blockGenerationMessage = "Добавьте способ использования или уход — без данных инструкцию не генерируем.";
+    warnings.push("usage_instruction без usage/care facts.");
+  }
+  if (cardTypeKey === "specs_card" && !hasSpecFacts(allFacts)) {
+    blockGeneration = true;
+    blockGenerationMessage =
+      "Добавьте минимум 2–3 характеристики — без данных слайд specs не генерируем.";
+    warnings.push("specs_card без достаточного числа spec facts.");
+  }
+  if (cardTypeKey === "social_proof" && !hasSocialProofFacts(allFacts)) {
+    blockGeneration = true;
+    blockGenerationMessage =
+      "Добавьте реальные отзывы или рейтинг — без данных social proof не генерируем.";
+    warnings.push("social_proof без review/rating facts.");
+  }
+  if (cardTypeKey === "offer_card" && !hasOfferFacts(allFacts)) {
+    blockGeneration = true;
+    blockGenerationMessage =
+      "Добавьте данные акции (скидка, цена, промо) — без данных offer-слайд не генерируем.";
+    warnings.push("offer_card без offer facts.");
   }
 
   return {
