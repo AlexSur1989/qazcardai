@@ -52,7 +52,9 @@ import {
   computeCardBuilderPlanFingerprint,
   cardBuilderLivePlanFingerprintInputs,
 } from "@/server/services/cardBuilderPlanFingerprint";
+import { cardBuilderOutputSizeFields, resolveCardBuilderOutputSize } from "@/lib/card-builder-output-size";
 import {
+  buildImageModelInput,
   queueProductCardImage,
   type ProductCardGenMeta,
 } from "@/server/services/productCardQueueGenerations";
@@ -140,6 +142,40 @@ async function assertProjectBasics(
   return { ok: true, project, sourceImageUrls: [src.url] };
 }
 
+function buildCardBuilderImageModelSettings(
+  model: { settingsSchema: unknown; supportsImageInput: boolean },
+  sourceImageUrl: string | string[],
+  outputSizeId: string | undefined,
+):
+  | { ok: true; merged: Record<string, unknown>; resolved: ReturnType<typeof resolveCardBuilderOutputSize> }
+  | { ok: false; error: string } {
+  const resolved = resolveCardBuilderOutputSize(outputSizeId);
+  try {
+    const b = buildImageModelInput(
+      { settingsSchema: model.settingsSchema, supportsImageInput: model.supportsImageInput },
+      sourceImageUrl,
+    );
+    return {
+      ok: true,
+      resolved,
+      merged: {
+        ...b.normalizedSettings,
+        size: resolved.id,
+        aspectRatio: resolved.kieAspectRatio,
+        resolution: resolved.kieResolution,
+        outputWidth: resolved.width,
+        outputHeight: resolved.height,
+        cardBuilderOutputSizeId: resolved.id,
+      },
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Некорректные настройки модели",
+    };
+  }
+}
+
 export async function planCardBuilderGallery(
   userId: string,
   projectId: string,
@@ -165,13 +201,13 @@ export async function planCardBuilderGallery(
     base.project.title ?? undefined,
   );
   const snapshot = buildAppliedMarketplaceRulesSnapshot(mpRes.profile);
+  const outputFields = cardBuilderOutputSizeFields(normalizedInput.cardBuilderOutputSizeId);
   const settingsOut: CardBuilderStoredSettings = {
     ...normalizedInput,
     marketplaceProfileId: mpRes.profile.id,
     marketplaceProfileVersion: PRODUCT_CARD_MARKETPLACE_PROFILE_VERSION,
     appliedMarketplaceRules: snapshot,
-    cardBuilderTargetAspectRatio: mpRes.profile.defaultAspectRatio,
-    cardBuilderTargetSize: mpRes.profile.defaultSize,
+    ...outputFields,
   };
   await saveCardBuilderSettingsAndPlan(projectId, settingsOut, enriched);
   return { ok: true, slides: enriched, ...(planWarning ? { planWarning } : {}) };
@@ -458,6 +494,16 @@ export async function generateCardBuilderSlide(
     productFacts: planInput.productFacts,
   });
 
+  const modelSettings = buildCardBuilderImageModelSettings(
+    model,
+    base.sourceImageUrls,
+    planInput.cardBuilderOutputSizeId,
+  );
+  if (!modelSettings.ok) {
+    return { ok: false, error: modelSettings.error, status: 400 };
+  }
+  const outputSize = modelSettings.resolved;
+
   const cardBuilderPromptSnapshot = {
     promptVersion: superPrompt.data.promptVersion,
     promptSource: superPrompt.data.promptMeta.promptSource,
@@ -486,6 +532,11 @@ export async function generateCardBuilderSlide(
     marketplaceProfileId: profile.id,
     marketplaceProfileVersion: PRODUCT_CARD_MARKETPLACE_PROFILE_VERSION,
     appliedMarketplaceRules: buildCardBuilderGenerationMarketplaceRules(profile),
+    cardBuilderOutputSizeId: outputSize.id,
+    cardBuilderTargetAspectRatio: outputSize.aspectRatio,
+    cardBuilderTargetSize: `${outputSize.width}x${outputSize.height}`,
+    outputWidth: outputSize.width,
+    outputHeight: outputSize.height,
     selectedCategory: planInput.selectedCategory,
     marketplace: planInput.marketplace,
     preserveProduct: planInput.preserveProduct,
@@ -535,6 +586,9 @@ export async function generateCardBuilderSlide(
       targetPlatform: planInput.targetPlatform ?? "universal",
       cardBuilderCategoryKey: planInput.cardBuilderCategoryKey,
       visualStyle: planInput.visualStyle,
+      cardBuilderOutputSizeId: outputSize.id,
+      cardBuilderTargetAspectRatio: outputSize.aspectRatio,
+      cardBuilderTargetSize: `${outputSize.width}x${outputSize.height}`,
       styleReferenceUsed: resolvedStyleUrls.length > 0,
       styleReferenceStrength:
         resolvedStyleUrls.length > 0 ? (planInput.styleReference?.strength ?? "medium") : null,
@@ -554,6 +608,7 @@ export async function generateCardBuilderSlide(
     breakdown,
     moderationUserEnvelope || null,
     resolvedStyleUrls.length > 0 ? resolvedStyleUrls : undefined,
+    modelSettings.merged,
   );
 
   if (!result.ok) {

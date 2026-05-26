@@ -13,6 +13,12 @@ import {
   type CardBuilderUniversalCategoryId,
   type CardBuilderVisualStyleId,
 } from "@/config/card-builder-universal";
+import {
+  CARD_BUILDER_DEFAULT_OUTPUT_SIZE_ID,
+  CARD_BUILDER_OUTPUT_SIZES,
+  normalizeCardBuilderOutputSizeId,
+  type CardBuilderOutputSizeId,
+} from "@/config/card-builder-output-sizes";
 import { UNIVERSAL_CARD_BUILDER_PROFILE } from "@/config/universal-card-builder-profile";
 import {
   normalizeProductFactsList,
@@ -163,6 +169,9 @@ export function CardBuilderTab({
   const [visualStyle, setVisualStyle] = useState<CardBuilderVisualStyleId>("auto");
   const [textAmountToggle, setTextAmountToggle] = useState<CardBuilderTextAmountToggle>("more");
   const [gallerySlideCount, setGallerySlideCount] = useState<6 | 8>(6);
+  const [outputSizeId, setOutputSizeId] = useState<CardBuilderOutputSizeId>(
+    CARD_BUILDER_DEFAULT_OUTPUT_SIZE_ID,
+  );
 
   const [slides, setSlides] = useState<GallerySlide[]>([]);
   const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
@@ -517,6 +526,7 @@ export function CardBuilderTab({
       productFacts,
       visionAnalysis: visionAnalysis ?? undefined,
       gallerySlideCount,
+      cardBuilderOutputSizeId: outputSizeId,
       goal: planGoal,
       preserveProduct: true,
       preserveAspects: [...CARD_BUILDER_FIXED_PRESERVE_ASPECTS],
@@ -540,6 +550,7 @@ export function CardBuilderTab({
     productFacts,
     visionAnalysis,
     gallerySlideCount,
+    outputSizeId,
     planGoal,
     derivedPlanStyles,
     styleReferenceEnabled,
@@ -682,6 +693,9 @@ export function CardBuilderTab({
         setTextAmountToggle(textDensityToToggle(saved.textDensity.trim()));
       }
       if (saved.gallerySlideCount === 8) setGallerySlideCount(8);
+      if (typeof saved.cardBuilderOutputSizeId === "string") {
+        setOutputSizeId(normalizeCardBuilderOutputSizeId(saved.cardBuilderOutputSizeId));
+      }
 
       const rawSr = saved.styleReference;
       if (rawSr && typeof rawSr === "object" && !Array.isArray(rawSr)) {
@@ -783,7 +797,10 @@ export function CardBuilderTab({
         });
         setVisionAnalysis(d as unknown as Record<string, unknown>);
         if (d.productType?.trim()) setProductType(d.productType.trim());
-        if (d.productNameGuess?.trim()) setProductNameGuess(d.productNameGuess.trim());
+        if (d.productNameGuess?.trim()) {
+          const guess = d.productNameGuess.trim();
+          setProductNameGuess((prev) => prev.trim() || guess);
+        }
         if (!categoryManuallyOverridden && d.categoryKey) {
           setCategoryKey(d.categoryKey as CardBuilderUniversalCategoryId);
         }
@@ -1396,6 +1413,8 @@ export function CardBuilderTab({
               value={sourceImage ?? (hasProjectImage ? projectSource : null)}
               onChange={handleCardBuilderSourceImageChange}
               disabled={!canUploadCardBuilderImage}
+              projectSaving={sourceImageSaving}
+              recognitionLoading={visionLoading}
               uploadPurpose="product_card_card_builder_source"
               title="Фото для «Создать карточку»"
               description={
@@ -1421,6 +1440,7 @@ export function CardBuilderTab({
           visionSummary={visionSummary}
           categoryKey={categoryKey}
           productType={productType}
+          productNameGuess={productNameGuess}
           productFacts={productFacts}
           creationMode={creationMode}
           singleCardType={singleCardType}
@@ -1433,6 +1453,10 @@ export function CardBuilderTab({
           onProductTypeChange={(v) => {
             markUserEditedForm();
             setProductType(v);
+          }}
+          onProductNameGuessChange={(v) => {
+            markUserEditedForm();
+            setProductNameGuess(v);
           }}
           onProductFactsChange={(facts) => {
             markUserEditedForm();
@@ -1469,6 +1493,11 @@ export function CardBuilderTab({
           onGallerySlideCountChange={(v) => {
             markUserEditedForm();
             setGallerySlideCount(v);
+          }}
+          outputSizeId={outputSizeId}
+          onOutputSizeIdChange={(v) => {
+            markUserEditedForm();
+            setOutputSizeId(v);
           }}
         />
 

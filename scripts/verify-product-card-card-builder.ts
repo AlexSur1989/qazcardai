@@ -38,6 +38,8 @@ import {
   type CardBuilderPlanInput,
 } from "@/server/services/productCardBuilderPlan";
 import { isUniversalCardBuilderTarget } from "@/config/universal-card-builder-profile";
+import { CARD_BUILDER_OUTPUT_SIZES } from "@/config/card-builder-output-sizes";
+import { resolveCardBuilderOutputSize } from "@/lib/card-builder-output-size";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -171,6 +173,15 @@ const genSrc = readFileSync(
 );
 assert(genSrc.includes('scenarioKey: "card_builder"'), "metadata generation scenarioKey card_builder");
 assert(genSrc.includes("resolveCardBuilderSourceImage"), "generation использует отдельное фото card_builder");
+assert(genSrc.includes("cardBuilderOutputSizeId"), "generation передаёт cardBuilderOutputSizeId");
+assert(genSrc.includes("buildCardBuilderImageModelSettings"), "generation собирает aspect_ratio для модели");
+
+assert(CARD_BUILDER_OUTPUT_SIZES.length === 5, "5 выходных форматов card_builder");
+for (const preset of CARD_BUILDER_OUTPUT_SIZES) {
+  const s = resolveCardBuilderOutputSize(preset.id);
+  assert(s.kieAspectRatio === preset.aspectRatio, `Kie aspect для ${preset.id}`);
+  assert(s.width === preset.width && s.height === preset.height, `px для ${preset.id}`);
+}
 
 const metaSrc = readFileSync(
   join(process.cwd(), "src/server/services/productCardCardBuilderMeta.ts"),

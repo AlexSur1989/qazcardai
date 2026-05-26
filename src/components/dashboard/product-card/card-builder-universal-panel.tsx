@@ -37,6 +37,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import {
+  CARD_BUILDER_OUTPUT_SIZES,
+  labelForCardBuilderOutputSize,
+  type CardBuilderOutputSizeId,
+} from "@/config/card-builder-output-sizes";
 
 const nativeFieldClass =
   "h-10 w-full min-w-0 rounded-xl border border-input bg-card px-2.5 text-sm text-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
@@ -62,20 +68,24 @@ type Props = {
   visionSummary: VisionSummary | null;
   categoryKey: CardBuilderUniversalCategoryId;
   productType: string;
+  productNameGuess: string;
   productFacts: CardBuilderProductFact[];
   creationMode: CardBuilderCreationModeId;
   singleCardType: CardBuilderSingleCardTypeId;
   visualStyle: CardBuilderVisualStyleId;
   textAmountToggle: CardBuilderTextAmountToggle;
   gallerySlideCount: 6 | 8;
+  outputSizeId: CardBuilderOutputSizeId;
   onCategoryKeyChange: (v: CardBuilderUniversalCategoryId) => void;
   onProductTypeChange: (v: string) => void;
+  onProductNameGuessChange: (v: string) => void;
   onProductFactsChange: (facts: CardBuilderProductFact[]) => void;
   onCreationModeChange: (v: CardBuilderCreationModeId) => void;
   onSingleCardTypeChange: (v: CardBuilderSingleCardTypeId) => void;
   onVisualStyleChange: (v: CardBuilderVisualStyleId) => void;
   onTextAmountToggleChange: (v: CardBuilderTextAmountToggle) => void;
   onGallerySlideCountChange: (v: 6 | 8) => void;
+  onOutputSizeIdChange: (v: CardBuilderOutputSizeId) => void;
   onRetryAnalysis?: () => void;
   canRetryAnalysis?: boolean;
   webResearchLoading?: boolean;
@@ -91,20 +101,24 @@ export function CardBuilderUniversalPanel({
   visionSummary,
   categoryKey,
   productType,
+  productNameGuess,
   productFacts,
   creationMode,
   singleCardType,
   visualStyle,
   textAmountToggle,
   gallerySlideCount,
+  outputSizeId,
   onCategoryKeyChange,
   onProductTypeChange,
+  onProductNameGuessChange,
   onProductFactsChange,
   onCreationModeChange,
   onSingleCardTypeChange,
   onVisualStyleChange,
   onTextAmountToggleChange,
   onGallerySlideCountChange,
+  onOutputSizeIdChange,
   onRetryAnalysis,
   canRetryAnalysis,
   webResearchLoading,
@@ -170,7 +184,15 @@ export function CardBuilderUniversalPanel({
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           {visionLoading ? (
-            <p className="text-muted-foreground">Анализируем фото…</p>
+            <div className="space-y-2">
+              <p className="text-muted-foreground flex items-center gap-2">
+                <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                Распознаём товар на фото…
+              </p>
+              <p className="text-muted-foreground text-xs">
+                Загрузка уже завершена — поля ниже можно заполнять вручную, пока идёт анализ.
+              </p>
+            </div>
           ) : visionSummary ? (
             <>
               {visionSummary.analysisFailed ? (
@@ -188,6 +210,18 @@ export function CardBuilderUniversalPanel({
                     {labelForUniversalCategory(visionSummary.categoryKey ?? categoryKey)}
                   </span>
                 </div>
+                {visionSummary.productNameGuess?.trim() ? (
+                  <div>
+                    <span className="text-muted-foreground">Название: </span>
+                    <span>{visionSummary.productNameGuess.trim()}</span>
+                  </div>
+                ) : null}
+                {visionSummary.productType?.trim() ? (
+                  <div>
+                    <span className="text-muted-foreground">Тип: </span>
+                    <span>{visionSummary.productType.trim()}</span>
+                  </div>
+                ) : null}
                 {visionSummary.mainColors?.length ? (
                   <div>
                     <span className="text-muted-foreground">Цвет: </span>
@@ -287,6 +321,23 @@ export function CardBuilderUniversalPanel({
                 placeholder="Например: термокружка"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cb-product-name">Название на карточке</Label>
+            <Input
+              id="cb-product-name"
+              value={productNameGuess}
+              onChange={(e) => onProductNameGuessChange(e.target.value)}
+              className="rounded-xl"
+              placeholder="Например: Карманные электронные весы"
+              maxLength={200}
+            />
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Заголовок товара на слайдах с текстом (главное фото, преимущества и др.). После
+              распознавания фото подставляется автоматически — проверьте и при необходимости
+              исправьте. Пустое поле — используется название проекта или «Товар».
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -442,6 +493,29 @@ export function CardBuilderUniversalPanel({
               </select>
             </div>
           ) : null}
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Размер готовой карточки</Label>
+            <div className="flex flex-wrap gap-2">
+              {CARD_BUILDER_OUTPUT_SIZES.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => onOutputSizeIdChange(preset.id)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs transition",
+                    outputSizeId === preset.id
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border bg-background text-foreground hover:border-primary/50",
+                  )}
+                >
+                  {labelForCardBuilderOutputSize(preset.id)}
+                </button>
+              ))}
+            </div>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Формат применяется ко всем слайдам галереи или к одной выбранной карточке.
+            </p>
+          </div>
           {creationMode === "single" ? (
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="cb-single-type">Тип карточки</Label>

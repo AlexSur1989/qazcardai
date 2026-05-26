@@ -6,6 +6,7 @@ import { Image as ImageIcon, Loader2, Upload } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { compressProductCardImage } from "@/lib/compress-product-card-image";
 
 export type SourceImageValue = {
   url: string;
@@ -17,6 +18,8 @@ export type SourceImageValue = {
 
 /** П.7: состояния блока загрузки */
 export type UploadFlowState = "idle" | "uploading" | "uploaded" | "error";
+
+type UploadPhase = "idle" | "preparing" | "uploading";
 
 const MAX_MB = 10;
 const MAX_BYTES = MAX_MB * 1024 * 1024;
@@ -41,6 +44,16 @@ function isValidImage(file: File): boolean {
   return /\.(jpe?g|png|webp)$/i.test(file.name);
 }
 
+function revokeBlobUrl(url: string | null | undefined) {
+  if (url?.startsWith("blob:")) {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore
+    }
+  }
+}
+
 type Props = {
   value: SourceImageValue;
   onChange: (v: SourceImageValue) => void;
@@ -53,11 +66,15 @@ type Props = {
     | "product_card_card_builder_source";
   title?: string;
   description?: string;
+  /** Сохранение URL/fileId в проект после upload */
+  projectSaving?: boolean;
+  /** Отдельный статус распознавания (Vision) — не смешивать с upload */
+  recognitionLoading?: boolean;
 };
 
 /**
  * Исходное фото: POST /api/uploads, purpose `product_card_source_image`.
- * При 503/ошибке S3 — состояние `error` (без тихого «только в браузере» для product-flow).
+ * Перед отправкой — сжатие на клиенте; превью показывается сразу из blob.
  */
 export function SourceImageUpload({
   value,
@@ -67,12 +84,19 @@ export function SourceImageUpload({
   uploadPurpose = "product_card_source_image",
   title = "Загрузите фото товара",
   description = "Это фото будет использоваться для определения категории и как основа для генерации.",
+  projectSaving = false,
+  recognitionLoading = false,
 }: Props) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const previewBlobRef = useRef<string | null>(null);
   const [drag, setDrag] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>("idle");
+  const [localPreview, setLocalPreview] = useState<SourceImageValue>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [compressionHint, setCompressionHint] = useState<string | null>(null);
+
+  const uploading = uploadPhase !== "idle";
 
   const emitFlow = useCallback(
     (s: UploadFlowState) => {
@@ -87,9 +111,22 @@ export function SourceImageUpload({
     }
   }, [value?.fileId, value?.isLocalPreview, value?.url, emitFlow]);
 
+  useEffect(() => {
+    return () => {
+      revokeBlobUrl(previewBlobRef.current);
+    };
+  }, []);
+
+  const clearLocalPreview = useCallback(() => {
+    revokeBlobUrl(previewBlobRef.current);
+    previewBlobRef.current = null;
+    setLocalPreview(null);
+  }, []);
+
   const run = useCallback(
     async (file: File) => {
       setErr(null);
+      setCompressionHint(null);
       if (!isValidImage(file)) {
         const msg = "Нужен файл PNG, JPG, JPEG или WebP.";
         setErr(msg);
@@ -101,11 +138,39 @@ export function SourceImageUpload({
         emitFlow("error");
         return;
       }
-      setUploading(true);
+
+      clearLocalPreview();
+      const blobUrl = URL.createObjectURL(file);
+      previewBlobRef.current = blobUrl;
+      setLocalPreview({
+        url: blobUrl,
+        fileName: file.name,
+        size: file.size,
+        isLocalPreview: true,
+      });
+
+      setUploadPhase("preparing");
       emitFlow("uploading");
       try {
+        const compressed = await compressProductCardImage(file);
+        if (compressed.wasCompressed) {
+          setCompressionHint(
+            `Сжали ${formatBytes(compressed.originalSize)} → ${formatBytes(compressed.compressedSize)} перед отправкой`,
+          );
+          setLocalPreview((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  size: compressed.compressedSize,
+                  fileName: compressed.file.name,
+                }
+              : prev,
+          );
+        }
+
+        setUploadPhase("uploading");
         const form = new FormData();
-        form.set("file", file);
+        form.set("file", compressed.file);
         form.set("purpose", uploadPurpose);
         const res = await fetch("/api/uploads", { method: "POST", body: form });
         const data = (await res.json()) as {
@@ -116,10 +181,13 @@ export function SourceImageUpload({
         };
         if (res.ok && typeof data.url === "string" && data.url) {
           const size =
-            typeof data.size === "number" && Number.isFinite(data.size) ? data.size : file.size;
+            typeof data.size === "number" && Number.isFinite(data.size)
+              ? data.size
+              : compressed.compressedSize;
+          clearLocalPreview();
           onChange({
             url: data.url,
-            fileName: file.name,
+            fileName: compressed.file.name,
             size,
             fileId: typeof data.fileId === "string" ? data.fileId : undefined,
             isLocalPreview: false,
@@ -136,10 +204,10 @@ export function SourceImageUpload({
         setErr("Нет сети или сервер недоступен. Повторите попытку.");
         emitFlow("error");
       } finally {
-        setUploading(false);
+        setUploadPhase("idle");
       }
     },
-    [emitFlow, onChange, uploadPurpose],
+    [clearLocalPreview, emitFlow, onChange, uploadPurpose],
   );
 
   const onPick = () => {
@@ -161,19 +229,27 @@ export function SourceImageUpload({
   };
 
   const remove = () => {
-    if (value?.isLocalPreview && value.url.startsWith("blob:")) {
-      try {
-        URL.revokeObjectURL(value.url);
-      } catch {
-        // ignore
-      }
-    }
+    clearLocalPreview();
     onChange(null);
     setErr(null);
+    setCompressionHint(null);
     emitFlow("idle");
   };
 
-  const has = value != null && value.url;
+  const displayValue = localPreview ?? value;
+  const has = displayValue != null && displayValue.url;
+  const isServerUploaded = Boolean(value?.fileId && !value.isLocalPreview && !uploading);
+
+  const statusLine = (() => {
+    if (uploadPhase === "preparing") return "Подготавливаем фото…";
+    if (uploadPhase === "uploading") return "Загружаем на сервер…";
+    if (projectSaving) return "Сохраняем фото в проект…";
+    if (recognitionLoading && isServerUploaded) return "Фото на сервере · распознаём товар…";
+    if (isServerUploaded) return "Фото загружено на сервер";
+    if (displayValue?.isLocalPreview && !uploading) return "Превью в браузере";
+    if (!has && !uploading) return "Ожидание файла";
+    return null;
+  })();
 
   return (
     <div className="space-y-3">
@@ -182,16 +258,16 @@ export function SourceImageUpload({
         <p className="text-muted-foreground mt-1 text-sm">{description}</p>
       </div>
 
-      {has && !value.isLocalPreview && !uploading && !err && (
+      {statusLine ? (
         <p className="text-muted-foreground text-xs" aria-live="polite">
-          Состояние: загружено на сервер
+          {statusLine}
         </p>
-      )}
-      {uploading && (
+      ) : null}
+      {compressionHint && !err ? (
         <p className="text-muted-foreground text-xs" aria-live="polite">
-          Состояние: загрузка…
+          {compressionHint}
         </p>
-      )}
+      ) : null}
 
       <div
         onDragEnter={(e) => {
@@ -227,7 +303,9 @@ export function SourceImageUpload({
         {uploading && (
           <div className="bg-background/85 absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[calc(1rem-2px)] backdrop-blur-[1px]">
             <Loader2 className="text-primary h-9 w-9 animate-spin" />
-            <p className="text-sm font-medium">Загружаем…</p>
+            <p className="text-sm font-medium">
+              {uploadPhase === "preparing" ? "Подготавливаем…" : "Загружаем…"}
+            </p>
           </div>
         )}
 
@@ -251,10 +329,9 @@ export function SourceImageUpload({
               Выбрать фото
             </Button>
             <p className="text-muted-foreground max-w-sm text-xs leading-relaxed">
-              PNG, JPG, JPEG или WebP до 10MB. Лучше использовать четкое фото товара на нейтральном
-              фоне.
+              PNG, JPG, JPEG или WebP до 10MB. Большие фото автоматически сжимаются перед
+              отправкой.
             </p>
-            {!err && <p className="text-muted-foreground text-xs">Состояние: ожидание файла</p>}
           </div>
         )}
 
@@ -263,22 +340,28 @@ export function SourceImageUpload({
             <div className="bg-background/60 relative max-h-72 min-h-[140px] overflow-hidden rounded-xl border">
               {/* eslint-disable-next-line @next/next/no-img-element -- user preview blob or S3 url */}
               <img
-                src={value.url}
-                alt={value.fileName}
+                src={displayValue.url}
+                alt={displayValue.fileName}
                 className="max-h-72 w-full object-contain"
               />
+              {recognitionLoading && isServerUploaded ? (
+                <div className="bg-background/75 absolute inset-x-0 bottom-0 flex items-center gap-2 px-3 py-2 text-xs">
+                  <Loader2 className="text-primary h-3.5 w-3.5 animate-spin" />
+                  <span>Распознаём товар…</span>
+                </div>
+              ) : null}
             </div>
             <div>
-              <p className="text-foreground truncate text-sm font-medium" title={value.fileName}>
-                {value.fileName}
+              <p className="text-foreground truncate text-sm font-medium" title={displayValue.fileName}>
+                {displayValue.fileName}
               </p>
               <p className="text-muted-foreground text-xs">
-                {formatBytes(value.size)}
-                {value.isLocalPreview ? " · только в браузере" : " · на сервере"}
+                {formatBytes(displayValue.size)}
+                {displayValue.isLocalPreview ? " · превью" : " · на сервере"}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={onPick} size="default">
+              <Button type="button" onClick={onPick} size="default" disabled={projectSaving}>
                 Заменить фото
               </Button>
               <Button type="button" variant="outline" onClick={remove} size="default">

@@ -98,6 +98,7 @@ export type CardBuilderPlanInput = {
   appliedMarketplaceRules?: AppliedMarketplaceRulesSnapshot;
   cardBuilderTargetAspectRatio?: string;
   cardBuilderTargetSize?: string;
+  cardBuilderOutputSizeId?: string;
   styleReference?: CardBuilderStyleReferencePlan;
   targetPlatform?: string;
   cardBuilderCategoryKey?: string;

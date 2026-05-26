@@ -18,6 +18,10 @@ import {
   CARD_BUILDER_UNIVERSAL_CATEGORY_IDS,
   CARD_BUILDER_VISUAL_STYLES,
 } from "@/config/card-builder-universal";
+import {
+  CARD_BUILDER_OUTPUT_SIZE_IDS,
+  CARD_BUILDER_DEFAULT_OUTPUT_SIZE_ID,
+} from "@/config/card-builder-output-sizes";
 import { CARD_BUILDER_PRODUCT_FACT_TYPES } from "@/lib/card-builder-product-facts";
 
 function enumFrom<K extends string>(ids: readonly K[]): [K, ...K[]] {
@@ -39,6 +43,7 @@ const Z_TARGET_PLATFORM = z.enum(enumFrom(CARD_BUILDER_TARGET_PLATFORMS.map((x) 
 const Z_UNIVERSAL_CATEGORY = z.enum(enumFrom(CARD_BUILDER_UNIVERSAL_CATEGORY_IDS));
 const Z_CREATION_MODE = z.enum(enumFrom(CARD_BUILDER_CREATION_MODES.map((x) => x.id)));
 const Z_SINGLE_CARD_TYPE = z.enum(enumFrom(CARD_BUILDER_SINGLE_CARD_TYPES.map((x) => x.id)));
+const Z_OUTPUT_SIZE = z.enum(enumFrom([...CARD_BUILDER_OUTPUT_SIZE_IDS]));
 const Z_VISUAL_STYLE = z.enum(enumFrom(CARD_BUILDER_VISUAL_STYLES.map((x) => x.id)));
 const Z_FACT_TYPE = z.enum(enumFrom(CARD_BUILDER_PRODUCT_FACT_TYPES));
 
@@ -106,6 +111,7 @@ export const cardBuilderPlanFieldsSchema = z
     creationMode: Z_CREATION_MODE.optional().default("full_gallery"),
     singleCardType: Z_SINGLE_CARD_TYPE.optional().default("auto"),
     visualStyle: Z_VISUAL_STYLE.optional().default("auto"),
+    cardBuilderOutputSizeId: Z_OUTPUT_SIZE.optional().default(CARD_BUILDER_DEFAULT_OUTPUT_SIZE_ID),
     productType: z.string().max(200).optional(),
     productNameGuess: z.string().max(200).optional(),
     categoryManuallyOverridden: z.boolean().optional().default(false),
@@ -140,6 +146,7 @@ export function coerceCardBuilderPlan(fields: CardBuilderPlanFields): CardBuilde
     creationMode: fields.creationMode ?? "full_gallery",
     singleCardType: fields.singleCardType ?? "auto",
     visualStyle: fields.visualStyle ?? "auto",
+    cardBuilderOutputSizeId: fields.cardBuilderOutputSizeId ?? CARD_BUILDER_DEFAULT_OUTPUT_SIZE_ID,
     productFacts: fields.productFacts ?? [],
   };
 }

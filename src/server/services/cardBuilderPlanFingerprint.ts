@@ -24,6 +24,7 @@ export type CardBuilderPlanFingerprintInput = {
   creationMode?: string;
   singleCardType?: string;
   visualStyle?: string;
+  cardBuilderOutputSizeId?: string;
   productFactsFingerprint?: string;
   styleReferenceFingerprint?: Record<string, unknown>;
 };
@@ -76,6 +77,7 @@ export function computeCardBuilderPlanFingerprint(
     creationMode: plan.creationMode ?? "full_gallery",
     singleCardType: plan.singleCardType ?? "auto",
     visualStyle: plan.visualStyle ?? "auto",
+    cardBuilderOutputSizeId: plan.cardBuilderOutputSizeId ?? "1x1",
     ...(plan.marketplaceProfileId ? { marketplaceProfileId: plan.marketplaceProfileId } : {}),
     ...(plan.marketplaceProfileVersion ? { marketplaceProfileVersion: plan.marketplaceProfileVersion } : {}),
     ...(plan.productFactsFingerprint ? { productFactsFingerprint: plan.productFactsFingerprint } : {}),
@@ -114,6 +116,7 @@ export function cardBuilderLivePlanFingerprintInputs(
     creationMode: plan.creationMode,
     singleCardType: plan.singleCardType,
     visualStyle: plan.visualStyle,
+    cardBuilderOutputSizeId: plan.cardBuilderOutputSizeId ?? "1x1",
     marketplaceProfileId: profileId,
     marketplaceProfileVersion: PRODUCT_CARD_MARKETPLACE_PROFILE_VERSION,
     ...(factsFp ? { productFactsFingerprint: factsFp } : {}),

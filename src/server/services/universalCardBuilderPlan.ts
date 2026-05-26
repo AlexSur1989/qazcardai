@@ -12,6 +12,8 @@ import {
   normalizeProductFactsList,
   type CardBuilderProductFact,
 } from "@/lib/card-builder-product-facts";
+import { cardBuilderOutputSizeFields } from "@/lib/card-builder-output-size";
+import { normalizeCardBuilderOutputSizeId } from "@/config/card-builder-output-sizes";
 import type {
   CardBuilderGallerySlide,
   CardBuilderPlanInput,
@@ -49,6 +51,7 @@ export function normalizeUniversalCardBuilderPlanInput(
 
   return {
     ...input,
+    ...cardBuilderOutputSizeFields(normalizeCardBuilderOutputSizeId(input.cardBuilderOutputSizeId)),
     targetPlatform: input.targetPlatform ?? "universal",
     cardBuilderCategoryKey: effectiveCategoryKey,
     selectedCategory: plannerCategory,
