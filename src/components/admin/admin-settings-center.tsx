@@ -1,25 +1,12 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  getAppSettingUiMeta,
-  isLegacyAppSettingKey,
-} from "@/lib/app-settings-ui-meta";
-import { cn } from "@/lib/utils";
+import { AdminSettingsAdvancedPanel } from "@/components/admin/admin-settings-advanced-panel";
+import { AdminSettingsBasicView } from "@/components/admin/admin-settings-basic-view";
+import { BASIC_EDITABLE_SETTING_KEYS } from "@/lib/admin-settings-basic-config";
+import type { Permission } from "@/lib/permissions";
 
 type SettingRow = {
   key: string;
@@ -63,14 +50,18 @@ export function AdminSettingsCenter({
   initialGroups,
   canEdit,
   canEditCritical,
+  linkPermissions,
 }: {
   initialGroups: Group[];
   canEdit: boolean;
   canEditCritical: boolean;
+  linkPermissions: Partial<Record<Permission, boolean>>;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const showAdvanced = searchParams.get("advanced") === "1";
+
   const [pending, startTransition] = useTransition();
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [message, setMessage] = useState<{
     type: "ok" | "err";
     text: string;
@@ -99,30 +90,24 @@ export function AdminSettingsCenter({
     return o;
   });
 
-  const visibleGroups = useMemo(() => {
-    return initialGroups
-      .map((g) => ({
-        ...g,
-        settings: g.settings.filter((s) => {
-          const meta = getAppSettingUiMeta(s.key);
-          if (showAdvanced) return true;
-          if (meta.hideInBasic) return false;
-          if (isLegacyAppSettingKey(s.key)) return false;
-          return true;
-        }),
-      }))
-      .filter((g) => g.settings.length > 0);
-  }, [initialGroups, showAdvanced]);
+  const basicSettings = useMemo(() => {
+    const rows: SettingRow[] = [];
+    for (const g of initialGroups) {
+      for (const s of g.settings) {
+        if (BASIC_EDITABLE_SETTING_KEYS.has(s.key)) {
+          rows.push(s);
+        }
+      }
+    }
+    return rows;
+  }, [initialGroups]);
 
-  const firstGroup = initialGroups[0]?.group ?? "general";
-  const firstVisibleGroup = visibleGroups[0]?.group ?? firstGroup;
-
-  const hiddenAdvancedCount = useMemo(() => {
+  const advancedOnlyCount = useMemo(() => {
     let n = 0;
     for (const g of initialGroups) {
       for (const s of g.settings) {
-        const meta = getAppSettingUiMeta(s.key);
-        if (meta.hideInBasic || isLegacyAppSettingKey(s.key)) n += 1;
+        if (BASIC_EDITABLE_SETTING_KEYS.has(s.key)) continue;
+        n += 1;
       }
     }
     return n;
@@ -135,6 +120,17 @@ export function AdminSettingsCenter({
     }
     return m;
   }, [initialGroups]);
+
+  function setAdvancedMode(next: boolean) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next) {
+      params.set("advanced", "1");
+    } else {
+      params.delete("advanced");
+    }
+    const qs = params.toString();
+    router.push(qs ? `/admin/settings?${qs}` : "/admin/settings");
+  }
 
   async function patchKey(key: string, value: unknown) {
     setMessage(null);
@@ -205,227 +201,39 @@ export function AdminSettingsCenter({
     });
   }
 
+  if (showAdvanced) {
+    return (
+      <AdminSettingsAdvancedPanel
+        initialGroups={initialGroups}
+        canEdit={canEdit}
+        canEditCritical={canEditCritical}
+        values={values}
+        setValues={setValues}
+        jsonText={jsonText}
+        setJsonText={setJsonText}
+        onSaveKey={(key) => void saveKey(key)}
+        pending={pending}
+        message={message}
+        onHideAdvanced={() => setAdvancedMode(false)}
+        onSeedDefaults={() => void seedDefaults()}
+        seeding={seeding}
+      />
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      {canEdit ? null : (
-        <Alert>
-          <AlertTitle>Только просмотр</AlertTitle>
-          <AlertDescription>
-            Нет права settings.manage — доступно только чтение.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {canEdit && !canEditCritical ? (
-        <Alert>
-          <AlertTitle>Часть настроек только для SUPER_ADMIN</AlertTitle>
-          <AlertDescription>
-            Критичные и технические параметры (maintenance, секреты) недоступны для
-            редактирования.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {message ? (
-        <Alert variant={message.type === "err" ? "destructive" : "default"}>
-          <AlertTitle>{message.type === "ok" ? "Готово" : "Ошибка"}</AlertTitle>
-          <AlertDescription>{message.text}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-muted-foreground text-sm">
-          Настройки в базе данных и значения по умолчанию из реестра.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          {hiddenAdvancedCount > 0 ? (
-            <Button
-              type="button"
-              size="sm"
-              variant={showAdvanced ? "secondary" : "outline"}
-              onClick={() => setShowAdvanced((v) => !v)}
-            >
-              {showAdvanced
-                ? "Базовый режим"
-                : `Расширенные настройки (${hiddenAdvancedCount})`}
-            </Button>
-          ) : null}
-          {canEditCritical ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              disabled={seeding || pending}
-              onClick={() => void seedDefaults()}
-              className="shrink-0"
-            >
-              Создать настройки по умолчанию
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {!showAdvanced && hiddenAdvancedCount > 0 ? (
-        <Alert>
-          <AlertTitle>Базовый режим</AlertTitle>
-          <AlertDescription className="text-sm">
-            Legacy-ключи card_builder и часть технических параметров скрыты. Тарифы «Создать
-            карточку» редактируются в{" "}
-            <Link href="/admin/pricing?tab=card-builder" className="underline">
-              Цены и тарифы → Создать карточку
-            </Link>
-            .
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      <Tabs defaultValue={firstVisibleGroup} className="w-full">
-        <div className="mb-4 overflow-x-auto">
-          <TabsList className="inline-flex h-auto w-max min-w-full flex-wrap justify-start gap-1 bg-muted/50 p-1">
-            {visibleGroups.map((g) => (
-              <TabsTrigger
-                key={g.group}
-                value={g.group}
-                className="whitespace-nowrap text-xs sm:text-sm"
-              >
-                {g.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
-        {visibleGroups.map((g) => (
-          <TabsContent key={g.group} value={g.group} className="mt-0 space-y-4">
-            {g.settings.map((s) => {
-              const val = values[s.key];
-              const rowWritable = canChangeRow(s, canEdit, canEditCritical);
-              const uiMeta = getAppSettingUiMeta(s.key);
-              const isLegacy = isLegacyAppSettingKey(s.key);
-              return (
-                <div
-                  key={s.key}
-                  className={cn(
-                    "space-y-2 rounded-2xl border border-[#b8dce6] bg-white p-4 shadow-sm",
-                    !s.inDatabase && "ring-1 ring-amber-200/60",
-                    isLegacy && "border-dashed border-amber-300/80 bg-amber-50/30",
-                  )}
-                >
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-foreground text-sm font-medium leading-snug">
-                        {s.label}
-                      </p>
-                      {isLegacy ? (
-                        <Badge variant="outline" className="text-[10px]">
-                          Legacy
-                        </Badge>
-                      ) : null}
-                      <code className="text-muted-foreground text-[10px]">{s.key}</code>
-                    </div>
-                    <p className="text-muted-foreground text-xs">{s.description}</p>
-                    {uiMeta.canonicalHref ? (
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        {uiMeta.canonicalHint ?? "Рекомендуемый раздел:"}{" "}
-                        <Link href={uiMeta.canonicalHref} className="text-primary underline">
-                          открыть
-                        </Link>
-                      </p>
-                    ) : null}
-                    {!s.inDatabase ? (
-                      <p className="text-amber-900/80 mt-1 text-xs">
-                        Пока показано значение по умолчанию; запись в БД появится
-                        после «Сохранить» или Seed defaults.
-                      </p>
-                    ) : null}
-                  </div>
-                  {s.key === "KASPI_MANUAL_SETTINGS" ? (
-                    <Alert variant="default" className="border-amber-200/80 bg-amber-50/50">
-                      <AlertTitle className="text-sm">Бухгалтерия и фискализация</AlertTitle>
-                      <AlertDescription className="text-xs">
-                        Ручной перевод требует корректного бухгалтерского и фискального
-                        оформления. Проверьте порядок выдачи фискального чека с бухгалтером.
-                      </AlertDescription>
-                    </Alert>
-                  ) : null}
-                  <div className="grid gap-2 sm:max-w-2xl">
-                    {s.type === "string" ? (
-                      <Input
-                        value={typeof val === "string" ? val : String(val ?? "")}
-                        onChange={(e) =>
-                          setValues((m) => ({ ...m, [s.key]: e.target.value }))
-                        }
-                        readOnly={!rowWritable}
-                        className="font-mono text-sm"
-                      />
-                    ) : null}
-                    {s.type === "number" ? (
-                      <Input
-                        type="number"
-                        value={
-                          typeof val === "number" && Number.isFinite(val)
-                            ? val
-                            : ""
-                        }
-                        onChange={(e) => {
-                          const n = parseFloat(e.target.value);
-                          setValues((m) => ({
-                            ...m,
-                            [s.key]: Number.isFinite(n) ? n : 0,
-                          }));
-                        }}
-                        readOnly={!rowWritable}
-                        className="font-mono text-sm"
-                      />
-                    ) : null}
-                    {s.type === "boolean" ? (
-                      <label className="flex cursor-pointer items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          className="size-4 rounded border"
-                          checked={val === true}
-                          disabled={!rowWritable}
-                          onChange={(e) =>
-                            setValues((m) => ({ ...m, [s.key]: e.target.checked }))
-                          }
-                        />
-                        {val === true ? "true" : "false"}
-                      </label>
-                    ) : null}
-                    {s.type === "json" ? (
-                      <Textarea
-                        value={jsonText[s.key] ?? ""}
-                        onChange={(e) =>
-                          setJsonText((m) => ({
-                            ...m,
-                            [s.key]: e.target.value,
-                          }))
-                        }
-                        readOnly={!rowWritable}
-                        rows={6}
-                        className="font-mono text-xs"
-                      />
-                    ) : null}
-                  </div>
-                  {s.type === "json" && rowWritable ? (
-                    <p className="text-muted-foreground text-xs">
-                      Сохранение: валидный JSON (массив или объект).
-                    </p>
-                  ) : null}
-                  {rowWritable ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={pending}
-                      onClick={() => void saveKey(s.key)}
-                    >
-                      Сохранить
-                    </Button>
-                  ) : null}
-                </div>
-              );
-            })}
-          </TabsContent>
-        ))}
-      </Tabs>
-    </div>
+    <AdminSettingsBasicView
+      basicSettings={basicSettings}
+      canEdit={canEdit}
+      canEditCritical={canEditCritical}
+      linkPermissions={linkPermissions}
+      values={values}
+      setValues={setValues}
+      onSaveKey={(key) => void saveKey(key)}
+      pending={pending}
+      message={message}
+      onShowAdvanced={() => setAdvancedMode(true)}
+      advancedCount={advancedOnlyCount}
+    />
   );
 }

@@ -116,7 +116,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     items: [
       {
         href: "/admin/settings",
-        label: "Настройки системы",
+        label: "Настройки проекта",
         icon: Settings,
         permission: "settings.view",
       },
