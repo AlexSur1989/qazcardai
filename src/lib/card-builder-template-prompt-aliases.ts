@@ -33,6 +33,10 @@ export const CARD_BUILDER_TEMPLATE_PROMPT_ALIASES: Record<string, string> = {
   brand_hero: "main_photo",
   package_card: "packaging_set",
   gift_packaging: "packaging_set",
+  instruction_steps: "instruction_steps",
+  specs_card: "specs_card",
+  social_proof_card: "social_proof",
+  before_after_card: "before_after",
 };
 
 /** Fallback template prompt keys по slideRole, если lookup по templateId пуст. */
@@ -45,7 +49,11 @@ export const CARD_BUILDER_TEMPLATE_PROMPT_ROLE_FALLBACK: Record<string, string> 
   detail_closeup: "detail_closeup",
   packaging: "packaging_set",
   premium_poster: "premium_poster",
-  ad_banner: "ad_banner",
+  ad_banner: "offer_card",
+  usage_instruction: "instruction_steps",
+  specs_card: "specs_card",
+  social_proof: "social_proof",
+  before_after: "before_after",
 };
 
 export function resolveCardBuilderTemplatePromptKey(templateId?: string | null): string {

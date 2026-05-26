@@ -35,7 +35,11 @@ const SLIDE_PURPOSES: Record<CardBuilderTemplateSlideRole, string> = {
   lifestyle: "Показать товар в сцене использования",
   packaging: "Показать комплектацию и упаковку",
   premium_poster: "Премиальная визуальная подача товара",
-  ad_banner: "Рекламный акцент на товаре",
+  ad_banner: "Показать акцию или спецпредложение",
+  usage_instruction: "Показать шаги использования или ухода",
+  specs_card: "Показать технические характеристики",
+  social_proof: "Показать отзыв или доверие",
+  before_after: "Показать результат до/после",
 };
 
 /** Понятные названия слайдов (без imageRole/templateId). */
@@ -48,7 +52,11 @@ export const CARD_BUILDER_SLIDE_USER_TITLES: Record<CardBuilderTemplateSlideRole
   lifestyle: "Lifestyle",
   packaging: "Комплектация",
   premium_poster: "Premium-баннер",
-  ad_banner: "Рекламный баннер",
+  ad_banner: "Акция / предложение",
+  usage_instruction: "Инструкция",
+  specs_card: "Характеристики",
+  social_proof: "Отзывы / доверие",
+  before_after: "До / после",
 };
 
 export function slideUserTitle(slideRole: string): string {
@@ -184,6 +192,55 @@ export function slidePreviewWarning(
     );
     if (!hasPkg) {
       return "Добавьте состав комплекта — без данных set_contents не сгенерируется.";
+    }
+  }
+  if (slideRole === "ad_banner") {
+    const hasPromo = allFacts.some(
+      (f) => f.type === "promo" && f.visibleOnCard !== false && f.value.trim(),
+    );
+    if (!hasPromo) {
+      return "Добавьте акцию или скидку — без данных рекламный слайд не сгенерируется.";
+    }
+  }
+  if (slideRole === "social_proof") {
+    const hasReview = allFacts.some(
+      (f) => f.type === "review" && f.visibleOnCard !== false && f.value.trim(),
+    );
+    if (!hasReview) {
+      return "Добавьте отзыв или рейтинг — без данных слайд доверия не сгенерируется.";
+    }
+  }
+  if (slideRole === "usage_instruction") {
+    const hasUsage = allFacts.some(
+      (f) =>
+        (f.type === "usage" || f.type === "care") &&
+        f.visibleOnCard !== false &&
+        f.value.trim(),
+    );
+    if (!hasUsage) {
+      return "Добавьте способ использования или уход — без данных инструкция не сгенерируется.";
+    }
+  }
+  if (slideRole === "specs_card") {
+    const specCount = allFacts.filter(
+      (f) =>
+        f.visibleOnCard !== false &&
+        f.value.trim() &&
+        (f.type === "feature" ||
+          f.type === "dimension" ||
+          f.type === "material" ||
+          f.type === "compatibility"),
+    ).length;
+    if (specCount < 2) {
+      return "Добавьте минимум 2–3 характеристики для слайда specs.";
+    }
+  }
+  if (slideRole === "before_after") {
+    const hasBa = allFacts.some(
+      (f) => f.type === "before_after" && f.visibleOnCard !== false && f.value.trim(),
+    );
+    if (!hasBa) {
+      return "Добавьте подтверждённый эффект до/после — иначе слайд не сгенерируется.";
     }
   }
   if (slideRole === "lifestyle") {

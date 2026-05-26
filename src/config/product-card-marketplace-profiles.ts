@@ -93,6 +93,10 @@ const VALID_ROLES = new Set<CardBuilderTemplateSlideRole>([
   "packaging",
   "premium_poster",
   "ad_banner",
+  "usage_instruction",
+  "specs_card",
+  "social_proof",
+  "before_after",
 ]);
 
 export function normalizeMarketplaceSlideRole(

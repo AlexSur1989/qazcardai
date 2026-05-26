@@ -71,7 +71,11 @@ function singleCardTypeToGoal(singleCardType: string): string {
     comparison: "benefits_info",
     dimensions: "dimensions_slide",
     packaging: "packaging_kit",
-    instruction: "detail_closeup",
+    instruction: "usage_instruction",
+    specs_card: "specs_card",
+    social_proof: "social_proof",
+    offer_card: "ad_banner",
+    before_after: "before_after",
     premium_poster: "premium_poster",
     lifestyle: "lifestyle",
     detail_closeup: "detail_closeup",
@@ -91,6 +95,11 @@ function slideRoleToGoal(role: string): string {
     lifestyle: "lifestyle",
     detail_closeup: "detail_closeup",
     materials: "materials_slide",
+    ad_banner: "ad_banner",
+    usage_instruction: "usage_instruction",
+    specs_card: "specs_card",
+    social_proof: "social_proof",
+    before_after: "before_after",
   };
   return map[role] ?? "main_photo";
 }
@@ -113,6 +122,12 @@ export function buildUniversalCardBuilderGalleryPlan(
     if (singleType === "dimensions" && !hasDimensionProductFacts(facts)) {
       planWarning =
         "Размеры не указаны — слайд покажет масштаб без точных цифр. Добавьте характеристики в данные товара.";
+    }
+    if (singleType === "offer_card" && !facts.some((f) => f.type === "promo" && f.value.trim())) {
+      planWarning = "Добавьте акцию или скидку в поле «Акция / скидка» — иначе слайд не сгенерируется.";
+    }
+    if (singleType === "social_proof" && !facts.some((f) => f.type === "review" && f.value.trim())) {
+      planWarning = "Добавьте отзыв или рейтинг — иначе слайд не сгенерируется.";
     }
   } else {
     const count = normalized.goal === "full_gallery_8" ? 8 : 6;

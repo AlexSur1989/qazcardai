@@ -45,6 +45,7 @@
     "verify:kie-general-models": "npx tsx scripts/verify-kie-general-models.ts",
     "verify:product-card-overlay": "npx tsx scripts/verify-product-card-overlay-strict.ts",
     "verify:product-card-card-builder": "npx tsx scripts/verify-product-card-card-builder.ts",
+    "seed:card-builder-prompts": "npx tsx scripts/seed-card-builder-prompts.ts",
     "verify:dashboard-user-copy": "npx tsx scripts/verify-dashboard-user-copy.ts",
     "verify:telegram-auth": "npx tsx scripts/verify-telegram-auth.ts",
     "verify:manual-payments": "npx tsx scripts/verify-manual-payments.ts",

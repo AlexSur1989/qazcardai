@@ -412,6 +412,18 @@ export const CARD_BUILDER_V2_TEMPLATE_OVERRIDES: Record<string, string> = {
   realistic_listing: T(
     "Template: realistic_listing.\nRealistic listing photo; clean; no invented specs.",
   ),
+  instruction_steps: T(
+    "Template: instruction_steps.\n2-4 confirmed usage/care steps. No dosage, medical use, dangerous installation or invented process.",
+  ),
+  specs_card: T(
+    "Template: specs_card.\nStructured specs table/list; 3-6 rows max; only confirmed feature/dimension/material/compatibility facts.",
+  ),
+  social_proof_card: T(
+    "Template: social_proof_card.\nTestimonial or rating only from user-provided review facts; no fake stars or sales counts.",
+  ),
+  before_after_card: T(
+    "Template: before_after_card.\nBefore/after panels only with confirmed before_after facts; no exaggerated medical/beauty claims.",
+  ),
 };
 
 export function buildCardBuilderV2TemplatePrompts(): Record<string, string> {

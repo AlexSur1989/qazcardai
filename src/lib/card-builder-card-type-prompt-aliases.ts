@@ -10,6 +10,8 @@ export const CARD_BUILDER_CARD_TYPE_PROMPT_ALIASES: Record<string, string> = {
   lifestyle: "lifestyle_card",
   details: "detail_closeup",
   materials: "material_texture",
+  offer_card: "offer_card",
+  ad_banner: "offer_card",
 };
 
 export function resolveCardBuilderCardTypePromptKey(key: string): string {

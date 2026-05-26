@@ -799,7 +799,7 @@ const packagingBlocked = computeEffectiveCardBuilderSettingsForSlide({
 });
 assert(packagingBlocked.blockGeneration, "packaging/set_contents без package facts блокируется");
 
-// TZ test case 7: social_proof card type blocked
+// TZ test case 7: social_proof blocked without review facts
 const socialBlocked = computeEffectiveCardBuilderSettingsForSlide({
   slideRole: "social_proof",
   rawSalesStyle: "clean_catalog",
@@ -807,17 +807,26 @@ const socialBlocked = computeEffectiveCardBuilderSettingsForSlide({
   productFacts: [],
   exactTextPhrases: [],
 });
-assert(socialBlocked.blockGeneration, "social_proof без reviews блокируется");
+assert(socialBlocked.blockGeneration, "social_proof без review блокируется");
 
-// TZ test case 8: offer_card blocked
+// TZ test case 8: offer/ad_banner blocked without promo facts
 const offerBlocked = computeEffectiveCardBuilderSettingsForSlide({
-  slideRole: "offer_card",
+  slideRole: "ad_banner",
   rawSalesStyle: "bold_ad",
   rawTextDensity: "medium",
   productFacts: [],
   exactTextPhrases: ["Товар"],
 });
-assert(offerBlocked.blockGeneration, "offer_card без offer facts блокируется");
+assert(offerBlocked.blockGeneration, "ad_banner без promo facts блокируется");
+
+assert(
+  resolveCardBuilderTemplatePromptKey("instruction_steps") === "instruction_steps",
+  "template instruction_steps key",
+);
+assert(
+  resolveCardBuilderTemplatePromptKey("social_proof_card") === "social_proof",
+  "alias social_proof_card → social_proof",
+);
 
 const samplePrompt = buildCardBuilderSuperPrompt(
   baseSuperPrompt({

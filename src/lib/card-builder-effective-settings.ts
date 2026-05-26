@@ -3,7 +3,13 @@ import { filterFactsForGeneration } from "@/lib/card-builder-fact-eligibility";
 import type { CardBuilderProductFact } from "@/lib/card-builder-product-facts";
 import {
   hasBenefitProductFacts,
+  hasBeforeAfterProductFacts,
   hasDimensionProductFacts,
+  hasPackageProductFacts,
+  hasPromoProductFacts,
+  hasReviewProductFacts,
+  hasSpecProductFacts,
+  hasUsageOrCareProductFacts,
   productFactsForSlideRole,
 } from "@/lib/card-builder-product-facts";
 
@@ -119,44 +125,6 @@ function hasComparisonFacts(facts: readonly CardBuilderProductFact[]): boolean {
         f.type === "material"),
   );
   return eligible.length >= 2;
-}
-
-function hasUsageOrCareFacts(facts: readonly CardBuilderProductFact[]): boolean {
-  return facts.some(
-    (f) =>
-      (f.type === "usage" || f.type === "care") &&
-      f.visibleOnCard !== false &&
-      f.value.trim().length > 0,
-  );
-}
-
-function hasSpecFacts(facts: readonly CardBuilderProductFact[]): boolean {
-  const specTypes = new Set(["feature", "dimension", "material", "compatibility", "package"]);
-  return (
-    facts.filter(
-      (f) => specTypes.has(f.type) && f.visibleOnCard !== false && f.value.trim().length > 0,
-    ).length >= 2
-  );
-}
-
-function hasOfferFacts(facts: readonly CardBuilderProductFact[]): boolean {
-  return facts.some((f) => {
-    if (f.visibleOnCard === false || !f.value.trim()) return false;
-    const blob = `${f.label} ${f.value}`.toLowerCase();
-    return (
-      /скидк|акци|промо|бонус|%-|₸|руб|тенге|deadline|до \d|цена|price|discount|promo/i.test(
-        blob,
-      ) || f.type === "package"
-    );
-  });
-}
-
-function hasSocialProofFacts(facts: readonly CardBuilderProductFact[]): boolean {
-  return facts.some((f) => {
-    if (f.visibleOnCard === false || !f.value.trim()) return false;
-    const blob = `${f.label} ${f.value}`.toLowerCase();
-    return /отзыв|review|rating|рейтинг|★|звезд|звёзд|оценк|продаж|заказ/i.test(blob);
-  });
 }
 
 export function computeEffectiveCardBuilderSettings(
@@ -277,14 +245,62 @@ export function computeEffectiveCardBuilderSettings(
     }
     case "detail_closeup":
     case "premium_poster":
-    case "ad_banner":
       break;
+    case "ad_banner": {
+      effectiveSalesStyle = effectiveSalesStyle === "infographic" ? "bold_ad" : effectiveSalesStyle;
+      if (!hasPromoProductFacts(allFacts)) {
+        blockGeneration = true;
+        blockGenerationMessage =
+          "Добавьте данные акции (скидка, цена, промо) — без данных рекламный слайд не генерируем.";
+        warnings.push("ad_banner без promo facts.");
+      }
+      break;
+    }
+    case "usage_instruction": {
+      effectiveTextDensity = capTextDensity(effectiveTextDensity, "medium");
+      suppressInfographicInstructions = true;
+      if (!hasUsageOrCareProductFacts(allFacts)) {
+        blockGeneration = true;
+        blockGenerationMessage =
+          "Добавьте способ использования или уход — без данных инструкцию не генерируем.";
+        warnings.push("usage_instruction без usage/care facts.");
+      }
+      break;
+    }
+    case "specs_card": {
+      effectiveTextDensity = capTextDensity(effectiveTextDensity, "medium");
+      if (!hasSpecProductFacts(allFacts)) {
+        blockGeneration = true;
+        blockGenerationMessage =
+          "Добавьте минимум 2–3 характеристики — без данных слайд specs не генерируем.";
+        warnings.push("specs_card без достаточного числа spec facts.");
+      }
+      break;
+    }
+    case "social_proof": {
+      if (!hasReviewProductFacts(allFacts)) {
+        blockGeneration = true;
+        blockGenerationMessage =
+          "Добавьте реальный отзыв или рейтинг — без данных social proof не генерируем.";
+        warnings.push("social_proof без review facts.");
+      }
+      break;
+    }
+    case "before_after": {
+      if (!hasBeforeAfterProductFacts(allFacts)) {
+        blockGeneration = true;
+        blockGenerationMessage =
+          "Добавьте подтверждённый эффект «до/после» — без данных этот слайд не генерируем.";
+        warnings.push("before_after без confirmed facts.");
+      }
+      break;
+    }
     case "packaging": {
       effectiveSalesStyle =
         effectiveSalesStyle === "infographic" ? "clean_catalog" : effectiveSalesStyle;
       effectiveTextDensity = capTextDensity(effectiveTextDensity, "medium");
       suppressInfographicInstructions = true;
-      if (!hasPackageFacts(allFacts)) {
+      if (!hasPackageProductFacts(allFacts)) {
         blockGeneration = true;
         blockGenerationMessage =
           "Добавьте состав комплекта или упаковку — без данных слайд комплектации не генерируем.";
@@ -328,36 +344,11 @@ export function computeEffectiveCardBuilderSettings(
       "Добавьте минимум два подтверждённых факта для сравнения — без данных слайд сравнения не генерируем.";
     warnings.push("comparison_card без comparison facts.");
   }
-  if (templateId === "set_contents" && !hasPackageFacts(allFacts)) {
+  if (templateId === "set_contents" && !hasPackageProductFacts(allFacts)) {
     blockGeneration = true;
     blockGenerationMessage =
       "Добавьте состав комплекта — без данных слайд set_contents не генерируем.";
     warnings.push("set_contents без package facts.");
-  }
-
-  const cardTypeKey = input.slideRole.trim();
-  if (cardTypeKey === "usage_instruction" && !hasUsageOrCareFacts(allFacts)) {
-    blockGeneration = true;
-    blockGenerationMessage = "Добавьте способ использования или уход — без данных инструкцию не генерируем.";
-    warnings.push("usage_instruction без usage/care facts.");
-  }
-  if (cardTypeKey === "specs_card" && !hasSpecFacts(allFacts)) {
-    blockGeneration = true;
-    blockGenerationMessage =
-      "Добавьте минимум 2–3 характеристики — без данных слайд specs не генерируем.";
-    warnings.push("specs_card без достаточного числа spec facts.");
-  }
-  if (cardTypeKey === "social_proof" && !hasSocialProofFacts(allFacts)) {
-    blockGeneration = true;
-    blockGenerationMessage =
-      "Добавьте реальные отзывы или рейтинг — без данных social proof не генерируем.";
-    warnings.push("social_proof без review/rating facts.");
-  }
-  if (cardTypeKey === "offer_card" && !hasOfferFacts(allFacts)) {
-    blockGeneration = true;
-    blockGenerationMessage =
-      "Добавьте данные акции (скидка, цена, промо) — без данных offer-слайд не генерируем.";
-    warnings.push("offer_card без offer facts.");
   }
 
   return {

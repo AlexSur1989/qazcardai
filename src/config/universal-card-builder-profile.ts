@@ -29,6 +29,10 @@ export const UNIVERSAL_CARD_BUILDER_PROFILE: ProductCardMarketplaceProfile = {
     "lifestyle",
     "packaging",
     "premium_poster",
+    "usage_instruction",
+    "specs_card",
+    "social_proof",
+    "before_after",
   ],
   allowedSlideTypes: [
     "main_photo",
@@ -40,6 +44,10 @@ export const UNIVERSAL_CARD_BUILDER_PROFILE: ProductCardMarketplaceProfile = {
     "packaging",
     "premium_poster",
     "ad_banner",
+    "usage_instruction",
+    "specs_card",
+    "social_proof",
+    "before_after",
   ],
   mainPhotoRules: {
     textAllowed: true,

@@ -90,6 +90,10 @@ export const CARD_BUILDER_PROMPTS_KNOWN_TEMPLATE_KEYS = [
   "dark_premium",
   "dark_premium_benefits",
   "realistic_listing",
+  "instruction_steps",
+  "specs_card",
+  "social_proof_card",
+  "before_after_card",
 ] as const;
 
 export type CardBuilderPromptsSetting = {
@@ -226,5 +230,9 @@ export const CARD_BUILDER_SLIDE_ROLE_TO_CARD_TYPE: Record<string, string> = {
   detail_closeup: "detail_closeup",
   packaging: "package_contents",
   premium_poster: "premium_poster",
-  ad_banner: "premium_poster",
+  ad_banner: "offer_card",
+  usage_instruction: "usage_instruction",
+  specs_card: "specs_card",
+  social_proof: "social_proof",
+  before_after: "before_after",
 };

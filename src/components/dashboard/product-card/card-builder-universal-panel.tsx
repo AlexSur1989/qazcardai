@@ -17,7 +17,13 @@ import type { CardBuilderTextAmountToggle } from "@/lib/card-builder-style-choic
 import {
   benefitTextareaValue,
   mergeBenefitFactsFromTextarea,
+  mergeBeforeAfterFactsFromTextarea,
   mergeProductPurposeFromTextarea,
+  mergePromoFactsFromTextarea,
+  mergeReviewFactsFromTextarea,
+  beforeAfterTextareaValue,
+  promoTextareaValue,
+  reviewTextareaValue,
   newProductFactId,
   productPurposeTextareaValue,
   type CardBuilderProductFact,
@@ -110,6 +116,9 @@ export function CardBuilderUniversalPanel({
 }: Props) {
   const benefitsText = useMemo(() => benefitTextareaValue(productFacts), [productFacts]);
   const productPurposeText = useMemo(() => productPurposeTextareaValue(productFacts), [productFacts]);
+  const promoText = useMemo(() => promoTextareaValue(productFacts), [productFacts]);
+  const reviewText = useMemo(() => reviewTextareaValue(productFacts), [productFacts]);
+  const beforeAfterText = useMemo(() => beforeAfterTextareaValue(productFacts), [productFacts]);
   const hasPendingWebFacts = useMemo(
     () => hasUnverifiedWebSuggestedFacts(productFacts),
     [productFacts],
@@ -125,6 +134,27 @@ export function CardBuilderUniversalPanel({
   const handleProductPurposeChange = useCallback(
     (text: string) => {
       onProductFactsChange(mergeProductPurposeFromTextarea(productFacts, text));
+    },
+    [onProductFactsChange, productFacts],
+  );
+
+  const handlePromoChange = useCallback(
+    (text: string) => {
+      onProductFactsChange(mergePromoFactsFromTextarea(productFacts, text));
+    },
+    [onProductFactsChange, productFacts],
+  );
+
+  const handleReviewChange = useCallback(
+    (text: string) => {
+      onProductFactsChange(mergeReviewFactsFromTextarea(productFacts, text));
+    },
+    [onProductFactsChange, productFacts],
+  );
+
+  const handleBeforeAfterChange = useCallback(
+    (text: string) => {
+      onProductFactsChange(mergeBeforeAfterFactsFromTextarea(productFacts, text));
     },
     [onProductFactsChange, productFacts],
   );
@@ -192,6 +222,11 @@ export function CardBuilderUniversalPanel({
             <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={onRetryAnalysis}>
               Обновить распознавание
             </Button>
+          ) : null}
+          {webResearchMeta?.provider === "mock" ? (
+            <p className="text-muted-foreground text-xs">
+              Web Research в demo-режиме (нет TAVILY_API_KEY на сервере). Добавьте ключ для реального поиска.
+            </p>
           ) : null}
           {canWebResearch && onWebResearch ? (
             <Button
@@ -283,6 +318,52 @@ export function CardBuilderUniversalPanel({
             <p className="text-muted-foreground text-xs">
               Каждая строка — отдельное преимущество. Текст попадёт только на слайд «Преимущества» и сохранится
               точно.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="cb-promo">Акция / скидка (опционально)</Label>
+              <Textarea
+                id="cb-promo"
+                value={promoText}
+                onChange={(e) => handlePromoChange(e.target.value)}
+                rows={2}
+                className="rounded-xl text-sm"
+                placeholder="Например: −20% до 31 мая"
+              />
+              <p className="text-muted-foreground text-xs">
+                Для слайда «Акция / предложение». Без текста акционный слайд не генерируется.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cb-review">Отзыв / рейтинг (опционально)</Label>
+              <Textarea
+                id="cb-review"
+                value={reviewText}
+                onChange={(e) => handleReviewChange(e.target.value)}
+                rows={2}
+                className="rounded-xl text-sm"
+                placeholder="Например: «Отличный товар» — 4.9 ★"
+              />
+              <p className="text-muted-foreground text-xs">
+                Только реальные данные. Для слайда «Отзывы / доверие».
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cb-before-after">До / после (опционально)</Label>
+            <Textarea
+              id="cb-before-after"
+              value={beforeAfterText}
+              onChange={(e) => handleBeforeAfterChange(e.target.value)}
+              rows={2}
+              className="rounded-xl text-sm"
+              placeholder="Кратко опишите подтверждённый результат"
+            />
+            <p className="text-muted-foreground text-xs">
+              Только если у вас есть реальный подтверждённый эффект. Без данных слайд «До/после» не генерируется.
             </p>
           </div>
 

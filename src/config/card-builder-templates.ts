@@ -13,7 +13,11 @@ export type CardBuilderTemplateSlideRole =
   | "detail_closeup"
   | "packaging"
   | "premium_poster"
-  | "ad_banner";
+  | "ad_banner"
+  | "usage_instruction"
+  | "specs_card"
+  | "social_proof"
+  | "before_after";
 
 export type CardBuilderTemplateDefinition = {
   templateId: string;
@@ -450,6 +454,74 @@ export const CARD_BUILDER_TEMPLATES: Record<string, CardBuilderTemplateDefinitio
     preserveProductRequired: true,
     overlayRequired: true,
   },
+  instruction_steps: {
+    templateId: "instruction_steps",
+    label: "Инструкция — шаги",
+    slideRole: "usage_instruction",
+    recommendedFor: ["own_site", "ozon"],
+    layoutPreset: "steps_row_icons",
+    overlayTemplatePreset: "feature_grid",
+    typographyPreset: "marketplace",
+    overlayTemplate: "badges_callouts",
+    textSlots: ["title", "benefit_1", "benefit_2", "benefit_3"],
+    iconSlots: ["check", "shield", "droplet"],
+    maxBenefits: 3,
+    allowText: true,
+    defaultTextDensity: "medium",
+    preserveProductRequired: true,
+    overlayRequired: true,
+  },
+  specs_card: {
+    templateId: "specs_card",
+    label: "Характеристики — таблица",
+    slideRole: "specs_card",
+    recommendedFor: ["gadgets_and_tech", "ozon"],
+    layoutPreset: "specs_table_right",
+    overlayTemplatePreset: "feature_grid",
+    typographyPreset: "marketplace",
+    overlayTemplate: "left_panel",
+    textSlots: ["title", "benefit_1", "benefit_2", "benefit_3", "benefit_4"],
+    iconSlots: ["check", "shield", "size"],
+    maxBenefits: 4,
+    allowText: true,
+    defaultTextDensity: "medium",
+    preserveProductRequired: true,
+    overlayRequired: true,
+  },
+  social_proof_card: {
+    templateId: "social_proof_card",
+    label: "Отзывы / доверие",
+    slideRole: "social_proof",
+    recommendedFor: ["own_site", "instagram_vk"],
+    layoutPreset: "testimonial_card",
+    overlayTemplatePreset: "promo_poster",
+    typographyPreset: "marketplace",
+    overlayTemplate: "badges_callouts",
+    textSlots: ["title", "subtitle"],
+    iconSlots: ["star"],
+    maxBenefits: 0,
+    allowText: true,
+    defaultTextDensity: "medium",
+    preserveProductRequired: true,
+    overlayRequired: true,
+  },
+  before_after_card: {
+    templateId: "before_after_card",
+    label: "До / после",
+    slideRole: "before_after",
+    recommendedFor: ["beauty_and_care", "own_site"],
+    layoutPreset: "dual_panel_before_after",
+    overlayTemplatePreset: "clean_catalog",
+    typographyPreset: "marketplace",
+    overlayTemplate: "bottom_panel",
+    textSlots: ["title", "subtitle"],
+    iconSlots: [],
+    maxBenefits: 0,
+    allowText: true,
+    defaultTextDensity: "minimal",
+    preserveProductRequired: true,
+    overlayRequired: false,
+  },
 };
 
 export function getCardBuilderTemplate(templateId: string): CardBuilderTemplateDefinition | undefined {
@@ -470,6 +542,10 @@ const ROLE_DEFAULT_TEMPLATE: Partial<Record<string, string>> = {
   packaging: "package_card",
   premium_poster: "premium_poster",
   ad_banner: "ad_banner",
+  usage_instruction: "instruction_steps",
+  specs_card: "specs_card",
+  social_proof: "social_proof_card",
+  before_after: "before_after_card",
 };
 
 export function defaultTemplateForSlideRole(role: CardBuilderTemplateSlideRole): string {
@@ -487,6 +563,10 @@ export function cardBuilderRoleUserPreviewCaption(role: CardBuilderTemplateSlide
     ad_banner: "Яркая рекламная подача под соцсети или акции.",
     detail_closeup: "Крупный план узла, фактуры или элемента товара.",
     packaging: "Упаковка и комплектация без выдумывания состава.",
+    usage_instruction: "Шаги использования или ухода — только подтверждённые данные.",
+    specs_card: "Технические характеристики в таблице — только ваши факты.",
+    social_proof: "Отзыв или рейтинг — только если вы указали данные.",
+    before_after: "Сравнение до/после — только подтверждённый результат.",
   };
   return map[role] ?? map.main_photo;
 }
@@ -534,6 +614,10 @@ export function templatePreviewCaption(templateId: string): string {
     interface_detail:
       "Крупный ракурс элементов управления или характерных деталей.",
     size_scale: "Размер без выдуманных цифр — акцент на масштаб и читаемую сравнимость.",
+    instruction_steps: "Пошаговая инструкция — только из ваших данных об использовании или уходе.",
+    specs_card: "Таблица характеристик — только подтверждённые specs из данных товара.",
+    social_proof_card: "Отзыв или доверие — только реальные данные, без выдуманных звёзд.",
+    before_after_card: "До/после — только если вы указали подтверждённый эффект.",
   };
   return captions[templateId] ?? "";
 }

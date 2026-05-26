@@ -13,6 +13,9 @@ export const CARD_BUILDER_PRODUCT_FACT_TYPES = [
   "effect",
   "compatibility",
   "care",
+  "promo",
+  "review",
+  "before_after",
   "other",
 ] as const;
 
@@ -207,7 +210,11 @@ const SLIDE_FACT_TYPES: Partial<Record<CardBuilderTemplateSlideRole, CardBuilder
     lifestyle: ["usage", "product_purpose"],
     packaging: ["package"],
     premium_poster: ["benefit", "feature", "product_purpose"],
-    ad_banner: ["benefit", "feature"],
+    ad_banner: ["promo"],
+    usage_instruction: ["usage", "care"],
+    specs_card: ["feature", "dimension", "material", "compatibility"],
+    social_proof: ["review"],
+    before_after: ["before_after", "effect"],
   };
 
 export function productFactsForSlideRole(
@@ -245,6 +252,9 @@ export const CARD_BUILDER_PRODUCT_FACT_TYPE_LABELS: Record<CardBuilderProductFac
   effect: "Эффект",
   compatibility: "Совместимость",
   care: "Уход",
+  promo: "Акция / скидка",
+  review: "Отзыв / рейтинг",
+  before_after: "До / после",
   other: "Другое",
 };
 
@@ -336,6 +346,146 @@ export function hasPackageProductFacts(facts: readonly CardBuilderProductFact[])
   return facts.some(
     (f) => f.type === "package" && f.visibleOnCard !== false && f.value.trim().length > 0,
   );
+}
+
+export function hasPromoProductFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  return facts.some(
+    (f) => f.type === "promo" && f.visibleOnCard !== false && f.value.trim().length > 0,
+  );
+}
+
+export function hasReviewProductFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  return facts.some(
+    (f) => f.type === "review" && f.visibleOnCard !== false && f.value.trim().length > 0,
+  );
+}
+
+export function hasBeforeAfterProductFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  return facts.some(
+    (f) =>
+      f.type === "before_after" &&
+      f.visibleOnCard !== false &&
+      f.value.trim().length > 0,
+  );
+}
+
+export function hasSpecProductFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  const specTypes = new Set<CardBuilderProductFactType>([
+    "feature",
+    "dimension",
+    "material",
+    "compatibility",
+  ]);
+  return (
+    facts.filter(
+      (f) => specTypes.has(f.type) && f.visibleOnCard !== false && f.value.trim().length > 0,
+    ).length >= 2
+  );
+}
+
+export function hasUsageOrCareProductFacts(facts: readonly CardBuilderProductFact[]): boolean {
+  return facts.some(
+    (f) =>
+      (f.type === "usage" || f.type === "care") &&
+      f.visibleOnCard !== false &&
+      f.value.trim().length > 0,
+  );
+}
+
+export function promoTextareaValue(facts: readonly CardBuilderProductFact[]): string {
+  return facts
+    .filter((f) => f.type === "promo" && f.value.trim())
+    .map((f) => f.value.trim())
+    .join("\n");
+}
+
+export function mergePromoFactsFromTextarea(
+  facts: readonly CardBuilderProductFact[],
+  textarea: string,
+): CardBuilderProductFact[] {
+  const others = facts.filter((f) => f.type !== "promo");
+  const line = textarea
+    .split(/\r?\n/)
+    .map((p) => p.trim())
+    .find(Boolean);
+  if (!line) return others;
+  return [
+    ...others,
+    {
+      id: newProductFactId(),
+      label: "Акция",
+      value: line.slice(0, 400),
+      type: "promo",
+      source: "user",
+      visibleOnCard: true,
+      lockedText: true,
+      verifiedByUser: true,
+    },
+  ];
+}
+
+export function reviewTextareaValue(facts: readonly CardBuilderProductFact[]): string {
+  return facts
+    .filter((f) => f.type === "review" && f.value.trim())
+    .map((f) => f.value.trim())
+    .join("\n");
+}
+
+export function mergeReviewFactsFromTextarea(
+  facts: readonly CardBuilderProductFact[],
+  textarea: string,
+): CardBuilderProductFact[] {
+  const others = facts.filter((f) => f.type !== "review");
+  const line = textarea
+    .split(/\r?\n/)
+    .map((p) => p.trim())
+    .find(Boolean);
+  if (!line) return others;
+  return [
+    ...others,
+    {
+      id: newProductFactId(),
+      label: "Отзыв",
+      value: line.slice(0, 400),
+      type: "review",
+      source: "user",
+      visibleOnCard: true,
+      lockedText: true,
+      verifiedByUser: true,
+    },
+  ];
+}
+
+export function beforeAfterTextareaValue(facts: readonly CardBuilderProductFact[]): string {
+  return facts
+    .filter((f) => f.type === "before_after" && f.value.trim())
+    .map((f) => f.value.trim())
+    .join("\n");
+}
+
+export function mergeBeforeAfterFactsFromTextarea(
+  facts: readonly CardBuilderProductFact[],
+  textarea: string,
+): CardBuilderProductFact[] {
+  const others = facts.filter((f) => f.type !== "before_after");
+  const line = textarea
+    .split(/\r?\n/)
+    .map((p) => p.trim())
+    .find(Boolean);
+  if (!line) return others;
+  return [
+    ...others,
+    {
+      id: newProductFactId(),
+      label: "До / после",
+      value: line.slice(0, 400),
+      type: "before_after",
+      source: "user",
+      visibleOnCard: true,
+      lockedText: true,
+      verifiedByUser: true,
+    },
+  ];
 }
 
 export function lockedTextPhrasesFromFacts(
