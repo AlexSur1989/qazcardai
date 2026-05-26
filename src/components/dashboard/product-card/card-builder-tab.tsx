@@ -798,8 +798,7 @@ export function CardBuilderTab({
         setVisionAnalysis(d as unknown as Record<string, unknown>);
         if (d.productType?.trim()) setProductType(d.productType.trim());
         if (d.productNameGuess?.trim()) {
-          const guess = d.productNameGuess.trim();
-          setProductNameGuess((prev) => prev.trim() || guess);
+          setProductNameGuess((prev) => prev.trim() || d.productNameGuess.trim());
         }
         if (!categoryManuallyOverridden && d.categoryKey) {
           setCategoryKey(d.categoryKey as CardBuilderUniversalCategoryId);
