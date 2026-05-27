@@ -6,7 +6,7 @@ import {
 } from "@/lib/request-body-limits";
 import { simpleProductCardGenerateSchema } from "@/lib/validations/simple-product-card";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
-import { assertCardBuilderScenarioEnabled } from "@/server/services/productCardCardBuilderGeneration";
+import { assertMarketplaceCardScenarioEnabled } from "@/server/services/productCardScenarios";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 import { generateSimpleProductCard } from "@/server/services/simpleProductCardGeneration";
 
@@ -23,7 +23,7 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
 
-  const gate = await assertCardBuilderScenarioEnabled();
+  const gate = await assertMarketplaceCardScenarioEnabled();
   if (!gate.ok) {
     return NextResponse.json({ error: gate.error, code: gate.code }, { status: gate.status });
   }

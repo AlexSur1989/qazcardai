@@ -150,16 +150,22 @@ export function SimpleProductCardTab({
       const parsed = await readJsonSafe<{ project?: { metadata?: Record<string, unknown> } }>(res);
       if (cancelled || !parsed.ok || !res.ok) return;
       const settings = (
-        parsed.data.project?.metadata as { cardBuilder?: { simpleCard?: { settings?: SimpleProductCardRequest } } } | undefined
-      )?.cardBuilder?.simpleCard?.settings;
-      if (!settings) return;
-      if (settings.userText) setUserText(settings.userText);
-      if (settings.styleMode) setStyleMode(settings.styleMode);
-      if (settings.aspectRatio) setAspectRatio(settings.aspectRatio);
-      if (settings.styleMode === "classic") setClassicUseReference(Boolean(settings.useReference));
-      if (settings.referenceCreativity != null) setReferenceCreativity(settings.referenceCreativity);
-      if (settings.productPhotoId && photosWithId.some((p) => p.fileId === settings.productPhotoId)) {
-        setProductPhotoId(settings.productPhotoId);
+        parsed.data.project?.metadata as {
+          marketplaceCard?: { simpleCard?: { settings?: SimpleProductCardRequest } };
+          cardBuilder?: { simpleCard?: { settings?: SimpleProductCardRequest } };
+        } | undefined
+      );
+      const saved =
+        settings?.marketplaceCard?.simpleCard?.settings ??
+        settings?.cardBuilder?.simpleCard?.settings;
+      if (!saved) return;
+      if (saved.userText) setUserText(saved.userText);
+      if (saved.styleMode) setStyleMode(saved.styleMode);
+      if (saved.aspectRatio) setAspectRatio(saved.aspectRatio);
+      if (saved.styleMode === "classic") setClassicUseReference(Boolean(saved.useReference));
+      if (saved.referenceCreativity != null) setReferenceCreativity(saved.referenceCreativity);
+      if (saved.productPhotoId && photosWithId.some((p) => p.fileId === saved.productPhotoId)) {
+        setProductPhotoId(saved.productPhotoId);
       }
     })();
     return () => {

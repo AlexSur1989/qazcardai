@@ -11,7 +11,7 @@ import {
   type SimpleProductCardRequest,
 } from "@/lib/validations/simple-product-card";
 import { assertUserOwnsFileUrl, getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
-import { assertCardBuilderScenarioEnabled } from "@/server/services/productCardCardBuilderGeneration";
+import { assertMarketplaceCardScenarioEnabled } from "@/server/services/productCardScenarios";
 import {
   cardBuilderModelProductImageError,
 } from "@/server/services/productCardModelResolver";
@@ -117,7 +117,7 @@ export async function estimateSimpleProductCard(
   projectId: string,
   rawPayload: unknown,
 ): Promise<EstimateOk | ServiceErr> {
-  const gate = await assertCardBuilderScenarioEnabled();
+  const gate = await assertMarketplaceCardScenarioEnabled();
   if (!gate.ok) return gate;
 
   const parsed = simpleProductCardRequestSchema.safeParse(rawPayload);
@@ -188,7 +188,7 @@ export async function generateSimpleProductCard(
   rawPayload: unknown,
   clientEstimateCredits: number | null | undefined,
 ): Promise<GenOk | ServiceErr> {
-  const gate = await assertCardBuilderScenarioEnabled();
+  const gate = await assertMarketplaceCardScenarioEnabled();
   if (!gate.ok) return gate;
 
   const parsed = simpleProductCardRequestSchema.safeParse(rawPayload);
@@ -293,7 +293,7 @@ export async function generateSimpleProductCard(
   const metadataRoot: Record<string, unknown> = {
     flow: "product_card",
     scenarioKey: "simple_card",
-    tab: "card_builder",
+    tab: "marketplace_card",
     projectId: project.id,
     simpleCardStyleMode: payload.styleMode,
     simpleCardAspectRatio: payload.aspectRatio,
@@ -314,7 +314,7 @@ export async function generateSimpleProductCard(
     productUrlRes,
     {
       flow: "product_card",
-      productCard: { projectId: project.id, tab: "card_builder", category: "simple_card", sourceType: "original" },
+      productCard: { projectId: project.id, tab: "marketplace_card", category: "simple_card", sourceType: "original" },
     },
     promptBuilt.negativePrompt,
     metadataRoot,

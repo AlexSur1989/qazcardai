@@ -18,6 +18,11 @@ export type SimpleCardBlock = {
 };
 
 type ProjectMetadata = {
+  marketplaceCard?: {
+    simpleCard?: SimpleCardBlock;
+    [key: string]: unknown;
+  };
+  /** @deprecated перенесено в marketplaceCard.simpleCard */
   cardBuilder?: {
     simpleCard?: SimpleCardBlock;
     [key: string]: unknown;
@@ -25,13 +30,17 @@ type ProjectMetadata = {
   [key: string]: unknown;
 };
 
+function readBlockFromMeta(meta: ProjectMetadata): SimpleCardBlock | null {
+  return meta.marketplaceCard?.simpleCard ?? meta.cardBuilder?.simpleCard ?? null;
+}
+
 export async function readSimpleCardBlock(projectId: string): Promise<SimpleCardBlock | null> {
   const row = await prisma.productCardProject.findUnique({
     where: { id: projectId },
     select: { metadata: true },
   });
   const meta = (row?.metadata ?? {}) as ProjectMetadata;
-  return meta.cardBuilder?.simpleCard ?? null;
+  return readBlockFromMeta(meta);
 }
 
 export async function mergeSimpleCardBlock(
@@ -43,18 +52,18 @@ export async function mergeSimpleCardBlock(
     select: { metadata: true },
   });
   const meta = (row?.metadata ?? {}) as ProjectMetadata;
-  const prev = meta.cardBuilder?.simpleCard ?? {};
+  const prev = readBlockFromMeta(meta) ?? {};
   const next: SimpleCardBlock = {
     ...prev,
     ...patch,
     settings: patch.settings ?? prev.settings,
     generations: patch.generations ?? prev.generations,
   };
-  const cardBuilder = { ...(meta.cardBuilder ?? {}), simpleCard: next };
+  const marketplaceCard = { ...(meta.marketplaceCard ?? {}), simpleCard: next };
   await prisma.productCardProject.update({
     where: { id: projectId },
     data: {
-      metadata: { ...meta, cardBuilder } as Prisma.InputJsonValue,
+      metadata: { ...meta, marketplaceCard } as Prisma.InputJsonValue,
     },
   });
 }

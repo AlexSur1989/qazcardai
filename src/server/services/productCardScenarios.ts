@@ -43,3 +43,25 @@ export function isCardBuilderScenarioEnabled(
 ): boolean {
   return scenarios.cardBuilder.enabled === true;
 }
+
+export function isMarketplaceCardScenarioEnabled(
+  scenarios: Record<ProductCardScenarioUiKey, ProductCardScenarioToggle>,
+): boolean {
+  return scenarios.marketplaceCard.enabled === true;
+}
+
+export async function assertMarketplaceCardScenarioEnabled(): Promise<
+  | { ok: true }
+  | { ok: false; error: string; status: number; code: string }
+> {
+  const scenarios = await getProductCardScenarios();
+  if (!isMarketplaceCardScenarioEnabled(scenarios)) {
+    return {
+      ok: false,
+      error: "Сценарий недоступен",
+      status: 403,
+      code: "MARKETPLACE_CARD_DISABLED",
+    };
+  }
+  return { ok: true };
+}

@@ -12,7 +12,7 @@ import { mergeSimpleProductCardPromptsWithDefaults } from "@/lib/validations/sim
 import { getAppSetting } from "@/server/services/appSettings";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
 import { prisma } from "@/lib/prisma";
-import { resolveCardBuilderImageModel } from "@/server/services/productCardModelResolver";
+import { resolveCardBuilderImageModel, resolveDefaultMarketplaceCardModel } from "@/server/services/productCardModelResolver";
 import { modelSupportsSimpleCardReferenceImage } from "@/lib/simple-product-card-model";
 
 export type SimpleProductCardRuntimeSettings = {
@@ -71,9 +71,14 @@ export async function getSimpleProductCardRuntimeSettings(): Promise<SimpleProdu
     enabled: parseBool(enabledRaw, true),
     defaultStyleMode: parseStyleMode(defaultStyleRaw ?? mergedPrompts.prompts.defaultStyleMode),
     defaultAspectRatio: parseAspect(aspectRaw ?? mergedPrompts.prompts.defaultAspectRatio),
-    modelSlug: (typeof modelSlugRaw === "string" ? modelSlugRaw.trim() : "") || pcSettings.cardBuilderModelSlug,
+    modelSlug:
+      (typeof modelSlugRaw === "string" ? modelSlugRaw.trim() : "") ||
+      pcSettings.marketplaceCardModelSlug ||
+      pcSettings.cardBuilderModelSlug,
     referenceModelSlug:
-      (typeof refModelSlugRaw === "string" ? refModelSlugRaw.trim() : "") || pcSettings.cardBuilderModelSlug,
+      (typeof refModelSlugRaw === "string" ? refModelSlugRaw.trim() : "") ||
+      pcSettings.marketplaceCardModelSlug ||
+      pcSettings.cardBuilderModelSlug,
     referenceEnabled: parseBool(refEnabledRaw, mergedPrompts.prompts.referenceEnabled),
     prompts: mergedPrompts.prompts,
     promptsSource: mergedPrompts.source,
@@ -107,6 +112,15 @@ export async function resolveSimpleProductCardImageModel(options: {
         supportsReference: modelSupportsSimpleCardReferenceImage(bySlug),
       };
     }
+  }
+
+  const marketplaceModel = await resolveDefaultMarketplaceCardModel();
+  if (marketplaceModel?.supportsImageInput) {
+    return {
+      model: marketplaceModel,
+      fallbackFromMarketplaceCard: true,
+      supportsReference: modelSupportsSimpleCardReferenceImage(marketplaceModel),
+    };
   }
 
   const resolved = await resolveCardBuilderImageModel();

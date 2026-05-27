@@ -12,10 +12,10 @@ import type {
   ProductCardScenarioToggles,
 } from "@/server/services/productCardSettings";
 
+import { CardBuilderTab } from "./card-builder-tab";
 import { SimpleProductCardTab } from "./simple-product-card-tab";
 import { CategorySelector } from "./category-selector";
 import { ConceptPhotoTab } from "./concept-photo-tab";
-import { MarketplaceCardTab } from "./marketplace-card-tab";
 import { ProductVideoTab } from "./product-video-tab";
 import { SourceImagesUpload, type UploadFlowState } from "./source-images-upload";
 import { useProductCardProject } from "./use-product-card-project";
@@ -244,21 +244,20 @@ export function ProductCardPage({
             />
           </TabsContent>
           <TabsContent value="card" className="mt-4">
-            <MarketplaceCardTab
-              hasImage={hasImage}
-              canUseBackend={canUseBackend}
-              projectId={projectId}
-              balanceCredits={balanceDisplay}
-              cardSizePresets={marketplaceCardSizes}
-              canLayoutDebug={canMarketplaceLayoutDebug}
-            />
-          </TabsContent>
-          <TabsContent value="cardBuilder" className="mt-4">
             <SimpleProductCardTab
               initDone={initDone}
               ensureProjectId={ensureProjectId}
               projectId={projectId}
               sourceImages={sourceImages}
+              balanceCredits={balanceDisplay}
+            />
+          </TabsContent>
+          <TabsContent value="cardBuilder" className="mt-4">
+            <CardBuilderTab
+              initDone={initDone}
+              ensureProjectId={ensureProjectId}
+              projectId={projectId}
+              projectSource={source}
               balanceCredits={balanceDisplay}
             />
           </TabsContent>
