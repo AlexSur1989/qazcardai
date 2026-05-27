@@ -3,12 +3,27 @@ import type { SimpleProductCardRequest } from "@/lib/validations/simple-product-
 import { prisma } from "@/lib/prisma";
 
 export type SimpleCardStoredState = SimpleProductCardRequest & {
+  productLabel?: string;
   updatedAt?: string;
   lastGenerationId?: string | null;
 };
 
+export type SimpleCardVisionSnapshot = {
+  productPhotoId?: string;
+  analyzedAt?: string;
+  analysisFailed?: boolean;
+  categoryKey?: string;
+  productType?: string;
+  productNameGuess?: string;
+  mainColors?: string[];
+  materialGuess?: string | null;
+  styleGuess?: string | null;
+  warnings?: string[];
+};
+
 export type SimpleCardBlock = {
   settings?: SimpleCardStoredState;
+  vision?: SimpleCardVisionSnapshot;
   generations?: Array<{
     generationId: string;
     status?: string;
@@ -57,6 +72,7 @@ export async function mergeSimpleCardBlock(
     ...prev,
     ...patch,
     settings: patch.settings ?? prev.settings,
+    vision: patch.vision ?? prev.vision,
     generations: patch.generations ?? prev.generations,
   };
   const marketplaceCard = { ...(meta.marketplaceCard ?? {}), simpleCard: next };
@@ -71,9 +87,14 @@ export async function mergeSimpleCardBlock(
 export async function saveSimpleCardSettings(
   projectId: string,
   settings: SimpleProductCardRequest,
+  extras?: { productLabel?: string },
 ): Promise<void> {
   await mergeSimpleCardBlock(projectId, {
-    settings: { ...settings, updatedAt: new Date().toISOString() },
+    settings: {
+      ...settings,
+      ...(extras?.productLabel?.trim() ? { productLabel: extras.productLabel.trim() } : {}),
+      updatedAt: new Date().toISOString(),
+    },
   });
 }
 

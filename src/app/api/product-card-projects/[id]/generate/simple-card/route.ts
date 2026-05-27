@@ -57,6 +57,7 @@ export async function POST(req: Request, ctx: Ctx) {
     id,
     parsed.data.payload,
     parsed.data.clientEstimateCredits,
+    parsed.data.productLabel,
   );
   if (!res.ok) {
     return NextResponse.json({ error: res.error, code: res.code }, { status: res.status });

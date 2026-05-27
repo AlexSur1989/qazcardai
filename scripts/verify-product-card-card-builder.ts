@@ -55,6 +55,10 @@ import {
   parseSimpleCardUserText,
   structureSimpleCardUserText,
 } from "@/lib/simple-product-card-user-text";
+import {
+  mergeSimpleCardProductLabelIntoUserText,
+  visionAnalysisToSimpleCardSuggestions,
+} from "@/lib/simple-product-card-vision-text";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -986,6 +990,39 @@ assert(builtCase6.prompt.includes("DIMENSIONS AND MEASUREMENTS RULES"), "global 
 assert(
   SIMPLE_PRODUCT_CARD_PROMPTS_DEFAULTS.dimensionsPrompt.includes("measurement arrows"),
   "dimensionsPrompt default present",
+);
+
+const visionSuggestions = visionAnalysisToSimpleCardSuggestions({
+  productNameGuess: "Clear Men Ледяная свежесть",
+  brandGuess: "Clear",
+  productType: "шампунь",
+  materialGuess: null,
+  visibleText: ["500 мл"],
+  visibleClaims: ["Против перхоти"],
+  suggestedProductFacts: [
+    { label: "Назначение", value: "Шампунь для мужчин", type: "product_purpose", confidence: 0.9 },
+    { label: "Преимущество", value: "Лёгкая", type: "benefit", confidence: 0.9 },
+  ],
+});
+assert(
+  visionSuggestions.productLabel.includes("Clear Men"),
+  "vision suggestions: productLabel из name/brand",
+);
+assert(
+  visionSuggestions.suggestedUserText.includes("Шампунь для мужчин"),
+  "vision suggestions: purpose в suggestedUserText",
+);
+assert(
+  !visionSuggestions.suggestedUserText.includes("Лёгкая"),
+  "vision suggestions: benefit не попадает в suggestedUserText",
+);
+assert(
+  mergeSimpleCardProductLabelIntoUserText("Clear Men", "Против перхоти") === "Clear Men\nПротив перхоти",
+  "merge label + userText",
+);
+assert(
+  mergeSimpleCardProductLabelIntoUserText("Clear Men", "Clear Men\nПротив перхоти") === "Clear Men\nПротив перхоти",
+  "merge без дубля названия",
 );
 
 console.log("[verify-product-card-card-builder] OK");

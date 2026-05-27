@@ -187,6 +187,7 @@ export async function generateSimpleProductCard(
   projectId: string,
   rawPayload: unknown,
   clientEstimateCredits: number | null | undefined,
+  productLabel?: string,
 ): Promise<GenOk | ServiceErr> {
   const gate = await assertMarketplaceCardScenarioEnabled();
   if (!gate.ok) return gate;
@@ -329,7 +330,9 @@ export async function generateSimpleProductCard(
     return { ok: false, error: result.error, status: result.status };
   }
 
-  await saveSimpleCardSettings(projectId, payload);
+  await saveSimpleCardSettings(projectId, payload, {
+    productLabel: productLabel?.trim() || undefined,
+  });
   await appendSimpleCardGeneration(projectId, {
     generationId: result.generationId,
     status: result.status,

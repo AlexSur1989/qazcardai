@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -34,6 +35,7 @@ import {
   mapGenerationErrorToUserMessage,
 } from "@/lib/generation-display";
 import { cn } from "@/lib/utils";
+import { mergeSimpleCardProductLabelIntoUserText } from "@/lib/simple-product-card-vision-text";
 import type { SimpleProductCardRequest } from "@/lib/validations/simple-product-card";
 
 import type { ProductSourceImageValue, SourceImagesValue } from "./source-images-upload";
@@ -47,6 +49,23 @@ type ReferenceRow = {
   fileName: string;
   size: number;
   fileId: string;
+};
+
+type SimpleCardVisionResponse = {
+  productLabel?: string;
+  suggestedUserText?: string;
+  productNameGuess?: string;
+  productType?: string;
+  mainColors?: string[];
+  materialGuess?: string | null;
+  styleGuess?: string | null;
+  analysisFailed?: boolean;
+  warnings?: string[];
+};
+
+type SavedSimpleCardBlock = {
+  settings?: SimpleProductCardRequest & { productLabel?: string };
+  vision?: { productPhotoId?: string; analyzedAt?: string } & SimpleCardVisionResponse;
 };
 
 type Props = {
@@ -69,6 +88,7 @@ function graphemeLen(s: string): number {
 
 function buildPayload(input: {
   productPhotoId: string;
+  productLabel: string;
   userText: string;
   styleMode: SimpleCardStyleMode;
   useReference: boolean;
@@ -78,7 +98,7 @@ function buildPayload(input: {
 }): SimpleProductCardRequest {
   return {
     productPhotoId: input.productPhotoId,
-    userText: input.userText.trim(),
+    userText: mergeSimpleCardProductLabelIntoUserText(input.productLabel, input.userText),
     styleMode: input.styleMode,
     useReference: input.styleMode === "classic" ? input.useReference : input.styleMode === "reference",
     referenceImageId:
@@ -111,7 +131,11 @@ export function SimpleProductCardTab({
   );
 
   const [productPhotoId, setProductPhotoId] = useState<string>("");
+  const [productLabel, setProductLabel] = useState("");
   const [userText, setUserText] = useState("");
+  const [visionLoading, setVisionLoading] = useState(false);
+  const [visionSummary, setVisionSummary] = useState<SimpleCardVisionResponse | null>(null);
+  const [analyzedPhotoId, setAnalyzedPhotoId] = useState<string | null>(null);
   const [styleMode, setStyleMode] = useState<SimpleCardStyleMode>(SIMPLE_CARD_DEFAULT_STYLE_MODE);
   const [classicUseReference, setClassicUseReference] = useState(false);
   const [referenceImage, setReferenceImage] = useState<ReferenceRow | null>(null);
@@ -134,6 +158,9 @@ export function SimpleProductCardTab({
   } | null>(null);
 
   const refInputRef = useRef<HTMLInputElement>(null);
+  const userTextTouchedRef = useRef(false);
+  const productLabelTouchedRef = useRef(false);
+  const visionRequestRef = useRef<string | null>(null);
 
   const defaultProductPhotoId = useMemo(() => {
     const main = photosWithId.find((p) => p.role === "main") ?? photosWithId[0];
@@ -142,6 +169,64 @@ export function SimpleProductCardTab({
 
   const selectedProductPhotoId = productPhotoId || defaultProductPhotoId;
 
+  const runVisionAnalysis = useCallback(
+    async (options?: { force?: boolean; photoId?: string }) => {
+      const pid = projectId;
+      const photoId = options?.photoId ?? selectedProductPhotoId;
+      if (!pid || !initDone || !photoId.trim()) return;
+      if (!options?.force && analyzedPhotoId === photoId && visionSummary && !visionSummary.analysisFailed) {
+        return;
+      }
+      if (visionRequestRef.current === photoId && visionLoading) return;
+
+      visionRequestRef.current = photoId;
+      setVisionLoading(true);
+      try {
+        const res = await fetch(`/api/product-card-projects/${pid}/product-analysis/vision`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productPhotoId: photoId, saveToSimpleCard: true }),
+        });
+        const parsed = await readJsonSafe<SimpleCardVisionResponse>(res);
+        if (visionRequestRef.current !== photoId) return;
+        if (!parsed.ok || !res.ok) {
+          toast.error(parsed.ok ? "Не удалось распознать товар" : parsed.message);
+          return;
+        }
+        const d = parsed.data;
+        setVisionSummary(d);
+        setAnalyzedPhotoId(photoId);
+
+        if (d.analysisFailed) {
+          const msg =
+            d.warnings?.find((w) => typeof w === "string" && w.trim())?.trim() ??
+            "Не удалось распознать товар — заполните данные вручную.";
+          toast.error(msg);
+          return;
+        }
+
+        const label = (d.productLabel ?? d.productNameGuess ?? "").trim();
+        if (label && !productLabelTouchedRef.current) {
+          setProductLabel(label);
+        }
+        const suggested = d.suggestedUserText?.trim() ?? "";
+        if (suggested && !userTextTouchedRef.current) {
+          setUserText(suggested);
+        }
+      } finally {
+        if (visionRequestRef.current === photoId) {
+          setVisionLoading(false);
+        }
+      }
+    },
+    [projectId, initDone, selectedProductPhotoId, analyzedPhotoId, visionSummary, visionLoading],
+  );
+
+  useEffect(() => {
+    if (!projectId || !initDone || !selectedProductPhotoId.trim()) return;
+    void runVisionAnalysis({ photoId: selectedProductPhotoId });
+  }, [projectId, initDone, selectedProductPhotoId, runVisionAnalysis]);
+
   useEffect(() => {
     if (!projectId || !initDone) return;
     let cancelled = false;
@@ -149,23 +234,35 @@ export function SimpleProductCardTab({
       const res = await fetch(`/api/product-card-projects/${projectId}`);
       const parsed = await readJsonSafe<{ project?: { metadata?: Record<string, unknown> } }>(res);
       if (cancelled || !parsed.ok || !res.ok) return;
-      const settings = (
-        parsed.data.project?.metadata as {
-          marketplaceCard?: { simpleCard?: { settings?: SimpleProductCardRequest } };
-          cardBuilder?: { simpleCard?: { settings?: SimpleProductCardRequest } };
-        } | undefined
-      );
-      const saved =
-        settings?.marketplaceCard?.simpleCard?.settings ??
-        settings?.cardBuilder?.simpleCard?.settings;
+      const meta = parsed.data.project?.metadata as {
+        marketplaceCard?: { simpleCard?: SavedSimpleCardBlock };
+        cardBuilder?: { simpleCard?: SavedSimpleCardBlock };
+      } | undefined;
+      const block =
+        meta?.marketplaceCard?.simpleCard ?? meta?.cardBuilder?.simpleCard;
+      const saved = block?.settings;
       if (!saved) return;
-      if (saved.userText) setUserText(saved.userText);
+      if (saved.productLabel) {
+        setProductLabel(saved.productLabel);
+        productLabelTouchedRef.current = true;
+      }
+      if (saved.userText) {
+        setUserText(saved.userText);
+        userTextTouchedRef.current = true;
+      }
       if (saved.styleMode) setStyleMode(saved.styleMode);
       if (saved.aspectRatio) setAspectRatio(saved.aspectRatio);
       if (saved.styleMode === "classic") setClassicUseReference(Boolean(saved.useReference));
       if (saved.referenceCreativity != null) setReferenceCreativity(saved.referenceCreativity);
       if (saved.productPhotoId && photosWithId.some((p) => p.fileId === saved.productPhotoId)) {
         setProductPhotoId(saved.productPhotoId);
+      }
+      if (block?.vision && !block.vision.analysisFailed) {
+        setVisionSummary(block.vision);
+        if (block.vision.productPhotoId) {
+          setAnalyzedPhotoId(block.vision.productPhotoId);
+          visionRequestRef.current = block.vision.productPhotoId;
+        }
       }
     })();
     return () => {
@@ -180,6 +277,7 @@ export function SimpleProductCardTab({
     () =>
       buildPayload({
         productPhotoId: selectedProductPhotoId,
+        productLabel,
         userText,
         styleMode,
         useReference: classicUseReference,
@@ -189,6 +287,7 @@ export function SimpleProductCardTab({
       }),
     [
       selectedProductPhotoId,
+      productLabel,
       userText,
       styleMode,
       classicUseReference,
@@ -198,11 +297,16 @@ export function SimpleProductCardTab({
     ],
   );
 
+  const effectiveCardText = useMemo(
+    () => mergeSimpleCardProductLabelIntoUserText(productLabel, userText),
+    [productLabel, userText],
+  );
+
   const canEstimate = Boolean(
     projectId &&
       initDone &&
       selectedProductPhotoId.trim() &&
-      userText.trim() &&
+      effectiveCardText.trim() &&
       (styleMode !== "reference" || referenceImage?.fileId) &&
       (styleMode !== "classic" || !classicUseReference || referenceImage?.fileId),
   );
@@ -217,7 +321,7 @@ export function SimpleProductCardTab({
     const res = await fetch(`/api/product-card-projects/${projectId}/estimate/simple-card`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload }),
+      body: JSON.stringify({ payload, productLabel: productLabel.trim() || undefined }),
     });
     const parsed = await readJsonSafe<{
       credits?: number;
@@ -241,7 +345,7 @@ export function SimpleProductCardTab({
     }
     setSupportsReference(parsed.data.supportsReference !== false);
     setEstimateCredits(typeof parsed.data.credits === "number" ? parsed.data.credits : null);
-  }, [projectId, payload]);
+  }, [projectId, payload, productLabel]);
 
   useEffect(() => {
     if (!canEstimate) return;
@@ -298,7 +402,9 @@ export function SimpleProductCardTab({
 
   const validateClient = (): string | null => {
     if (!selectedProductPhotoId.trim()) return "Выберите фото товара.";
-    if (!userText.trim()) return "Добавьте хотя бы одну фразу или преимущество для карточки.";
+    if (!effectiveCardText.trim()) {
+      return "Добавьте название товара или хотя бы одну фразу для карточки.";
+    }
     if (styleMode === "classic" && classicUseReference && !referenceImage?.fileId) {
       return "Загрузите фото-референс или выключите эту опцию.";
     }
@@ -336,7 +442,11 @@ export function SimpleProductCardTab({
     const res = await fetch(`/api/product-card-projects/${pid}/generate/simple-card`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload, clientEstimateCredits: estimateCredits }),
+      body: JSON.stringify({
+        payload,
+        clientEstimateCredits: estimateCredits,
+        productLabel: productLabel.trim() || undefined,
+      }),
     });
     const parsed = await readJsonSafe<{
       generationId?: string;
@@ -421,30 +531,117 @@ export function SimpleProductCardTab({
                 </AlertDescription>
               </Alert>
             ) : (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {photosWithId.map((img) => {
-                  const selected = selectedProductPhotoId === img.fileId;
-                  return (
-                    <button
-                      key={img.fileId}
-                      type="button"
-                      onClick={() => setProductPhotoId(img.fileId!)}
-                      className={cn(
-                        "overflow-hidden rounded-xl border-2 text-left transition-colors",
-                        selected ? "border-primary ring-primary/30 ring-2" : "border-border hover:border-primary/40",
-                      )}
-                    >
-                      <div className="bg-muted aspect-square w-full">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={img.url} alt="" className="h-full w-full object-cover" />
-                      </div>
-                      <div className="px-2 py-1.5 text-xs font-medium">
-                        {img.role === "main" ? "Главное" : img.role}
-                      </div>
-                    </button>
-                  );
-                })}
+              <>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {photosWithId.map((img) => {
+                    const selected = selectedProductPhotoId === img.fileId;
+                    return (
+                      <button
+                        key={img.fileId}
+                        type="button"
+                        onClick={() => {
+                          setProductPhotoId(img.fileId!);
+                          if (analyzedPhotoId !== img.fileId) {
+                            setVisionSummary(null);
+                          }
+                        }}
+                        className={cn(
+                          "overflow-hidden rounded-xl border-2 text-left transition-colors",
+                          selected ? "border-primary ring-primary/30 ring-2" : "border-border hover:border-primary/40",
+                        )}
+                      >
+                        <div className="bg-muted aspect-square w-full">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={img.url} alt="" className="h-full w-full object-cover" />
+                        </div>
+                        <div className="px-2 py-1.5 text-xs font-medium">
+                          {img.role === "main" ? "Главное" : img.role}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {visionLoading ? (
+                  <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                    <Loader2 className="size-4 animate-spin" />
+                    Распознаём товар на фото…
+                  </div>
+                ) : null}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-border">
+          <CardHeader>
+            <CardTitle className="text-base">Что это за товар?</CardTitle>
+            <CardDescription>
+              AI определяет товар по выбранному фото. Вы можете оставить предложенное название или изменить его.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {visionLoading && !productLabel.trim() ? (
+              <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                <Loader2 className="size-4 animate-spin" />
+                Анализируем фото…
               </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="simple-card-product-label">Название товара</Label>
+                  <Input
+                    id="simple-card-product-label"
+                    value={productLabel}
+                    onChange={(e) => {
+                      productLabelTouchedRef.current = true;
+                      setProductLabel(e.target.value);
+                    }}
+                    placeholder="Например: Шампунь Clear Men Ледяная свежесть"
+                    maxLength={200}
+                  />
+                </div>
+                {visionSummary && !visionSummary.analysisFailed ? (
+                  <div className="text-muted-foreground grid gap-1 text-xs sm:grid-cols-2">
+                    {visionSummary.productType?.trim() ? (
+                      <div>
+                        <span>Тип: </span>
+                        <span className="text-foreground">{visionSummary.productType.trim()}</span>
+                      </div>
+                    ) : null}
+                    {visionSummary.mainColors?.length ? (
+                      <div>
+                        <span>Цвет: </span>
+                        <span className="text-foreground">{visionSummary.mainColors.slice(0, 4).join(", ")}</span>
+                      </div>
+                    ) : null}
+                    {visionSummary.materialGuess?.trim() ? (
+                      <div>
+                        <span>Материал: </span>
+                        <span className="text-foreground">{visionSummary.materialGuess.trim()}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {visionSummary?.analysisFailed ? (
+                  <Alert>
+                    <AlertTitle>Не удалось распознать товар</AlertTitle>
+                    <AlertDescription>
+                      Укажите название вручную — генерация всё равно доступна.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+                {selectedProductPhotoId && !visionLoading ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                    onClick={() => void runVisionAnalysis({ force: true, photoId: selectedProductPhotoId })}
+                  >
+                    Обновить распознавание
+                  </Button>
+                ) : null}
+              </>
             )}
           </CardContent>
         </Card>
@@ -453,15 +650,23 @@ export function SimpleProductCardTab({
           <CardHeader>
             <CardTitle className="text-base">Какой текст хотите видеть на карточке?</CardTitle>
             <CardDescription>
-              Напишите в свободной форме: преимущества, качества товара, заголовок, подзаголовок или любые фразы,
-              которые нужно использовать. Если хотите показать размеры на карточке, укажите их прямо в тексте:
-              например, «размер 20×30 см», «высота 15 см», «объём 500 мл», «вес 250 г».
+              AI предложит текст по фото — вы можете оставить или изменить. Напишите преимущества, заголовок,
+              подзаголовок или любые фразы. Размеры укажите прямо в тексте: «размер 20×30 см», «объём 500 мл».
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
+            {visionLoading && !userText.trim() ? (
+              <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                <Loader2 className="size-4 animate-spin" />
+                Подбираем текст для карточки…
+              </div>
+            ) : null}
             <Textarea
               value={userText}
-              onChange={(e) => setUserText(e.target.value)}
+              onChange={(e) => {
+                userTextTouchedRef.current = true;
+                setUserText(e.target.value);
+              }}
               placeholder="Например: Лёгкий и удобный. Подходит для ежедневного использования. Современный дизайн. Прочный материал."
               rows={5}
               maxLength={SIMPLE_CARD_USER_TEXT_MAX}

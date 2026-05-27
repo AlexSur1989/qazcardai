@@ -67,6 +67,34 @@ export async function resolveCardBuilderSourceImage(
   return resolveProjectMainSourceImage(userId, projectId);
 }
 
+export async function resolveProjectSourceImageByFileId(
+  userId: string,
+  projectId: string,
+  fileId: string,
+): Promise<{ ok: true; url: string; fileId: string } | { ok: false; error: string; status: number }> {
+  const id = fileId.trim();
+  if (!id) {
+    return { ok: false, error: "Укажите фото товара", status: 400 };
+  }
+
+  const project = await getOwnedProjectOrNull(userId, projectId);
+  if (!project) {
+    return { ok: false, error: "Проект не найден", status: 404 };
+  }
+
+  const sources = normalizeProductSourceImages(project);
+  const match = sources.find((s) => s.fileId?.trim() === id);
+  const url = match?.url?.trim() ?? "";
+  if (url) {
+    if (!(await assertUserOwnsFileUrl(userId, url))) {
+      return { ok: false, error: "Нет доступа к файлу", status: 403 };
+    }
+    return { ok: true, url, fileId: id };
+  }
+
+  return resolveProjectMainSourceImage(userId, projectId);
+}
+
 export async function saveCardBuilderSourceImage(
   projectId: string,
   image: Omit<CardBuilderSourceImage, "updatedAt">,

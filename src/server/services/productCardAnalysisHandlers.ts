@@ -12,7 +12,12 @@ import {
   type CardBuilderStoredSettings,
 } from "@/server/services/productCardCardBuilderMeta";
 import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
-import { resolveCardBuilderSourceImage } from "@/server/services/cardBuilderSourceImage";
+import {
+  resolveCardBuilderSourceImage,
+  resolveProjectSourceImageByFileId,
+} from "@/server/services/cardBuilderSourceImage";
+import { visionAnalysisToSimpleCardSuggestions } from "@/lib/simple-product-card-vision-text";
+import { mergeSimpleCardBlock, readSimpleCardBlock } from "@/server/services/simpleProductCardMeta";
 import { enforceProductClassifyRateLimit } from "@/server/services/rateLimitService";
 import {
   analyzeProductImageForCardBuilder,
@@ -20,9 +25,16 @@ import {
   visionAnalysisToProductFacts,
 } from "@/server/services/productCardVisionAnalysis";
 
+export type ProductCardVisionAnalysisOptions = {
+  productPhotoId?: string;
+  /** Сохранить результат в marketplaceCard.simpleCard (простая карточка). */
+  saveToSimpleCard?: boolean;
+};
+
 export async function handleProductCardVisionAnalysis(
   projectId: string,
   userId: string,
+  options?: ProductCardVisionAnalysisOptions,
 ): Promise<NextResponse> {
   const rate = await enforceProductClassifyRateLimit(userId);
   if (rate) return rate;
@@ -32,7 +44,9 @@ export async function handleProductCardVisionAnalysis(
     return NextResponse.json({ error: "Проект не найден" }, { status: 404 });
   }
 
-  const src = await resolveCardBuilderSourceImage(userId, projectId);
+  const src = options?.productPhotoId?.trim()
+    ? await resolveProjectSourceImageByFileId(userId, projectId, options.productPhotoId.trim())
+    : await resolveCardBuilderSourceImage(userId, projectId);
   if (!src.ok) {
     return NextResponse.json({ error: src.error, code: "NO_SOURCE" }, { status: src.status });
   }
@@ -45,6 +59,7 @@ export async function handleProductCardVisionAnalysis(
 
   const publicPayload = toPublicVisionAnalysisPayload(analysis);
   const productFacts = visionAnalysisToProductFacts(analysis);
+  const simpleSuggestions = visionAnalysisToSimpleCardSuggestions(analysis);
 
   if (!analysis.analysisFailed) {
     const prev = await readCardBuilderBlock(projectId);
@@ -68,9 +83,31 @@ export async function handleProductCardVisionAnalysis(
     });
   }
 
+  if (options?.saveToSimpleCard) {
+    const simpleBlk = (await readSimpleCardBlock(projectId)) ?? {};
+    const prevSettings = simpleBlk.settings;
+    await mergeSimpleCardBlock(projectId, {
+      vision: {
+        ...publicPayload,
+        productPhotoId: options.productPhotoId?.trim() || src.fileId,
+        analyzedAt: new Date().toISOString(),
+        analysisFailed: analysis.analysisFailed === true,
+      },
+      settings: prevSettings
+        ? {
+            ...prevSettings,
+            productLabel: simpleSuggestions.productLabel || prevSettings.productLabel,
+            updatedAt: new Date().toISOString(),
+          }
+        : undefined,
+    });
+  }
+
   return NextResponse.json({
     ...publicPayload,
     productFacts,
+    productLabel: simpleSuggestions.productLabel,
+    suggestedUserText: simpleSuggestions.suggestedUserText,
     visionOnly: true,
     message:
       "Распознано только видимое на фото. Для характеристик из интернета используйте «Найти характеристики в интернете».",

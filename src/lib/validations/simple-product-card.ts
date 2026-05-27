@@ -149,9 +149,11 @@ export function aspectRatioToSimpleCardSizeId(aspect: SimpleCardAspectRatio): st
 
 export const simpleProductCardEstimateSchema = z.object({
   payload: simpleProductCardRequestSchema,
+  productLabel: z.string().trim().max(200).optional(),
 });
 
 export const simpleProductCardGenerateSchema = z.object({
   payload: simpleProductCardRequestSchema,
   clientEstimateCredits: z.number().int().nonnegative().optional().nullable(),
+  productLabel: z.string().trim().max(200).optional(),
 });
