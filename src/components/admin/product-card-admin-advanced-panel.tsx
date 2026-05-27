@@ -10,6 +10,7 @@ import {
   MARKETPLACE_CARD_BASE_PROMPT,
 } from "@/config/product-card-prompts";
 import { ProductCardCardBuilderPromptsPanel } from "@/components/admin/product-card-card-builder-prompts-panel";
+import { ProductCardSimpleCardPromptsPanel } from "@/components/admin/product-card-simple-card-prompts-panel";
 import { ProductCardWebResearchAdminPanel } from "@/components/admin/product-card-web-research-admin-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +69,7 @@ type Props = {
   models: ModelRow[];
   calculatorRows: CalculatorRow[];
   cardBuilderPromptsSetting: unknown;
+  simpleCardPromptsSetting: unknown;
   cardBuilderSuperPromptSample: CardBuilderPromptResult;
   canPatchSettings: boolean;
   webResearchSettings: ProductCardWebResearchSettings;
@@ -85,11 +87,13 @@ export function ProductCardAdminAdvancedPanel({
   models,
   calculatorRows,
   cardBuilderPromptsSetting,
+  simpleCardPromptsSetting,
   cardBuilderSuperPromptSample,
   canPatchSettings,
   webResearchSettings,
 }: Props) {
-  const isPromptTab = tab === "prompts" || tab === "card-builder-prompts";
+  const isPromptTab =
+    tab === "prompts" || tab === "card-builder-prompts" || tab === "simple-card-prompts";
 
   return (
     <div className="space-y-4">
@@ -253,6 +257,13 @@ export function ProductCardAdminAdvancedPanel({
       {tab === "card-builder-prompts" ? (
         <ProductCardCardBuilderPromptsPanel
           initialValue={cardBuilderPromptsSetting ?? null}
+          canPatch={canPatchSettings}
+        />
+      ) : null}
+
+      {tab === "simple-card-prompts" ? (
+        <ProductCardSimpleCardPromptsPanel
+          initialValue={simpleCardPromptsSetting ?? null}
           canPatch={canPatchSettings}
         />
       ) : null}

@@ -12,7 +12,7 @@ import type {
   ProductCardScenarioToggles,
 } from "@/server/services/productCardSettings";
 
-import { CardBuilderTab } from "./card-builder-tab";
+import { SimpleProductCardTab } from "./simple-product-card-tab";
 import { CategorySelector } from "./category-selector";
 import { ConceptPhotoTab } from "./concept-photo-tab";
 import { MarketplaceCardTab } from "./marketplace-card-tab";
@@ -254,11 +254,11 @@ export function ProductCardPage({
             />
           </TabsContent>
           <TabsContent value="cardBuilder" className="mt-4">
-            <CardBuilderTab
+            <SimpleProductCardTab
               initDone={initDone}
               ensureProjectId={ensureProjectId}
               projectId={projectId}
-              projectSource={source}
+              sourceImages={sourceImages}
               balanceCredits={balanceDisplay}
             />
           </TabsContent>

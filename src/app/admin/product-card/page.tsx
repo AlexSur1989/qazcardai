@@ -20,6 +20,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 import { buildCardBuilderSuperPromptWithAppSettings } from "@/server/services/cardBuilderPromptBuilder";
 import { PRODUCT_CARD_CARD_BUILDER_PROMPTS_KEY } from "@/server/services/cardBuilderPromptsSettings";
+import { PRODUCT_CARD_SIMPLE_CARD_SETTING_KEYS } from "@/config/simple-product-card-prompts-defaults";
 import { getAppSettingsByGroup } from "@/server/services/appSettings";
 import {
   buildCardBuilderPriceBreakdown,
@@ -67,6 +68,9 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
   const scenariosSetting = settingsRows.find((row) => row.key === "PRODUCT_CARD_SCENARIOS")?.value;
   const cardBuilderPromptsSetting = settingsRows.find(
     (row) => row.key === PRODUCT_CARD_CARD_BUILDER_PROMPTS_KEY,
+  )?.value;
+  const simpleCardPromptsSetting = settingsRows.find(
+    (row) => row.key === PRODUCT_CARD_SIMPLE_CARD_SETTING_KEYS.prompts,
   )?.value;
   const canPatchSettings = hasPermission(adminUser.role, "settings.manage");
 
@@ -261,6 +265,7 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
           models={models}
           calculatorRows={calculatorRows}
           cardBuilderPromptsSetting={cardBuilderPromptsSetting}
+          simpleCardPromptsSetting={simpleCardPromptsSetting}
           cardBuilderSuperPromptSample={cardBuilderSuperPromptSample}
           canPatchSettings={canPatchSettings}
           webResearchSettings={webResearchSettings}

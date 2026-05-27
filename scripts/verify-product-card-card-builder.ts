@@ -2,6 +2,7 @@
  * Проверка универсального сценария «Создать карточку».
  * Запуск: npm run verify:product-card-card-builder
  */
+import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -40,6 +41,20 @@ import {
 import { isUniversalCardBuilderTarget } from "@/config/universal-card-builder-profile";
 import { CARD_BUILDER_OUTPUT_SIZES } from "@/config/card-builder-output-sizes";
 import { resolveCardBuilderOutputSize } from "@/lib/card-builder-output-size";
+import { SIMPLE_PRODUCT_CARD_PROMPTS_DEFAULTS } from "@/config/simple-product-card-prompts-defaults";
+import { mergeSimpleProductCardPromptsWithDefaults } from "@/lib/validations/simple-product-card-prompts-setting";
+import {
+  aspectRatioToSimpleCardSizeId,
+  normalizeSimpleCardPayload,
+  simpleCardUsesReference,
+} from "@/lib/validations/simple-product-card";
+import { buildSimpleProductCardPrompt } from "@/server/services/simpleProductCardPromptBuilder";
+import {
+  formatConfirmedDimensionsBlock,
+  NO_DIMENSIONS_RULE,
+  parseSimpleCardUserText,
+  structureSimpleCardUserText,
+} from "@/lib/simple-product-card-user-text";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -855,5 +870,122 @@ const promptLen = samplePrompt.data!.prompt.length;
 assert(promptLen <= CARD_BUILDER_PROMPT_MAX_LEN, `prompt size ${promptLen} <= ${CARD_BUILDER_PROMPT_MAX_LEN}`);
 const globalCount = (samplePrompt.data!.prompt.match(/GLOBAL PRODUCT TRUTH RULES/gi) ?? []).length;
 assert(globalCount === 1, "GLOBAL PRODUCT TRUTH RULES inserted once");
+
+// --- Simple product card flow ---
+
+const simpleEnabled = APP_SETTINGS_REGISTRY.find((e) => e.key === "PRODUCT_CARD_SIMPLE_CARD_ENABLED");
+assert(simpleEnabled, "PRODUCT_CARD_SIMPLE_CARD_ENABLED в APP_SETTINGS_REGISTRY");
+const simplePrompts = APP_SETTINGS_REGISTRY.find((e) => e.key === "PRODUCT_CARD_SIMPLE_CARD_PROMPTS");
+assert(simplePrompts, "PRODUCT_CARD_SIMPLE_CARD_PROMPTS в APP_SETTINGS_REGISTRY");
+
+const classicNorm = normalizeSimpleCardPayload({
+  productPhotoId: "p1",
+  userText: "Тест",
+  styleMode: "classic",
+  useReference: false,
+  aspectRatio: "1:1",
+});
+assert(!simpleCardUsesReference(classicNorm), "classic без reference");
+assert(classicNorm.referenceImageId == null, "classic без referenceImageId");
+
+const classicRefNorm = normalizeSimpleCardPayload({
+  productPhotoId: "p1",
+  userText: "Тест",
+  styleMode: "classic",
+  useReference: true,
+  referenceImageId: "r1",
+  referenceCreativity: 50,
+  aspectRatio: "1:1",
+});
+assert(simpleCardUsesReference(classicRefNorm), "classic с reference");
+
+const premiumNorm = normalizeSimpleCardPayload({
+  productPhotoId: "p1",
+  userText: "Тест",
+  styleMode: "premium",
+  useReference: true,
+  referenceImageId: "r1",
+  referenceCreativity: 80,
+  aspectRatio: "16:9",
+});
+assert(!simpleCardUsesReference(premiumNorm), "premium не использует reference");
+assert(premiumNorm.referenceImageId == null, "premium очищает referenceImageId");
+
+assert(aspectRatioToSimpleCardSizeId("9:16") === "9x16", "aspect 9:16 → 9x16");
+
+const mergedSimple = mergeSimpleProductCardPromptsWithDefaults(null);
+const structured = structureSimpleCardUserText(
+  "Заголовок\nПодзаг\nФраза 1\nФраза 2\nФраза 3",
+  mergedSimple.prompts.maxKeyPhrases,
+);
+assert(structured.headline === "Заголовок", "user text headline");
+assert(structured.keyPhrases.length <= mergedSimple.prompts.maxKeyPhrases, "key phrases limit");
+
+const builtClassic = buildSimpleProductCardPrompt({
+  payload: classicNorm,
+  prompts: SIMPLE_PRODUCT_CARD_PROMPTS_DEFAULTS,
+  aspectRatio: "1:1",
+});
+assert(builtClassic.prompt.includes("Image A = main product image"), "Image A в prompt");
+assert(!builtClassic.prompt.includes("Image B"), "classic без Image B");
+assert(builtClassic.usesReference === false, "builtClassic usesReference false");
+
+const builtRef = buildSimpleProductCardPrompt({
+  payload: classicRefNorm,
+  prompts: SIMPLE_PRODUCT_CARD_PROMPTS_DEFAULTS,
+  aspectRatio: "1:1",
+});
+assert(builtRef.prompt.includes("Image B = style reference"), "Image B при reference");
+assert(builtRef.creativityInstruction != null, "creativity instruction при reference");
+
+// Dimensions / specs detection (TZ cases 1–6)
+const case1 = parseSimpleCardUserText(
+  "Размер 20×30 см. Лёгкий и удобный органайзер для кухни.",
+  4,
+);
+assert(case1.hasDimensionsOrSpecs, "case1: размер 20×30 см detected");
+assert(case1.dimensions.some((d) => d.label === "Size (WxH)"), "case1: WxH label");
+assert(case1.benefits.some((b) => b.includes("органайзер")), "case1: benefit preserved");
+const case1Block = formatConfirmedDimensionsBlock(case1);
+assert(case1Block?.includes("20"), "case1: confirmed block has size");
+
+const case2 = parseSimpleCardUserText("Объём 500 мл. Подходит для ежедневного ухода.", 4);
+assert(case2.hasDimensionsOrSpecs, "case2: volume detected");
+assert(case2.specs.some((s) => s.label === "Volume"), "case2: volume label");
+assert(!case2.dimensions.some((d) => d.label === "Height"), "case2: no fake height");
+
+const case3 = parseSimpleCardUserText("Высота 15 см, ширина 8 см, вес 250 г.", 4);
+assert(case3.dimensions.some((d) => d.label === "Height"), "case3: height");
+assert(case3.dimensions.some((d) => d.label === "Width"), "case3: width");
+assert(case3.specs.some((s) => s.label === "Weight"), "case3: weight");
+
+const case4 = parseSimpleCardUserText("Красивый современный дизайн, удобный для дома.", 4);
+assert(!case4.hasDimensionsOrSpecs, "case4: no dimensions");
+
+const builtCase4 = buildSimpleProductCardPrompt({
+  payload: { ...classicNorm, userText: "Красивый современный дизайн, удобный для дома." },
+  prompts: SIMPLE_PRODUCT_CARD_PROMPTS_DEFAULTS,
+  aspectRatio: "1:1",
+});
+assert(builtCase4.prompt.includes(NO_DIMENSIONS_RULE), "case4: no-dimensions rule in prompt");
+assert(!builtCase4.hasDimensionsOrSpecs, "case4: flag false");
+
+const case6 = parseSimpleCardUserText("Мощность 1200 Вт, объём 1.8 л.", 4);
+assert(case6.specs.some((s) => s.label === "Power"), "case6: power");
+assert(case6.specs.some((s) => s.label === "Volume"), "case6: volume");
+
+const builtCase6 = buildSimpleProductCardPrompt({
+  payload: { ...premiumNorm, userText: "Мощность 1200 Вт, объём 1.8 л." },
+  prompts: SIMPLE_PRODUCT_CARD_PROMPTS_DEFAULTS,
+  aspectRatio: "1:1",
+});
+assert(builtCase6.prompt.includes("DIMENSIONS VISUALIZATION PROMPT"), "case6: dimensions prompt included");
+assert(builtCase6.prompt.includes("CONFIRMED DIMENSIONS / SPECS"), "case6: confirmed block");
+assert(builtCase6.prompt.includes("DIMENSIONS AND MEASUREMENTS RULES"), "global dimensions rules");
+
+assert(
+  SIMPLE_PRODUCT_CARD_PROMPTS_DEFAULTS.dimensionsPrompt.includes("measurement arrows"),
+  "dimensionsPrompt default present",
+);
 
 console.log("[verify-product-card-card-builder] OK");
