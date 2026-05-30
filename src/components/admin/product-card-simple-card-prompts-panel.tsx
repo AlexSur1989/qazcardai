@@ -15,11 +15,16 @@ import { Textarea } from "@/components/ui/textarea";
 const PROMPT_FIELDS: Array<{
   field: keyof Pick<
     SimpleProductCardPromptsSetting,
+    | "megaPromptTemplate"
     | "globalRules"
     | "promptClassic"
     | "promptClassicWithReference"
     | "promptReference"
     | "promptPremium"
+    | "referenceRulesClassicNoRef"
+    | "referenceRulesClassicWithRef"
+    | "referenceRulesReference"
+    | "referenceRulesPremium"
     | "dimensionsPrompt"
     | "negativePrompt"
   >;
@@ -27,9 +32,15 @@ const PROMPT_FIELDS: Array<{
   description: string;
 }> = [
   {
+    field: "megaPromptTemplate",
+    title: "MEGA PROMPT template",
+    description:
+      "Главный шаблон для gpt-image-2. Плейсхолдеры: {{styleMode}}, {{stylePrompt}}, {{referenceRules}}, {{creativityInstruction}}, {{userProvidedContent}}, {{measurementVisualInstructions}}, {{exactRenderText}}, {{styleSpecificVisualRules}}, {{aspectRatio}}, {{layoutPriorityNote}}.",
+  },
+  {
     field: "globalRules",
-    title: "Глобальные правила",
-    description: "Общий блок для всех стилей простой карточки.",
+    title: "Глобальные правила (legacy)",
+    description: "Сохранено для совместимости; основной prompt собирается из MEGA template.",
   },
   {
     field: "promptClassic",
@@ -50,6 +61,26 @@ const PROMPT_FIELDS: Array<{
     field: "promptPremium",
     title: "Премиум стиль",
     description: "Без reference image — только product photo и user text.",
+  },
+  {
+    field: "referenceRulesClassicNoRef",
+    title: "Reference rules: classic без референса",
+    description: "Подставляется в {{referenceRules}} для classic без reference.",
+  },
+  {
+    field: "referenceRulesClassicWithRef",
+    title: "Reference rules: classic + референс",
+    description: "Подставляется в {{referenceRules}} для classic с optional reference.",
+  },
+  {
+    field: "referenceRulesReference",
+    title: "Reference rules: reference mode",
+    description: "Подставляется в {{referenceRules}} для режима reference.",
+  },
+  {
+    field: "referenceRulesPremium",
+    title: "Reference rules: premium",
+    description: "Подставляется в {{referenceRules}} для premium (reference запрещён).",
   },
   {
     field: "dimensionsPrompt",
@@ -154,7 +185,7 @@ export function ProductCardSimpleCardPromptsPanel({
             </div>
           ))}
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
             <div className="space-y-1">
               <Label>maxTextBlocks</Label>
               <input
@@ -167,7 +198,40 @@ export function ProductCardSimpleCardPromptsPanel({
               />
             </div>
             <div className="space-y-1">
-              <Label>maxKeyPhrases</Label>
+              <Label>maxBenefits</Label>
+              <input
+                type="number"
+                className="border-input w-full rounded-md border px-2 py-1 text-sm"
+                value={state.maxBenefits ?? state.maxKeyPhrases}
+                onChange={(e) =>
+                  setState((s) => ({ ...s, maxBenefits: Number(e.target.value) || 3 }))
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>maxSpecs</Label>
+              <input
+                type="number"
+                className="border-input w-full rounded-md border px-2 py-1 text-sm"
+                value={state.maxSpecs ?? 4}
+                onChange={(e) =>
+                  setState((s) => ({ ...s, maxSpecs: Number(e.target.value) || 4 }))
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>maxPackageItems</Label>
+              <input
+                type="number"
+                className="border-input w-full rounded-md border px-2 py-1 text-sm"
+                value={state.maxPackageItems ?? 4}
+                onChange={(e) =>
+                  setState((s) => ({ ...s, maxPackageItems: Number(e.target.value) || 4 }))
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>maxKeyPhrases (legacy)</Label>
               <input
                 type="number"
                 className="border-input w-full rounded-md border px-2 py-1 text-sm"

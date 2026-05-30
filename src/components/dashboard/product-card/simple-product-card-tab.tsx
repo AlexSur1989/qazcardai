@@ -650,8 +650,8 @@ export function SimpleProductCardTab({
           <CardHeader>
             <CardTitle className="text-base">Какой текст хотите видеть на карточке?</CardTitle>
             <CardDescription>
-              AI предложит текст по фото — вы можете оставить или изменить. Напишите преимущества, заголовок,
-              подзаголовок или любые фразы. Размеры укажите прямо в тексте: «размер 20×30 см», «объём 500 мл».
+              Напишите свободно: название, преимущества, размеры, объём, вес, материал, комплектацию, скидку,
+              доставку или гарантию. AI сам разложит это по карточке.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -667,13 +667,16 @@ export function SimpleProductCardTab({
                 userTextTouchedRef.current = true;
                 setUserText(e.target.value);
               }}
-              placeholder="Например: Лёгкий и удобный. Подходит для ежедневного использования. Современный дизайн. Прочный материал."
+              placeholder="Например: Джойстик для PlayStation. Не боится падений. Размер 60×27×32 мм. Доставка по Алматы."
               rows={5}
               maxLength={SIMPLE_CARD_USER_TEXT_MAX}
               className="resize-y"
             />
-            <div className="text-muted-foreground flex justify-between text-xs">
-              <span>AI красиво покажет указанные размеры стрелками, линиями или плашками на карточке</span>
+            <div className="text-muted-foreground flex justify-between gap-3 text-xs">
+              <span>
+                AI сам разложит текст по карточке: размеры покажет стрелками, преимущества — плашками,
+                характеристики — аккуратным блоком.
+              </span>
               <span>
                 {textLen} / {SIMPLE_CARD_USER_TEXT_MAX}
               </span>

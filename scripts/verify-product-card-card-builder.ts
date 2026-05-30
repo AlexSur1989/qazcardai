@@ -59,6 +59,10 @@ import {
   mergeSimpleCardProductLabelIntoUserText,
   visionAnalysisToSimpleCardSuggestions,
 } from "@/lib/simple-product-card-vision-text";
+import {
+  parseSimpleProductCardContent,
+  hasConfirmedMeasurements,
+} from "@/lib/simple-product-card-parsed-content";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -931,6 +935,7 @@ const builtClassic = buildSimpleProductCardPrompt({
   aspectRatio: "1:1",
 });
 assert(builtClassic.prompt.includes("Image A = main product image"), "Image A в prompt");
+assert(builtClassic.prompt.includes("USER PROVIDED CONTENT"), "structured USER PROVIDED CONTENT");
 assert(!builtClassic.prompt.includes("Image B"), "classic без Image B");
 assert(builtClassic.usesReference === false, "builtClassic usesReference false");
 
@@ -971,7 +976,7 @@ const builtCase4 = buildSimpleProductCardPrompt({
   prompts: SIMPLE_PRODUCT_CARD_PROMPTS_DEFAULTS,
   aspectRatio: "1:1",
 });
-assert(builtCase4.prompt.includes(NO_DIMENSIONS_RULE), "case4: no-dimensions rule in prompt");
+assert(builtCase4.prompt.includes("No confirmed measurements were provided"), "case4: no-dimensions rule in prompt");
 assert(!builtCase4.hasDimensionsOrSpecs, "case4: flag false");
 
 const case6 = parseSimpleCardUserText("Мощность 1200 Вт, объём 1.8 л.", 4);
@@ -984,8 +989,8 @@ const builtCase6 = buildSimpleProductCardPrompt({
   aspectRatio: "1:1",
 });
 assert(builtCase6.prompt.includes("DIMENSIONS VISUALIZATION PROMPT"), "case6: dimensions prompt included");
-assert(builtCase6.prompt.includes("CONFIRMED DIMENSIONS / SPECS"), "case6: confirmed block");
-assert(builtCase6.prompt.includes("DIMENSIONS AND MEASUREMENTS RULES"), "global dimensions rules");
+assert(builtCase6.prompt.includes("CONFIRMED SPECS:"), "case6: confirmed specs block");
+assert(builtCase6.prompt.includes("power: 1200"), "case6: power in structured content");
 
 assert(
   SIMPLE_PRODUCT_CARD_PROMPTS_DEFAULTS.dimensionsPrompt.includes("measurement arrows"),
@@ -1024,5 +1029,116 @@ assert(
   mergeSimpleCardProductLabelIntoUserText("Clear Men", "Clear Men\nПротив перхоти") === "Clear Men\nПротив перхоти",
   "merge без дубля названия",
 );
+
+// --- MEGA PROMPT BUILDER (simple product card) ---
+
+function assertMegaPrompt(label: string, userText: string, checks: {
+  mustContain: string[];
+  mustNotContain: string[];
+}) {
+  const payload = normalizeSimpleCardPayload({
+    productPhotoId: "p1",
+    userText,
+    styleMode: "classic",
+    useReference: false,
+    aspectRatio: "1:1",
+  });
+  const built = buildSimpleProductCardPrompt({
+    payload,
+    prompts: SIMPLE_PRODUCT_CARD_PROMPTS_DEFAULTS,
+    aspectRatio: "1:1",
+  });
+  const p = built.prompt;
+  for (const s of checks.mustContain) {
+    assert(p.includes(s), `${label}: prompt contains "${s.slice(0, 60)}"`);
+  }
+  for (const s of checks.mustNotContain) {
+    assert(!p.includes(s), `${label}: prompt must NOT contain "${s.slice(0, 60)}"`);
+  }
+}
+
+const joystickParsed = parseSimpleProductCardContent(
+  "Джойстик для PlayStation. Крутой. Не боится падений. Размер 60×27×32 мм. Доставка по Алматы.",
+);
+assert(joystickParsed.headline?.includes("Джойстик"), "joystick: headline");
+assert(joystickParsed.benefits.length >= 2, "joystick: benefits");
+assert(hasConfirmedMeasurements(joystickParsed.measurements), "joystick: measurements");
+assert(joystickParsed.measurements.width?.includes("60"), "joystick: width 60");
+assert(joystickParsed.delivery.length >= 1, "joystick: delivery");
+
+assertMegaPrompt("joystick", "Джойстик для PlayStation. Крутой. Не боится падений. Размер 60×27×32 мм. Доставка по Алматы.", {
+  mustContain: [
+    "USER PROVIDED CONTENT",
+    "HEADLINE:",
+    "Джойстик для PlayStation",
+    "BENEFITS:",
+    "Крутой",
+    "CONFIRMED MEASUREMENTS:",
+    "width: 60",
+    "height: 27",
+    "depth: 32",
+    "DELIVERY:",
+    "Доставка по Алматы",
+    "MEASUREMENT VISUAL INSTRUCTIONS",
+    "Do NOT show all dimensions only inside one bottom badge",
+    "Render exactly:",
+    "Джойстик для PlayStation",
+  ],
+  mustNotContain: ["one bottom badge only"],
+});
+
+const creamParsed = parseSimpleProductCardContent(
+  "Крем для рук. Объём 50 мл. Ежедневный уход. Нежная текстура.",
+);
+assert(creamParsed.specs.volume?.includes("50"), "cream: volume 50 ml");
+assertMegaPrompt("cream", "Крем для рук. Объём 50 мл. Ежедневный уход. Нежная текстура.", {
+  mustContain: ["CONFIRMED SPECS:", "volume: 50", "Ежедневный уход", "Нежная текстура"],
+  mustNotContain: ["CONFIRMED MEASUREMENTS:\n- width", "MEASUREMENT VISUAL INSTRUCTIONS:\n- Show width"],
+});
+
+const blenderParsed = parseSimpleProductCardContent(
+  "Портативный блендер. Мощность 1200 Вт. Объём 500 мл. USB-C. Скидка 20%.",
+);
+assert(blenderParsed.specs.power?.includes("1200"), "blender: power");
+assert(blenderParsed.offer.discount?.includes("20"), "blender: discount");
+assertMegaPrompt("blender", "Портативный блендер. Мощность 1200 Вт. Объём 500 мл. USB-C. Скидка 20%.", {
+  mustContain: ["power: 1200", "volume: 500", "USB-C", "OFFER / PROMO:", "Скидка 20%"],
+  mustNotContain: ["гарантия", "доставка"],
+});
+
+const backpackParsed = parseSimpleProductCardContent(
+  "Детский рюкзак. Для школы. В комплекте пенал. Размер 30×40×12 см.",
+);
+assert(backpackParsed.targetAudience.some((t) => t.includes("школ")), "backpack: audience");
+assert(backpackParsed.packageContents.length >= 1, "backpack: package");
+assert(hasConfirmedMeasurements(backpackParsed.measurements), "backpack: measurements");
+assertMegaPrompt("backpack", "Детский рюкзак. Для школы. В комплекте пенал. Размер 30×40×12 см.", {
+  mustContain: [
+    "TARGET AUDIENCE",
+    "Для школы",
+    "PACKAGE CONTENTS",
+    "пенал",
+    "width: 30",
+    "height: 40",
+    "depth: 12",
+  ],
+  mustNotContain: [],
+});
+
+const noDimParsed = parseSimpleProductCardContent("Современный дизайн. Удобный для дома.");
+assert(!hasConfirmedMeasurements(noDimParsed.measurements), "no-dim: no measurements");
+assertMegaPrompt("no-dim", "Современный дизайн. Удобный для дома.", {
+  mustContain: ["BENEFITS:", "Современный дизайн", "No confirmed measurements were provided"],
+  mustNotContain: ["CONFIRMED MEASUREMENTS:\n- width", "Show width ("],
+});
+
+const builtMegaClassic = buildSimpleProductCardPrompt({
+  payload: classicNorm,
+  prompts: SIMPLE_PRODUCT_CARD_PROMPTS_DEFAULTS,
+  aspectRatio: "1:1",
+});
+assert(builtMegaClassic.prompt.includes("USER PROVIDED CONTENT"), "mega prompt: structured content block");
+assert(builtMegaClassic.prompt.includes("Image A = main product image"), "mega prompt: Image A");
+assert(!builtMegaClassic.prompt.includes("Image B"), "mega classic без Image B");
 
 console.log("[verify-product-card-card-builder] OK");

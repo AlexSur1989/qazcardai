@@ -22,11 +22,16 @@ export const simpleProductCardPromptsSettingSchema = z
   .object({
     version: z.string().trim().min(3).max(64),
     enabled: z.boolean(),
+    megaPromptTemplate: Z_PROMPT,
     globalRules: Z_PROMPT,
     promptClassic: Z_PROMPT,
     promptClassicWithReference: Z_PROMPT,
     promptReference: Z_PROMPT,
     promptPremium: Z_PROMPT,
+    referenceRulesClassicNoRef: Z_PROMPT,
+    referenceRulesClassicWithRef: Z_PROMPT,
+    referenceRulesReference: Z_PROMPT,
+    referenceRulesPremium: Z_PROMPT,
     dimensionsPrompt: Z_PROMPT,
     negativePrompt: Z_PROMPT,
     creativityBands: z.array(Z_CREATIVITY_BAND).min(1).max(10),
@@ -34,11 +39,22 @@ export const simpleProductCardPromptsSettingSchema = z
     defaultStyleMode: z.enum(["classic", "reference", "premium"]),
     maxTextBlocks: z.number().int().min(1).max(20),
     maxKeyPhrases: z.number().int().min(1).max(12),
+    maxBenefits: z.number().int().min(1).max(12).optional(),
+    maxSpecs: z.number().int().min(1).max(12).optional(),
+    maxPackageItems: z.number().int().min(1).max(12).optional(),
+    maxUsageSteps: z.number().int().min(1).max(12).optional(),
     requireText: z.boolean(),
     preserveProductIdentity: z.boolean(),
     referenceEnabled: z.boolean(),
   })
-  .strict();
+  .strict()
+  .transform((data) => ({
+    ...data,
+    maxBenefits: data.maxBenefits ?? data.maxKeyPhrases,
+    maxSpecs: data.maxSpecs ?? 4,
+    maxPackageItems: data.maxPackageItems ?? 4,
+    maxUsageSteps: data.maxUsageSteps ?? 3,
+  }));
 
 export function mergeSimpleProductCardPromptsWithDefaults(raw: unknown): {
   prompts: SimpleProductCardPromptsSetting;

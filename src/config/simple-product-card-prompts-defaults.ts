@@ -1,4 +1,12 @@
-export const SIMPLE_PRODUCT_CARD_PROMPTS_SETTING_VERSION = "simple_product_card_prompts_v2" as const;
+export const SIMPLE_PRODUCT_CARD_PROMPTS_SETTING_VERSION = "simple_product_card_prompts_v3" as const;
+
+import {
+  SIMPLE_CARD_MEGA_PROMPT_TEMPLATE,
+  SIMPLE_CARD_REFERENCE_RULES_CLASSIC_NO_REF,
+  SIMPLE_CARD_REFERENCE_RULES_CLASSIC_WITH_REF,
+  SIMPLE_CARD_REFERENCE_RULES_PREMIUM,
+  SIMPLE_CARD_REFERENCE_RULES_REFERENCE,
+} from "@/lib/simple-product-card-mega-prompt-template";
 
 export type SimpleProductCardCreativityBand = {
   min: number;
@@ -9,11 +17,17 @@ export type SimpleProductCardCreativityBand = {
 export type SimpleProductCardPromptsSetting = {
   version: typeof SIMPLE_PRODUCT_CARD_PROMPTS_SETTING_VERSION | string;
   enabled: boolean;
+  /** MEGA PROMPT template с плейсхолдерами {{styleMode}}, {{userProvidedContent}} и др. */
+  megaPromptTemplate: string;
   globalRules: string;
   promptClassic: string;
   promptClassicWithReference: string;
   promptReference: string;
   promptPremium: string;
+  referenceRulesClassicNoRef: string;
+  referenceRulesClassicWithRef: string;
+  referenceRulesReference: string;
+  referenceRulesPremium: string;
   dimensionsPrompt: string;
   negativePrompt: string;
   creativityBands: SimpleProductCardCreativityBand[];
@@ -21,6 +35,10 @@ export type SimpleProductCardPromptsSetting = {
   defaultStyleMode: string;
   maxTextBlocks: number;
   maxKeyPhrases: number;
+  maxBenefits: number;
+  maxSpecs: number;
+  maxPackageItems: number;
+  maxUsageSteps: number;
   requireText: boolean;
   preserveProductIdentity: boolean;
   referenceEnabled: boolean;
@@ -298,25 +316,41 @@ Do not turn premium design into a boring engineering drawing.
 Best result:
 A premium advertising-style product card with strong visual appeal and clean readable text.`;
 
-const NEGATIVE_PROMPT = `Do not change product identity.
-Do not alter logo, label, packaging, shape, color, proportions or visible product text.
-Do not invent product features, materials, dimensions, ingredients, compatibility, warranty, certificates, safety claims, medical claims, health claims, ratings, discounts or marketplace badges.
-Do not add extra accessories or bundle items unless user provided them.
-Do not copy reference image text, brands, logos or watermarks.
-Do not create unreadable tiny text.
-Do not overload the design.
-Do not translate or distort Russian/Kazakh text.
-Do not create fake before/after results.
-Do not add dangerous or misleading usage claims.
+const NEGATIVE_PROMPT = `NEGATIVE PROMPT
 
+Do not change product identity.
+Do not replace the product.
+Do not alter logo, label, packaging, shape, color, proportions or visible product text.
+Do not invent product features.
+Do not invent benefits.
 Do not invent measurements.
-Do not invent size, height, width, depth, volume, capacity, weight or numeric specs.
-Do not estimate dimensions from the image.
-Do not create measurement arrows with fake values.
-Do not copy measurements from the reference image unless they were provided by the user.
-Do not add technical specs that are not in user text or verified facts.
-Do not add unreadable tiny measurement labels.
-Do not place dimension lines in a way that hides the product.`;
+Do not invent specs.
+Do not invent materials.
+Do not invent ingredients.
+Do not invent compatibility.
+Do not invent warranty.
+Do not invent certificates.
+Do not invent delivery.
+Do not invent discounts.
+Do not invent prices.
+Do not invent ratings.
+Do not invent marketplace badges.
+Do not invent “official”, “original”, “best seller”, “№1”, “doctor recommended”, “safe”, “organic”, “eco”.
+Do not add extra accessories or bundle items unless user provided them.
+Do not copy text, logos, badges, watermarks or numbers from reference image.
+Do not put all dimensions only in one bottom badge.
+Do not mix dimensions with benefit badges.
+Do not create measurement lines without confirmed measurements.
+Do not estimate size from image.
+Do not make measurement labels tiny or unreadable.
+Do not overload the card with text.
+Do not create fake Cyrillic words.
+Do not misspell Russian or Kazakh text.
+Do not translate user-provided text.
+Do not rewrite brand names.
+Do not crop product badly.
+Do not hide product behind text panels.
+Do not create cluttered composition.`;
 
 const DIMENSIONS_PROMPT = `DIMENSIONS VISUALIZATION PROMPT
 
@@ -389,11 +423,16 @@ const CREATIVITY_BANDS: SimpleProductCardCreativityBand[] = [
 export const SIMPLE_PRODUCT_CARD_PROMPTS_DEFAULTS: SimpleProductCardPromptsSetting = {
   version: SIMPLE_PRODUCT_CARD_PROMPTS_SETTING_VERSION,
   enabled: true,
+  megaPromptTemplate: SIMPLE_CARD_MEGA_PROMPT_TEMPLATE,
   globalRules: GLOBAL_RULES,
   promptClassic: PROMPT_CLASSIC,
   promptClassicWithReference: PROMPT_CLASSIC_WITH_REFERENCE,
   promptReference: PROMPT_REFERENCE,
   promptPremium: PROMPT_PREMIUM,
+  referenceRulesClassicNoRef: SIMPLE_CARD_REFERENCE_RULES_CLASSIC_NO_REF,
+  referenceRulesClassicWithRef: SIMPLE_CARD_REFERENCE_RULES_CLASSIC_WITH_REF,
+  referenceRulesReference: SIMPLE_CARD_REFERENCE_RULES_REFERENCE,
+  referenceRulesPremium: SIMPLE_CARD_REFERENCE_RULES_PREMIUM,
   dimensionsPrompt: DIMENSIONS_PROMPT,
   negativePrompt: NEGATIVE_PROMPT,
   creativityBands: CREATIVITY_BANDS,
@@ -401,6 +440,10 @@ export const SIMPLE_PRODUCT_CARD_PROMPTS_DEFAULTS: SimpleProductCardPromptsSetti
   defaultStyleMode: "classic",
   maxTextBlocks: 6,
   maxKeyPhrases: 4,
+  maxBenefits: 3,
+  maxSpecs: 4,
+  maxPackageItems: 4,
+  maxUsageSteps: 3,
   requireText: true,
   preserveProductIdentity: true,
   referenceEnabled: true,
