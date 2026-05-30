@@ -6,6 +6,11 @@ import {
   defaultKieCallBackUrl,
   isStrictKiePayloadMapping,
 } from "@/server/services/kiePayloadMapping";
+import {
+  parseGeminiOmniVideoList,
+  isGeminiOmniVideoModelId,
+} from "@/server/services/gemini-omni-settings";
+import { publicHttpUrlsOnly } from "@/lib/generation-input-limits";
 
 const DEFAULT_KIE_FETCH_TIMEOUT_MS = 120_000;
 
@@ -97,6 +102,11 @@ export type NormalizedKieImageResult = {
   taskId?: string;
   imageUrls?: string[];
   videoUrls?: string[];
+  /** Gemini Omni Audio sync: kieAudioId для audio_ids в video. */
+  omniAudioId?: string;
+  /** Gemini Omni Character sync: characterId для character_ids в video. */
+  omniCharacterId?: string;
+  omniCharacterImageUrl?: string;
   rawResponse: unknown;
   errorMessage?: string;
 };
@@ -214,10 +224,22 @@ export function normalizeResponse(
   let taskId: string | undefined;
   let imageUrls: string[] | undefined;
   let videoUrls: string[] | undefined;
+  let omniAudioId: string | undefined;
+  let omniCharacterId: string | undefined;
+  let omniCharacterImageUrl: string | undefined;
 
   if (isRecord(data)) {
     if (typeof data.taskId === "string" && data.taskId) taskId = data.taskId;
     if (typeof data.task_id === "string" && data.task_id) taskId = data.task_id;
+    if (typeof data.kieAudioId === "string" && data.kieAudioId.trim()) {
+      omniAudioId = data.kieAudioId.trim();
+    }
+    if (typeof data.characterId === "string" && data.characterId.trim()) {
+      omniCharacterId = data.characterId.trim();
+    }
+    if (typeof data.imageUrl === "string" && data.imageUrl.trim()) {
+      omniCharacterImageUrl = data.imageUrl.trim();
+    }
     if (Array.isArray(data.imageUrls) && data.imageUrls.every((u) => typeof u === "string")) {
       imageUrls = data.imageUrls;
     } else if (Array.isArray(data.images) && data.images.every((u) => typeof u === "string")) {
@@ -283,7 +305,10 @@ export function normalizeResponse(
   const hasMedia = Boolean(
     (imageUrls && imageUrls.length > 0) || (videoUrls && videoUrls.length > 0),
   );
-  const success = Boolean((taskId && taskId.length > 0) || hasMedia);
+  const hasOmniIds = Boolean(omniAudioId || omniCharacterId);
+  const success = Boolean(
+    (taskId && taskId.length > 0) || hasMedia || hasOmniIds,
+  );
   if (!success) {
     return {
       ...base,
@@ -297,6 +322,9 @@ export function normalizeResponse(
     taskId,
     imageUrls,
     videoUrls,
+    omniAudioId,
+    omniCharacterId,
+    omniCharacterImageUrl,
   };
 }
 
@@ -456,6 +484,8 @@ export type KieVideoGenerateInput = {
   marketCreateBody?: JsonRecord;
   /** Veo get-1080p-video: GET с query taskId (без JSON-тела). */
   veoGet1080pTaskId?: string;
+  /** Gemini Omni audio/character: плоское тело POST на omni/* (без createTask). */
+  omniSyncBody?: JsonRecord;
   prompt?: string;
   negativePrompt?: string | null;
   aspectRatio?: string | null;
@@ -1456,6 +1486,72 @@ function buildSora2ProStoryboardMarketCreateTaskPayload(
 /**
  * Тело POST для Kie Market /api/v1/jobs/createTask (без секретов в логах — отдельно redact).
  */
+export function buildGeminiOmniVideoMarketCreateTaskPayload(
+  prompt: string,
+  model: { apiModelId: string; payloadMapping: unknown },
+  settings: Record<string, unknown>,
+  inputFiles: string[] = [],
+): JsonRecord {
+  if (!isStrictKiePayloadMapping(model.payloadMapping)) {
+    throw new Error("gemini-omni-video: strict payloadMapping required");
+  }
+  const base = buildKieMarketPayloadFromMapping(model.payloadMapping, {
+    model: { apiModelId: model.apiModelId },
+    prompt: prompt.trim(),
+    settings,
+    inputFiles,
+    callBackUrl: defaultKieCallBackUrl(),
+  });
+  const videoList = parseGeminiOmniVideoList(settings.videoList);
+  if (videoList.length > 0) {
+    (base.input as JsonRecord).video_list = videoList.map(
+      ({ url, start, ends }) => ({ url, start, ends }),
+    );
+  }
+  return base;
+}
+
+function geminiOmniStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((x): x is string => typeof x === "string")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function buildGeminiOmniAudioSyncBody(
+  settings: Record<string, unknown>,
+): JsonRecord {
+  const body: JsonRecord = {
+    audio_id: String(settings.audioId ?? "").trim(),
+    name: String(settings.name ?? "").trim(),
+  };
+  const voiceDescription = String(settings.voiceDescription ?? "").trim();
+  if (voiceDescription) body.voice_description = voiceDescription;
+  const exampleDialogue = String(settings.exampleDialogue ?? "").trim();
+  if (exampleDialogue) body.example_dialogue = exampleDialogue;
+  return body;
+}
+
+export function buildGeminiOmniCharacterSyncBody(
+  settings: Record<string, unknown>,
+  inputFiles: string[] = [],
+): JsonRecord {
+  const fromSettings = geminiOmniStringList(settings.imageUrls);
+  const imageUrls = publicHttpUrlsOnly(
+    fromSettings.length > 0 ? fromSettings : inputFiles,
+  );
+  const body: JsonRecord = {
+    descriptions: String(settings.descriptions ?? "").trim(),
+    image_urls: imageUrls.slice(0, 1),
+  };
+  const audioIds = geminiOmniStringList(settings.audioIds);
+  if (audioIds.length > 0) body.audio_ids = audioIds;
+  const characterName = String(settings.characterName ?? "").trim();
+  if (characterName) body.character_name = characterName;
+  return body;
+}
+
 export function buildKieMarketCreateTaskPayload(
   prompt: string,
   model: { apiModelId: string; payloadMapping: unknown },
@@ -1463,6 +1559,14 @@ export function buildKieMarketCreateTaskPayload(
   inputFiles: string[] = [],
 ): JsonRecord {
   const modelId = assertKieModelIdSet(model.apiModelId);
+  if (isGeminiOmniVideoModelId(modelId)) {
+    return buildGeminiOmniVideoMarketCreateTaskPayload(
+      prompt,
+      model,
+      settings,
+      inputFiles,
+    );
+  }
   if (isStrictKiePayloadMapping(model.payloadMapping)) {
     const normalized = normalizeGptImage2AspectIfOmittedForKie(
       modelId,
@@ -1633,6 +1737,9 @@ export function buildKieVideoRequestBodyForLog(input: KieVideoGenerateInput): Js
       taskId: input.veoGet1080pTaskId.trim(),
     } as JsonRecord;
   }
+  if (input.omniSyncBody) {
+    return input.omniSyncBody;
+  }
   if (input.marketCreateBody) {
     return input.marketCreateBody;
   }
@@ -1647,6 +1754,13 @@ export function getKieVideoGenerateRequestUrl(input: KieVideoGenerateInput): str
     );
     const sep = baseUrl.includes("?") ? "&" : "?";
     return `${baseUrl}${sep}taskId=${encodeURIComponent(tid)}`;
+  }
+  if (input.omniSyncBody) {
+    return resolveKieRequestUrl(
+      getKieBaseUrl(),
+      input.endpoint,
+      "/api/v1/omni/audio/create",
+    );
   }
   if (input.marketCreateBody) {
     return getKieJobsCreateTaskUrl(input.endpoint);
@@ -1677,6 +1791,54 @@ export async function generateVideo(
           Authorization: `Bearer ${key}`,
           Accept: "application/json",
         },
+      });
+      httpStatus = res.status;
+      text = await res.text();
+    } catch (e) {
+      const aborted = e instanceof Error && e.name === "AbortError";
+      return {
+        success: false,
+        httpStatus: 0,
+        rawResponse: { networkError: true, aborted },
+        errorMessage: aborted
+          ? "Превышено время ожидания ответа провайдера"
+          : e instanceof Error
+            ? e.message
+            : "Сеть / fetch",
+      };
+    }
+    let json: unknown;
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      return {
+        success: false,
+        httpStatus,
+        rawResponse: { parseError: true, textSnippet: text.slice(0, 500) },
+        errorMessage: "Ответ провайдера не JSON",
+      };
+    }
+    if (isDevKieLogEnabled()) {
+      console.log("[KIE response]", { status: res.status, ok: res.ok, data: json });
+    }
+    return normalizeResponse(json, httpStatus);
+  }
+
+  if (input.omniSyncBody) {
+    const url = getKieVideoGenerateRequestUrl(input);
+    const body = stripUndefinedDeep(input.omniSyncBody) as JsonRecord;
+    kieRequestLog(url, body);
+    let httpStatus = 0;
+    let text = "";
+    let res: Response;
+    try {
+      res = await fetchKie(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify(body),
       });
       httpStatus = res.status;
       text = await res.text();

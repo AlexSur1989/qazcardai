@@ -235,6 +235,48 @@ export function DynamicModelSettingsFields({
           );
         }
 
+        if (field.type === "textarea") {
+          const help = sanitizeUserFacingHelpText(field.helpText);
+          return (
+            <div key={field.name} className="space-y-2">
+              <Label htmlFor={id}>{label}</Label>
+              {help ? (
+                <p className="text-muted-foreground text-xs leading-snug">
+                  {help}
+                </p>
+              ) : null}
+              <Textarea
+                id={id}
+                value={typeof val === "string" ? val : ""}
+                onChange={(e) => setDynField(field.name, e.target.value)}
+                rows={4}
+                className="text-sm"
+              />
+            </div>
+          );
+        }
+
+        if (field.type === "text") {
+          const help = sanitizeUserFacingHelpText(field.helpText);
+          return (
+            <div key={field.name} className="space-y-2">
+              <Label htmlFor={id}>{label}</Label>
+              {help ? (
+                <p className="text-muted-foreground text-xs leading-snug">
+                  {help}
+                </p>
+              ) : null}
+              <Input
+                id={id}
+                type="text"
+                value={typeof val === "string" ? val : ""}
+                onChange={(e) => setDynField(field.name, e.target.value)}
+                className="text-sm"
+              />
+            </div>
+          );
+        }
+
         return null;
       })}
     </div>

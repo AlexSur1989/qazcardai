@@ -30,6 +30,15 @@ import {
   type Wan27VideoSlug,
 } from "../src/server/kie/kie-wan-27-video-models";
 import {
+  GEMINI_OMNI_MODELS,
+  type GeminiOmniSlug,
+} from "../src/server/kie/kie-gemini-omni-models";
+import {
+  buildGeminiOmniVideoMarketCreateTaskPayload,
+  buildGeminiOmniAudioSyncBody,
+  buildGeminiOmniCharacterSyncBody,
+} from "../src/server/services/provider/kie";
+import {
   buildKieMarketPayloadFromMapping,
   type KiePayloadMapping,
 } from "../src/server/services/kiePayloadMapping";
@@ -59,6 +68,7 @@ function assertRequiredRegistryCoverage(): void {
   const families = new Set(KIE_GENERAL_MODEL_DEFINITIONS.map((m) => m.familySlug));
   for (const family of [
     "wan-2-7",
+    "gemini-omni",
     "seedance-2",
     "seedance-2-fast",
     "nano-banana-2",
@@ -91,14 +101,29 @@ function assertRequiredRegistryCoverage(): void {
 
 function assertAllRegistryPayloadsBuild(): void {
   for (const def of KIE_GENERAL_MODEL_DEFINITIONS) {
-    const body = bodyFromDefinition(
-      def.apiModelId,
-      def.payloadMapping,
-      settingsForSlug(def.slug, def),
-      promptFixture,
-    );
+    if (def.metadata.kieOmniSync === true) {
+      continue;
+    }
+    const body =
+      def.apiModelId === "gemini-omni-video"
+        ? buildGeminiOmniVideoMarketCreateTaskPayload(
+            promptFixture,
+            def,
+            settingsForSlug(def.slug, def),
+            [],
+          )
+        : bodyFromDefinition(
+            def.apiModelId,
+            def.payloadMapping,
+            settingsForSlug(def.slug, def),
+            promptFixture,
+          );
     assert.equal(body.model, def.apiModelId, `${def.slug}: model`);
-    assert.equal(body.callBackUrl, callBackUrl, `${def.slug}: callBackUrl`);
+    if (def.apiModelId !== "gemini-omni-video") {
+      assert.equal(body.callBackUrl, callBackUrl, `${def.slug}: callBackUrl`);
+    } else {
+      assert.ok(typeof body.callBackUrl === "string" && body.callBackUrl.includes("/api/webhooks/kie"));
+    }
     assert.ok(
       typeof (body.input as { prompt?: unknown }).prompt === "string",
       `${def.slug}: input.prompt`,
@@ -563,6 +588,96 @@ function assertGptResolutionValidationMatrix(): void {
   );
 }
 
+function assertGeminiOmniPayloadSnapshots(): void {
+  const video = GEMINI_OMNI_MODELS.find((m) => m.slug === "gemini-omni-video")!;
+  const baseSettings = {
+    duration: "8",
+    aspectRatio: "16:9",
+    resolution: "720p",
+    imageUrls: ["https://example.com/a.png"],
+    audioIds: ["audio_fixture"],
+    characterIds: ["char_fixture"],
+    videoList: '[{"url":"https://example.com/v.mp4","start":0,"ends":8}]',
+  };
+  const body = buildGeminiOmniVideoMarketCreateTaskPayload(
+    promptFixture,
+    video,
+    baseSettings,
+    [],
+  );
+  assert.equal(body.model, "gemini-omni-video");
+  assert.deepStrictEqual(body.input, {
+    prompt: promptFixture,
+    image_urls: ["https://example.com/a.png"],
+    audio_ids: ["audio_fixture"],
+    character_ids: ["char_fixture"],
+    duration: "8",
+    aspect_ratio: "16:9",
+    resolution: "720p",
+    video_list: [{ url: "https://example.com/v.mp4", start: 0, ends: 8 }],
+  });
+  assert.ok(!("input_urls" in (body.input as object)));
+
+  assert.equal(
+    validateStrictKieMarketPayload(video, promptFixture, {
+      ...baseSettings,
+      imageUrls: Array.from({ length: 8 }, (_, i) => `https://example.com/${i}.png`),
+      videoList: "[]",
+      characterIds: [],
+    }).ok,
+    false,
+    "quota overflow rejected",
+  );
+
+  const audio = GEMINI_OMNI_MODELS.find((m) => m.slug === "gemini-omni-audio")!;
+  const audioBody = buildGeminiOmniAudioSyncBody({
+    audioId: "achernar",
+    name: "Test Voice",
+    voiceDescription: "calm",
+    exampleDialogue: "Hello",
+  });
+  assert.deepStrictEqual(audioBody, {
+    audio_id: "achernar",
+    name: "Test Voice",
+    voice_description: "calm",
+    example_dialogue: "Hello",
+  });
+  assert.equal(
+    validateStrictKieMarketPayload(audio, "", {
+      audioId: "achernar",
+      name: "N",
+    }).ok,
+    true,
+  );
+
+  const character = GEMINI_OMNI_MODELS.find(
+    (m) => m.slug === "gemini-omni-character",
+  )!;
+  const charBody = buildGeminiOmniCharacterSyncBody(
+    {
+      descriptions: "cyberpunk hero",
+      imageUrls: ["https://example.com/char.png"],
+      audioIds: ["audio_fixture"],
+      characterName: "Jenny",
+    },
+    [],
+  );
+  assert.deepStrictEqual(charBody, {
+    descriptions: "cyberpunk hero",
+    image_urls: ["https://example.com/char.png"],
+    audio_ids: ["audio_fixture"],
+    character_name: "Jenny",
+  });
+  assert.ok(!("prompt" in charBody));
+  assert.ok(!("model" in charBody));
+
+  for (const slug of ["gemini-omni-video", "gemini-omni-audio", "gemini-omni-character"] as const) {
+    const row = GEMINI_OMNI_MODELS.find((m) => m.slug === slug)!;
+    assert.strictEqual(row.metadata.publicReady, false, `${slug}: publicReady=false`);
+    assert.strictEqual(row.metadata.requiresManualKieTest, true, `${slug}: manual test`);
+  }
+}
+
 const SETTINGS_FOR_DB_BUILD: Record<
   string,
   Record<string, unknown>
@@ -658,6 +773,24 @@ const SETTINGS_FOR_DB_BUILD: Record<
     watermark: false,
     seed: 123,
     nsfwChecker: true,
+  },
+  "gemini-omni-video": {
+    duration: "8",
+    aspectRatio: "16:9",
+    resolution: "720p",
+    imageUrls: ["https://example.com/a.png"],
+    videoList: "[]",
+  },
+  "gemini-omni-audio": {
+    audioId: "achernar",
+    name: "Fixture Voice",
+    voiceDescription: "calm narrator",
+    exampleDialogue: "Hello",
+  },
+  "gemini-omni-character": {
+    descriptions: "silver hair cyberpunk character",
+    imageUrls: ["https://example.com/char.png"],
+    characterName: "Fixture",
   },
 };
 
@@ -908,6 +1041,7 @@ async function assertDatabase(): Promise<void> {
 async function main() {
   assertRequiredRegistryCoverage();
   assertPayloadSnapshots();
+  assertGeminiOmniPayloadSnapshots();
   assertAllRegistryPayloadsBuild();
   assertGptResolutionValidationMatrix();
   const hhSmoke = HAPPYHORSE_MODELS.find(

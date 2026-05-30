@@ -3,6 +3,7 @@ import type { KiePayloadMapping } from "@/server/services/kiePayloadMapping";
 import { GENERAL_PHASE1_MODELS } from "@/server/kie/general-phase1-models";
 import { ADDITIONAL_KIE_GENERAL_MODELS } from "@/server/kie/kie-additional-general-models";
 import { HAPPYHORSE_MODELS } from "@/server/kie/kie-happyhorse-models";
+import { GEMINI_OMNI_MODELS } from "@/server/kie/kie-gemini-omni-models";
 import { WAN_27_VIDEO_MODELS } from "@/server/kie/kie-wan-27-video-models";
 
 export type KieModelDefinition = {
@@ -17,7 +18,7 @@ export type KieModelDefinition = {
   isPublic: boolean;
   apiModelId: string;
   endpoint: string;
-  statusEndpoint: string;
+  statusEndpoint: string | null;
   settingsSchema: Record<string, unknown>;
   payloadMapping: KiePayloadMapping;
   pricingSchema: Record<string, unknown>;
@@ -59,6 +60,7 @@ function familySlugFor(familyName: string): string {
   if (n.includes("gpt image 2")) return "gpt-image-2";
   if (n.includes("kling 2.6")) return "kling-2-6";
   if (n.includes("happyhorse")) return "happyhorse-1-0";
+  if (n.includes("gemini omni")) return "gemini-omni";
   if (n.includes("wan 2.7")) return "wan-2-7";
   if (n.includes("seedance 2.0 fast")) return "seedance-2-fast";
   if (n.includes("seedance 2.0")) return "seedance-2";
@@ -94,6 +96,8 @@ function normalizeDefinition(
     pricingSchema: Record<string, unknown>;
     costCredits: number;
     realCost: number | null;
+    endpoint?: string;
+    statusEndpoint?: string | null;
   },
 ): KieModelDefinition {
   const familyName = String(row.metadata.kieModelFamily ?? row.name);
@@ -108,8 +112,11 @@ function normalizeDefinition(
     productCardModelType: null,
     isPublic: metaWithPublicGate(row.metadata).publicReady === true,
     apiModelId: row.apiModelId,
-    endpoint: "/api/v1/jobs/createTask",
-    statusEndpoint: "/api/v1/jobs/recordInfo",
+    endpoint: row.endpoint ?? "/api/v1/jobs/createTask",
+    statusEndpoint:
+      row.statusEndpoint === undefined
+        ? "/api/v1/jobs/recordInfo"
+        : row.statusEndpoint,
     settingsSchema: row.settingsSchema,
     payloadMapping: row.payloadMapping,
     pricingSchema: row.pricingSchema,
@@ -143,6 +150,7 @@ export const KIE_GENERAL_MODEL_DEFINITIONS: readonly KieModelDefinition[] = [
     }),
   ),
   ...WAN_27_VIDEO_MODELS.map((m) => normalizeDefinition(m)),
+  ...GEMINI_OMNI_MODELS.map((m) => normalizeDefinition(m)),
   ...ADDITIONAL_KIE_GENERAL_MODELS.map((m) => normalizeDefinition(m)),
 ];
 

@@ -312,6 +312,30 @@ export const GENERATION_MODEL_CATALOG: CatalogModelDefinition[] = [
       "from-emerald-500/86 via-teal-600/84 to-cyan-700/87",
   },
   {
+    catalogSlug: "gemini-omni",
+    displayName: "Gemini Omni",
+    providerLabel: "Google",
+    descriptionFallback:
+      "Gemini Omni: мультимодальное видео с референсами, голосами и персонажами.",
+    tasks: ["text_to_video", "image_to_video", "video_to_video"],
+    category: "video",
+    dbSlugCandidates: [
+      "gemini-omni-video",
+      "gemini-omni-audio",
+      "gemini-omni-character",
+    ],
+    familyDbSlugCandidates: [
+      "gemini-omni-video",
+      "gemini-omni-audio",
+      "gemini-omni-character",
+    ],
+    urlSlugForGenerator: "gemini-omni",
+    openBehavior: { kind: "video", querySlug: "gemini-omni" },
+    catalogOpenIsModelHub: true,
+    gradientClass:
+      "from-violet-500/86 via-indigo-600/84 to-blue-700/87",
+  },
+  {
     catalogSlug: "wan-2-6",
     displayName: "Wan 2.6",
     providerLabel: "Alibaba",
@@ -616,6 +640,10 @@ export function buildModelSlugAliasMap(): Record<string, string> {
   map["wan-2-7-i2v"] = "wan-2-7-image-to-video";
   map["wan-2-7-r2v"] = "wan-2-7-r2v";
   map["wan-2-7-edit"] = "wan-2-7-videoedit";
+  map["gemini-omni"] = "gemini-omni-video";
+  map["gemini-omni-video"] = "gemini-omni-video";
+  map["gemini-omni-audio"] = "gemini-omni-audio";
+  map["gemini-omni-character"] = "gemini-omni-character";
   map["wan-2-6"] = "wan-2-6-text-to-video";
   map["wan-2-6-i2v"] = "wan-2-6-image-to-video";
   map["wan-2-6-v2v"] = "wan-2-6-video-to-video";

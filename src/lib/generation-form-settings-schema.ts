@@ -58,6 +58,10 @@ export function defaultsFromSchema(schema: unknown): Record<string, unknown> {
       d[field.name] = false;
     } else if (field.type === "image-upload" || field.type === "url") {
       d[field.name] = "";
+    } else if (field.type === "text" || field.type === "textarea") {
+      d[field.name] = "";
+    } else if (field.type === "text" || field.type === "textarea") {
+      d[field.name] = "";
     } else if (
       field.type === "url-list" ||
       field.type === "upload-list" ||

@@ -35,6 +35,8 @@ import {
   buildKieMarketCreateTaskPayload,
   buildKieRequestBodyForLog,
   buildKieVideoRequestBodyForLog,
+  buildGeminiOmniAudioSyncBody,
+  buildGeminiOmniCharacterSyncBody,
   buildVeo31VideoMarketBody,
   assertKieModelIdSet,
   generateImage,
@@ -47,7 +49,12 @@ import {
   trimKieModelEndpoint,
   type KieImageGenerateInput,
   type KieVideoGenerateInput,
+  type NormalizedKieImageResult,
 } from "@/server/services/provider/kie";
+import {
+  GEMINI_OMNI_AUDIO_API_ID,
+  isGeminiOmniSyncModelId,
+} from "@/server/services/gemini-omni-settings";
 import {
   compositeProductCardMarketplaceOverlayOnImage,
   shouldApplyProductCardMarketplaceOverlay,
@@ -215,6 +222,22 @@ export function buildVideoKieInput(
   const modelId = assertKieModelIdSet(model.apiModelId);
   const ep = trimKieModelEndpoint(model.endpoint);
   const meta = asMeta(gen.metadata);
+
+  if (isGeminiOmniSyncModelId(modelId)) {
+    const rawSettings = isSettingsRecord(meta.settings) ? meta.settings : {};
+    const inputUrls = publicHttpUrlsOnly(parseInputFilesList(gen.inputFiles));
+    const omniSyncBody =
+      modelId === GEMINI_OMNI_AUDIO_API_ID
+        ? buildGeminiOmniAudioSyncBody(rawSettings)
+        : buildGeminiOmniCharacterSyncBody(rawSettings, inputUrls);
+    return {
+      apiModelId: modelId,
+      endpoint: ep,
+      omniSyncBody,
+      prompt: gen.prompt,
+    };
+  }
+
   const httpUrls = publicHttpUrlsOnly(parseInputFilesList(gen.inputFiles));
   const wantsFiles =
     (model.supportsImageInput || model.supportsVideoInput) && httpUrls.length > 0;
@@ -623,6 +646,10 @@ export async function processGenerationJob(
       );
       return;
     }
+    if (result.omniAudioId || result.omniCharacterId) {
+      await completeGeminiOmniSync(gen, result);
+      return;
+    }
     const videoUrls = result.videoUrls?.length
       ? result.videoUrls
       : result.imageUrls && /\.(mp4|webm|mov)/i.test(result.imageUrls[0] ?? "")
@@ -672,6 +699,52 @@ function mergeGenerationMetadataOverlayLayout(
 /**
  * Сохранение результата (S3 при наличии), COMPLETED, confirmCredits. Используется worker и webhook Kie.
  */
+async function completeGeminiOmniSync(
+  gen: Generation,
+  result: NormalizedKieImageResult,
+): Promise<void> {
+  const latest = await prisma.generation.findUnique({
+    where: { id: gen.id },
+    select: { status: true, metadata: true },
+  });
+  if (!latest || TERMINAL.has(latest.status)) return;
+
+  const prevMeta = asMeta(latest.metadata);
+  const kieOmniResult: Record<string, unknown> = {};
+  if (result.omniAudioId) kieOmniResult.kieAudioId = result.omniAudioId;
+  if (result.omniCharacterId) kieOmniResult.characterId = result.omniCharacterId;
+  if (result.omniCharacterImageUrl) {
+    kieOmniResult.imageUrl = result.omniCharacterImageUrl;
+  }
+
+  const outputFiles: Prisma.InputJsonValue = [
+    {
+      kind: "gemini_omni_sync",
+      ...kieOmniResult,
+    },
+  ];
+
+  await prisma.generation.update({
+    where: { id: gen.id },
+    data: {
+      status: "COMPLETED",
+      completedAt: new Date(),
+      metadata: {
+        ...prevMeta,
+        kieOmniResult,
+      } as Prisma.InputJsonValue,
+      outputFiles,
+    },
+  });
+
+  try {
+    await confirmCredits(gen.id);
+  } catch {
+    // идемпотентность
+  }
+  void trySendGenerationCompletedEmail(gen.id);
+}
+
 export async function completeWithOutput(
   gen: Generation,
   type: "IMAGE" | "VIDEO",

@@ -7,6 +7,20 @@ import {
   generalKieDefinitionByApiModelId,
 } from "@/server/kie/kie-general-model-definitions";
 import { validateHappyHorseSettings } from "@/server/services/happyhorse-settings";
+import {
+  buildGeminiOmniAudioSyncBody,
+  buildGeminiOmniCharacterSyncBody,
+  buildGeminiOmniVideoMarketCreateTaskPayload,
+} from "@/server/services/provider/kie";
+import {
+  validateGeminiOmniAudioSettings,
+  validateGeminiOmniCharacterSettings,
+  validateGeminiOmniVideoSettings,
+  isGeminiOmniSyncModelId,
+  isGeminiOmniVideoModelId,
+  GEMINI_OMNI_AUDIO_API_ID,
+  GEMINI_OMNI_CHARACTER_API_ID,
+} from "@/server/services/gemini-omni-settings";
 import { buildKieMarketPayloadFromMapping, isStrictKiePayloadMapping } from "@/server/services/kiePayloadMapping";
 import { validateWan27ModelScenario } from "@/server/services/wan-settings";
 
@@ -162,6 +176,31 @@ export function validateStrictKieMarketPayload(
   const wan = validateWan27ModelScenario(modelId, settings);
   if (!wan.ok) return wan;
 
+  const omniVideo = validateGeminiOmniVideoSettings(modelId, settings);
+  if (!omniVideo.ok) return omniVideo;
+
+  const omniAudio = validateGeminiOmniAudioSettings(modelId, settings);
+  if (!omniAudio.ok) return omniAudio;
+
+  const omniCharacter = validateGeminiOmniCharacterSettings(modelId, settings);
+  if (!omniCharacter.ok) return omniCharacter;
+
+  if (isGeminiOmniSyncModelId(modelId)) {
+    try {
+      if (modelId === GEMINI_OMNI_AUDIO_API_ID) {
+        buildGeminiOmniAudioSyncBody(settings);
+      } else if (modelId === GEMINI_OMNI_CHARACTER_API_ID) {
+        buildGeminiOmniCharacterSyncBody(settings, inputFiles);
+      }
+      return { ok: true };
+    } catch (e) {
+      return {
+        ok: false,
+        message: e instanceof Error ? e.message : "Некорректные настройки Gemini Omni",
+      };
+    }
+  }
+
   if (!isStrictKiePayloadMapping(model.payloadMapping)) {
     if (phase1SlugByApiModelId(modelId) != null) {
       return {
@@ -185,6 +224,15 @@ export function validateStrictKieMarketPayload(
       modelId,
       settings,
     );
+    if (isGeminiOmniVideoModelId(modelId)) {
+      buildGeminiOmniVideoMarketCreateTaskPayload(
+        prompt,
+        model,
+        settingsForBuild,
+        inputFiles,
+      );
+      return { ok: true };
+    }
     buildKieMarketPayloadFromMapping(model.payloadMapping, {
       model: { apiModelId: modelId },
       prompt,
