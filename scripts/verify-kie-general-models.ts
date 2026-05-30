@@ -943,8 +943,17 @@ async function assertDatabase(): Promise<void> {
         `GENERAL active ${m.slug}: productCardModelType должен быть null`,
       );
       assert.ok(m.apiModelId?.trim(), `${m.slug}: apiModelId`);
-      assert.equal(m.endpoint, "/api/v1/jobs/createTask", m.slug);
-      assert.equal(m.statusEndpoint, "/api/v1/jobs/recordInfo", m.slug);
+      const defRow = KIE_GENERAL_MODEL_DEFINITIONS.find((d) => d.slug === m.slug);
+      assert.equal(
+        m.endpoint,
+        defRow?.endpoint ?? "/api/v1/jobs/createTask",
+        m.slug,
+      );
+      const expectedStatus =
+        defRow?.statusEndpoint === null
+          ? null
+          : (defRow?.statusEndpoint ?? "/api/v1/jobs/recordInfo");
+      assert.equal(m.statusEndpoint, expectedStatus, m.slug);
       assert.ok(m.settingsSchema != null, `${m.slug}: settingsSchema`);
       assert.ok(m.payloadMapping != null, `${m.slug}: payloadMapping`);
     }
@@ -1002,30 +1011,62 @@ async function assertDatabase(): Promise<void> {
         `${slug}: payloadMapping отличается от реестра`,
       );
 
-      const builtFromRegistry = bodyFromDefinition(
-        def.apiModelId,
-        def.payloadMapping,
-        settingsForSlug(slug, def),
-        promptFixture,
-      );
+      const builtFromRegistry =
+        def.metadata.kieOmniSync === true
+          ? null
+          : def.apiModelId === "gemini-omni-video"
+            ? buildGeminiOmniVideoMarketCreateTaskPayload(
+                promptFixture,
+                def,
+                settingsForSlug(slug, def),
+                [],
+              )
+            : bodyFromDefinition(
+                def.apiModelId,
+                def.payloadMapping,
+                settingsForSlug(slug, def),
+                promptFixture,
+              );
 
-      const dbBuilt = buildKieMarketPayloadFromMapping(
-        row!.payloadMapping as KiePayloadMapping,
-        {
-          model: { apiModelId: row!.apiModelId },
-          prompt: promptFixture,
-          settings: settingsForSlug(slug, def),
-          inputFiles: [],
-          callBackUrl,
-        },
-      );
+      if (builtFromRegistry != null) {
+        const dbBuilt =
+          def.apiModelId === "gemini-omni-video"
+            ? buildGeminiOmniVideoMarketCreateTaskPayload(
+                promptFixture,
+                {
+                  apiModelId: row!.apiModelId,
+                  payloadMapping: row!.payloadMapping,
+                },
+                settingsForSlug(slug, def),
+                [],
+              )
+            : buildKieMarketPayloadFromMapping(
+                row!.payloadMapping as KiePayloadMapping,
+                {
+                  model: { apiModelId: row!.apiModelId },
+                  prompt: promptFixture,
+                  settings: settingsForSlug(slug, def),
+                  inputFiles: [],
+                  callBackUrl,
+                },
+              );
 
-      assert.deepStrictEqual(dbBuilt.input, builtFromRegistry.input);
+        assert.deepStrictEqual(dbBuilt.input, builtFromRegistry.input);
+      }
 
       if (slug === "happyhorse-1-0-video-edit") {
         assertHappyHorseVideoEditDbGate(
           meta,
-          dbBuilt.input as Record<string, unknown>,
+          (buildKieMarketPayloadFromMapping(
+            row!.payloadMapping as KiePayloadMapping,
+            {
+              model: { apiModelId: row!.apiModelId },
+              prompt: promptFixture,
+              settings: settingsForSlug(slug, def),
+              inputFiles: [],
+              callBackUrl,
+            },
+          ).input ?? {}) as Record<string, unknown>,
         );
       }
       if (slug.startsWith("wan-2-7-")) {
