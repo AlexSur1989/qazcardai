@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
-import { USER_LABELS } from "@/lib/user-facing-copy";
+import { USER_LABELS, publicUserErrorMessage } from "@/lib/user-facing-copy";
+import { mapGenerationErrorToUserMessage } from "@/lib/generation-display";
 import { canonicalModelSlug } from "@/lib/model-slug-params";
 import {
   defaultsFromSchema,
@@ -166,7 +167,9 @@ export function CreateImageForm({
         setPoll({
           id: data.id,
           status: data.status,
-          errorMessage: data.errorMessage ?? null,
+          errorMessage: data.errorMessage
+            ? mapGenerationErrorToUserMessage(data.errorMessage)
+            : null,
           outputFiles: data.outputFiles,
         });
         if (TERMINAL.includes(data.status as GenerationStatus)) {
@@ -353,19 +356,21 @@ export function CreateImageForm({
           toast.error(msg);
           return;
         }
-        const msg = [
-          (typeof data.message === "string" && data.message.trim()
-            ? data.message
-            : null) ??
-            (typeof data.error === "string" ? data.error : null) ??
-            `Ошибка ${res.status}`,
-          typeof (data as { reason?: string }).reason === "string" &&
-          (data as { reason?: string }).reason!.trim() !== ""
-            ? (data as { reason: string }).reason
-            : null,
-        ]
-          .filter(Boolean)
-          .join(" — ");
+        const msg = publicUserErrorMessage(
+          [
+            (typeof data.message === "string" && data.message.trim()
+              ? data.message
+              : null) ??
+              (typeof data.error === "string" ? data.error : null) ??
+              `Ошибка ${res.status}`,
+            typeof (data as { reason?: string }).reason === "string" &&
+            (data as { reason?: string }).reason!.trim() !== ""
+              ? (data as { reason: string }).reason
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" — "),
+        );
         setError(msg);
         toast.error(msg);
         return;

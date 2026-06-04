@@ -68,7 +68,7 @@ const GPT_RESOLUTION_FIELD = {
   required: true,
   defaultValue: "1K",
   helpText:
-    "По docs.kie.ai: при формате Auto допустимо только 1K; для 1:1 недоступно 4K.",
+    "При формате Auto допустимо только 1K; для 1:1 недоступно 4K.",
   options: [
     { label: "1K", value: "1K" },
     { label: "2K", value: "2K" },

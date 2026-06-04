@@ -10,6 +10,7 @@ import {
   parseGeminiOmniVideoList,
   isGeminiOmniVideoModelId,
 } from "@/server/services/gemini-omni-settings";
+import { firstFrameUrlString } from "@/server/services/seedance-settings";
 import { publicHttpUrlsOnly } from "@/lib/generation-input-limits";
 
 const DEFAULT_KIE_FETCH_TIMEOUT_MS = 120_000;
@@ -1030,8 +1031,11 @@ function buildSeedance2MarketCreateTaskPayload(
   settings: Record<string, unknown>,
 ): JsonRecord {
   const base = getAppUrlForKieCallback();
-  const first = typeof settings.firstFrameUrl === "string" ? settings.firstFrameUrl.trim() : "";
-  const last = typeof settings.lastFrameUrl === "string" ? settings.lastFrameUrl.trim() : "";
+  const first = firstFrameUrlString(settings.firstFrameUrl);
+  const last =
+    typeof settings.lastFrameUrl === "string"
+      ? settings.lastFrameUrl.trim()
+      : firstFrameUrlString(settings.lastFrameUrl);
   /** Референсы: изображения до 9; в консоли Kie ref video часто 1 файл; audio до 3. */
   const refImg = seedanceStringList(settings.referenceImageUrls).slice(0, 9);
   const refVid = seedanceStringList(settings.referenceVideoUrls).slice(0, 3);

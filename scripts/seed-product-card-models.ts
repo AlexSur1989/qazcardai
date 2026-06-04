@@ -4,6 +4,11 @@ import pg from "pg";
 
 import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 
+import {
+  PRODUCT_CARD_SEEDANCE_VIDEO_PAYLOAD,
+  productCardSeedanceVideoPricing,
+  productCardSeedanceVideoSettings,
+} from "../src/server/kie/product-card-seedance-video-schemas";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -13,7 +18,10 @@ const pool = new pg.Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-const productCardPricing = (baseTokens: number, providerCostUsd: number) => ({
+const KIE_ENDPOINT = "/api/v1/jobs/createTask";
+const KIE_STATUS = "/api/v1/jobs/recordInfo";
+
+const productCardImagePricing = (baseTokens: number, providerCostUsd: number) => ({
   pricingScope: "PRODUCT_CARD",
   type: "product_card_matrix",
   baseTokens,
@@ -52,7 +60,7 @@ async function main() {
       productCardModelType: "PRODUCT_CLASSIFIER",
       apiModelId: "gemini-2.5-flash",
       costCredits: 1,
-      pricingSchema: productCardPricing(1, 0.001),
+      pricingSchema: productCardImagePricing(1, 0.001),
       supportsImageInput: true,
     },
     {
@@ -60,12 +68,11 @@ async function main() {
       slug: "seedream-4-0-product-concept",
       type: "IMAGE" as const,
       productCardModelType: "PRODUCT_CONCEPT_IMAGE",
-      /** KIE Market: изображение товара + промпт → seedream-v4-edit */
       apiModelId: "bytedance/seedream-v4-edit",
-      endpoint: "/api/v1/jobs/createTask",
-      statusEndpoint: "/api/v1/jobs/recordInfo",
+      endpoint: KIE_ENDPOINT,
+      statusEndpoint: KIE_STATUS,
       costCredits: 15,
-      pricingSchema: productCardPricing(15, 0.03),
+      pricingSchema: productCardImagePricing(15, 0.03),
       supportsImageInput: true,
       payloadMapping: {
         prompt: "input.prompt",
@@ -78,10 +85,10 @@ async function main() {
       type: "IMAGE" as const,
       productCardModelType: "PRODUCT_MARKETPLACE_CARD",
       apiModelId: "gpt-image-2-image-to-image",
-      endpoint: "/api/v1/jobs/createTask",
-      statusEndpoint: "/api/v1/jobs/recordInfo",
+      endpoint: KIE_ENDPOINT,
+      statusEndpoint: KIE_STATUS,
       costCredits: 25,
-      pricingSchema: productCardPricing(25, 0.05),
+      pricingSchema: productCardImagePricing(25, 0.05),
       supportsImageInput: true,
       settingsSchema: {
         fields: [
@@ -107,15 +114,36 @@ async function main() {
       },
     },
     {
+      name: "Seedance 2.0 Product Video",
+      slug: "seedance-2-0-product-video",
+      type: "VIDEO" as const,
+      productCardModelType: "PRODUCT_VIDEO",
+      apiModelId: "bytedance/seedance-2",
+      endpoint: KIE_ENDPOINT,
+      statusEndpoint: KIE_STATUS,
+      costCredits: 55,
+      pricingSchema: productCardSeedanceVideoPricing(55, 0.11, false),
+      supportsImageInput: true,
+      supportsVideoInput: false,
+      maxDuration: 10,
+      settingsSchema: productCardSeedanceVideoSettings(false),
+      payloadMapping: PRODUCT_CARD_SEEDANCE_VIDEO_PAYLOAD,
+    },
+    {
       name: "Seedance 2.0 Fast Product Video",
       slug: "seedance-2-0-fast-product-video",
       type: "VIDEO" as const,
       productCardModelType: "PRODUCT_VIDEO",
       apiModelId: "bytedance/seedance-2-fast",
+      endpoint: KIE_ENDPOINT,
+      statusEndpoint: KIE_STATUS,
       costCredits: 40,
-      pricingSchema: productCardPricing(40, 0.08),
+      pricingSchema: productCardSeedanceVideoPricing(40, 0.08, true),
       supportsImageInput: true,
+      supportsVideoInput: false,
       maxDuration: 10,
+      settingsSchema: productCardSeedanceVideoSettings(true),
+      payloadMapping: PRODUCT_CARD_SEEDANCE_VIDEO_PAYLOAD,
     },
   ];
 
@@ -133,11 +161,22 @@ async function main() {
         scope: "PRODUCT_CARD",
         endpoint: row.endpoint ?? null,
         statusEndpoint: row.statusEndpoint ?? null,
-        supportsVideoInput: false,
+        supportsVideoInput: row.supportsVideoInput ?? false,
         supportsNegativePrompt: false,
         supportsSeed: false,
         description: "Dedicated Product Card model.",
-        ...row,
+        name: row.name,
+        slug: row.slug,
+        type: row.type,
+        productCardModelType: row.productCardModelType,
+        apiModelId: row.apiModelId,
+        costCredits: row.costCredits,
+        supportsImageInput: row.supportsImageInput,
+        maxDuration: "maxDuration" in row ? row.maxDuration : null,
+        settingsSchema:
+          "settingsSchema" in row ? (row.settingsSchema as object) : undefined,
+        payloadMapping:
+          "payloadMapping" in row ? (row.payloadMapping as object) : undefined,
         pricingSchema,
       },
       update: omitSeedPricingWhenPinned(guard, {
@@ -152,12 +191,16 @@ async function main() {
         costCredits: row.costCredits,
         isActive: true,
         supportsImageInput: row.supportsImageInput,
-        supportsVideoInput: false,
+        supportsVideoInput: row.supportsVideoInput ?? false,
         supportsNegativePrompt: false,
         supportsSeed: false,
         maxDuration: "maxDuration" in row ? row.maxDuration : null,
-        settingsSchema: "settingsSchema" in row ? row.settingsSchema : undefined,
-        payloadMapping: "payloadMapping" in row ? row.payloadMapping : undefined,
+        settingsSchema:
+          "settingsSchema" in row
+            ? (row.settingsSchema as object)
+            : undefined,
+        payloadMapping:
+          "payloadMapping" in row ? (row.payloadMapping as object) : undefined,
         pricingSchema,
       }),
     });
@@ -167,7 +210,7 @@ async function main() {
     PRODUCT_CARD_DEFAULT_CLASSIFIER_MODEL_SLUG: "gemini-2-5-flash-classifier",
     PRODUCT_CARD_DEFAULT_CONCEPT_IMAGE_MODEL_SLUG: "seedream-4-0-product-concept",
     PRODUCT_CARD_DEFAULT_MARKETPLACE_CARD_MODEL_SLUG: "gpt-image-2-product-card",
-    PRODUCT_CARD_DEFAULT_VIDEO_MODEL_SLUG: "seedance-2-0-fast-product-video",
+    PRODUCT_CARD_DEFAULT_VIDEO_MODEL_SLUG: "seedance-2-0-product-video",
     PRODUCT_CARD_DEFAULT_CARD_BUILDER_MODEL_SLUG: "",
   };
   for (const [key, value] of Object.entries(defaults)) {

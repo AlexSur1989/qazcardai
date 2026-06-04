@@ -377,7 +377,7 @@ export function validateSeedanceReferenceAudioBuffer(
   if (size > MAX_SEEDANCE_AUDIO_BYTES) {
     return {
       ok: false,
-      message: "Аудио: максимум 15 МБ (как в консоли Kie)",
+      message: "Аудио: максимум 15 МБ",
       code: "FILE_TOO_LARGE",
     };
   }

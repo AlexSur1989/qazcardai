@@ -56,12 +56,19 @@ type VideoPreset = {
   aspectRatio: string;
 };
 
+type ProductVideoModelOption = {
+  slug: string;
+  name: string;
+};
+
 type Props = {
   balanceCredits: number;
   scenarios: ProductCardScenarioToggles;
   conceptImageSizes: SizePreset[];
   marketplaceCardSizes: SizePreset[];
   videoPresets: VideoPreset[];
+  productVideoModels: ProductVideoModelOption[];
+  defaultProductVideoModelSlug: string;
   /** Показать режим разметки оверлея (админ) */
   canMarketplaceLayoutDebug?: boolean;
 };
@@ -72,6 +79,8 @@ export function ProductCardPage({
   conceptImageSizes,
   marketplaceCardSizes,
   videoPresets,
+  productVideoModels,
+  defaultProductVideoModelSlug,
   canMarketplaceLayoutDebug = false,
 }: Props) {
   const {
@@ -268,6 +277,8 @@ export function ProductCardPage({
               projectId={projectId}
               balanceCredits={balanceDisplay}
               videoPresets={videoPresets}
+              productVideoModels={productVideoModels}
+              defaultProductVideoModelSlug={defaultProductVideoModelSlug}
             />
           </TabsContent>
         </Tabs>

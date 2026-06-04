@@ -5,6 +5,7 @@ import { Download, ExternalLink, Film, RefreshCw, Type } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { getProductCardTemplatePreset } from "@/config/product-card-overlay-presets";
+import { mapGenerationErrorToUserMessage } from "@/lib/generation-display";
 
 export type ProductCardVariantGalleryItem = {
   generationId: string;
@@ -61,7 +62,8 @@ export function ProductCardVariantGallery({
               ) : (
                 <div className="flex min-h-44 items-center justify-center rounded-xl border border-dashed border-[#B8DCE6] bg-[#F4FBFD] text-sm text-[#4a6e7a]">
                   {isFailed
-                    ? item.errorMessage || "Вариант не создан"
+                    ? mapGenerationErrorToUserMessage(item.errorMessage) ??
+                      "Вариант не создан"
                     : hasRealGeneration
                       ? "Ожидаем результат генерации…"
                       : "Ещё не запущено"}

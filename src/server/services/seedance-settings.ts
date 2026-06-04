@@ -1,6 +1,19 @@
 
 function hasNonEmptyUrl(value: unknown): boolean {
-  return typeof value === "string" && value.trim() !== "";
+  if (typeof value === "string") return value.trim() !== "";
+  if (Array.isArray(value)) {
+    return value.some((x) => typeof x === "string" && x.trim() !== "");
+  }
+  return false;
+}
+
+export function firstFrameUrlString(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) {
+    const first = value.find((x) => typeof x === "string" && x.trim() !== "");
+    return typeof first === "string" ? first.trim() : "";
+  }
+  return "";
 }
 
 function hasNonEmptyUrlList(value: unknown): boolean {
@@ -80,12 +93,10 @@ export function collectSeedanceSettingsHttpUrls(
   settings: Record<string, unknown>,
 ): string[] {
   const out: string[] = [];
-  if (hasNonEmptyUrl(settings.firstFrameUrl)) {
-    out.push(String(settings.firstFrameUrl).trim());
-  }
-  if (hasNonEmptyUrl(settings.lastFrameUrl)) {
-    out.push(String(settings.lastFrameUrl).trim());
-  }
+  const first = firstFrameUrlString(settings.firstFrameUrl);
+  if (first) out.push(first);
+  const last = typeof settings.lastFrameUrl === "string" ? settings.lastFrameUrl.trim() : "";
+  if (last) out.push(last);
   for (const key of [
     "referenceImageUrls",
     "referenceVideoUrls",

@@ -62,8 +62,7 @@ function validateGptImage2Settings(
     if (resolution !== "1K") {
       return {
         ok: false,
-        message:
-          "GPT Image 2: если формат не задан, допустимо только разрешение 1K (docs.kie.ai).",
+        message: "GPT Image 2: если формат не задан, допустимо только разрешение 1K",
       };
     }
     return { ok: true };
@@ -88,16 +87,14 @@ function validateGptImage2Settings(
   if (aspectRatio === "auto" && resolution !== "1K") {
     return {
       ok: false,
-      message:
-        "GPT Image 2: при формате Auto допустимо только разрешение 1K (docs.kie.ai).",
+      message: "GPT Image 2: при формате Auto допустимо только разрешение 1K",
     };
   }
 
   if (aspectRatio === "1:1" && resolution === "4K") {
     return {
       ok: false,
-      message:
-        "GPT Image 2: соотношение 1:1 не поддерживает 4K (docs.kie.ai).",
+      message: "GPT Image 2: соотношение 1:1 не поддерживает 4K",
     };
   }
 

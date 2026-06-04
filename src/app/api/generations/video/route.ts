@@ -10,6 +10,7 @@ import {
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
 import { publicApiErrorMessage } from "@/lib/safe-api-error";
+import { publicUserErrorMessage } from "@/lib/user-facing-copy";
 import { validateVideoInputFiles } from "@/lib/video-input-limits";
 import { videoGenerationBodySchema } from "@/lib/validations/video-generation";
 import { CreditServiceError, getBalance, refundCredits, reserveCredits } from "@/server/services/credits";
@@ -108,7 +109,7 @@ export async function POST(req: Request) {
 
   if (!process.env.KIE_API_KEY?.trim()) {
     return NextResponse.json(
-      { error: "Видео: настройте KIE_API_KEY" },
+      { error: "Генерация видео временно недоступна. Попробуйте позже." },
       { status: 503 },
     );
   }
@@ -453,7 +454,10 @@ export async function POST(req: Request) {
     httpUrls,
   );
   if (!strictKiePayload.ok) {
-    return NextResponse.json({ error: strictKiePayload.message }, { status: 400 });
+    return NextResponse.json(
+      { error: publicUserErrorMessage(strictKiePayload.message) },
+      { status: 400 },
+    );
   }
 
   const metadata: Record<string, unknown> = {};

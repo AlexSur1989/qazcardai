@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { sanitizeUserFacingHelpText } from "@/lib/user-facing-copy";
+import { sanitizeUserFacingFieldLabel, sanitizeUserFacingHelpText } from "@/lib/user-facing-copy";
 import type { SchemaField } from "@/lib/generation-form-settings-schema";
 import { KIE_SETTINGS_URL_LIST_FROM_COMPUTER } from "@/lib/kie-computer-upload-fields";
 import {
@@ -32,7 +32,7 @@ export function DynamicModelSettingsFields({
       </p>
       {schemaFields.map((field) => {
         const id = `dyn-${field.name}`;
-        const label = field.label ?? field.name;
+        const label = sanitizeUserFacingFieldLabel(field.label, field.name);
         const val = dynSettings[field.name];
 
         if (field.type === "hidden") {

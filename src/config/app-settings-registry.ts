@@ -450,7 +450,7 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
     label: "PRODUCT_CARD_DEFAULT_VIDEO_MODEL_SLUG / Видео товара",
     description: "Product Card VIDEO модель по умолчанию.",
     type: "string",
-    defaultValue: "seedance-2-0-fast-product-video",
+    defaultValue: "seedance-2-0-product-video",
     editable: true,
     sensitive: false,
   },

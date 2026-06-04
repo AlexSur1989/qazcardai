@@ -30,7 +30,7 @@ import { normalizeProductSourceImages } from "@/server/services/productCardProje
 import {
   resolveDefaultMarketplaceCardModel,
   resolveDefaultProductConceptImageModel,
-  resolveDefaultProductVideoModel,
+  resolveProductVideoModel,
 } from "@/server/services/productCardModelResolver";
 import {
   resolveMarketplaceCardSource,
@@ -953,9 +953,23 @@ function buildProductCardVideoModelSettings(
 
   if (fieldNames.has("scenario")) {
     draft.scenario = "first-frame";
+  } else if (
+    model.apiModelId === "bytedance/seedance-2" ||
+    model.apiModelId === "bytedance/seedance-2-fast"
+  ) {
+    draft.scenario = "first-frame";
   }
   if (fieldNames.has("firstFrameUrl")) {
-    draft.firstFrameUrl = sourceImageUrl;
+    const urls =
+      referenceImageUrls.length > 0 ? referenceImageUrls : [sourceImageUrl];
+    const firstField = getSchemaFields(model.settingsSchema).find(
+      (f) => f.name === "firstFrameUrl",
+    );
+    const isUploadList =
+      firstField?.type === "image-upload-list" ||
+      firstField?.type === "upload-list" ||
+      firstField?.type === "url-list";
+    draft.firstFrameUrl = isUploadList ? urls : sourceImageUrl;
   } else if (fieldNames.has("imageUrl")) {
     draft.imageUrl = sourceImageUrl;
   } else if (fieldNames.has("inputUrls")) {
@@ -1007,6 +1021,7 @@ export async function estimateProductVideoCredits(
     motionStyle: string;
     resolution?: string;
     aspectRatio?: string;
+    modelSlug?: string | null;
   },
 ): Promise<EstimateProductVideoResult> {
   const project = await getOwnedProjectOrNull(userId, projectId);
@@ -1025,7 +1040,7 @@ export async function estimateProductVideoCredits(
   if (!src.ok) {
     return { ok: false, error: src.message, status: 400 };
   }
-  const model = await resolveDefaultProductVideoModel();
+  const model = await resolveProductVideoModel(input.modelSlug);
   if (!model) {
     return {
       ok: false,
@@ -1080,6 +1095,7 @@ export async function generateProductVideoForProductCard(p: {
   aspectRatio?: string;
   userPrompt: string;
   clientEstimateCredits?: number | null;
+  modelSlug?: string | null;
 }): Promise<GenerateProductVideoResult> {
   const { userId, projectId, clientEstimateCredits, ...input } = p;
   const project = await getOwnedProjectOrNull(userId, projectId);
@@ -1100,7 +1116,7 @@ export async function generateProductVideoForProductCard(p: {
     return { ok: false, error: src.message, status: 400 };
   }
 
-  const model = await resolveDefaultProductVideoModel();
+  const model = await resolveProductVideoModel(input.modelSlug);
   if (!model) {
     return {
       ok: false,

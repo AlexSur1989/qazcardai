@@ -8,6 +8,7 @@ import {
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
+import { publicUserErrorMessage } from "@/lib/user-facing-copy";
 import {
   modelHasSettingsSchema,
   validateAndNormalizeModelSettings,
@@ -183,10 +184,8 @@ export async function POST(req: Request) {
       [],
     );
     if (!strictKiePayload.ok) {
-      return NextResponse.json(
-        { error: strictKiePayload.message, message: strictKiePayload.message },
-        { status: 400 },
-      );
+      const msg = publicUserErrorMessage(strictKiePayload.message);
+      return NextResponse.json({ error: msg, message: msg }, { status: 400 });
     }
     if (isKlingMotionControlModel(model.apiModelId)) {
       const mVal = validateKlingMotionControlSettingsForEstimate(v.settings);

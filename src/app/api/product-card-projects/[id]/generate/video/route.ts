@@ -28,6 +28,7 @@ const bodySchema = z.object({
     .refine((s) => styleSet.has(s as (typeof PRODUCT_VIDEO_MOTION_STYLES)[number]["id"]), "Некорректный стиль движения"),
   userPrompt: z.string().max(1000).optional().default(""),
   clientEstimateCredits: z.number().int().nonnegative().optional().nullable(),
+  modelSlug: z.string().trim().min(1).max(128).optional(),
 });
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -84,6 +85,7 @@ export async function POST(req: Request, ctx: Ctx) {
     motionStyle: parsed.data.motionStyle,
     userPrompt: parsed.data.userPrompt.trim(),
     clientEstimateCredits: parsed.data.clientEstimateCredits ?? null,
+    modelSlug: parsed.data.modelSlug,
   });
 
   if (!result.ok) {

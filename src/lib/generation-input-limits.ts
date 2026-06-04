@@ -2,9 +2,9 @@ import { toAbsoluteIfAppPath } from "@/lib/app-base-url";
 
 const DATA_URL_PREFIX = /^data:image\/(png|jpeg|jpg|webp|gif|jfif|pjpeg|pjp);base64,(.+)$/i;
 
-/** Сообщение при попытке реального Kie с localhost /uploads/ без публичного CDN. */
+/** Сообщение пользователю, если загруженное изображение недоступно для генерации. */
 export const KIE_REQUIRES_PUBLIC_IMAGE_URLS_RU =
-  "Для реальной генерации Kie нужны публичные URL изображений (S3/R2/CDN), доступные из интернета. Локальные адреса (localhost, /uploads/ и т.п.) Kie скачать не может. Настройте хранилище с публичным URL или задайте MOCK_KIE=true для локального теста без Kie.";
+  "Не удалось использовать загруженное изображение. Загрузите файл ещё раз или выберите другой.";
 
 function getMaxImageBytes(): number {
   const raw = process.env.MAX_IMAGE_UPLOAD_MB;

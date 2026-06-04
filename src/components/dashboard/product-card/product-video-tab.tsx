@@ -38,6 +38,8 @@ type Props = {
   projectId: string | null;
   balanceCredits: number;
   videoPresets: { duration: number; resolution: string; aspectRatio: string }[];
+  productVideoModels: { slug: string; name: string }[];
+  defaultProductVideoModelSlug: string;
 };
 
 export function ProductVideoTab({
@@ -46,6 +48,8 @@ export function ProductVideoTab({
   projectId,
   balanceCredits,
   videoPresets,
+  productVideoModels,
+  defaultProductVideoModelSlug,
 }: Props) {
   const router = useRouter();
   const [sourceType, setSourceType] = useState<SourceTab>("original");
@@ -59,6 +63,12 @@ export function ProductVideoTab({
   const [aspectRatio, setAspectRatio] = useState(videoPresets[0]?.aspectRatio ?? "16:9");
   const [motion, setMotion] = useState<ProductVideoMotionStyle>("none");
   const [userPrompt, setUserPrompt] = useState("");
+  const initialModelSlug =
+    productVideoModels.find((m) => m.slug === defaultProductVideoModelSlug)?.slug ??
+    productVideoModels[0]?.slug ??
+    defaultProductVideoModelSlug;
+  const [modelSlug, setModelSlug] = useState(initialModelSlug);
+  const [modelName, setModelName] = useState<string | null>(null);
 
   const [estimating, setEstimating] = useState(false);
   const [estimateCredits, setEstimateCredits] = useState<number | null>(null);
@@ -207,9 +217,10 @@ export function ProductVideoTab({
           resolution,
           aspectRatio,
           motionStyle: motion,
+          modelSlug,
         }),
       });
-      const parsed = await readJsonSafe<{ credits?: number; error?: string }>(res);
+      const parsed = await readJsonSafe<{ credits?: number; error?: string; modelName?: string }>(res);
       if (cancelled) return;
       if (!parsed.ok) {
         setEstErr(parsed.message);
@@ -224,12 +235,13 @@ export function ProductVideoTab({
         return;
       }
       setEstimateCredits(typeof parsed.data.credits === "number" ? parsed.data.credits : null);
+      setModelName(typeof parsed.data.modelName === "string" ? parsed.data.modelName : null);
       setEstimating(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [canEstimate, projectId, sourceType, sourceGenerationId, duration, resolution, aspectRatio, motion]);
+  }, [canEstimate, projectId, sourceType, sourceGenerationId, duration, resolution, aspectRatio, motion, modelSlug]);
 
   const showEstimate = canEstimate;
   const creditsToShow = showEstimate ? estimateCredits : null;
@@ -284,6 +296,7 @@ export function ProductVideoTab({
         aspectRatio,
         motionStyle: motion,
         userPrompt: userPrompt.trim(),
+        modelSlug,
       };
       if (typeof estimateCredits === "number" && Number.isFinite(estimateCredits)) {
         body.clientEstimateCredits = estimateCredits;
@@ -517,6 +530,36 @@ export function ProductVideoTab({
             )}
           </div>
         )}
+
+        <div className="space-y-2">
+          <Label className="text-[#0C2D38]">Модель анимации</Label>
+          {productVideoModels.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {productVideoModels.map((m) => (
+                <button
+                  key={m.slug}
+                  type="button"
+                  onClick={() => setModelSlug(m.slug)}
+                  className={cn(
+                    "rounded-full border px-4 py-2 text-sm font-medium transition",
+                    modelSlug === m.slug
+                      ? "border-[#00AFCA] bg-[#e8f8fb] text-[#006b82]"
+                      : "border-[#B8DCE6] bg-white text-[#0C2D38]",
+                  )}
+                >
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-[#4a6e7a]">
+              Модели видео не настроены. Запустите seed:product-card-models на сервере.
+            </p>
+          )}
+          {modelName ? (
+            <p className="text-xs text-[#4a6e7a]">Выбрано: {modelName}</p>
+          ) : null}
+        </div>
 
         <div className="space-y-2">
           <Label className="text-[#0C2D38]">Длительность</Label>

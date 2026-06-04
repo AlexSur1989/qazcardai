@@ -71,7 +71,7 @@ const SEED_FIELD = {
   min: 0,
   max: 2147483647,
   step: 1,
-  helpText: "Необязательно. Если не указано, Kie сгенерирует seed автоматически.",
+  helpText: "Необязательно. Если не указано, seed будет сгенерирован автоматически.",
 } as const;
 
 const NEGATIVE_PROMPT_FIELD = {
@@ -104,7 +104,7 @@ const NSFW_CHECKER_FIELD = {
   type: "boolean",
   required: false,
   defaultValue: true,
-  helpText: "Playground defaults to true; Kie docs allow disabling if needed.",
+  helpText: "По умолчанию включено; при необходимости можно отключить.",
 } as const;
 
 const WAN_27_PRICING_REVIEW = {
@@ -353,7 +353,7 @@ const WAN_R2V_SETTINGS = {
       maxItems: 1,
       accept: "image/*",
       purpose: "generation_input",
-      helpText: "If supplied, aspect_ratio is ignored by Kie.",
+      helpText: "Если указано, формат кадра может игнорироваться.",
     },
     {
       name: "referenceVoice",
@@ -363,7 +363,7 @@ const WAN_R2V_SETTINGS = {
       maxItems: 1,
       accept: "audio/*",
       purpose: "generation_input",
-      helpText: "wav/mp3, 1 to 10 seconds according to Kie docs.",
+      helpText: "wav/mp3, от 1 до 10 секунд.",
     },
     {
       name: "resolution",

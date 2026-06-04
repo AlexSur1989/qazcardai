@@ -46,6 +46,8 @@ type Props = {
   providerTaskId?: string | null;
   submitting?: boolean;
   className?: string;
+  /** Внутренний ID задачи провайдера — не показываем в кабинете клиента. */
+  showProviderTaskId?: boolean;
 };
 
 /**
@@ -60,6 +62,7 @@ export function GenerationResultAside({
   providerTaskId,
   submitting = false,
   className,
+  showProviderTaskId = false,
 }: Props) {
   const files = parseOutputFilesList(outputFiles);
   const firstUrl = files[0]?.url?.trim() ?? null;
@@ -115,7 +118,7 @@ export function GenerationResultAside({
               ) : null}
             </div>
 
-            {providerTaskId ? (
+            {showProviderTaskId && providerTaskId ? (
               <p className="text-muted-foreground text-xs break-all">
                 task: <span className="font-mono">{providerTaskId}</span>
               </p>

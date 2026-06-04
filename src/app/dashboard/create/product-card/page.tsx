@@ -17,6 +17,7 @@ import { getBalance } from "@/server/services/credits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 
 import { getProductCardSettings } from "@/server/services/productCardSettings";
+import { listActiveProductVideoModels } from "@/server/services/productCardModelResolver";
 
 
 
@@ -40,11 +41,13 @@ export default async function ProductCardCreatePage() {
 
 
 
-  const [balanceCredits, productCardSettings] = await Promise.all([
+  const [balanceCredits, productCardSettings, productVideoModels] = await Promise.all([
 
     getBalance(current.user.id),
 
     getProductCardSettings(),
+
+    listActiveProductVideoModels(),
 
   ]);
 
@@ -85,6 +88,10 @@ export default async function ProductCardCreatePage() {
           marketplaceCardSizes={productCardSettings.marketplaceCardSizes}
 
           videoPresets={productCardSettings.videoPresets}
+
+          productVideoModels={productVideoModels}
+
+          defaultProductVideoModelSlug={productCardSettings.videoModelSlug}
 
           canMarketplaceLayoutDebug={canAccessAdminPanel(current.user.role)}
 

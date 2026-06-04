@@ -146,8 +146,49 @@ export async function resolveDefaultMarketplaceCardModel(): Promise<AiModel | nu
 /**
  * Видео «карточка товара» (image-to-video).
  */
+export async function resolveProductVideoModel(
+  slug?: string | null,
+): Promise<AiModel | null> {
+  const settings = await getProductCardSettings();
+  const targetSlug = (slug?.trim() || settings.videoModelSlug).trim();
+  if (!targetSlug) return null;
+
+  const wrongScope = await prisma.aiModel.findFirst({
+    where: { slug: targetSlug, isActive: true, scope: "GENERAL" },
+    select: { id: true },
+  });
+  if (wrongScope) {
+    throw new ProductCardModelMisconfiguredError(targetSlug);
+  }
+
+  return prisma.aiModel.findFirst({
+    where: {
+      slug: targetSlug,
+      scope: "PRODUCT_CARD",
+      productCardModelType: "PRODUCT_VIDEO",
+      isActive: true,
+      type: "VIDEO",
+    },
+  });
+}
+
 export async function resolveDefaultProductVideoModel(): Promise<AiModel | null> {
-  return resolveStrictProductCardModel("PRODUCT_VIDEO");
+  return resolveProductVideoModel(null);
+}
+
+export async function listActiveProductVideoModels(): Promise<
+  { slug: string; name: string }[]
+> {
+  return prisma.aiModel.findMany({
+    where: {
+      scope: "PRODUCT_CARD",
+      productCardModelType: "PRODUCT_VIDEO",
+      isActive: true,
+      type: "VIDEO",
+    },
+    select: { slug: true, name: true },
+    orderBy: { name: "asc" },
+  });
 }
 
 /** Классификатор категории по фото (Product Card). */

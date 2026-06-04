@@ -15,6 +15,7 @@ import {
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
 import { publicApiErrorMessage } from "@/lib/safe-api-error";
+import { publicUserErrorMessage } from "@/lib/user-facing-copy";
 import { imageGenerationBodySchema } from "@/lib/validations/image-generation";
 import { enqueueGenerationJob } from "@/server/queues/generationQueue";
 import { isRedisReachableForQueue } from "@/server/queues/redisConnection";
@@ -75,7 +76,7 @@ export async function POST(req: Request) {
 
   if (!redisAndKieReady()) {
     return NextResponse.json(
-      { error: "Генерация недоступна: настройте REDIS_URL, KIE_API_KEY и KIE_BASE_URL" },
+      { error: "Генерация временно недоступна. Попробуйте позже." },
       { status: 503 },
     );
   }
@@ -179,7 +180,10 @@ export async function POST(req: Request) {
     httpUrls,
   );
   if (!strictKiePayload.ok) {
-    return NextResponse.json({ error: strictKiePayload.message }, { status: 400 });
+    return NextResponse.json(
+      { error: publicUserErrorMessage(strictKiePayload.message) },
+      { status: 400 },
+    );
   }
 
   const metadata: Record<string, unknown> = {};

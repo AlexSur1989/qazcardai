@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import type { ProductCategory, ProductCategoryId } from "@/config/product-card-categories";
 import { formatProductCategoryClassifierReason } from "@/lib/product-card-classifier-ui";
+import { publicUserErrorMessage } from "@/lib/user-facing-copy";
 
 import type { CategorySourceUi, ClassifyInfo, ClassifyFlowState } from "./use-product-card-project";
 
@@ -113,7 +114,7 @@ export function CategorySelector({
         {classifyFlow === "error" && classifyError && (
           <Alert variant="destructive">
             <AlertTitle>Классификация</AlertTitle>
-            <AlertDescription>{classifyError}</AlertDescription>
+            <AlertDescription>{publicUserErrorMessage(classifyError)}</AlertDescription>
           </Alert>
         )}
 

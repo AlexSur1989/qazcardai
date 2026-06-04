@@ -176,7 +176,7 @@ const VIDEO_SETTINGS = {
         { label: "10 с", value: "10" },
       ],
       helpText:
-        "При video_list длительность может определяться моделью автоматически (docs.kie.ai).",
+        "При списке видео длительность может определяться моделью автоматически.",
     },
     {
       name: "aspectRatio",
@@ -254,7 +254,7 @@ const AUDIO_SETTINGS = {
       type: "text",
       required: true,
       maxLength: 210,
-      helpText: "До 210 символов. Результат — kieAudioId для video/audio_ids.",
+      helpText: "До 210 символов. После генерации получите идентификатор голоса для видео.",
     },
     {
       name: "voiceDescription",
@@ -282,7 +282,7 @@ const CHARACTER_SETTINGS = {
       label: "Описание персонажа",
       type: "textarea",
       required: true,
-      helpText: "Внешность, стиль, одежда, характер (поле descriptions в Kie).",
+      helpText: "Внешность, стиль, одежда, характер персонажа.",
     },
     {
       name: "imageUrls",
@@ -294,11 +294,11 @@ const CHARACTER_SETTINGS = {
     },
     {
       name: "audioIds",
-      label: "Audio IDs (опционально)",
+      label: "Голос персонажа (опционально)",
       type: "url-list",
       required: false,
       maxItems: 3,
-      helpText: "kieAudioId из gemini-omni-audio для голоса персонажа.",
+      helpText: "Идентификатор голоса из шага синтеза голоса (если нужен свой голос).",
     },
     {
       name: "characterName",

@@ -217,7 +217,7 @@ export async function getProductCardSettings(): Promise<ProductCardSettings> {
     conceptImageModelSlug: asString(entries[5], "seedream-4-0-product-concept"),
     marketplaceCardModelSlug: asString(entries[6], "gpt-image-2-product-card"),
     cardBuilderModelSlug: asString(entries[7]),
-    videoModelSlug: asString(entries[8], "seedance-2-0-fast-product-video"),
+    videoModelSlug: asString(entries[8], "seedance-2-0-product-video"),
     usdToKzt: asNumber(entries[9], 500, 1),
     tokenValueKzt: asNumber(entries[10], 10, 0.0001),
     markupPercent: asNumber(entries[11], 100, 0),
