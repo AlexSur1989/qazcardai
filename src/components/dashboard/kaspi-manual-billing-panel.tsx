@@ -1,9 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState, startTransition } from "react";
 import { ExternalLink, Loader2, MessageCircle } from "lucide-react";
 
-import type { KaspiManualBillingPublic } from "@/lib/kaspi-manual-config";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -16,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { formatKzt } from "@/lib/format-kzt";
 import { formatAdminDateTime } from "@/lib/admin-format";
+import type { ManualPaymentRow } from "@/components/dashboard/use-kaspi-manual-billing";
 
 type PackageRow = {
   id: string;
@@ -23,125 +22,41 @@ type PackageRow = {
   priceKzt: number;
 };
 
-type ManualPaymentRow = {
-  requestId: string;
-  paymentCode: string;
-  status: string;
-  statusLabel: string;
-  amountKzt: number;
-  creditsAmount: number;
-  packageLabel: string;
-  kaspiRecipientPhoneMasked?: string;
-  kaspiPhoneDisplay: string;
-  recipientName: string;
-  instructionText: string;
-  whatsappUrl: string | null;
-  whatsappEnabled: boolean;
-  whatsappPhoneDisplay: string;
-  whatsappUnavailable?: boolean;
-  createdAt: string;
-  expiresAt: string | null;
-  expired: boolean;
-  canCancel: boolean;
-  canOpenWhatsApp: boolean;
+type BillingState = {
+  settings: { enabled: boolean; whatsappEnabled: boolean };
+  active: ManualPaymentRow | null;
+  history: ManualPaymentRow[];
+  loading: boolean;
+  err: string | null;
+  creating: string | null;
+  busyId: string | null;
+  createRequest: (packageId: string) => Promise<void>;
+  cancelRequest: (requestId: string) => Promise<void>;
 };
 
 type Props = {
   packages: PackageRow[];
-  publicSettings: KaspiManualBillingPublic;
+  billing: BillingState;
+  /** Не дублировать список пакетов — кнопки на карточках каталога */
+  hidePackagePicker?: boolean;
 };
 
-export function KaspiManualBillingPanel({ packages, publicSettings }: Props) {
-  const settings = publicSettings;
-  const [active, setActive] = useState<ManualPaymentRow | null>(null);
-  const [history, setHistory] = useState<ManualPaymentRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-  const [creating, setCreating] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    setErr(null);
-    try {
-      const res = await fetch("/api/billing/manual-payments", { cache: "no-store" });
-      const data = (await res.json()) as {
-        enabled?: boolean;
-        activeRequest?: ManualPaymentRow | null;
-        requests?: ManualPaymentRow[];
-        error?: string;
-      };
-      if (!res.ok) {
-        setErr(data.error ?? "Не удалось загрузить заявки");
-        return;
-      }
-      if (data.enabled === false) {
-        setActive(null);
-        setHistory([]);
-        return;
-      }
-      setActive(data.activeRequest ?? null);
-      setHistory(data.requests ?? []);
-    } catch {
-      setErr("Сеть: не удалось загрузить заявки");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    startTransition(() => {
-      void refresh();
-    });
-  }, [refresh]);
-
-  async function createRequest(packageId: string) {
-    setErr(null);
-    setCreating(packageId);
-    try {
-      const res = await fetch("/api/billing/manual-payments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          packageId,
-          contactChannel: settings.whatsappEnabled ? "whatsapp" : "kaspi",
-        }),
-      });
-      const data = (await res.json()) as {
-        error?: string;
-        existingPaymentId?: string;
-      };
-      if (!res.ok) {
-        setErr(data.error ?? `Ошибка ${res.status}`);
-        return;
-      }
-      await refresh();
-    } catch {
-      setErr("Сеть: не удалось создать заявку");
-    } finally {
-      setCreating(null);
-    }
-  }
-
-  async function cancelRequest(requestId: string) {
-    setBusyId(requestId);
-    setErr(null);
-    try {
-      const res = await fetch(
-        `/api/billing/manual-payments/${encodeURIComponent(requestId)}/cancel`,
-        { method: "POST" },
-      );
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        setErr(data.error ?? `Ошибка ${res.status}`);
-        return;
-      }
-      await refresh();
-    } catch {
-      setErr("Сеть: не удалось отменить");
-    } finally {
-      setBusyId(null);
-    }
-  }
+export function KaspiManualBillingPanel({
+  packages,
+  billing,
+  hidePackagePicker = false,
+}: Props) {
+  const {
+    settings,
+    active,
+    history,
+    loading,
+    err,
+    creating,
+    busyId,
+    createRequest,
+    cancelRequest,
+  } = billing;
 
   function openWhatsApp(url: string) {
     window.open(url, "_blank", "noopener,noreferrer");
@@ -281,19 +196,9 @@ export function KaspiManualBillingPanel({ packages, publicSettings }: Props) {
         </Alert>
       )}
 
-      <div className="space-y-1">
-        <p className="text-foreground text-sm font-medium">
-          Пополнить через Kaspi / WhatsApp
-        </p>
-        <p className="text-muted-foreground text-xs">
-          Выберите пакет, переведите сумму на Kaspi с кодом заявки и отправьте чек в
-          WhatsApp. Токены начисляются только после проверки администратором.
-        </p>
-      </div>
-
       {active ? renderActiveCard(active) : null}
 
-      {!active && packages.length > 0 && (
+      {!hidePackagePicker && !active && packages.length > 0 && (
         <ul className="flex flex-col gap-2">
           {packages.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center gap-2">

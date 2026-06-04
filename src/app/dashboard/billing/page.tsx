@@ -22,11 +22,9 @@ import {
 } from "@/components/ui/table";
 import { creditTypeLabel } from "@/lib/credit-labels";
 import { formatAdminDateTime } from "@/lib/admin-format";
-import { isStripeSecretConfigured } from "@/lib/payment-config";
-import { isKaspiBillingEnabled } from "@/lib/kaspi-config";
-import { getKaspiManualBillingPublic } from "@/server/services/kaspiManualSettings";
 import { formatKzt, formatRuDate } from "@/lib/format-kzt";
 import { userTokenPackageStatusLabel } from "@/lib/user-token-package-labels";
+import { getKaspiManualBillingPublic } from "@/server/services/kaspiManualSettings";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { getBalance, listTransactions } from "@/server/services/credits";
 import { listActiveTokenPackagesForBilling } from "@/server/services/token-packages-catalog";
@@ -65,8 +63,6 @@ export default async function BillingPage({ searchParams }: PageProps) {
     getUserTokenPackageHistory(current.user.id, 100),
     getKaspiManualBillingPublic(),
   ]);
-  const stripeReady = isStripeSecretConfigured();
-  const kaspiReady = isKaspiBillingEnabled();
   const packageCards = packRows.map((p) => ({
     id: p.id,
     name: p.name,
@@ -82,7 +78,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
       <PageHeader
         variant="qaz"
         title="Биллинг"
-        description="Покупка пакетов токенов. Начисление после подтверждения на сервере (webhook), а не по странице «успех» в браузере."
+        description="Пополнение баланса через Kaspi и WhatsApp. Токены начисляются после проверки оплаты."
         breadcrumbs={[
           { label: "Кабинет", href: "/dashboard" },
           { label: "Биллинг" },
@@ -93,8 +89,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
         <Alert>
           <AlertTitle>Оплата отправлена</AlertTitle>
           <AlertDescription>
-            Если токены ещё не появились, подождите несколько секунд — срабатывает
-            webhook Stripe. Обновите страницу.
+            Если токены ещё не появились, подождите несколько секунд и обновите страницу.
           </AlertDescription>
         </Alert>
       )}
@@ -144,8 +139,6 @@ export default async function BillingPage({ searchParams }: PageProps) {
 
       <TokenPackagesBillingSection
         packages={packageCards}
-        stripeReady={stripeReady}
-        kaspiReady={kaspiReady}
         kaspiManual={kaspiManual}
       />
 

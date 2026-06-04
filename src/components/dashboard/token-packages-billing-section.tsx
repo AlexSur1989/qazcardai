@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -11,12 +10,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { formatKzt } from "@/lib/format-kzt";
 import { cn } from "@/lib/utils";
 import type { KaspiManualBillingPublic } from "@/lib/kaspi-manual-config";
 import { KaspiManualBillingPanel } from "@/components/dashboard/kaspi-manual-billing-panel";
+import { useKaspiManualBilling } from "@/components/dashboard/use-kaspi-manual-billing";
 
 export type BillingTokenPackage = {
   id: string;
@@ -30,8 +29,6 @@ export type BillingTokenPackage = {
 
 type Props = {
   packages: BillingTokenPackage[];
-  stripeReady: boolean;
-  kaspiReady: boolean;
   kaspiManual: KaspiManualBillingPublic;
 };
 
@@ -46,75 +43,18 @@ function isPopularPackageName(name: string) {
 
 export function TokenPackagesBillingSection({
   packages,
-  stripeReady,
-  kaspiReady,
   kaspiManual,
 }: Props) {
-  const [loading, setLoading] = useState<string | null>(null);
-  const [loadingKaspi, setLoadingKaspi] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const manualBilling = useKaspiManualBilling(kaspiManual);
+  const manualEnabled = kaspiManual.enabled;
 
-  async function buyStripe(packageId: string) {
-    setError(null);
-    setLoading(packageId);
-    try {
-      const res = await fetch("/api/payments/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packageId, provider: "stripe" }),
-      });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok) {
-        setError(data.error ?? `Ошибка ${res.status}`);
-        return;
-      }
-      if (data.url) {
-        window.location.assign(data.url);
-        return;
-      }
-      setError("Нет ссылки на оплату");
-    } catch {
-      setError("Сеть: не удалось создать сессию оплаты");
-    } finally {
-      setLoading(null);
-    }
-  }
-
-  async function buyKaspi(packageId: string) {
-    setError(null);
-    setLoadingKaspi(packageId);
-    try {
-      const res = await fetch("/api/billing/payments/kaspi/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tokenPackageId: packageId }),
-      });
-      const data = (await res.json()) as { paymentUrl?: string; error?: string };
-      if (!res.ok) {
-        setError(data.error ?? `Ошибка ${res.status}`);
-        return;
-      }
-      if (data.paymentUrl) {
-        window.location.assign(data.paymentUrl);
-        return;
-      }
-      setError("Нет ссылки на оплату Kaspi");
-    } catch {
-      setError("Сеть: не удалось создать Kaspi-платёж");
-    } finally {
-      setLoadingKaspi(null);
-    }
-  }
-
-  if (!stripeReady && !kaspiReady && !kaspiManual.enabled) {
+  if (!manualEnabled) {
     return (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Пакеты токенов</CardTitle>
           <CardDescription>
-            Для приёма платежей настройте Stripe или Kaspi Pay (см.{" "}
-            <code className="text-xs">.env.example</code>), либо включите ручной перевод Kaspi в
-            админке (KASPI_MANUAL_SETTINGS).
+            Пополнение через Kaspi / WhatsApp временно недоступно. Обратитесь в поддержку.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -128,7 +68,7 @@ export function TokenPackagesBillingSection({
                     {formatKzt(p.priceKzt)} · {p.totalTokens} токенов
                   </p>
                   <Button className="mt-3 w-full" type="button" disabled variant="secondary">
-                    Платежи скоро
+                    Пополнение скоро
                   </Button>
                 </li>
               ))}
@@ -152,40 +92,30 @@ export function TokenPackagesBillingSection({
     );
   }
 
+  const hasActiveRequest = manualBilling.active !== null;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Пакеты токенов</CardTitle>
         <CardDescription>
-          {stripeReady
-            ? "Оплата через Stripe Checkout. Токены начисляются после webhook на сервере."
-            : null}
-          {stripeReady && kaspiReady ? " " : null}
-          {kaspiReady
-            ? "Kaspi Pay: токены только после подтверждения на сервере (webhook), а не со страницы «успех» в браузере."
-            : null}
-          {kaspiManual.enabled
-            ? " Kaspi / WhatsApp: токены только после ручной проверки администратором."
-            : null}
-          {!stripeReady && kaspiReady
-            ? "Сейчас доступна тестовая оплата Kaspi Pay (mock)."
-            : null}
+          Выберите пакет и нажмите «Пополнить через Kaspi / WhatsApp». Переведите сумму на Kaspi
+          с кодом заявки и отправьте чек в WhatsApp. Токены начисляются после проверки
+          администратором.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {kaspiManual.enabled ? (
-          <KaspiManualBillingPanel packages={packages} publicSettings={kaspiManual} />
-        ) : null}
-        {error && (
-          <Alert variant="destructive">
-            <AlertTitle>Не удалось перейти к оплате</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+        <KaspiManualBillingPanel
+          packages={packages}
+          billing={manualBilling}
+          hidePackagePicker
+        />
+
         <ul className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
           {packages.map((p) => {
             const bp = bonusPercent(p.baseTokens, p.bonusTokens);
             const popular = isPopularPackageName(p.name);
+            const isCreating = manualBilling.creating === p.id;
             return (
               <li key={p.id} className="qaz-surface relative flex flex-col p-5">
                 {popular && (
@@ -204,10 +134,7 @@ export function TokenPackagesBillingSection({
                   <p className="text-foreground text-lg font-semibold">{p.name}</p>
                   {p.bonusTokens > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      <Badge
-                        variant="secondary"
-                        className={cn("font-normal", "shrink-0")}
-                      >
+                      <Badge variant="secondary" className="shrink-0 font-normal">
                         +{p.bonusTokens} бонусных токенов
                       </Badge>
                       {bp > 0 && (
@@ -229,46 +156,35 @@ export function TokenPackagesBillingSection({
                 <p className="text-foreground mt-1 text-sm font-medium">
                   Итого: {p.totalTokens} токенов
                 </p>
-                <div className="mt-4 flex flex-col gap-2">
-                  {stripeReady ? (
-                    <Button
-                      className="w-full"
-                      type="button"
-                      disabled={loading !== null || loadingKaspi !== null}
-                      onClick={() => void buyStripe(p.id)}
-                    >
-                      {loading === p.id ? (
-                        <>
-                          <Loader2 className="size-3.5 animate-spin" />
-                          Создаём сессию…
-                        </>
-                      ) : (
-                        "Купить пакет (Stripe)"
-                      )}
-                    </Button>
-                  ) : null}
-                  {kaspiReady ? (
-                    <Button
-                      className="w-full"
-                      type="button"
-                      variant={stripeReady ? "secondary" : "default"}
-                      disabled={loading !== null || loadingKaspi !== null}
-                      onClick={() => void buyKaspi(p.id)}
-                    >
-                      {loadingKaspi === p.id ? (
-                        <>
-                          <Loader2 className="size-3.5 animate-spin" />
-                          Создаём Kaspi-платёж…
-                        </>
-                      ) : (
-                        "Оплатить через Kaspi"
-                      )}
-                    </Button>
+                <div className="mt-4">
+                  <Button
+                    className="w-full"
+                    type="button"
+                    disabled={
+                      hasActiveRequest ||
+                      manualBilling.creating !== null ||
+                      manualBilling.loading
+                    }
+                    onClick={() => void manualBilling.createRequest(p.id)}
+                  >
+                    {isCreating ? (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin" />
+                        Создаём заявку…
+                      </>
+                    ) : (
+                      "Пополнить через Kaspi / WhatsApp"
+                    )}
+                  </Button>
+                  {hasActiveRequest ? (
+                    <p className="text-muted-foreground mt-2 text-xs">
+                      Сначала завершите или отмените текущую заявку выше.
+                    </p>
                   ) : null}
                 </div>
                 <p className="text-muted-foreground mt-2 flex items-center gap-1 text-xs">
                   <Sparkles className="size-3" aria-hidden />
-                  Статус оплаты: pending → success после сервера; баланс не меняется до подтверждения.
+                  Токены появятся на балансе после подтверждения оплаты.
                 </p>
               </li>
             );
