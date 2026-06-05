@@ -164,6 +164,8 @@ export function ConceptPhotoTab({
             conceptId,
             userPrompt: userAdd.trim(),
             size,
+            clientEstimateCredits:
+              typeof estimateCredits === "number" ? estimateCredits : null,
           }),
         },
       );
@@ -173,6 +175,7 @@ export function ConceptPhotoTab({
         costCredits?: number;
         error?: string;
         reason?: string;
+        code?: string;
       }>(res);
       if (!parsed.ok) {
         setGenError(parsed.message);
@@ -189,6 +192,9 @@ export function ConceptPhotoTab({
             ? ` — ${data.reason}`
             : "";
         setGenError((data.error ?? "Ошибка генерации") + detail);
+        if (res.status === 409 && data.code === "PRICE_CHANGED") {
+          setEstimateCredits(null);
+        }
         return;
       }
       const genId = data.generationId;

@@ -5,7 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { canAccessAdminPanel } from "@/lib/auth";
-import { getAppName } from "@/lib/app-name";
+import { getAppName, getLandingUrl } from "@/lib/app-name";
 import { cn } from "@/lib/utils";
 
 export function SiteHeader() {
@@ -14,12 +14,12 @@ export function SiteHeader() {
   return (
     <header className="border-border border-b bg-card/80 backdrop-blur-md supports-[backdrop-filter]:bg-card/60">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4">
-        <Link
-          href="/"
+        <a
+          href={getLandingUrl()}
           className="text-sm font-semibold tracking-tight text-foreground"
         >
           {getAppName()}
-        </Link>
+        </a>
         <nav className="flex flex-wrap items-center justify-end gap-2">
           {status === "loading" ? (
             <span className="text-muted-foreground text-xs" aria-busy="true">

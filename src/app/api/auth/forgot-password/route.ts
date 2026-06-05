@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { resolvePublicOriginFromRequest } from "@/lib/auth-public-url";
 import { getClientIpFromRequest } from "@/lib/client-ip";
 import { ensureDefaultEmailTemplates } from "@/server/services/emailTemplates";
 import {
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
     email,
     ipAddress: ip,
     userAgent,
-    publicBaseUrl: new URL(req.url).origin,
+    publicBaseUrl: resolvePublicOriginFromRequest(req),
   });
 
   const resBody: {

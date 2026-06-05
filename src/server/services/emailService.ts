@@ -4,6 +4,13 @@ import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
 import { getAppName } from "@/lib/app-name";
 import { getAppBaseUrl } from "@/lib/app-base-url";
+import {
+  buildSmtpFromHeader,
+  getSmtpPublicEnvStatus,
+  getSmtpTransportOptions,
+  getSupportEmailFromEnv,
+  isSmtpEnvConfigured,
+} from "@/lib/smtp-config";
 import { getAppSetting } from "@/server/services/appSettings";
 import {
   renderEmailTemplate,
@@ -17,25 +24,25 @@ export type SendEmailResult =
 
 const ALLOWED_PROVIDERS = new Set(["none", "smtp", "resend", "sendgrid"]);
 
-function fromHeader(): string {
-  const smtp = process.env.SMTP_FROM?.trim();
-  if (smtp) return smtp;
-  return "";
+async function resolveSupportEmail(): Promise<string> {
+  const fromEnv = getSupportEmailFromEnv();
+  if (process.env.SUPPORT_EMAIL?.trim()) {
+    return fromEnv;
+  }
+  const v = await getAppSetting("SUPPORT_EMAIL");
+  return typeof v === "string" && v.trim() ? v.trim() : fromEnv;
 }
 
-async function fromAppSettingOrEnv(): Promise<string> {
-  const f = fromHeader();
-  if (f) return f;
+async function resolveFromHeader(): Promise<string> {
+  const fromEnv = buildSmtpFromHeader();
+  if (fromEnv) return fromEnv;
   const v = await getAppSetting("EMAIL_FROM");
-  return typeof v === "string" && v.trim() ? v.trim() : "QazCard AI <noreply@qazcard.ai>";
+  if (typeof v === "string" && v.trim()) return v.trim();
+  return `${getAppName()} <noreply@qazcardai.kz>`;
 }
 
 export function getSmtpEnvConfigured(): boolean {
-  return Boolean(
-    process.env.SMTP_HOST?.trim() &&
-      process.env.SMTP_USER?.trim() &&
-      process.env.SMTP_PASSWORD?.trim(),
-  );
+  return isSmtpEnvConfigured();
 }
 
 export function getResendEnvConfigured(): boolean {
@@ -59,8 +66,10 @@ export async function getEmailProviderEnvStatus() {
       ? providerRaw.trim().toLowerCase()
       : "none";
   const emailEnabled = enabledRaw === true;
+  const smtp = getSmtpPublicEnvStatus();
   return {
-    smtpConfigured: getSmtpEnvConfigured(),
+    ...smtp,
+    smtpConfigured: smtp.smtpConfigured,
     resendApiConfigured: getResendEnvConfigured(),
     sendgridApiConfigured: getSendgridEnvConfigured(),
     apiKeyConfigured: getResendEnvConfigured() || getSendgridEnvConfigured(),
@@ -93,40 +102,58 @@ export async function sendEmail(args: {
     if (!getSmtpEnvConfigured()) {
       return { status: "skipped", reason: "smtp_not_configured" };
     }
-    return sendViaSmtp({ ...args, from: await fromAppSettingOrEnv() });
+    return sendViaSmtp({ ...args, from: await resolveFromHeader() });
   }
   if (p === "resend") {
     if (!getResendEnvConfigured()) {
       return { status: "skipped", reason: "resend_not_configured" };
     }
-    return sendViaResend({ ...args, from: await fromAppSettingOrEnv() });
+    return sendViaResend({ ...args, from: await resolveFromHeader() });
   }
   if (p === "sendgrid") {
     if (!getSendgridEnvConfigured()) {
       return { status: "skipped", reason: "sendgrid_not_configured" };
     }
-    return sendViaSendgrid({ ...args, from: await fromAppSettingOrEnv() });
+    return sendViaSendgrid({ ...args, from: await resolveFromHeader() });
   }
   return { status: "skipped", reason: "unknown_provider" };
 }
 
-async function sendViaSmtp(args: {
+/**
+ * Тест SMTP из админки: подробная ошибка провайдера, без утечки пароля.
+ */
+export async function sendSmtpTestEmail(args: {
   to: string;
-  from: string;
   subject: string;
   text: string;
   html?: string;
 }): Promise<SendEmailResult> {
-  const host = process.env.SMTP_HOST!.trim();
-  const port = Math.max(1, parseInt(process.env.SMTP_PORT?.trim() || "587", 10) || 587);
-  const user = process.env.SMTP_USER!.trim();
-  const pass = process.env.SMTP_PASSWORD!;
+  if (!getSmtpEnvConfigured()) {
+    return { status: "skipped", reason: "smtp_not_configured" };
+  }
+  return sendViaSmtp(
+    { ...args, from: await resolveFromHeader() },
+    { exposeError: true },
+  );
+}
+
+async function sendViaSmtp(
+  args: {
+    to: string;
+    from: string;
+    subject: string;
+    text: string;
+    html?: string;
+  },
+  options?: { exposeError?: boolean },
+): Promise<SendEmailResult> {
+  const { host, port, secure, auth } = getSmtpTransportOptions();
   try {
     const transporter = nodemailer.createTransport({
       host,
       port,
-      secure: port === 465,
-      auth: { user, pass },
+      secure,
+      auth,
     });
     await transporter.sendMail({
       from: args.from,
@@ -139,7 +166,10 @@ async function sendViaSmtp(args: {
   } catch (e) {
     const message = e instanceof Error ? e.message : "smtp_error";
     console.error("[emailService] smtp", message);
-    return { status: "error", message: "send_failed" };
+    return {
+      status: "error",
+      message: options?.exposeError ? message : "send_failed",
+    };
   }
 }
 
@@ -187,15 +217,11 @@ async function sendViaSendgrid(args: {
   const key = process.env.SENDGRID_API_KEY!.trim();
   const fromMatch = args.from.match(/^(?:"?([^"]*)"?\s+)?<([^>]+)>$/);
   const fromEmail = fromMatch ? fromMatch[2].trim() : args.from.trim();
-  const fromName = fromMatch?.[1]?.trim() || "QazCard AI";
+  const fromName = fromMatch?.[1]?.trim() || getAppName();
   const body: Record<string, unknown> = {
-    personalizations: [
-      { to: [{ email: args.to }], subject: args.subject },
-    ],
+    personalizations: [{ to: [{ email: args.to }], subject: args.subject }],
     from: { email: fromEmail, name: fromName },
-    content: [
-      { type: "text/plain", value: args.text },
-    ],
+    content: [{ type: "text/plain", value: args.text }],
   };
   if (args.html) {
     (body.content as { type: string; value: string }[]).push({
@@ -245,9 +271,10 @@ export async function sendTemplateEmail(args: {
   templateKey: EmailTemplateKey;
   variables: Record<string, string | number | undefined | null | Date>;
 }): Promise<SendEmailResult> {
+  const supportEmail = await resolveSupportEmail();
   const rendered = await renderEmailTemplate({
     key: args.templateKey,
-    variables: normVars(args.variables),
+    variables: normVars({ supportEmail, ...args.variables }),
   });
   if (!rendered) {
     return { status: "skipped", reason: "template_inactive" };
@@ -262,7 +289,7 @@ export async function sendTemplateEmail(args: {
 
 const LOW_BALANCE_THROTTLE_HOURS = 72;
 
-const ADMIN_THROTTLE_MS = 60 * 60 * 1000; // 1h between same admin channel
+const ADMIN_THROTTLE_MS = 60 * 60 * 1000;
 
 export async function canSendUserLowBalanceAgain(userId: string): Promise<boolean> {
   const u = await prisma.user.findUnique({
@@ -310,6 +337,7 @@ export function getEmailFlowUrls() {
   return {
     dashboardUrl: `${base}/dashboard`,
     billingUrl: `${base}/dashboard/billing`,
+    supportEmail: getSupportEmailFromEnv(),
     appName: (() => {
       try {
         return getAppName();

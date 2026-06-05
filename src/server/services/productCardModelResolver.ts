@@ -61,7 +61,20 @@ async function resolveStrictProductCardModel(
   }
 
   const slug = defaultSlugForProductCardType(settings, productCardModelType);
-  if (!slug) return null;
+  if (!slug) {
+    if (productCardModelType === "PRODUCT_CARD_BUILDER") {
+      return prisma.aiModel.findFirst({
+        where: {
+          scope: "PRODUCT_CARD",
+          productCardModelType: "PRODUCT_CARD_BUILDER",
+          isActive: true,
+          type: "IMAGE",
+        },
+        orderBy: { name: "asc" },
+      });
+    }
+    return null;
+  }
 
   const wrongScope = await prisma.aiModel.findFirst({
     where: { slug, isActive: true, scope: "GENERAL" },

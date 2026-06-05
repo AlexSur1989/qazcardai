@@ -3,8 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { auth } from "@/auth";
 import { APP_DESCRIPTION, getAppName } from "@/lib/app-name";
-import { SiteFooter } from "@/components/layout/site-footer";
-import { SiteHeader } from "@/components/layout/site-header";
+import { ConditionalSiteChrome } from "@/components/layout/conditional-site-chrome";
 import { AppProviders } from "@/components/providers/app-providers";
 
 import "./globals.css";
@@ -38,9 +37,7 @@ export default async function RootLayout({
     >
       <body className="flex min-h-full flex-col">
         <AppProviders session={session}>
-          <SiteHeader />
-          <div className="min-w-0 flex-1">{children}</div>
-          <SiteFooter />
+          <ConditionalSiteChrome>{children}</ConditionalSiteChrome>
         </AppProviders>
       </body>
     </html>

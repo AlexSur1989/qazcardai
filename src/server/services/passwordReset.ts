@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "crypto";
 
 import { writeAdminAuditLog } from "@/lib/admin-audit";
 import { getAppBaseUrl } from "@/lib/app-base-url";
+import { sanitizePublicLinkBaseUrl } from "@/lib/auth-public-url";
 import { getAppName } from "@/lib/app-name";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -22,7 +23,9 @@ export function hashResetToken(token: string): string {
 }
 
 function buildResetUrl(rawToken: string, publicBaseUrl?: string | null): string {
-  const base = (publicBaseUrl?.trim() || getAppBaseUrl()).replace(/\/$/, "");
+  const base = (
+    sanitizePublicLinkBaseUrl(publicBaseUrl) || getAppBaseUrl()
+  ).replace(/\/$/, "");
   return `${base}/reset-password?token=${encodeURIComponent(rawToken)}`;
 }
 

@@ -4,18 +4,25 @@ import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getSession, signIn } from "next-auth/react";
+import { Loader2, Mail, User } from "lucide-react";
 
-import { TelegramLoginButton } from "@/components/auth/telegram-login-button";
+import { AuthDivider, AuthLayout } from "@/components/auth/auth-layout";
+import { AuthTabs } from "@/components/auth/auth-header";
+import { GoogleLoginButton } from "@/components/auth/google-login-button";
+import { PasswordInput } from "@/components/auth/password-input";
+import { TelegramAuthSection } from "@/components/auth/telegram-auth-section";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { postAuthLandingPath } from "@/lib/auth";
+import { oauthErrorMessage, type AuthOAuthProps } from "@/lib/auth-oauth-ui";
 
-type RegisterFormProps = {
-  telegramAuthEnabled: boolean;
-  telegramBotUsername?: string;
-  telegramAuthUrl?: string;
-};
+type RegisterFormProps = AuthOAuthProps;
 
 function RegisterFormInner({
+  googleAuthUiState,
+  googleAuthStartUrl,
   telegramAuthEnabled,
   telegramBotUsername,
   telegramAuthUrl,
@@ -23,6 +30,7 @@ function RegisterFormInner({
   const router = useRouter();
   const searchParams = useSearchParams();
   const oauthErr = searchParams.get("error");
+  const oauthError = oauthErrorMessage(oauthErr);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -78,103 +86,127 @@ function RegisterFormInner({
     telegramAuthEnabled && telegramBotUsername && telegramAuthUrl;
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-12">
+    <AuthLayout mode="register">
+      <AuthTabs mode="register" />
       <h1 className="text-2xl font-semibold tracking-tight">Регистрация</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Уже есть аккаунт?{" "}
-        <Link
-          href="/login"
-          className="text-primary underline-offset-4 hover:underline"
-        >
-          Войти
-        </Link>
-      </p>
 
-      {oauthErr ? (
-        <p className="text-destructive mt-4 text-sm" role="alert">
-          Не удалось войти через Telegram. Попробуйте ещё раз.
-        </p>
+      <div className="mt-6 space-y-3">
+        <GoogleLoginButton
+          mode="register"
+          uiState={googleAuthUiState}
+          authStartUrl={googleAuthStartUrl}
+        />
+        {showTelegramWidget ? (
+          <TelegramAuthSection
+            mode="register"
+            botUsername={telegramBotUsername}
+            authUrl={telegramAuthUrl}
+          />
+        ) : null}
+      </div>
+
+      <AuthDivider />
+
+      {oauthError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{oauthError}</AlertDescription>
+        </Alert>
       ) : null}
 
-      <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="name" className="text-sm font-medium">
-            Имя (необязательно)
-          </label>
-          <input
-            id="name"
-            name="name"
-            type="text"
-            autoComplete="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-          />
+      <form onSubmit={onSubmit} className="flex flex-col gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Имя</Label>
+          <div className="relative">
+            <User
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              aria-hidden
+            />
+            <Input
+              id="name"
+              name="name"
+              type="text"
+              autoComplete="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-11 pl-9"
+              disabled={loading}
+              placeholder="Как к вам обращаться"
+            />
+          </div>
         </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="email" className="text-sm font-medium">
-            Email
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-          />
+
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <div className="relative">
+            <Mail
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              aria-hidden
+            />
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="h-11 pl-9"
+              disabled={loading}
+            />
+          </div>
         </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="password" className="text-sm font-medium">
-            Пароль (мин. 8 символов)
-          </label>
-          <input
+
+        <div className="space-y-2">
+          <Label htmlFor="password">Пароль</Label>
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             autoComplete="new-password"
             required
             minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={loading}
           />
+          <p className="text-muted-foreground text-xs">Минимум 8 символов</p>
         </div>
+
         {error ? (
-          <p className="text-destructive text-sm" role="alert">
-            {error}
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         ) : null}
-        <Button type="submit" disabled={loading}>
-          {loading ? "Регистрация…" : "Зарегистрироваться"}
+
+        <Button type="submit" className="h-11 w-full" disabled={loading}>
+          {loading ? (
+            <>
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+              Регистрация…
+            </>
+          ) : (
+            "Зарегистрироваться"
+          )}
         </Button>
       </form>
 
-      {showTelegramWidget ? (
-        <div className="mt-6 space-y-3">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background text-muted-foreground px-2">или</span>
-            </div>
-          </div>
-          <TelegramLoginButton
-            botUsername={telegramBotUsername}
-            authUrl={telegramAuthUrl}
-          />
-        </div>
-      ) : null}
-
-      <p className="mt-8 text-center text-sm text-muted-foreground">
-        <Link href="/" className="underline-offset-4 hover:underline">
-          На главную
+      <p className="text-muted-foreground mt-6 text-center text-sm">
+        Уже есть аккаунт?{" "}
+        <Link
+          href="/login"
+          className="text-primary font-medium underline-offset-4 hover:underline"
+        >
+          Войти
         </Link>
       </p>
-    </main>
+
+      <p className="text-muted-foreground mt-4 text-center text-xs leading-relaxed">
+        Создавая аккаунт, вы соглашаетесь с{" "}
+        <Link href="/terms" className="text-primary underline-offset-4 hover:underline">
+          условиями сервиса
+        </Link>
+        .
+      </p>
+    </AuthLayout>
   );
 }
 
@@ -182,9 +214,9 @@ export function RegisterForm(props: RegisterFormProps) {
   return (
     <Suspense
       fallback={
-        <main className="mx-auto flex w-full max-w-md flex-1 items-center justify-center px-4 py-12 text-sm text-muted-foreground">
-          Загрузка…
-        </main>
+        <div className="auth-page-bg flex min-h-dvh items-center justify-center">
+          <Loader2 className="text-primary size-8 animate-spin" aria-label="Загрузка" />
+        </div>
       }
     >
       <RegisterFormInner {...props} />

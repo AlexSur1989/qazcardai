@@ -192,4 +192,44 @@
     );
     border-color: var(--qaz-border);
   }
+
+  /* Auth pages — те же градиенты/атмосфера, что maintenance + qaz-hero */
+  .auth-page-bg {
+    position: relative;
+    overflow-x: hidden;
+    background: var(--qaz-bg);
+  }
+  .auth-page-bg::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--qaz-gradient);
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .auth-page-glow {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(72px);
+    pointer-events: none;
+    animation: auth-glow-pulse 10s ease-in-out infinite;
+  }
+  @keyframes auth-glow-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.55;
+      transform: scale(1.04);
+    }
+  }
+  .auth-card {
+    border-radius: calc(var(--radius) * 1.25);
+    border: 1px solid var(--qaz-border);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: var(--qaz-shadow);
+    backdrop-filter: blur(8px);
+  }
 }

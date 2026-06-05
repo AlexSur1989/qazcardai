@@ -7,6 +7,10 @@ import {
   postAuthLandingPath,
 } from "@/lib/auth";
 import {
+  getGoogleAuthUiState,
+  getGoogleOAuthStartUrl,
+} from "@/lib/google-auth-config";
+import {
   getTelegramBotUsernameForWidget,
   getTelegramWidgetAuthCallbackUrl,
   telegramAuthEnabledForUi,
@@ -28,6 +32,7 @@ export default async function LoginPage({ searchParams }: Props) {
     firstSearchParam(sp, "next"),
     firstSearchParam(sp, "callbackUrl"),
   );
+  const landingPath = postAuthLandingPath(redirectParam, undefined);
 
   if (session?.user) {
     redirect(postAuthLandingPath(redirectParam, session.user.role));
@@ -38,13 +43,13 @@ export default async function LoginPage({ searchParams }: Props) {
     ? getTelegramBotUsernameForWidget() ?? undefined
     : undefined;
   const telegramAuthUrl = showTelegram
-    ? getTelegramWidgetAuthCallbackUrl(
-        postAuthLandingPath(redirectParam, undefined),
-      )
+    ? getTelegramWidgetAuthCallbackUrl(landingPath)
     : undefined;
 
   return (
     <LoginForm
+      googleAuthUiState={getGoogleAuthUiState()}
+      googleAuthStartUrl={getGoogleOAuthStartUrl(landingPath)}
       telegramAuthEnabled={showTelegram}
       telegramBotUsername={telegramBotUsername}
       telegramAuthUrl={telegramAuthUrl}

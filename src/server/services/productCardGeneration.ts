@@ -131,6 +131,7 @@ export type GenerateConceptPhotoErr = {
   error: string;
   status: number;
   reason?: string;
+  code?: "PRICE_CHANGED";
 };
 
 export type GenerateConceptPhotoResult = GenerateConceptPhotoOk | GenerateConceptPhotoErr;
@@ -141,7 +142,13 @@ export type GenerateConceptPhotoResult = GenerateConceptPhotoOk | GenerateConcep
 export async function generateConceptPhotoForProductCard(
   userId: string,
   projectId: string,
-  input: { categoryId: string; conceptId: string; userPrompt: string; size?: string },
+  input: {
+    categoryId: string;
+    conceptId: string;
+    userPrompt: string;
+    size?: string;
+    clientEstimateCredits?: number | null;
+  },
 ): Promise<GenerateConceptPhotoResult> {
   const project = await getOwnedProjectOrNull(userId, projectId);
   if (!project) {
@@ -249,6 +256,20 @@ export async function generateConceptPhotoForProductCard(
       ok: false,
       error: e instanceof Error ? e.message : "Некорректные настройки модели",
       status: 400,
+    };
+  }
+
+  const serverCredits = conceptPricing.credits;
+  if (
+    input.clientEstimateCredits != null &&
+    Number.isFinite(input.clientEstimateCredits) &&
+    input.clientEstimateCredits !== serverCredits
+  ) {
+    return {
+      ok: false,
+      error: "Стоимость изменилась — обновите оценку и попробуйте снова",
+      status: 409,
+      code: "PRICE_CHANGED",
     };
   }
 

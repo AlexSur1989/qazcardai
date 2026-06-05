@@ -22,6 +22,7 @@ const VAR_LIST: Record<EmailTemplateKey, string[]> = {
     "userName",
     "userEmail",
     "dashboardUrl",
+    "supportEmail",
     "createdAt",
   ],
   PAYMENT_SUCCESS: [
@@ -34,6 +35,7 @@ const VAR_LIST: Record<EmailTemplateKey, string[]> = {
     "currency",
     "balanceCredits",
     "billingUrl",
+    "supportEmail",
     "createdAt",
   ],
   GENERATION_COMPLETED: [
@@ -45,6 +47,7 @@ const VAR_LIST: Record<EmailTemplateKey, string[]> = {
     "modelName",
     "balanceCredits",
     "dashboardUrl",
+    "supportEmail",
     "createdAt",
   ],
   GENERATION_FAILED: [
@@ -56,6 +59,7 @@ const VAR_LIST: Record<EmailTemplateKey, string[]> = {
     "modelName",
     "errorMessage",
     "dashboardUrl",
+    "supportEmail",
     "createdAt",
   ],
   LOW_BALANCE: [
@@ -65,6 +69,7 @@ const VAR_LIST: Record<EmailTemplateKey, string[]> = {
     "balanceCredits",
     "dashboardUrl",
     "billingUrl",
+    "supportEmail",
     "createdAt",
   ],
   ADMIN_PROVIDER_ERROR: [
@@ -83,6 +88,7 @@ const VAR_LIST: Record<EmailTemplateKey, string[]> = {
     "userName",
     "resetUrl",
     "expiresInMinutes",
+    "supportEmail",
   ],
 };
 
@@ -97,6 +103,7 @@ const DEFAULTS: Record<
       "Здравствуйте, {{userName}}!\n\n" +
       "Спасибо за регистрацию в {{appName}}. Ваш email: {{userEmail}}.\n\n" +
       "Перейдите в кабинет: {{dashboardUrl}}\n\n" +
+      "По вопросам: {{supportEmail}}\n\n" +
       "— Команда {{appName}}",
   },
   PAYMENT_SUCCESS: {
@@ -107,7 +114,8 @@ const DEFAULTS: Record<
       "Начислено токенов: {{credits}}. Сумма: {{amount}} {{currency}}.\n" +
       "Текущий баланс: {{balanceCredits}}.\n\n" +
       "История: {{billingUrl}}\n\n" +
-      "— {{appName}}",
+      "— {{appName}}\n" +
+      "Поддержка: {{supportEmail}}",
   },
   GENERATION_COMPLETED: {
     name: "Генерация готова / Generation completed",
@@ -117,7 +125,8 @@ const DEFAULTS: Record<
       "Генерация ({{generationType}}) на модели «{{modelName}}» завершена.\n" +
       "ID: {{generationId}}\n" +
       "Баланс: {{balanceCredits}} токенов.\n\n" +
-      "Открыть: {{dashboardUrl}}\n",
+      "Открыть: {{dashboardUrl}}\n\n" +
+      "Поддержка: {{supportEmail}}\n",
   },
   GENERATION_FAILED: {
     name: "Ошибка генерации / Generation failed",
@@ -127,14 +136,16 @@ const DEFAULTS: Record<
       "ID: {{generationId}}\n" +
       "Модель: {{modelName}}\n" +
       "Сообщение: {{errorMessage}}\n\n" +
-      "Кабинет: {{dashboardUrl}}\n",
+      "Кабинет: {{dashboardUrl}}\n\n" +
+      "Поддержка: {{supportEmail}}\n",
   },
   LOW_BALANCE: {
     name: "Низкий баланс / Low balance",
     subject: "У вас заканчиваются токены",
     bodyText:
       "{{userName}}, баланс: {{balanceCredits}} токенов — рекомендуем пополнить.\n" +
-      "Кабинет: {{dashboardUrl}} · Оплата: {{billingUrl}}\n",
+      "Кабинет: {{dashboardUrl}} · Оплата: {{billingUrl}}\n\n" +
+      "Поддержка: {{supportEmail}}\n",
   },
   ADMIN_PROVIDER_ERROR: {
     name: "Админ: ошибка провайдера / Admin provider error",
@@ -162,7 +173,8 @@ const DEFAULTS: Record<
       "Перейдите по ссылке, чтобы задать новый пароль:\n" +
       "{{resetUrl}}\n\n" +
       "Ссылка действует {{expiresInMinutes}} минут.\n\n" +
-      "Если вы не запрашивали восстановление пароля, просто проигнорируйте это письмо.\n",
+      "Если вы не запрашивали восстановление пароля, просто проигнорируйте это письмо.\n\n" +
+      "По вопросам: {{supportEmail}}\n",
   },
 };
 

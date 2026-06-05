@@ -6,6 +6,7 @@ import { useMemo, useState, useTransition } from "react";
 import { AdminSettingsAdvancedPanel } from "@/components/admin/admin-settings-advanced-panel";
 import { AdminSettingsBasicView } from "@/components/admin/admin-settings-basic-view";
 import { BASIC_EDITABLE_SETTING_KEYS } from "@/lib/admin-settings-basic-config";
+import type { GoogleOAuthEnvStatus } from "@/lib/google-auth-config";
 import type { Permission } from "@/lib/permissions";
 
 type SettingRow = {
@@ -51,11 +52,13 @@ export function AdminSettingsCenter({
   canEdit,
   canEditCritical,
   linkPermissions,
+  googleOAuthEnvStatus,
 }: {
   initialGroups: Group[];
   canEdit: boolean;
   canEditCritical: boolean;
   linkPermissions: Partial<Record<Permission, boolean>>;
+  googleOAuthEnvStatus: GoogleOAuthEnvStatus;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -217,6 +220,7 @@ export function AdminSettingsCenter({
         onHideAdvanced={() => setAdvancedMode(false)}
         onSeedDefaults={() => void seedDefaults()}
         seeding={seeding}
+        googleOAuthEnvStatus={googleOAuthEnvStatus}
       />
     );
   }

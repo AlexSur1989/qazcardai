@@ -80,6 +80,40 @@ async function main() {
       },
     },
     {
+      name: "GPT Image 2 Card Builder",
+      slug: "gpt-image-2-card-builder",
+      type: "IMAGE" as const,
+      productCardModelType: "PRODUCT_CARD_BUILDER",
+      apiModelId: "gpt-image-2-image-to-image",
+      endpoint: KIE_ENDPOINT,
+      statusEndpoint: KIE_STATUS,
+      costCredits: 25,
+      pricingSchema: productCardImagePricing(25, 0.05),
+      supportsImageInput: true,
+      settingsSchema: {
+        fields: [
+          { name: "inputUrls", type: "upload-list", label: "Reference image URLs", required: true, maxItems: 16, accept: "image/*" },
+          { name: "aspectRatio", type: "select", label: "Aspect ratio", default: "auto", options: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"], required: true },
+          { name: "resolution", type: "select", label: "Resolution", default: "1K", options: ["1K", "2K", "4K"], required: true },
+        ],
+      },
+      payloadMapping: {
+        adapter: "market-create-task",
+        omitNull: true,
+        required: ["input_urls", "aspect_ratio"],
+        input: {
+          input_urls: "$settings.inputUrls",
+          aspect_ratio: "$settings.aspectRatio",
+          resolution: "$settings.resolution",
+        },
+        coerce: {
+          input_urls: "stringArray",
+          aspect_ratio: "string",
+          resolution: "string",
+        },
+      },
+    },
+    {
       name: "GPT Image 2 Product Card",
       slug: "gpt-image-2-product-card",
       type: "IMAGE" as const,

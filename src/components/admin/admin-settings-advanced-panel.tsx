@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { GoogleOAuthEnvStatusCard } from "@/components/admin/google-oauth-env-status";
+import type { GoogleOAuthEnvStatus } from "@/lib/google-auth-config";
 import type { AppSettingGroupId } from "@/config/app-settings-registry";
 import {
   getAppSettingBadges,
@@ -85,6 +87,7 @@ type Props = {
   onHideAdvanced: () => void;
   onSeedDefaults: () => void;
   seeding: boolean;
+  googleOAuthEnvStatus: GoogleOAuthEnvStatus;
 };
 
 export function AdminSettingsAdvancedPanel({
@@ -101,6 +104,7 @@ export function AdminSettingsAdvancedPanel({
   onHideAdvanced,
   onSeedDefaults,
   seeding,
+  googleOAuthEnvStatus,
 }: Props) {
   const [filters, setFilters] = useState<FilterState>({
     group: "all",
@@ -193,6 +197,8 @@ export function AdminSettingsAdvancedPanel({
           <AlertDescription>{message.text}</AlertDescription>
         </Alert>
       ) : null}
+
+      <GoogleOAuthEnvStatusCard status={googleOAuthEnvStatus} />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-muted-foreground text-sm">

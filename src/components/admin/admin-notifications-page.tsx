@@ -26,6 +26,14 @@ import {
 
 type ProviderPayload = {
   smtpConfigured: boolean;
+  smtpHost: string | null;
+  smtpPort: number | null;
+  smtpSecure: boolean | null;
+  smtpUser: string | null;
+  smtpFromEmail: string | null;
+  smtpFromName: string | null;
+  smtpPasswordConfigured: boolean;
+  supportEmail: string | null;
   resendApiConfigured: boolean;
   sendgridApiConfigured: boolean;
   apiKeyConfigured: boolean;
@@ -82,6 +90,8 @@ export function AdminNotificationsPage({ canEdit, initial }: Props) {
   });
   const [testTo, setTestTo] = useState("");
   const [testing, setTesting] = useState(false);
+  const [smtpTestTo, setSmtpTestTo] = useState("");
+  const [smtpTesting, setSmtpTesting] = useState(false);
 
   const selected = useMemo(
     () => data.templates.find((t) => t.key === editorKey) ?? null,
@@ -180,6 +190,40 @@ export function AdminNotificationsPage({ canEdit, initial }: Props) {
     }
   };
 
+  const sendSmtpTest = async () => {
+    if (!canEdit) return;
+    if (!smtpTestTo.trim()) {
+      toast.error("Email");
+      return;
+    }
+    setSmtpTesting(true);
+    try {
+      const res = await fetch("/api/admin/notifications/test-smtp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: smtpTestTo.trim() }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        result?: string;
+        reason?: string;
+        message?: string;
+      };
+      if (!res.ok) {
+        throw new Error(j.message ?? j.error ?? "error");
+      }
+      if (j.result === "skipped") {
+        toast.message(`Пропущено: ${j.reason ?? ""}`);
+      } else {
+        toast.success("SMTP-тест отправлен / SMTP test sent");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setSmtpTesting(false);
+    }
+  };
+
   const sendTest = async () => {
     if (!canEdit || !editorKey) return;
     if (!testTo.trim()) {
@@ -231,6 +275,7 @@ export function AdminNotificationsPage({ canEdit, initial }: Props) {
       errorMessage: "—",
       dashboardUrl: "https://app.example/dashboard",
       billingUrl: "https://app.example/dashboard/billing",
+      supportEmail: "support@qazcardai.kz",
       createdAt: new Date().toISOString(),
     };
     const subj = simpleReplace(editor.subject, sample);
@@ -269,8 +314,11 @@ export function AdminNotificationsPage({ canEdit, initial }: Props) {
                 value={String(form.EMAIL_FROM ?? "")}
                 onChange={(e) => setForm((f) => ({ ...f, EMAIL_FROM: e.target.value }))}
                 disabled={!canEdit}
-                placeholder="QazCard AI &lt;noreply@qazcard.ai&gt;"
+                placeholder="QazCard AI &lt;noreply@qazcardai.kz&gt;"
               />
+              <p className="text-muted-foreground text-xs">
+                From в env (SMTP_FROM_EMAIL / SMTP_FROM_NAME) имеет приоритет над этим полем.
+              </p>
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label>ADMIN_ALERT_EMAIL (admin alerts)</Label>
@@ -283,18 +331,54 @@ export function AdminNotificationsPage({ canEdit, initial }: Props) {
               />
             </div>
           </div>
-          <ul className="text-muted-foreground text-sm">
+          <ul className="text-muted-foreground space-y-1 text-sm">
             <li>
               {data.provider.smtpConfigured
                 ? "✓ " + adminTerm("notifSmtpOk")
                 : "— " + adminTerm("notifSmtpNo")}
             </li>
+            {data.provider.smtpHost ? (
+              <li>
+                SMTP: {data.provider.smtpHost}:{data.provider.smtpPort}
+                {data.provider.smtpSecure ? " (SSL)" : ""} · From:{" "}
+                {data.provider.smtpFromName} &lt;{data.provider.smtpFromEmail}&gt;
+              </li>
+            ) : null}
+            <li>
+              {data.provider.smtpPasswordConfigured
+                ? "✓ SMTP password задан в env"
+                : "— SMTP_PASSWORD не задан в env"}
+            </li>
+            {data.provider.supportEmail ? (
+              <li>Поддержка в письмах: {data.provider.supportEmail}</li>
+            ) : null}
             <li>
               {data.provider.apiKeyConfigured
                 ? "✓ " + adminTerm("notifApiOk")
                 : "— " + adminTerm("notifApiNo")}
             </li>
           </ul>
+          {canEdit ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="flex-1 space-y-2">
+                <Label>Тест SMTP (без шаблона)</Label>
+                <Input
+                  type="email"
+                  placeholder="admin@example.com"
+                  value={smtpTestTo}
+                  onChange={(e) => setSmtpTestTo(e.target.value)}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={sendSmtpTest}
+                disabled={smtpTesting}
+              >
+                {smtpTesting ? "…" : "Отправить тест SMTP"}
+              </Button>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

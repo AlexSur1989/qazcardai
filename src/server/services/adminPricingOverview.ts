@@ -394,30 +394,6 @@ export async function buildAdminPricingOverview(): Promise<AdminPricingOverviewD
     });
   }
 
-  warnings.push({
-    id: "concept-no-price-changed",
-    severity: "warning",
-    title: "Фото с концепциями: нет проверки PRICE_CHANGED при generate",
-    detail: "Маршрут generate/concept-photo не сравнивает clientEstimateCredits с сервером. Клиент может отправить устаревшую оценку.",
-    tab: "concepts",
-  });
-
-  const promptOnlySettings = [
-    { name: "priceSegment (card_builder)", scenario: "Создать карточку" },
-    { name: "motionStyle (видео товара)", scenario: "Видео товара" },
-    { name: "overlay / SVG / typography", scenario: "Карточка товара" },
-    { name: "category / concept text", scenario: "Фото с концепциями" },
-  ];
-  for (const p of promptOnlySettings) {
-    warnings.push({
-      id: `prompt-only-${p.name.replace(/\W+/g, "-").toLowerCase()}`,
-      severity: "info",
-      title: `${p.name} влияет на промпт, но не на цену`,
-      detail: `Сценарий: ${p.scenario}.`,
-      tab: "warnings",
-    });
-  }
-
   const modelRows: AdminPricingModelRow[] = models.map((m) => {
     const minCredits = getCreditsUiFloor(m);
     let sampleCredits = m.costCredits;

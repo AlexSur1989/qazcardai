@@ -784,7 +784,7 @@ export async function buildLaunchChecklist(): Promise<{
     emailPwdDetail = "Задайте EMAIL_PROVIDER (smtp, resend или sendgrid).";
   } else if (emailStatus.emailProvider === "smtp" && !emailStatus.smtpConfigured) {
     emailPwdSeverity = "required";
-    emailPwdDetail = "Для SMTP задайте SMTP_HOST, SMTP_USER, SMTP_PASSWORD.";
+    emailPwdDetail = "Для SMTP задайте SMTP_HOST, SMTP_USER, SMTP_PASSWORD в .env на сервере.";
   } else if (
     emailStatus.emailProvider === "resend" &&
     !emailStatus.resendApiConfigured

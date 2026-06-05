@@ -412,13 +412,6 @@ export function AdminPricingTabPanels({
             </CardContent>
           </Card>
         ) : null}
-        <Alert variant="destructive">
-          <AlertTitle>PRICE_CHANGED</AlertTitle>
-          <AlertDescription>
-            generate/concept-photo не проверяет clientEstimateCredits — клиент может отправить
-            устаревшую оценку (исправление — отдельная задача).
-          </AlertDescription>
-        </Alert>
         <p className="text-muted-foreground text-sm">
           Size presets:{" "}
           {data.productCardSettings.conceptImageSizes.map((s) => s.id).join(", ")}

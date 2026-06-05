@@ -10,3 +10,12 @@ export function getAppName(): string {
     (typeof process !== "undefined" && process.env.APP_NAME?.trim());
   return a || DEFAULT_APP_NAME;
 }
+
+/** Публичный URL лендинга (логотип в шапке). Переопределение: `NEXT_PUBLIC_LANDING_URL`. */
+export const DEFAULT_LANDING_URL = "https://qazcardai.kz";
+
+export function getLandingUrl(): string {
+  const fromEnv =
+    typeof process !== "undefined" && process.env.NEXT_PUBLIC_LANDING_URL?.trim();
+  return fromEnv || DEFAULT_LANDING_URL;
+}

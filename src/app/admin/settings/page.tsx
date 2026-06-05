@@ -5,6 +5,7 @@ import { AdminSettingsCenter } from "@/components/admin/admin-settings-center";
 import { PageHeader } from "@/components/layout/page-header";
 import { hasPermission } from "@/lib/permissions";
 import type { Permission } from "@/lib/permissions";
+import { getGoogleOAuthEnvStatus } from "@/lib/google-auth-config";
 import { getAllAppSettingsForAdminResponse } from "@/server/services/appSettings";
 import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
@@ -22,6 +23,7 @@ export default async function AdminSettingsPage({
   const showAdvanced = params.advanced === "1";
 
   const data = await getAllAppSettingsForAdminResponse();
+  const googleOAuthEnvStatus = getGoogleOAuthEnvStatus();
 
   const linkPermissions: Partial<Record<Permission, boolean>> = {
     "models.pricing.manage": hasPermission(user.role, "models.pricing.manage"),
@@ -56,6 +58,7 @@ export default async function AdminSettingsPage({
           canEdit={canEdit}
           canEditCritical={canEditCritical}
           linkPermissions={linkPermissions}
+          googleOAuthEnvStatus={googleOAuthEnvStatus}
         />
       </Suspense>
     </div>

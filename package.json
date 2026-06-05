@@ -48,6 +48,7 @@
     "seed:card-builder-prompts": "npx tsx scripts/seed-card-builder-prompts.ts",
     "verify:dashboard-user-copy": "npx tsx scripts/verify-dashboard-user-copy.ts",
     "verify:telegram-auth": "npx tsx scripts/verify-telegram-auth.ts",
+    "verify:google-auth": "npx tsx scripts/verify-google-auth.ts",
     "verify:manual-payments": "npx tsx scripts/verify-manual-payments.ts",
     "verify:pricing": "npx tsx scripts/verify-pricing.ts"
   },

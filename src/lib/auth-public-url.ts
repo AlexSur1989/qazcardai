@@ -65,6 +65,61 @@ export function normalizePublicAppUrlRaw(
   return `${url.protocol}//${url.host}`;
 }
 
+/** Безопасный origin для ссылок в письмах (reset password и т.д.). */
+export function resolvePublicOriginFromRequest(req: Request): string {
+  if (isProductionNodeEnv()) {
+    return getPublicAppUrl();
+  }
+
+  const forwardedHost = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const forwardedProto =
+    req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || "http";
+  if (forwardedHost) {
+    const hostname = forwardedHost.split(":")[0] ?? forwardedHost;
+    if (!isUnusableBrowserHostname(hostname)) {
+      return `${forwardedProto}://${forwardedHost}`;
+    }
+  }
+
+  const host = req.headers.get("host")?.trim();
+  if (host) {
+    const hostname = host.split(":")[0] ?? host;
+    if (!isUnusableBrowserHostname(hostname)) {
+      const proto =
+        req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || "http";
+      return `${proto}://${host}`;
+    }
+  }
+
+  try {
+    const origin = new URL(req.url).origin;
+    const hostname = new URL(origin).hostname;
+    if (!isUnusableBrowserHostname(hostname)) {
+      return origin;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return getPublicAppUrl();
+}
+
+/** Отбрасывает 0.0.0.0 / localhost в production для ссылок из писем. */
+export function sanitizePublicLinkBaseUrl(
+  raw: string | null | undefined,
+): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed) return null;
+  try {
+    const url = parsePublicUrlInput(trimmed);
+    if (isUnusableBrowserHostname(url.hostname)) return null;
+    if (isProductionNodeEnv() && isLoopbackHostname(url.hostname)) return null;
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return null;
+  }
+}
+
 /** Публичный origin приложения (browser-facing). Без trailing slash. */
 export function getPublicAppUrl(): string {
   const raw = readFirstPublicUrlEnv();

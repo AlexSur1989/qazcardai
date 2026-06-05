@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_templateKey" }, { status: 400 });
   }
   const templateKey = b.templateKey as EmailTemplateKey;
-  const { appName, dashboardUrl, billingUrl } = getEmailFlowUrls();
+  const { appName, dashboardUrl, billingUrl, supportEmail } = getEmailFlowUrls();
   const u = await prisma.user.findUnique({
     where: { id: gate.user.id },
     select: { name: true, email: true },
@@ -58,6 +58,7 @@ export async function POST(req: Request) {
       errorMessage: "Test error (preview)",
       dashboardUrl,
       billingUrl,
+      supportEmail,
       createdAt: new Date(),
     },
   });

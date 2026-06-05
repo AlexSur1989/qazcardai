@@ -14,6 +14,7 @@ const bodySchema = z.object({
   conceptId: z.string().min(1, "Выберите концепцию"),
   userPrompt: z.string().max(1000).optional().default(""),
   size: z.string().trim().min(1).max(64).optional().default("1x1"),
+  clientEstimateCredits: z.number().finite().nullable().optional(),
 });
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -54,6 +55,7 @@ export async function POST(req: Request, ctx: Ctx) {
     conceptId: parsed.data.conceptId,
     userPrompt: parsed.data.userPrompt.trim(),
     size: parsed.data.size,
+    clientEstimateCredits: parsed.data.clientEstimateCredits ?? null,
   });
 
   if (!result.ok) {
@@ -61,6 +63,7 @@ export async function POST(req: Request, ctx: Ctx) {
       {
         error: result.error,
         ...(result.reason ? { reason: result.reason } : {}),
+        ...(result.code ? { code: result.code } : {}),
       },
       { status: result.status },
     );
