@@ -53,7 +53,7 @@ export function SiteHeader() {
               <button
                 type="button"
                 className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-                onClick={() => void signOut({ callbackUrl: "/" })}
+                onClick={() => void signOut({ callbackUrl: "/login" })}
               >
                 Выйти
               </button>

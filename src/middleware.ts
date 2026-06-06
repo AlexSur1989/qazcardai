@@ -17,6 +17,13 @@ import {
   isMaintenanceAllowAdminEnv,
   isMaintenanceModeEnv,
 } from "@/lib/maintenance-mode";
+import { getLandingUrl } from "@/lib/app-name";
+
+function redirectAppRootToLanding(req: NextRequest): NextResponse | null {
+  if (process.env.NODE_ENV !== "production") return null;
+  if (req.nextUrl.pathname !== "/") return null;
+  return NextResponse.redirect(getLandingUrl());
+}
 
 function getMiddlewareJwtSecret(): string | null {
   const s = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
@@ -151,6 +158,9 @@ async function applyMaintenanceGate(
 }
 
 export async function middleware(req: NextRequest) {
+  const landingRedirect = redirectAppRootToLanding(req);
+  if (landingRedirect) return landingRedirect;
+
   const gated = await applyMaintenanceGate(req);
   if (gated !== null) {
     return gated;
