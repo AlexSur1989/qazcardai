@@ -1,6 +1,6 @@
 import { getAppSetting } from "@/server/services/appSettings";
 
-export type ProductCardScenarioUiKey = "conceptPhoto" | "marketplaceCard" | "cardBuilder" | "productVideo";
+export type ProductCardScenarioUiKey = "conceptPhoto" | "marketplaceCard" | "productVideo";
 
 export type ProductCardScenarioToggle = {
   enabled: boolean;
@@ -10,7 +10,6 @@ export type ProductCardScenarioToggle = {
 const DEFAULT_SCENARIOS: Record<ProductCardScenarioUiKey, ProductCardScenarioToggle> = {
   conceptPhoto: { enabled: true, label: "Фото с концепциями" },
   marketplaceCard: { enabled: true, label: "Карточка товара" },
-  cardBuilder: { enabled: true, label: "Создать карточку" },
   productVideo: { enabled: true, label: "Видео" },
 };
 
@@ -36,12 +35,6 @@ export async function getProductCardScenarios(): Promise<
     base[k] = readToggle(row[k], base[k]!);
   });
   return base;
-}
-
-export function isCardBuilderScenarioEnabled(
-  scenarios: Record<ProductCardScenarioUiKey, ProductCardScenarioToggle>,
-): boolean {
-  return scenarios.cardBuilder.enabled === true;
 }
 
 export function isMarketplaceCardScenarioEnabled(

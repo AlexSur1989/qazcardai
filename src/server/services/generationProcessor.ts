@@ -61,8 +61,6 @@ import {
   type OverlayObjectLayoutMetaV1,
   type OverlayObjectLayoutMetaV2,
 } from "@/server/services/marketplaceCardImageComposite";
-import { patchCardBuilderGenerationEntry } from "@/server/services/productCardCardBuilderMeta";
-import { syncFailedCardBuilderProjectGenerationEntry } from "@/server/services/productCardCardBuilderGenerationFailure";
 import {
   StorageError,
   deleteFile,
@@ -353,7 +351,6 @@ export async function markFailed(
       completedAt: new Date(),
     },
   });
-  void syncFailedCardBuilderProjectGenerationEntry(genId, errorMessage.slice(0, 8000));
   void trySendGenerationFailedEmail(genId);
 }
 
@@ -792,7 +789,7 @@ export async function completeWithOutput(
       const outputItems: Record<string, unknown>[] = [];
       const fileRows: FileRow[] = [];
       let overlayObjectLayoutPatch: OverlayObjectLayoutMetaV1 | OverlayObjectLayoutMetaV2 | undefined;
-      let cardBuilderOverlayApplied = false;
+      let marketplaceOverlayApplied = false;
       try {
         for (let i = 0; i < providerUrls.length; i++) {
           const src = providerUrls[i];
@@ -808,7 +805,7 @@ export async function completeWithOutput(
               gen,
             );
             if (composed.overlayApplied) {
-              cardBuilderOverlayApplied = true;
+              marketplaceOverlayApplied = true;
             }
             if (composed.objectLayoutForMetadata != null) {
               overlayObjectLayoutPatch = composed.objectLayoutForMetadata;
@@ -895,30 +892,6 @@ export async function completeWithOutput(
           gen.metadata && typeof gen.metadata === "object" && !Array.isArray(gen.metadata)
             ? (gen.metadata as Record<string, unknown>)
             : {};
-        if (
-          metaRoot.flow === "product_card" &&
-          metaRoot.tab === "card_builder" &&
-          typeof metaRoot.projectId === "string" &&
-          outputItems.length > 0
-        ) {
-          const url0 =
-            typeof outputItems[0]?.url === "string" ? (outputItems[0].url as string) : "";
-          if (url0) {
-            await patchCardBuilderGenerationEntry(metaRoot.projectId as string, gen.id, {
-              overlayApplied: cardBuilderOverlayApplied,
-              finalUrl: url0,
-              templateId:
-                typeof metaRoot.cardBuilderTemplateId === "string"
-                  ? metaRoot.cardBuilderTemplateId
-                  : undefined,
-              layoutPreset:
-                typeof metaRoot.cardBuilderLayoutPreset === "string"
-                  ? metaRoot.cardBuilderLayoutPreset
-                  : undefined,
-              status: "done",
-            });
-          }
-        }
       } catch (e) {
         for (const k of keysRolled) {
           await deleteFile(k).catch(() => {});

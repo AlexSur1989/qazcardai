@@ -1,9 +1,8 @@
 /**
- * Тип профиля card_builder и снимок правил для metadata.
- * Каноничный профиль сценария «Создать карточку» — UNIVERSAL_CARD_BUILDER_PROFILE.
+ * Тип профиля маркетплейса и снимок правил для metadata.
  */
 
-import type { CardBuilderTemplateSlideRole } from "@/config/card-builder-templates";
+export type MarketplaceSlideRole = string;
 
 export const PRODUCT_CARD_MARKETPLACE_PROFILE_VERSION = "v1" as const;
 
@@ -75,7 +74,7 @@ export type ProductCardMarketplaceProfile = {
   complianceHints: string[];
 };
 
-const SLIDE_ROLE_ALIASES: Record<string, CardBuilderTemplateSlideRole> = {
+const SLIDE_ROLE_ALIASES: Record<string, MarketplaceSlideRole> = {
   package: "packaging",
   front_view: "main_photo",
   back_view: "detail_closeup",
@@ -83,7 +82,7 @@ const SLIDE_ROLE_ALIASES: Record<string, CardBuilderTemplateSlideRole> = {
   details: "detail_closeup",
 };
 
-const VALID_ROLES = new Set<CardBuilderTemplateSlideRole>([
+const VALID_ROLES = new Set<MarketplaceSlideRole>([
   "main_photo",
   "benefits_infographic",
   "dimensions",
@@ -101,18 +100,18 @@ const VALID_ROLES = new Set<CardBuilderTemplateSlideRole>([
 
 export function normalizeMarketplaceSlideRole(
   raw: string,
-): CardBuilderTemplateSlideRole | null {
+): MarketplaceSlideRole | null {
   const s = raw.trim().toLowerCase();
   if (!s) return null;
-  if (VALID_ROLES.has(s as CardBuilderTemplateSlideRole)) {
-    return s as CardBuilderTemplateSlideRole;
+  if (VALID_ROLES.has(s)) {
+    return s;
   }
   const mapped = SLIDE_ROLE_ALIASES[s];
   return mapped ?? null;
 }
 
-export function normalizeSlideRoleList(list: string[]): CardBuilderTemplateSlideRole[] {
-  const out: CardBuilderTemplateSlideRole[] = [];
+export function normalizeSlideRoleList(list: string[]): MarketplaceSlideRole[] {
+  const out: MarketplaceSlideRole[] = [];
   const seen = new Set<string>();
   for (const x of list) {
     const r = normalizeMarketplaceSlideRole(x);

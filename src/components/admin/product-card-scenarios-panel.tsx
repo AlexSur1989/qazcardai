@@ -18,7 +18,6 @@ type Props = {
 const ORDER: ProductCardScenarioKey[] = [
   "conceptPhoto",
   "marketplaceCard",
-  "cardBuilder",
   "productVideo",
 ];
 

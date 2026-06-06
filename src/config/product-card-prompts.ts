@@ -1,9 +1,6 @@
 import "server-only";
 
 import {
-  PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA,
-} from "@/config/card-builder-prompts-defaults";
-import {
   type MarketplaceCardStyle,
   PRODUCT_CATEGORY_IDS,
   type ProductCategoryId,
@@ -179,53 +176,6 @@ Rules:
 - If you are not confident, choose "other" and set confidence low (for example 0.2–0.4).
 - Never invent multiple categories. Never add fields outside the schema.`;
   return classifierPromptCache;
-}
-
-// --- Card builder: анализ фото товара (JSON для «Создать карточку») ---
-
-export { PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA } from "@/config/card-builder-prompts-defaults";
-
-let visionAnalysisPromptCache: string | null = null;
-
-export function getProductCardVisionAnalysisPrompt(): string {
-  if (visionAnalysisPromptCache) return visionAnalysisPromptCache;
-  visionAnalysisPromptCache = `Ты анализируешь фото товара для генератора карточек товара.
-
-Твоя задача:
-- определить тип товара;
-- определить категорию;
-- описать видимые цвета;
-- определить материал только если он очевиден визуально;
-- извлечь видимый текст, если он есть;
-- предложить факты товара, которые помогут создать карточку.
-
-Не выдумывай:
-- размер;
-- вес;
-- объём;
-- состав;
-- материал (если не очевиден);
-- функции;
-- гарантию;
-- совместимость;
-- лечебные или медицинские свойства;
-- сертификаты;
-- бренд, если он не виден.
-
-Верни только валидный JSON без markdown и без лишних ключей.
-JSON должен точно соответствовать схеме:
-${PRODUCT_CARD_VISION_ANALYSIS_OUTPUT_SCHEMA}
-
-Правила:
-- categoryKey — одна из перечисленных категорий.
-- materialGuess — null, если материал не очевиден.
-- productShape — null, если форма неясна.
-- suggestedProductFacts — только то, что можно обосновать визуально; confidence 0.0–1.0.
-- type=product_purpose для назначения или краткого описания товара — это НЕ benefit.
-- type=benefit только для конкретных selling points / преимуществ, а не для общего назначения товара.
-- warnings — короткие предупреждения на русском, если данных мало.
-- Не добавляй поля вне схемы.`;
-  return visionAnalysisPromptCache;
 }
 
 // --- Concept helpers ---

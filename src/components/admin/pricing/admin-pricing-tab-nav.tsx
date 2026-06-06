@@ -7,7 +7,6 @@ import { buttonVariants } from "@/components/ui/button";
 const TABS: { id: AdminPricingTabId; label: string }[] = [
   { id: "overview", label: "Обзор" },
   { id: "models", label: "AI-модели" },
-  { id: "card-builder", label: "Создать карточку" },
   { id: "marketplace", label: "Карточка для маркетплейса" },
   { id: "video", label: "Видео товара" },
   { id: "concepts", label: "Фото с концепциями" },

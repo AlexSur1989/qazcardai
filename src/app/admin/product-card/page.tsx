@@ -10,7 +10,6 @@ import { ProductCardScenariosForm } from "@/components/admin/product-card-scenar
 import { ProductCardScenariosPanel } from "@/components/admin/product-card-scenarios-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { UNIVERSAL_CARD_BUILDER_PROFILE } from "@/config/universal-card-builder-profile";
 import {
   isProductCardAdvancedTab,
   resolveProductCardTab,
@@ -18,20 +17,14 @@ import {
 import { hasPermission, isSuperAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
-import { buildCardBuilderSuperPromptWithAppSettings } from "@/server/services/cardBuilderPromptBuilder";
-import { PRODUCT_CARD_CARD_BUILDER_PROMPTS_KEY } from "@/server/services/cardBuilderPromptsSettings";
 import { PRODUCT_CARD_SIMPLE_CARD_SETTING_KEYS } from "@/config/simple-product-card-prompts-defaults";
 import { getAppSettingsByGroup } from "@/server/services/appSettings";
 import {
-  buildCardBuilderPriceBreakdown,
   calculateProductCardConceptImageCredits,
   calculateProductCardMarketplaceCardCredits,
   calculateProductCardVideoCredits,
-  estimateCardBuilderCharge,
   type ProductCardPriceBreakdown,
 } from "@/server/services/productCardPricing";
-import { resolveCardBuilderImageModel } from "@/server/services/productCardModelResolver";
-import { getProductCardWebResearchSettings } from "@/server/services/productCardWebResearch";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
 
 export const metadata = {
@@ -55,20 +48,16 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
     isSuperAdmin(adminUser.role) || adminUser.role === "ADMIN";
   const showAdvancedSection = showAdvanced && canToggleAdvanced;
 
-  const [settingsRows, productSettings, models, webResearchSettings] = await Promise.all([
+  const [settingsRows, productSettings, models] = await Promise.all([
     getAppSettingsByGroup("productCard"),
     getProductCardSettings(),
     prisma.aiModel.findMany({
       where: { scope: "PRODUCT_CARD" },
       orderBy: [{ productCardModelType: "asc" }, { name: "asc" }],
     }),
-    getProductCardWebResearchSettings(),
   ]);
 
   const scenariosSetting = settingsRows.find((row) => row.key === "PRODUCT_CARD_SCENARIOS")?.value;
-  const cardBuilderPromptsSetting = settingsRows.find(
-    (row) => row.key === PRODUCT_CARD_CARD_BUILDER_PROMPTS_KEY,
-  )?.value;
   const simpleCardPromptsSetting = settingsRows.find(
     (row) => row.key === PRODUCT_CARD_SIMPLE_CARD_SETTING_KEYS.prompts,
   )?.value;
@@ -77,9 +66,6 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
   const needsTechnicalData = showAdvancedSection && isProductCardAdvancedTab(activeTab);
 
   let calculatorRows: { label: string; breakdown: ProductCardPriceBreakdown }[] = [];
-  let cardBuilderSuperPromptSample: Awaited<
-    ReturnType<typeof buildCardBuilderSuperPromptWithAppSettings>
-  > = { ok: false, validationErrors: ["Не загружено"] };
 
   if (needsTechnicalData) {
     const activeModels = models.filter((m) => m.isActive);
@@ -125,72 +111,7 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
       );
     }
 
-    const resolvedCb = await resolveCardBuilderImageModel();
-    const cbModel = resolvedCb?.model ?? null;
-    if (cbModel) {
-      const pricing = productSettings.cardBuilderPricing;
-      calculatorPromises.push(
-        buildCardBuilderPriceBreakdown({
-          model: cbModel,
-          finalCredits: pricing.cardBuilderPlanCredits,
-          slideRole: "plan",
-        }).then((breakdown) => ({
-          label: "Создать карточку · план структуры",
-          breakdown,
-        })),
-      );
-      calculatorPromises.push(
-        estimateCardBuilderCharge(
-          "slide",
-          cbModel,
-          pricing,
-          "light_marketplace",
-          "medium",
-          "main_photo",
-          null,
-        ).then((breakdown) => ({
-          label: "Создать карточку · один слайд",
-          breakdown,
-        })),
-      );
-    }
-
     calculatorRows = await Promise.all(calculatorPromises);
-
-    if (activeTab === "prompts") {
-      cardBuilderSuperPromptSample = await buildCardBuilderSuperPromptWithAppSettings({
-        productTitle: "Қысқы балақлава",
-        selectedCategory: "apparel",
-        marketplace: "other",
-        targetPlatform: "universal",
-        marketplaceProfile: UNIVERSAL_CARD_BUILDER_PROFILE,
-        slideRole: "benefits_infographic",
-        templateId: "benefits_grid",
-        layoutPreset: "product_right_text_left",
-        cardBuilderCategoryKey: "food_grocery",
-        visualStyle: "clean_minimal",
-        productNameGuess: "Балақлава",
-        productFacts: [
-          {
-            id: "fact_1",
-            label: "Состав",
-            value: "Миндаль, мёд",
-            type: "ingredient",
-            source: "vision_ai",
-            lockedText: true,
-            visibleOnCard: true,
-          },
-        ],
-        audience: "mass_market",
-        priceSegment: "middle",
-        salesStyle: "infographic",
-        textDensity: "medium",
-        preserveProduct: true,
-        preserveAspects: ["shape", "color"],
-        allowCreativeStylization: false,
-        languageMode: "auto",
-      });
-    }
   }
 
   return (
@@ -225,7 +146,6 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
         <ProductCardAdminOverview
           scenarios={productSettings.scenarios}
           productCardEnabled={productSettings.enabled}
-          webResearchEnabled={webResearchSettings.enabled}
         />
       ) : null}
 
@@ -264,11 +184,8 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
           productSettings={productSettings}
           models={models}
           calculatorRows={calculatorRows}
-          cardBuilderPromptsSetting={cardBuilderPromptsSetting}
           simpleCardPromptsSetting={simpleCardPromptsSetting}
-          cardBuilderSuperPromptSample={cardBuilderSuperPromptSample}
           canPatchSettings={canPatchSettings}
-          webResearchSettings={webResearchSettings}
         />
       ) : null}
 

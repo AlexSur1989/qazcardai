@@ -16,7 +16,6 @@ const scenariosBodySchema = z.object({
   scenarios: z.object({
     conceptPhoto: toggleSchema,
     marketplaceCard: toggleSchema,
-    cardBuilder: toggleSchema,
     productVideo: toggleSchema,
   }),
 });

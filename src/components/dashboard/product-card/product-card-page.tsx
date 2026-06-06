@@ -12,7 +12,6 @@ import type {
   ProductCardScenarioToggles,
 } from "@/server/services/productCardSettings";
 
-import { CardBuilderTab } from "./card-builder-tab";
 import { SimpleProductCardTab } from "./simple-product-card-tab";
 import { CategorySelector } from "./category-selector";
 import { ConceptPhotoTab } from "./concept-photo-tab";
@@ -21,12 +20,11 @@ import { SourceImagesUpload, type UploadFlowState } from "./source-images-upload
 import { useProductCardProject } from "./use-product-card-project";
 
 const SCENARIO_TAB: Array<{
-  id: "concepts" | "card" | "cardBuilder" | "video";
+  id: "concepts" | "card" | "video";
   scenario: ProductCardScenarioKey;
 }> = [
   { id: "concepts", scenario: "conceptPhoto" },
   { id: "card", scenario: "marketplaceCard" },
-  { id: "cardBuilder", scenario: "cardBuilder" },
   { id: "video", scenario: "productVideo" },
 ];
 
@@ -34,7 +32,6 @@ const SCENARIO_TAB: Array<{
 const FALLBACK_LABELS: Record<ProductCardScenarioKey, string> = {
   conceptPhoto: "Фото с концепциями",
   marketplaceCard: "Карточка товара",
-  cardBuilder: "Создать карточку",
   productVideo: "Видео",
 };
 
@@ -222,7 +219,7 @@ export function ProductCardPage({
           value={resolvedTab}
           onValueChange={(v) => {
             const next = v as TabId;
-            if (hasImage || next === "cardBuilder") setTab(next);
+            if (hasImage) setTab(next);
           }}
           className="gap-4"
         >
@@ -234,7 +231,7 @@ export function ProductCardPage({
               <TabsTrigger
                 key={t.id}
                 value={t.id}
-                disabled={t.id !== "cardBuilder" && !hasImage}
+                disabled={!hasImage}
                 className="rounded-lg border border-transparent px-4 py-2.5 text-sm data-active:border-primary data-active:bg-primary/10 data-active:shadow-sm"
               >
                 {tabLabel(t.scenario)}
@@ -258,15 +255,6 @@ export function ProductCardPage({
               ensureProjectId={ensureProjectId}
               projectId={projectId}
               sourceImages={sourceImages}
-              balanceCredits={balanceDisplay}
-            />
-          </TabsContent>
-          <TabsContent value="cardBuilder" className="mt-4">
-            <CardBuilderTab
-              initDone={initDone}
-              ensureProjectId={ensureProjectId}
-              projectId={projectId}
-              projectSource={source}
               balanceCredits={balanceDisplay}
             />
           </TabsContent>

@@ -9,9 +9,7 @@ import {
   BASE_PRODUCT_PHOTO_PROMPT,
   MARKETPLACE_CARD_BASE_PROMPT,
 } from "@/config/product-card-prompts";
-import { ProductCardCardBuilderPromptsPanel } from "@/components/admin/product-card-card-builder-prompts-panel";
 import { ProductCardSimpleCardPromptsPanel } from "@/components/admin/product-card-simple-card-prompts-panel";
-import { ProductCardWebResearchAdminPanel } from "@/components/admin/product-card-web-research-admin-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +22,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ProductCardAdvancedTabId } from "@/lib/product-card-admin-meta";
-import type { ProductCardWebResearchSettings } from "@/lib/product-card-web-research-config";
 import type { ProductCardPriceBreakdown } from "@/server/services/productCardPricing";
 import type { ProductCardSettings } from "@/server/services/productCardSettings";
 import type { Prisma } from "@/generated/prisma/client";
@@ -49,30 +46,14 @@ type ModelRow = Prisma.AiModelGetPayload<{
 
 type CalculatorRow = { label: string; breakdown: ProductCardPriceBreakdown };
 
-type CardBuilderPromptResult =
-  | {
-      ok: true;
-      data: {
-        prompt: string;
-        promptVersion: string;
-        promptMeta: { promptSource: string };
-        textLockLevel: string;
-        exactTextPhrases: string[];
-      };
-    }
-  | { ok: false; validationErrors: string[] };
-
 type Props = {
   tab: ProductCardAdvancedTabId;
   settingsRows: AppSettingRow[];
   productSettings: ProductCardSettings;
   models: ModelRow[];
   calculatorRows: CalculatorRow[];
-  cardBuilderPromptsSetting: unknown;
   simpleCardPromptsSetting: unknown;
-  cardBuilderSuperPromptSample: CardBuilderPromptResult;
   canPatchSettings: boolean;
-  webResearchSettings: ProductCardWebResearchSettings;
 };
 
 function jsonPreview(value: unknown): string {
@@ -86,14 +67,10 @@ export function ProductCardAdminAdvancedPanel({
   productSettings,
   models,
   calculatorRows,
-  cardBuilderPromptsSetting,
   simpleCardPromptsSetting,
-  cardBuilderSuperPromptSample,
   canPatchSettings,
-  webResearchSettings,
 }: Props) {
-  const isPromptTab =
-    tab === "prompts" || tab === "card-builder-prompts" || tab === "simple-card-prompts";
+  const isPromptTab = tab === "prompts" || tab === "simple-card-prompts";
 
   return (
     <div className="space-y-4">
@@ -254,13 +231,6 @@ export function ProductCardAdminAdvancedPanel({
         </Card>
       ) : null}
 
-      {tab === "card-builder-prompts" ? (
-        <ProductCardCardBuilderPromptsPanel
-          initialValue={cardBuilderPromptsSetting ?? null}
-          canPatch={canPatchSettings}
-        />
-      ) : null}
-
       {tab === "simple-card-prompts" ? (
         <ProductCardSimpleCardPromptsPanel
           initialValue={simpleCardPromptsSetting ?? null}
@@ -268,53 +238,20 @@ export function ProductCardAdminAdvancedPanel({
         />
       ) : null}
 
-      {tab === "web-research" ? (
-        <ProductCardWebResearchAdminPanel
-          initialSettings={webResearchSettings}
-          canEdit={canPatchSettings}
-        />
-      ) : null}
-
       {tab === "prompts" ? (
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Server-Only Prompts (legacy)</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <pre className="bg-muted overflow-x-auto rounded-lg p-3 text-xs">
-                {BASE_PRODUCT_PHOTO_PROMPT}
-              </pre>
-              <pre className="bg-muted overflow-x-auto rounded-lg p-3 text-xs">
-                {MARKETPLACE_CARD_BASE_PROMPT}
-              </pre>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Создать карточку — супер-промпт (отладка)</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {cardBuilderSuperPromptSample.ok ? (
-                <>
-                  <div className="text-muted-foreground text-xs">
-                    {cardBuilderSuperPromptSample.data.promptVersion} ·{" "}
-                    {cardBuilderSuperPromptSample.data.promptMeta.promptSource} ·{" "}
-                    {cardBuilderSuperPromptSample.data.textLockLevel} · фразы:{" "}
-                    {cardBuilderSuperPromptSample.data.exactTextPhrases.join(" | ")}
-                  </div>
-                  <pre className="bg-muted max-h-[28rem] overflow-auto rounded-lg p-3 text-xs whitespace-pre-wrap">
-                    {cardBuilderSuperPromptSample.data.prompt}
-                  </pre>
-                </>
-              ) : (
-                <pre className="bg-destructive/10 rounded-lg p-3 text-xs">
-                  {cardBuilderSuperPromptSample.validationErrors.join("\n")}
-                </pre>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Server-Only Prompts (legacy)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <pre className="bg-muted overflow-x-auto rounded-lg p-3 text-xs">
+              {BASE_PRODUCT_PHOTO_PROMPT}
+            </pre>
+            <pre className="bg-muted overflow-x-auto rounded-lg p-3 text-xs">
+              {MARKETPLACE_CARD_BASE_PROMPT}
+            </pre>
+          </CardContent>
+        </Card>
       ) : null}
 
       {tab === "video" ? (

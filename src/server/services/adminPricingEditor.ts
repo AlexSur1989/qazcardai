@@ -3,13 +3,6 @@ import { revalidatePath } from "next/cache";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
 import { isRecord } from "@/lib/model-pricing-shared";
 import {
-  CARD_BUILDER_PRICING_SETTING_KEY,
-  cardBuilderPricingApiToStorage,
-  cardBuilderPricingPatchSchema,
-  storageToCardBuilderPricingApi,
-  type CardBuilderPricingApi,
-} from "@/lib/pricing-admin/card-builder";
-import {
   KASPI_MANUAL_SETTING_KEY,
   kaspiManualApiToStorage,
   kaspiManualPricingPatchSchema,
@@ -19,10 +12,6 @@ import { prisma } from "@/lib/prisma";
 import { tokenPackageFormSchema } from "@/lib/validations/token-package";
 import { getAppSetting, setAppSettingFromRegistry } from "@/server/services/appSettings";
 import { mergeKaspiManualSettings } from "@/server/services/kaspiManualSettings";
-import {
-  getProductCardSettings,
-  type ProductCardCardBuilderPricing,
-} from "@/server/services/productCardSettings";
 
 import type { AppSettingMeta } from "@/lib/pricing-admin/types";
 
@@ -41,87 +30,6 @@ export async function getAppSettingMeta(key: string): Promise<AppSettingMeta | n
     updatedAt: row.updatedAt.toISOString(),
     updatedByEmail: row.editor?.email ?? null,
   };
-}
-
-export async function loadCardBuilderPricingForAdmin(): Promise<{
-  pricing: CardBuilderPricingApi;
-  meta: AppSettingMeta | null;
-}> {
-  const settings = await getProductCardSettings();
-  const meta = await getAppSettingMeta(CARD_BUILDER_PRICING_SETTING_KEY);
-  return {
-    pricing: storageToCardBuilderPricingApi(settings.cardBuilderPricing),
-    meta,
-  };
-}
-
-export async function saveCardBuilderPricing(args: {
-  input: unknown;
-  adminUserId: string;
-}): Promise<
-  | { ok: true; pricing: CardBuilderPricingApi; normalized: ProductCardCardBuilderPricing }
-  | { ok: false; error: string; status: number }
-> {
-  const parsed = cardBuilderPricingPatchSchema.safeParse(args.input);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: parsed.error.issues[0]?.message ?? "Некорректные данные",
-      status: 400,
-    };
-  }
-
-  const currentRaw = await getAppSetting(CARD_BUILDER_PRICING_SETTING_KEY);
-  const preserve = isRecord(currentRaw) ? currentRaw : {};
-  const storageValue = cardBuilderPricingApiToStorage(parsed.data, preserve);
-
-  const res = await setAppSettingFromRegistry({
-    key: CARD_BUILDER_PRICING_SETTING_KEY,
-    value: storageValue,
-    adminUserId: args.adminUserId,
-  });
-
-  if (!res.ok) {
-    return { ok: false, error: res.error, status: 400 };
-  }
-
-  const settings = await getProductCardSettings();
-  revalidatePath("/admin/pricing");
-  revalidatePath("/dashboard/billing");
-  revalidatePath("/admin/product-card");
-
-  return {
-    ok: true,
-    pricing: storageToCardBuilderPricingApi(settings.cardBuilderPricing),
-    normalized: settings.cardBuilderPricing,
-  };
-}
-
-export async function resetCardBuilderPricingToDefault(args: {
-  adminUserId: string;
-}): Promise<
-  | { ok: true; pricing: CardBuilderPricingApi }
-  | { ok: false; error: string; status: number }
-> {
-  const { getRegistryEntry } = await import("@/config/app-settings-registry");
-  const def = getRegistryEntry(CARD_BUILDER_PRICING_SETTING_KEY);
-  if (!def) {
-    return { ok: false, error: "unknown_key", status: 500 };
-  }
-
-  const res = await setAppSettingFromRegistry({
-    key: CARD_BUILDER_PRICING_SETTING_KEY,
-    value: def.defaultValue,
-    adminUserId: args.adminUserId,
-  });
-
-  if (!res.ok) {
-    return { ok: false, error: res.error, status: 400 };
-  }
-
-  const settings = await getProductCardSettings();
-  revalidatePath("/admin/pricing");
-  return { ok: true, pricing: storageToCardBuilderPricingApi(settings.cardBuilderPricing) };
 }
 
 export async function loadKaspiManualForAdmin(): Promise<{

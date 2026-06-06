@@ -1,7 +1,6 @@
 
 import type { AiModel } from "@/generated/prisma/client";
 import { isAdminPricingPinned } from "@/lib/admin-pricing-pinned";
-import { computeCardBuilderCreditsBeforeMargin } from "@/lib/card-builder-pricing-math";
 import {
   entryForProductCardMatrixKeys,
   pickProductCardPricingKeys,
@@ -9,15 +8,11 @@ import {
 import {
   getProductCardSettings,
   type ProductCardSettings,
-  type ProductCardCardBuilderPricing,
 } from "@/server/services/productCardSettings";
-
-export { computeCardBuilderCreditsBeforeMargin };
 
 export type ProductCardPricingScenario =
   | "concept_image"
   | "marketplace_card"
-  | "card_builder"
   | "video";
 
 export type ProductCardPriceBreakdown = {
@@ -103,11 +98,6 @@ function scenarioMinTokens(
     return Math.round(asNumber(schema?.minConceptImageTokens, settings.minConceptImageTokens));
   }
   if (scenario === "marketplace_card") {
-    return Math.round(
-      asNumber(schema?.minMarketplaceCardTokens, settings.minMarketplaceCardTokens),
-    );
-  }
-  if (scenario === "card_builder") {
     return Math.round(
       asNumber(schema?.minMarketplaceCardTokens, settings.minMarketplaceCardTokens),
     );
@@ -439,100 +429,4 @@ export function calculateProductCardVideoCredits(
     scenario: "video",
     settings,
   });
-}
-
-function isPremiumSalesStyle(id: string): boolean {
-  const s = id.trim().toLowerCase();
-  return s === "premium" || s === "editorial" || s === "luxury" || s.includes("premium");
-}
-
-function isHeavyTextDensity(id: string): boolean {
-  const s = id.trim().toLowerCase();
-  return s === "heavy" || s === "infographic";
-}
-
-/** Оценка карточки-билдера: фиксированные кредиты + множители, провайдер — пропорционально референсу marketplace. */
-export async function buildCardBuilderPriceBreakdown(params: {
-  model: AiModel;
-  finalCredits: number;
-  slideRole: string;
-  gallerySlideCount?: number | null;
-}): Promise<ProductCardPriceBreakdown> {
-  const settings = await getProductCardSettings();
-  const ref = await calculateProductCardMarketplaceCardCredits(params.model, {
-    cardSize: "square",
-  });
-  const scale = ref.credits > 0 ? params.finalCredits / ref.credits : 1;
-  const providerCostUsd =
-    Math.round(ref.providerCostUsd * scale * 100_000) / 100_000;
-  const revenueKzt =
-    Math.round(params.finalCredits * settings.tokenValueKzt * 100) / 100;
-  const providerCostKzt =
-    Math.round(providerCostUsd * settings.usdToKzt * 100) / 100;
-  const marginKzt = Math.round((revenueKzt - providerCostKzt) * 100) / 100;
-  const marginPercent = revenueKzt > 0 ? (marginKzt / revenueKzt) * 100 : null;
-
-  const warnings: string[] = [...ref.warnings.filter((w) => !w.includes("matrix"))];
-  if (!settings.allowNegativeMargin && marginKzt < 0) {
-    warnings.push("Negative margin is not allowed for Product Card pricing.");
-  }
-
-  const galleryCount = params.gallerySlideCount ?? undefined;
-  const formula = `card_builder fixed credits=${params.finalCredits}${galleryCount ? `; gallerySlides=${galleryCount}` : ""}; scaled provider from marketplace ref`;
-
-  return {
-    v: 2,
-    pricingScope: "PRODUCT_CARD",
-    scenario: "card_builder",
-    productCardModelType: params.model.productCardModelType,
-    modelId: params.model.id,
-    modelSlug: params.model.slug,
-    modelName: params.model.name,
-    credits: params.finalCredits,
-    tokens: params.finalCredits,
-    providerCostUsd,
-    providerCostKzt,
-    revenueKzt,
-    marginKzt,
-    marginPercent,
-    priceSource: "manual_override",
-    formula,
-    warnings,
-    manualOverrideKey: `card_builder:${params.slideRole}`,
-    variantCount: galleryCount ?? 1,
-    singleVariantCredits: params.finalCredits,
-    bundleCredits: galleryCount && galleryCount > 1 ? params.finalCredits : null,
-    totalCredits: params.finalCredits,
-    variantAllocations: galleryCount && galleryCount > 1 ? [params.finalCredits] : undefined,
-  };
-}
-
-export async function estimateCardBuilderCharge(
-  kind: "slide" | "gallery6" | "gallery8",
-  model: AiModel,
-  cardBuilderPricing: ProductCardCardBuilderPricing,
-  salesStyleId: string,
-  textDensityId: string,
-  slideRole: string,
-  gallerySlideCount?: number | null,
-): Promise<ProductCardPriceBreakdown> {
-  const premiumStyle = isPremiumSalesStyle(salesStyleId);
-  const heavyText = isHeavyTextDensity(textDensityId);
-  const credits = computeCardBuilderCreditsBeforeMargin(kind, cardBuilderPricing, {
-    premiumStyle,
-    heavyText,
-  });
-  return buildCardBuilderPriceBreakdown({
-    model,
-    finalCredits: credits,
-    slideRole,
-    gallerySlideCount: gallerySlideCount ?? null,
-  });
-}
-
-export function cardBuilderMultiplierFlags(salesStyleId: string, textDensityId: string) {
-  return {
-    premiumStyle: isPremiumSalesStyle(salesStyleId),
-    heavyText: isHeavyTextDensity(textDensityId),
-  };
 }

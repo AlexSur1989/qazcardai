@@ -9,10 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { hasPermission } from "@/lib/permissions";
 import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 import { buildAdminPricingOverview } from "@/server/services/adminPricingOverview";
-import {
-  loadCardBuilderPricingForAdmin,
-  loadKaspiManualForAdmin,
-} from "@/server/services/adminPricingEditor";
+import { loadKaspiManualForAdmin } from "@/server/services/adminPricingEditor";
 import { loadProductCardVideoPricingForAdmin } from "@/server/services/adminProductCardVideoPricingEditor";
 
 export const metadata = {
@@ -31,15 +28,13 @@ export default async function AdminPricingHubPage({ searchParams }: PageProps) {
   const tabRaw = sp.tab?.trim();
   const tab = isAdminPricingTab(tabRaw) ? tabRaw : "overview";
 
-  const [data, cardBuilderEditor, kaspiEditor, productCardVideoEditor] = await Promise.all([
+  const [data, kaspiEditor, productCardVideoEditor] = await Promise.all([
     buildAdminPricingOverview(),
-    loadCardBuilderPricingForAdmin(),
     loadKaspiManualForAdmin(),
     loadProductCardVideoPricingForAdmin(),
   ]);
 
   const editPermissions = {
-    cardBuilder: hasPermission(adminUser.role, "models.pricing.manage"),
     tokenPackages: hasPermission(adminUser.role, "token_packages.manage"),
     manualTopUp: hasPermission(adminUser.role, "settings.manage"),
     productCardVideo: hasPermission(adminUser.role, "models.pricing.manage"),
@@ -67,10 +62,10 @@ export default async function AdminPricingHubPage({ searchParams }: PageProps) {
         <AlertDescription className="space-y-1 text-sm">
           <p>AI-модели — технические цены и себестоимость.</p>
           <p>
-            <Link href="/admin/pricing?tab=card-builder" className="underline">
-              Создать карточку
+            <Link href="/admin/pricing?tab=marketplace" className="underline">
+              Карточка для маркетплейса
             </Link>{" "}
-            — тарифы слайдов и галерей.
+            — matrix pricing витринной карточки.
           </p>
           <p>
             <Link href="/admin/pricing?tab=topup" className="underline">
@@ -87,7 +82,6 @@ export default async function AdminPricingHubPage({ searchParams }: PageProps) {
         data={data}
         editPermissions={editPermissions}
         editor={{
-          cardBuilder: cardBuilderEditor,
           kaspi: kaspiEditor,
           productCardVideo: productCardVideoEditor,
         }}

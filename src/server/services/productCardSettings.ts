@@ -8,13 +8,11 @@ export type ProductCardModelType =
   | "PRODUCT_CLASSIFIER"
   | "PRODUCT_CONCEPT_IMAGE"
   | "PRODUCT_MARKETPLACE_CARD"
-  | "PRODUCT_CARD_BUILDER"
   | "PRODUCT_VIDEO";
 
 export type ProductCardScenarioKey =
   | "conceptPhoto"
   | "marketplaceCard"
-  | "cardBuilder"
   | "productVideo";
 
 export type ProductCardScenarioToggle = {
@@ -26,17 +24,6 @@ export type ProductCardScenarioToggles = Record<
   ProductCardScenarioKey,
   ProductCardScenarioToggle
 >;
-
-export type ProductCardCardBuilderPricing = {
-  cardBuilderPlanCredits: number;
-  cardBuilderSingleSlideCredits: number;
-  cardBuilderGallery6Credits: number;
-  cardBuilderGallery8Credits: number;
-  multipliers: {
-    premiumStyle: number;
-    heavyTextInfographic: number;
-  };
-};
 
 export type ProductCardSizePreset = {
   id: string;
@@ -60,7 +47,6 @@ export type ProductCardSettings = {
   classifierModelSlug: string;
   conceptImageModelSlug: string;
   marketplaceCardModelSlug: string;
-  cardBuilderModelSlug: string;
   videoModelSlug: string;
   usdToKzt: number;
   tokenValueKzt: number;
@@ -74,7 +60,6 @@ export type ProductCardSettings = {
   marketplaceCardSizes: ProductCardSizePreset[];
   videoPresets: ProductCardVideoPreset[];
   scenarios: ProductCardScenarioToggles;
-  cardBuilderPricing: ProductCardCardBuilderPricing;
 };
 
 function asString(value: unknown, fallback = ""): string {
@@ -88,12 +73,6 @@ function asNumber(value: unknown, fallback: number, min = 0): number {
 
 function asBool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 function normalizeSizePresets(value: unknown): ProductCardSizePreset[] {
@@ -127,7 +106,6 @@ function normalizeVideoPresets(value: unknown): ProductCardVideoPreset[] {
 const DEFAULT_SCENARIOS: ProductCardScenarioToggles = {
   conceptPhoto: { enabled: true, label: "Фото с концепциями" },
   marketplaceCard: { enabled: true, label: "Карточка товара" },
-  cardBuilder: { enabled: true, label: "Создать карточку" },
   productVideo: { enabled: true, label: "Видео" },
 };
 
@@ -151,34 +129,7 @@ function normalizeScenarios(raw: unknown): ProductCardScenarioToggles {
   return {
     conceptPhoto: pick("conceptPhoto", DEFAULT_SCENARIOS.conceptPhoto),
     marketplaceCard: pick("marketplaceCard", DEFAULT_SCENARIOS.marketplaceCard),
-    cardBuilder: pick("cardBuilder", DEFAULT_SCENARIOS.cardBuilder),
     productVideo: pick("productVideo", DEFAULT_SCENARIOS.productVideo),
-  };
-}
-
-const DEFAULT_CARD_BUILDER_PRICING: ProductCardCardBuilderPricing = {
-  cardBuilderPlanCredits: 0,
-  cardBuilderSingleSlideCredits: 150,
-  cardBuilderGallery6Credits: 750,
-  cardBuilderGallery8Credits: 950,
-  multipliers: { premiumStyle: 1.2, heavyTextInfographic: 1.1 },
-};
-
-function normalizeCardBuilderPricing(raw: unknown): ProductCardCardBuilderPricing {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { ...DEFAULT_CARD_BUILDER_PRICING, multipliers: { ...DEFAULT_CARD_BUILDER_PRICING.multipliers } };
-  }
-  const o = raw as Record<string, unknown>;
-  const mult = asRecord(o.multipliers);
-  return {
-    cardBuilderPlanCredits: Math.max(0, Math.round(asNumber(o.cardBuilderPlanCredits, DEFAULT_CARD_BUILDER_PRICING.cardBuilderPlanCredits))),
-    cardBuilderSingleSlideCredits: Math.max(1, Math.round(asNumber(o.cardBuilderSingleSlideCredits, DEFAULT_CARD_BUILDER_PRICING.cardBuilderSingleSlideCredits))),
-    cardBuilderGallery6Credits: Math.max(1, Math.round(asNumber(o.cardBuilderGallery6Credits, DEFAULT_CARD_BUILDER_PRICING.cardBuilderGallery6Credits))),
-    cardBuilderGallery8Credits: Math.max(1, Math.round(asNumber(o.cardBuilderGallery8Credits, DEFAULT_CARD_BUILDER_PRICING.cardBuilderGallery8Credits))),
-    multipliers: {
-      premiumStyle: Math.max(0.1, asNumber(mult?.premiumStyle, DEFAULT_CARD_BUILDER_PRICING.multipliers.premiumStyle)),
-      heavyTextInfographic: Math.max(0.1, asNumber(mult?.heavyTextInfographic, DEFAULT_CARD_BUILDER_PRICING.multipliers.heavyTextInfographic)),
-    },
   };
 }
 
@@ -191,7 +142,6 @@ export async function getProductCardSettings(): Promise<ProductCardSettings> {
     getAppSetting("PRODUCT_CARD_DEFAULT_CLASSIFIER_MODEL_SLUG"),
     getAppSetting("PRODUCT_CARD_DEFAULT_CONCEPT_IMAGE_MODEL_SLUG"),
     getAppSetting("PRODUCT_CARD_DEFAULT_MARKETPLACE_CARD_MODEL_SLUG"),
-    getAppSetting("PRODUCT_CARD_DEFAULT_CARD_BUILDER_MODEL_SLUG"),
     getAppSetting("PRODUCT_CARD_DEFAULT_VIDEO_MODEL_SLUG"),
     getAppSetting("PRODUCT_CARD_DEFAULT_USD_TO_KZT"),
     getAppSetting("PRODUCT_CARD_DEFAULT_TOKEN_VALUE_KZT"),
@@ -205,7 +155,6 @@ export async function getProductCardSettings(): Promise<ProductCardSettings> {
     getAppSetting("PRODUCT_CARD_MARKETPLACE_CARD_SIZES"),
     getAppSetting("PRODUCT_CARD_VIDEO_PRESETS"),
     getAppSetting("PRODUCT_CARD_SCENARIOS"),
-    getAppSetting("PRODUCT_CARD_CARD_BUILDER_PRICING"),
   ]);
 
   return {
@@ -216,21 +165,19 @@ export async function getProductCardSettings(): Promise<ProductCardSettings> {
     classifierModelSlug: asString(entries[4], "gemini-2-5-flash-classifier"),
     conceptImageModelSlug: asString(entries[5], "gpt-image-2-image-to-image"),
     marketplaceCardModelSlug: asString(entries[6], "gpt-image-2-product-card"),
-    cardBuilderModelSlug: asString(entries[7]),
-    videoModelSlug: asString(entries[8], "seedance-2-0-product-video"),
-    usdToKzt: asNumber(entries[9], 500, 1),
-    tokenValueKzt: asNumber(entries[10], 10, 0.0001),
-    markupPercent: asNumber(entries[11], 100, 0),
-    allowNegativeMargin: asBool(entries[12], false),
-    lowMarginWarningPercent: asNumber(entries[13], 30, 0),
-    minConceptImageTokens: Math.round(asNumber(entries[14], 15, 0)),
-    minMarketplaceCardTokens: Math.round(asNumber(entries[15], 25, 0)),
-    minVideoTokens: Math.round(asNumber(entries[16], 40, 0)),
-    conceptImageSizes: normalizeSizePresets(entries[17]),
-    marketplaceCardSizes: normalizeSizePresets(entries[18]),
-    videoPresets: normalizeVideoPresets(entries[19]),
-    scenarios: normalizeScenarios(entries[20]),
-    cardBuilderPricing: normalizeCardBuilderPricing(entries[21]),
+    videoModelSlug: asString(entries[7], "seedance-2-0-product-video"),
+    usdToKzt: asNumber(entries[8], 500, 1),
+    tokenValueKzt: asNumber(entries[9], 10, 0.0001),
+    markupPercent: asNumber(entries[10], 100, 0),
+    allowNegativeMargin: asBool(entries[11], false),
+    lowMarginWarningPercent: asNumber(entries[12], 30, 0),
+    minConceptImageTokens: Math.round(asNumber(entries[13], 15, 0)),
+    minMarketplaceCardTokens: Math.round(asNumber(entries[14], 25, 0)),
+    minVideoTokens: Math.round(asNumber(entries[15], 40, 0)),
+    conceptImageSizes: normalizeSizePresets(entries[16]),
+    marketplaceCardSizes: normalizeSizePresets(entries[17]),
+    videoPresets: normalizeVideoPresets(entries[18]),
+    scenarios: normalizeScenarios(entries[19]),
   };
 }
 
@@ -241,6 +188,5 @@ export function defaultSlugForProductCardType(
   if (type === "PRODUCT_CLASSIFIER") return settings.classifierModelSlug;
   if (type === "PRODUCT_CONCEPT_IMAGE") return settings.conceptImageModelSlug;
   if (type === "PRODUCT_MARKETPLACE_CARD") return settings.marketplaceCardModelSlug;
-  if (type === "PRODUCT_CARD_BUILDER") return settings.cardBuilderModelSlug.trim();
   return settings.videoModelSlug;
 }

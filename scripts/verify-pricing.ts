@@ -1,5 +1,5 @@
 /**
- * Admin pricing hub: card_builder tariffs, token packages helpers, Kaspi/WhatsApp.
+ * Admin pricing hub: token packages helpers, Kaspi/WhatsApp, product video matrix.
  * npm run verify:pricing
  */
 import "dotenv/config";
@@ -7,15 +7,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  CARD_BUILDER_PRICING_SETTING_KEY,
-  cardBuilderPricingApiToStorage,
-  cardBuilderPricingPatchSchema,
-  cardBuilderPricingSoftWarnings,
-  cardBuilderPricingToProductCardShape,
-  DEFAULT_CARD_BUILDER_PRICING_API,
-  storageToCardBuilderPricingApi,
-} from "../src/lib/pricing-admin/card-builder";
 import {
   buildWhatsAppTestPreviewUrl,
   kaspiManualApiToStorage,
@@ -34,85 +25,8 @@ import {
   readMatrixCellCredits,
   validateProductCardVideoPatchCells,
 } from "../src/lib/pricing-admin/product-card-video";
-import { computeCardBuilderCreditsBeforeMargin } from "../src/lib/card-builder-pricing-math";
 import { calculateProductCardVideoCredits } from "../src/server/services/productCardPricing";
 import { tokenPackagePriceWarnings } from "@/lib/pricing-admin/token-packages";
-
-function testCardBuilderPatchValidation() {
-  const ok = cardBuilderPricingPatchSchema.safeParse(DEFAULT_CARD_BUILDER_PRICING_API);
-  assert.ok(ok.success, "default pricing valid");
-
-  const badMult = cardBuilderPricingPatchSchema.safeParse({
-    ...DEFAULT_CARD_BUILDER_PRICING_API,
-    multipliers: { premiumStyle: 0.5, heavyTextInfographic: 1.1 },
-  });
-  assert.ok(!badMult.success, "multiplier < 1 rejected");
-
-  const badMax = cardBuilderPricingPatchSchema.safeParse({
-    ...DEFAULT_CARD_BUILDER_PRICING_API,
-    multipliers: { premiumStyle: 6, heavyTextInfographic: 1.1 },
-  });
-  assert.ok(!badMax.success, "multiplier > 5 rejected");
-
-  const badSlide = cardBuilderPricingPatchSchema.safeParse({
-    ...DEFAULT_CARD_BUILDER_PRICING_API,
-    singleSlideCredits: 0,
-  });
-  assert.ok(!badSlide.success, "singleSlideCredits 0 rejected");
-}
-
-function testCardBuilderStorageRoundtrip() {
-  const api = {
-    planCredits: 0,
-    singleSlideCredits: 200,
-    gallery6Credits: 800,
-    gallery8Credits: 1000,
-    multipliers: { premiumStyle: 1.3, heavyTextInfographic: 1.15 },
-  };
-  const preserve = { customFutureField: "keep-me", multipliers: { legacyExtra: 9 } };
-  const stored = cardBuilderPricingApiToStorage(api, preserve);
-  assert.equal(stored.customFutureField, "keep-me");
-  assert.equal((stored.multipliers as Record<string, unknown>).legacyExtra, 9);
-  assert.equal(stored.cardBuilderSingleSlideCredits, 200);
-
-  const back = storageToCardBuilderPricingApi({
-    cardBuilderPlanCredits: stored.cardBuilderPlanCredits as number,
-    cardBuilderSingleSlideCredits: stored.cardBuilderSingleSlideCredits as number,
-    cardBuilderGallery6Credits: stored.cardBuilderGallery6Credits as number,
-    cardBuilderGallery8Credits: stored.cardBuilderGallery8Credits as number,
-    multipliers: stored.multipliers as { premiumStyle: number; heavyTextInfographic: number },
-  });
-  assert.deepEqual(back, api);
-}
-
-function testCalculatorUsesUpdatedPricing() {
-  const base = cardBuilderPricingToProductCardShape(DEFAULT_CARD_BUILDER_PRICING_API);
-  const updated = cardBuilderPricingToProductCardShape({
-    ...DEFAULT_CARD_BUILDER_PRICING_API,
-    singleSlideCredits: 999,
-  });
-  const before = computeCardBuilderCreditsBeforeMargin("slide", base, {
-    premiumStyle: false,
-    heavyText: false,
-  });
-  const after = computeCardBuilderCreditsBeforeMargin("slide", updated, {
-    premiumStyle: false,
-    heavyText: false,
-  });
-  assert.equal(before, 150);
-  assert.equal(after, 999);
-}
-
-function testLegacyKeysNotReadByProductCardSettings() {
-  const src = readFileSync(
-    join(process.cwd(), "src/server/services/productCardSettings.ts"),
-    "utf8",
-  );
-  assert.match(src, /PRODUCT_CARD_CARD_BUILDER_PRICING/);
-  assert.doesNotMatch(src, /PRODUCT_CARD_BUILDER_PLAN_CREDITS/);
-  assert.doesNotMatch(src, /PRODUCT_CARD_BUILDER_SLIDE_CREDITS/);
-  assert.equal(CARD_BUILDER_PRICING_SETTING_KEY, "PRODUCT_CARD_CARD_BUILDER_PRICING");
-}
 
 function testPaymentSnapshotImmutabilityPattern() {
   const src = readFileSync(
@@ -164,17 +78,6 @@ function testWhatsAppTestUrl() {
   assert.match(url!, /%40testuser|@testuser/);
   assert.doesNotMatch(decodeURIComponent(url!.split("text=")[1] ?? ""), /\{\{userTelegram\}\}/);
   assert.match(url!, /^https:\/\/wa\.me\/77001234567\?text=/);
-}
-
-function testSoftWarnings() {
-  const w = cardBuilderPricingSoftWarnings({
-    planCredits: 0,
-    singleSlideCredits: 150,
-    gallery6Credits: 400,
-    gallery8Credits: 700,
-    multipliers: { premiumStyle: 1.2, heavyTextInfographic: 1.1 },
-  });
-  assert.ok(w.some((x) => x.includes("Галерея 6")));
 }
 
 function testTokenPackagePriceWarnings() {
@@ -334,14 +237,9 @@ function testProductCardVideoReadMatrixCell() {
 }
 
 function main() {
-  testCardBuilderPatchValidation();
-  testCardBuilderStorageRoundtrip();
-  testCalculatorUsesUpdatedPricing();
-  testLegacyKeysNotReadByProductCardSettings();
   testPaymentSnapshotImmutabilityPattern();
   testWhatsAppNormalizationInKaspiStorage();
   testWhatsAppTestUrl();
-  testSoftWarnings();
   testTokenPackagePriceWarnings();
   testProductCardVideoMatrixKeys();
   testProductCardVideoPatchValidation();

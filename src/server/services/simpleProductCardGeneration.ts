@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 
 import type { AiModel } from "@/generated/prisma/client";
-import { resolveCardBuilderOutputSize } from "@/lib/card-builder-output-size";
 import { SIMPLE_CARD_REFERENCE_UNSUPPORTED_MESSAGE } from "@/lib/simple-product-card-model";
+import type { SimpleCardAspectRatio } from "@/config/simple-product-card";
 import {
   aspectRatioToSimpleCardSizeId,
   normalizeSimpleCardPayload,
@@ -12,15 +12,13 @@ import {
 } from "@/lib/validations/simple-product-card";
 import { assertUserOwnsFileUrl, getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 import { assertMarketplaceCardScenarioEnabled } from "@/server/services/productCardScenarios";
-import {
-  cardBuilderModelProductImageError,
-} from "@/server/services/productCardModelResolver";
+import { marketplaceModelProductImageError } from "@/server/services/productCardModelResolver";
 import {
   assertProductCardPriceAllowed,
-  estimateCardBuilderCharge,
+  calculateProductCardMarketplaceCardCredits,
   type ProductCardPriceBreakdown,
 } from "@/server/services/productCardPricing";
-import { getProductCardSettings, PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE } from "@/server/services/productCardSettings";
+import { PRODUCT_CARD_MODEL_NOT_CONFIGURED_MESSAGE } from "@/server/services/productCardSettings";
 import { buildImageModelInput, queueProductCardImage } from "@/server/services/productCardQueueGenerations";
 import { buildSimpleProductCardPrompt } from "@/server/services/simpleProductCardPromptBuilder";
 import {
@@ -32,6 +30,26 @@ import {
   resolveSimpleProductCardImageModel,
 } from "@/server/services/simpleProductCardSettings";
 import { prisma } from "@/lib/prisma";
+
+type SimpleCardOutputSize = {
+  id: string;
+  kieAspectRatio: string;
+  kieResolution: string;
+  width: number;
+  height: number;
+};
+
+const SIMPLE_CARD_OUTPUT_SIZES: Record<SimpleCardAspectRatio, SimpleCardOutputSize> = {
+  "1:1": { id: "1x1", kieAspectRatio: "1:1", kieResolution: "1K", width: 1024, height: 1024 },
+  "4:3": { id: "4x3", kieAspectRatio: "4:3", kieResolution: "1K", width: 1200, height: 900 },
+  "3:4": { id: "3x4", kieAspectRatio: "3:4", kieResolution: "1K", width: 1200, height: 1600 },
+  "16:9": { id: "16x9", kieAspectRatio: "16:9", kieResolution: "1K", width: 1344, height: 768 },
+  "9:16": { id: "9x16", kieAspectRatio: "9:16", kieResolution: "1K", width: 768, height: 1344 },
+};
+
+function resolveSimpleCardOutputSize(aspectRatio: SimpleCardAspectRatio): SimpleCardOutputSize {
+  return SIMPLE_CARD_OUTPUT_SIZES[aspectRatio];
+}
 
 type ServiceErr = { ok: false; error: string; status: number; code?: string };
 type EstimateOk = { ok: true; credits: number; planHash: string; supportsReference: boolean; modelSlug: string };
@@ -77,8 +95,7 @@ function buildModelSettingsMerge(
   referenceUrl: string | null,
   aspectRatio: SimpleProductCardRequest["aspectRatio"],
 ): { ok: true; merged: Record<string, unknown> } | { ok: false; error: string } {
-  const sizeId = aspectRatioToSimpleCardSizeId(aspectRatio);
-  const resolved = resolveCardBuilderOutputSize(sizeId);
+  const resolved = resolveSimpleCardOutputSize(aspectRatio);
   try {
     const b = buildImageModelInput(
       { settingsSchema: model.settingsSchema, supportsImageInput: model.supportsImageInput },
@@ -94,7 +111,7 @@ function buildModelSettingsMerge(
         resolution: resolved.kieResolution,
         outputWidth: resolved.width,
         outputHeight: resolved.height,
-        cardBuilderOutputSizeId: resolved.id,
+        simpleCardOutputSizeId: resolved.id,
       },
     };
   } catch (e) {
@@ -105,11 +122,6 @@ function buildModelSettingsMerge(
 export function computeSimpleCardPlanHash(payload: SimpleProductCardRequest): string {
   const norm = normalizeSimpleCardPayload(payload);
   return createHash("sha256").update(JSON.stringify(norm)).digest("hex");
-}
-
-function salesStyleForMode(styleMode: SimpleProductCardRequest["styleMode"]): string {
-  if (styleMode === "premium") return "premium";
-  return "marketplace";
 }
 
 export async function estimateSimpleProductCard(
@@ -157,19 +169,13 @@ export async function estimateSimpleProductCard(
     };
   }
 
-  const imgErr = cardBuilderModelProductImageError(modelRes.model);
+  const imgErr = marketplaceModelProductImageError(modelRes.model);
   if (imgErr) return { ok: false, error: imgErr, status: 400, code: "MODEL_UNSUPPORTED" };
 
-  const settings = await getProductCardSettings();
-  const br = await estimateCardBuilderCharge(
-    "slide",
-    modelRes.model,
-    settings.cardBuilderPricing,
-    salesStyleForMode(payload.styleMode),
-    "medium",
-    "main_photo",
-    null,
-  );
+  const br = await calculateProductCardMarketplaceCardCredits(modelRes.model, {
+    cardSize: aspectRatioToSimpleCardSizeId(payload.aspectRatio),
+    styleMode: payload.styleMode,
+  });
 
   await saveSimpleCardSettings(projectId, payload);
 
@@ -247,7 +253,7 @@ export async function generateSimpleProductCard(
   }
 
   const model = modelRes.model;
-  const imgErr = cardBuilderModelProductImageError(model);
+  const imgErr = marketplaceModelProductImageError(model);
   if (imgErr) return { ok: false, error: imgErr, status: 400 };
 
   const promptBuilt = buildSimpleProductCardPrompt({
@@ -261,16 +267,10 @@ export async function generateSimpleProductCard(
     return { ok: false, error: settingsMerge.error, status: 400 };
   }
 
-  const pcSettings = await getProductCardSettings();
-  const breakdown: ProductCardPriceBreakdown = await estimateCardBuilderCharge(
-    "slide",
-    model,
-    pcSettings.cardBuilderPricing,
-    salesStyleForMode(payload.styleMode),
-    "medium",
-    "main_photo",
-    null,
-  );
+  const breakdown: ProductCardPriceBreakdown = await calculateProductCardMarketplaceCardCredits(model, {
+    cardSize: aspectRatioToSimpleCardSizeId(payload.aspectRatio),
+    styleMode: payload.styleMode,
+  });
 
   try {
     assertProductCardPriceAllowed(breakdown);

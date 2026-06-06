@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { CardBuilderPricingEditor } from "@/components/admin/pricing/card-builder-pricing-editor";
 import { ManualTopUpPricingEditor } from "@/components/admin/pricing/manual-topup-pricing-editor";
 import { AdminPricingModelsTable } from "@/components/admin/pricing/admin-pricing-models-table";
 import { TokenPackagesPricingEditor } from "@/components/admin/pricing/token-packages-pricing-editor";
@@ -29,7 +28,6 @@ import type {
   AdminPricingTabId,
   AdminPricingWarning,
 } from "@/server/services/adminPricingOverview";
-import type { CardBuilderPricingApi } from "@/lib/pricing-admin/card-builder";
 import type { KaspiManualPricingApi } from "@/lib/pricing-admin/kaspi-manual";
 import type { ProductCardVideoPricingApi } from "@/lib/pricing-admin/product-card-video";
 import type { ProductCardVideoMatrixCellPreview } from "@/lib/pricing-admin/product-card-video";
@@ -60,14 +58,12 @@ function warningSeverityVariant(s: AdminPricingWarning["severity"]) {
 }
 
 type PricingEditPermissions = {
-  cardBuilder: boolean;
   tokenPackages: boolean;
   manualTopUp: boolean;
   productCardVideo: boolean;
 };
 
 type PricingEditorProps = {
-  cardBuilder: { pricing: CardBuilderPricingApi; meta: AppSettingMeta | null };
   kaspi: { settings: KaspiManualPricingApi; meta: AppSettingMeta | null };
   productCardVideo: {
     pricing: ProductCardVideoPricingApi | null;
@@ -90,7 +86,6 @@ export function AdminPricingTabPanels({
   editor,
 }: Props) {
   const perms = editPermissions ?? {
-    cardBuilder: false,
     tokenPackages: false,
     manualTopUp: false,
     productCardVideo: false,
@@ -169,8 +164,8 @@ export function AdminPricingTabPanels({
           ))}
         </div>
         <p className="text-muted-foreground text-xs">
-          Обзор read-only. Редактирование тарифов card_builder, пакетов и Kaspi/WhatsApp — на
-          вкладках «Создать карточку» и «Пополнение» (при наличии прав).
+          Обзор read-only. Редактирование пакетов и Kaspi/WhatsApp — на вкладке «Пополнение» (при
+          наличии прав).
         </p>
       </div>
     );
@@ -183,74 +178,6 @@ export function AdminPricingTabPanels({
           Сводка по моделям. Редактирование — в Pricing Studio на странице модели.
         </p>
         <AdminPricingModelsTable models={data.models} />
-      </div>
-    );
-  }
-
-  if (tab === "card-builder") {
-    const cb = data.productCardSettings.cardBuilderPricing;
-    const cardPricing = editor?.cardBuilder ?? {
-      pricing: {
-        planCredits: cb.cardBuilderPlanCredits,
-        singleSlideCredits: cb.cardBuilderSingleSlideCredits,
-        gallery6Credits: cb.cardBuilderGallery6Credits,
-        gallery8Credits: cb.cardBuilderGallery8Credits,
-        multipliers: { ...cb.multipliers },
-      },
-      meta: null,
-    };
-
-    return (
-      <div className="space-y-6">
-        <Alert>
-          <AlertTitle>Источник цены</AlertTitle>
-          <AlertDescription>
-            Тарифы из AppSettings <code>PRODUCT_CARD_CARD_BUILDER_PRICING</code>. Модель Kie
-            влияет только на расчёт provider cost (reference), не на списание с клиента.
-          </AlertDescription>
-        </Alert>
-        {data.cardBuilderModel ? (
-          <p className="text-sm">
-            Модель reference: <strong>{data.cardBuilderModel.name}</strong>
-            {data.cardBuilderModel.fallbackFromMarketplaceCard ? (
-              <Badge variant="outline" className="ml-2">
-                fallback marketplace
-              </Badge>
-            ) : null}
-          </p>
-        ) : (
-          <Alert variant="destructive">
-            <AlertDescription>Модель card_builder не настроена.</AlertDescription>
-          </Alert>
-        )}
-        <CardBuilderPricingEditor
-          key={cardPricing.meta?.updatedAt ?? JSON.stringify(cardPricing.pricing)}
-          initialPricing={cardPricing.pricing}
-          meta={cardPricing.meta}
-          canEdit={perms.cardBuilder}
-        />
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Примеры (сервер)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2 text-sm">
-              {data.cardBuilderSamples.map((s) => (
-                <li key={s.label}>
-                  <strong>{s.credits} ток.</strong> — {s.label}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Не влияет на цену</CardTitle>
-          </CardHeader>
-          <CardContent className="text-muted-foreground text-sm">
-            {data.notAffectingPrice.find((x) => x.scenario === "Создать карточку")?.items.join(", ")}
-          </CardContent>
-        </Card>
       </div>
     );
   }
@@ -500,10 +427,7 @@ export function AdminPricingTabPanels({
             <CardTitle className="text-base">Справка</CardTitle>
           </CardHeader>
           <CardContent className="text-muted-foreground space-y-2 text-sm">
-            <p>
-              Каноничный тариф card_builder: <code>PRODUCT_CARD_CARD_BUILDER_PRICING</code>
-            </p>
-            <p>Legacy PRODUCT_CARD_BUILDER_* keys в registry не используются кодом.</p>
+            <p>Product Card pricing редактируется на вкладках сценариев и в Pricing Studio моделей.</p>
           </CardContent>
         </Card>
       </div>

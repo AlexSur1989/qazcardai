@@ -137,14 +137,6 @@ export function ProductCardScenariosForm({
                       <Link href={meta.pricingHref} className="text-primary underline">
                         {meta.pricingLabel}
                       </Link>
-                      {meta.id === "cardBuilder" ? (
-                        <Link
-                          href="/admin/product-card?tab=card-builder-prompts&advanced=1"
-                          className="text-muted-foreground underline"
-                        >
-                          AI-промпты (расшир.)
-                        </Link>
-                      ) : null}
                     </div>
                     <details className="text-muted-foreground text-xs">
                       <summary className="cursor-pointer select-none">Технические детали</summary>

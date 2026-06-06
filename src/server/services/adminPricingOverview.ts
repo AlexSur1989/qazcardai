@@ -13,7 +13,6 @@ import {
   calculateProductCardConceptImageCredits,
   calculateProductCardMarketplaceCardCredits,
   calculateProductCardVideoCredits,
-  estimateCardBuilderCharge,
   resolveMarketplaceVariantBundleTotals,
 } from "@/server/services/productCardPricing";
 import {
@@ -21,15 +20,10 @@ import {
   type ProductCardSettings,
 } from "@/server/services/productCardSettings";
 import {
-  resolveCardBuilderImageModel,
   resolveDefaultProductConceptImageModel,
   resolveDefaultMarketplaceCardModel,
   resolveDefaultProductVideoModel,
 } from "@/server/services/productCardModelResolver";
-import {
-  cardBuilderPricingSoftWarnings,
-  storageToCardBuilderPricingApi,
-} from "@/lib/pricing-admin/card-builder";
 import { tokenPackagePriceWarnings } from "@/lib/pricing-admin/token-packages";
 import { listActiveTokenPackagesForBilling } from "@/server/services/token-packages-catalog";
 import { buildGeneralPriceBreakdownV2 } from "@/server/services/unifiedModelPricing";
@@ -37,7 +31,6 @@ import { buildGeneralPriceBreakdownV2 } from "@/server/services/unifiedModelPric
 export type AdminPricingTabId =
   | "overview"
   | "models"
-  | "card-builder"
   | "marketplace"
   | "video"
   | "concepts"
@@ -57,7 +50,6 @@ export type AdminPricingWarning = {
 export type PricingScenarioId =
   | "ai_image"
   | "ai_video"
-  | "card_builder"
   | "marketplace_card"
   | "concept_photo"
   | "product_video"
@@ -124,13 +116,6 @@ export type AdminPricingOverviewData = {
   scenarioCards: ScenarioOverviewCard[];
   models: AdminPricingModelRow[];
   productCardSettings: ProductCardSettings;
-  cardBuilderModel: {
-    id: string;
-    name: string;
-    slug: string;
-    fallbackFromMarketplaceCard: boolean;
-  } | null;
-  cardBuilderSamples: Array<{ label: string; credits: number; formula: string }>;
   marketplaceModel: { id: string; name: string; slug: string } | null;
   marketplaceSamples: Array<{ variantCount: number; credits: number; formula: string }>;
   conceptModel: { id: string; name: string; slug: string } | null;
@@ -164,14 +149,6 @@ export type AdminPricingOverviewData = {
   warnings: AdminPricingWarning[];
   notAffectingPrice: Array<{ scenario: string; items: string[] }>;
 };
-
-const LEGACY_BUILDER_KEYS = [
-  "PRODUCT_CARD_BUILDER_PLAN_CREDITS",
-  "PRODUCT_CARD_BUILDER_SLIDE_CREDITS",
-  "PRODUCT_CARD_BUILDER_GALLERY_6_CREDITS",
-  "PRODUCT_CARD_BUILDER_GALLERY_8_CREDITS",
-  "PRODUCT_CARD_BUILDER_PRICE_MULTIPLIERS",
-] as const;
 
 function schemaType(pricingSchema: unknown): string {
   if (!isRecord(pricingSchema)) return "fallback (costCredits)";
@@ -271,7 +248,6 @@ export async function buildAdminPricingOverview(): Promise<AdminPricingOverviewD
     globalTokenRaw,
     globalUsdRaw,
     globalMarkupRaw,
-    cardBuilderResolved,
     conceptModel,
     marketplaceModel,
     productVideoModel,
@@ -300,7 +276,6 @@ export async function buildAdminPricingOverview(): Promise<AdminPricingOverviewD
     getAppSetting("TOKEN_VALUE_KZT"),
     getAppSetting("USD_TO_KZT"),
     getAppSetting("DEFAULT_MARKUP_PERCENT"),
-    resolveCardBuilderImageModel(),
     resolveDefaultProductConceptImageModel(),
     resolveDefaultMarketplaceCardModel(),
     resolveDefaultProductVideoModel(),
@@ -323,33 +298,6 @@ export async function buildAdminPricingOverview(): Promise<AdminPricingOverviewD
       title: "Разные стоимости токена: GLOBAL и Product Card",
       detail: `TOKEN_VALUE_KZT=${globalTokenValueKzt}, PRODUCT_CARD_DEFAULT_TOKEN_VALUE_KZT=${productSettings.tokenValueKzt}. Маржа и выручка в разных разделах считаются по разным правилам.`,
       tab: "overview",
-    });
-  }
-
-  for (const key of LEGACY_BUILDER_KEYS) {
-    const row = await prisma.appSetting.findUnique({
-      where: { key },
-      select: { key: true },
-    });
-    if (row) {
-      warnings.push({
-        id: `legacy-${key}`,
-        severity: "info",
-        title: `Legacy-ключ ${key} есть в БД, но код его не читает`,
-        detail: `Каноничный источник тарифов card_builder — PRODUCT_CARD_CARD_BUILDER_PRICING. Значение ${key} можно удалить из AppSettings.`,
-        tab: "warnings",
-      });
-    }
-  }
-
-  const cbApi = storageToCardBuilderPricingApi(productSettings.cardBuilderPricing);
-  for (const msg of cardBuilderPricingSoftWarnings(cbApi)) {
-    warnings.push({
-      id: `card-builder-pricing-${msg.slice(0, 40).replace(/\W+/g, "-")}`,
-      severity: "warning",
-      title: "Создать карточку: тарифы",
-      detail: msg,
-      tab: "card-builder",
     });
   }
 
@@ -381,16 +329,6 @@ export async function buildAdminPricingOverview(): Promise<AdminPricingOverviewD
       title: "WhatsApp включён без номера",
       detail: "Укажите whatsappPhone в KASPI_MANUAL_SETTINGS или отключите WhatsApp.",
       tab: "topup",
-    });
-  }
-
-  if (cardBuilderResolved?.fallbackFromMarketplaceCard) {
-    warnings.push({
-      id: "card-builder-fallback-model",
-      severity: "warning",
-      title: "Создать карточку использует fallback-модель marketplace",
-      detail: `Отдельная модель PRODUCT_CARD_BUILDER не найдена; для provider cost reference используется «${cardBuilderResolved.model.name}». Цена слайдов задаётся AppSettings, не моделью.`,
-      tab: "card-builder",
     });
   }
 
@@ -471,24 +409,6 @@ export async function buildAdminPricingOverview(): Promise<AdminPricingOverviewD
   const generalVideoMatrices = models
     .map(extractGeneralVideoMatrix)
     .filter((x): x is GeneralVideoMatrixRow => x != null);
-
-  const cardBuilderSamples: AdminPricingOverviewData["cardBuilderSamples"] = [];
-  if (cardBuilderResolved) {
-    const p = productSettings.cardBuilderPricing;
-    const cbModel = cardBuilderResolved.model;
-    const samples = await Promise.all([
-      estimateCardBuilderCharge("slide", cbModel, p, "light_marketplace", "medium", "main_photo"),
-      estimateCardBuilderCharge("slide", cbModel, p, "premium", "medium", "lifestyle"),
-      estimateCardBuilderCharge("gallery6", cbModel, p, "infographic", "infographic", "benefits_infographic", 6),
-      estimateCardBuilderCharge("gallery8", cbModel, p, "premium", "heavy", "benefits_infographic", 8),
-    ]);
-    cardBuilderSamples.push(
-      { label: "1 слайд · main_photo · обычный стиль", credits: samples[0].credits, formula: samples[0].formula },
-      { label: "1 слайд · lifestyle · premium", credits: samples[1].credits, formula: samples[1].formula },
-      { label: "Галерея 6 · bundle", credits: samples[2].credits, formula: samples[2].formula },
-      { label: "Галерея 8 · bundle · premium + heavy", credits: samples[3].credits, formula: samples[3].formula },
-    );
-  }
 
   const marketplaceSamples: AdminPricingOverviewData["marketplaceSamples"] = [];
   if (marketplaceModel) {
@@ -580,20 +500,6 @@ export async function buildAdminPricingOverview(): Promise<AdminPricingOverviewD
       tab: "video",
     },
     {
-      id: "card_builder",
-      label: "Создать карточку",
-      status: productSettings.scenarios.cardBuilder.enabled
-        ? cardBuilderResolved
-          ? "active"
-          : "partial"
-        : "disabled",
-      priceSource: "PRODUCT_CARD_CARD_BUILDER_PRICING (AppSettings)",
-      minCredits: productSettings.cardBuilderPricing.cardBuilderSingleSlideCredits,
-      sampleCredits: cardBuilderSamples[cardBuilderSamples.length - 1]?.credits ?? null,
-      warningCount: countWarningsForTab(warnings, "card-builder"),
-      tab: "card-builder",
-    },
-    {
       id: "marketplace_card",
       label: "Карточка товара",
       status: productSettings.scenarios.marketplaceCard.enabled
@@ -662,10 +568,6 @@ export async function buildAdminPricingOverview(): Promise<AdminPricingOverviewD
       items: ["motionStyle", "category"],
     },
     {
-      scenario: "Создать карточку",
-      items: ["priceSegment", "audience", "category (на цену напрямую)"],
-    },
-    {
       scenario: "Фото с концепциями",
       items: ["category", "concept text", "количество source images"],
     },
@@ -690,15 +592,6 @@ export async function buildAdminPricingOverview(): Promise<AdminPricingOverviewD
     scenarioCards,
     models: modelRows,
     productCardSettings: productSettings,
-    cardBuilderModel: cardBuilderResolved
-      ? {
-          id: cardBuilderResolved.model.id,
-          name: cardBuilderResolved.model.name,
-          slug: cardBuilderResolved.model.slug,
-          fallbackFromMarketplaceCard: cardBuilderResolved.fallbackFromMarketplaceCard,
-        }
-      : null,
-    cardBuilderSamples,
     marketplaceModel: marketplaceModel
       ? { id: marketplaceModel.id, name: marketplaceModel.name, slug: marketplaceModel.slug }
       : null,

@@ -1,4 +1,7 @@
 import type { AiModel } from "@/generated/prisma/client";
+import { resolveDefaultMarketplaceCardModel } from "@/server/services/productCardModelResolver";
+import { modelSupportsSimpleCardReferenceImage } from "@/lib/simple-product-card-model";
+import { prisma } from "@/lib/prisma";
 import {
   PRODUCT_CARD_SIMPLE_CARD_SETTING_KEYS,
 } from "@/config/simple-product-card-prompts-defaults";
@@ -11,9 +14,6 @@ import {
 import { mergeSimpleProductCardPromptsWithDefaults } from "@/lib/validations/simple-product-card-prompts-setting";
 import { getAppSetting } from "@/server/services/appSettings";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
-import { prisma } from "@/lib/prisma";
-import { resolveCardBuilderImageModel, resolveDefaultMarketplaceCardModel } from "@/server/services/productCardModelResolver";
-import { modelSupportsSimpleCardReferenceImage } from "@/lib/simple-product-card-model";
 
 export type SimpleProductCardRuntimeSettings = {
   enabled: boolean;
@@ -73,12 +73,10 @@ export async function getSimpleProductCardRuntimeSettings(): Promise<SimpleProdu
     defaultAspectRatio: parseAspect(aspectRaw ?? mergedPrompts.prompts.defaultAspectRatio),
     modelSlug:
       (typeof modelSlugRaw === "string" ? modelSlugRaw.trim() : "") ||
-      pcSettings.marketplaceCardModelSlug ||
-      pcSettings.cardBuilderModelSlug,
+      pcSettings.marketplaceCardModelSlug,
     referenceModelSlug:
       (typeof refModelSlugRaw === "string" ? refModelSlugRaw.trim() : "") ||
-      pcSettings.marketplaceCardModelSlug ||
-      pcSettings.cardBuilderModelSlug,
+      pcSettings.marketplaceCardModelSlug,
     referenceEnabled: parseBool(refEnabledRaw, mergedPrompts.prompts.referenceEnabled),
     prompts: mergedPrompts.prompts,
     promptsSource: mergedPrompts.source,
@@ -108,7 +106,7 @@ export async function resolveSimpleProductCardImageModel(options: {
     if (bySlug?.supportsImageInput) {
       return {
         model: bySlug,
-        fallbackFromMarketplaceCard: bySlug.productCardModelType !== "PRODUCT_CARD_BUILDER",
+        fallbackFromMarketplaceCard: bySlug.productCardModelType !== "PRODUCT_MARKETPLACE_CARD",
         supportsReference: modelSupportsSimpleCardReferenceImage(bySlug),
       };
     }
@@ -123,10 +121,5 @@ export async function resolveSimpleProductCardImageModel(options: {
     };
   }
 
-  const resolved = await resolveCardBuilderImageModel();
-  if (!resolved) return null;
-  return {
-    ...resolved,
-    supportsReference: modelSupportsSimpleCardReferenceImage(resolved.model),
-  };
+  return null;
 }

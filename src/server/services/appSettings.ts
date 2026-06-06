@@ -4,12 +4,7 @@ import { writeAdminAuditLog } from "@/lib/admin-audit";
 import {
   validateAppSettingValueForType,
 } from "@/lib/app-setting-value";
-import { validateCardBuilderPromptsForSave } from "@/lib/validations/card-builder-prompts-setting";
 import { validateSimpleProductCardPromptsForSave } from "@/lib/validations/simple-product-card-prompts-setting";
-import {
-  clearCardBuilderPromptsSettingsCache,
-  PRODUCT_CARD_CARD_BUILDER_PROMPTS_KEY,
-} from "@/server/services/cardBuilderPromptsSettings";
 import {
   clearSimpleProductCardSettingsCache,
 } from "@/server/services/simpleProductCardSettings";
@@ -201,13 +196,6 @@ export async function setAppSettingFromRegistry(input: {
   if (def.sensitive) {
     return { ok: false, error: "sensitive" };
   }
-  if (def.key === PRODUCT_CARD_CARD_BUILDER_PROMPTS_KEY) {
-    const promptsValid = validateCardBuilderPromptsForSave(input.value);
-    if (!promptsValid.ok) {
-      return { ok: false, error: promptsValid.errors.join("; ") };
-    }
-    input.value = promptsValid.value;
-  }
   if (def.key === PRODUCT_CARD_SIMPLE_CARD_SETTING_KEYS.prompts) {
     const promptsValid = validateSimpleProductCardPromptsForSave(input.value);
     if (!promptsValid.ok) {
@@ -249,9 +237,6 @@ export async function setAppSettingFromRegistry(input: {
     newValue: { value: newValue, key: def.key, group: def.group },
     metadata: { key: def.key, group: def.group },
   });
-  if (def.key === PRODUCT_CARD_CARD_BUILDER_PROMPTS_KEY) {
-    clearCardBuilderPromptsSettingsCache();
-  }
   if (def.key === PRODUCT_CARD_SIMPLE_CARD_SETTING_KEYS.prompts) {
     clearSimpleProductCardSettingsCache();
   }

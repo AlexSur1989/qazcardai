@@ -15,18 +15,6 @@ export type ProductCardScenarioMeta = {
 
 export const PRODUCT_CARD_SCENARIO_CATALOG: ProductCardScenarioMeta[] = [
   {
-    id: "cardBuilder",
-    title: "Создать карточку",
-    description:
-      "Мастер создания галереи карточек товара: главный слайд, преимущества, детали, lifestyle, размеры.",
-    clientHint: "Вкладка «Создать карточку» в разделе «Создать карточку товара» в кабинете.",
-    pricingHref: "/admin/pricing?tab=card-builder",
-    pricingLabel: "Цены и тарифы → Создать карточку",
-    generationsHref: "/admin/generations",
-    scenariosHref: "/admin/product-card?tab=scenarios",
-    overviewOrder: 1,
-  },
-  {
     id: "marketplaceCard",
     title: "Карточка для маркетплейса",
     description:
@@ -36,7 +24,7 @@ export const PRODUCT_CARD_SCENARIO_CATALOG: ProductCardScenarioMeta[] = [
     pricingLabel: "Цены и тарифы → Карточка для маркетплейса",
     generationsHref: "/admin/generations",
     scenariosHref: "/admin/product-card?tab=scenarios",
-    overviewOrder: 2,
+    overviewOrder: 1,
   },
   {
     id: "conceptPhoto",
@@ -48,7 +36,7 @@ export const PRODUCT_CARD_SCENARIO_CATALOG: ProductCardScenarioMeta[] = [
     pricingLabel: "Цены и тарифы → Фото с концепциями",
     generationsHref: "/admin/generations",
     scenariosHref: "/admin/product-card?tab=scenarios",
-    overviewOrder: 3,
+    overviewOrder: 2,
   },
   {
     id: "productVideo",
@@ -59,7 +47,7 @@ export const PRODUCT_CARD_SCENARIO_CATALOG: ProductCardScenarioMeta[] = [
     pricingLabel: "Цены и тарифы → Видео товара",
     generationsHref: "/admin/generations",
     scenariosHref: "/admin/product-card?tab=scenarios",
-    overviewOrder: 4,
+    overviewOrder: 3,
   },
 ];
 
@@ -77,9 +65,7 @@ export const PRODUCT_CARD_ADVANCED_TABS = [
   { id: "categories", label: "Категории" },
   { id: "concepts", label: "Концепции" },
   { id: "prompts", label: "Промпты (legacy)" },
-  { id: "card-builder-prompts", label: "Промпты «Создать карточку»" },
   { id: "simple-card-prompts", label: "Промпты простой карточки" },
-  { id: "web-research", label: "Web Research" },
   { id: "video", label: "Видео (техн.)" },
   { id: "calculator", label: "Калькулятор" },
 ] as const;
@@ -113,7 +99,6 @@ export function resolveProductCardTab(input: {
 
 export const PRODUCT_CARD_QUICK_LINKS = [
   { label: "Цены и тарифы", href: "/admin/pricing" },
-  { label: "Цены «Создать карточку»", href: "/admin/pricing?tab=card-builder" },
   { label: "Matrix видео товара", href: "/admin/pricing?tab=video" },
   { label: "Генерации", href: "/admin/generations" },
   { label: "AI-модели", href: "/admin/models" },
