@@ -325,7 +325,7 @@ export async function getSeoChecklist(): Promise<SeoChecklistItem[]> {
       status: "info",
       detail:
         landing && landingHost && appHost && landingHost !== appHost
-          ? "Сайтмап внешнего лендинга настраивается отдельно (qazcard-landing/ и т.д.)."
+          ? "Сайтмап внешнего лендинга настраивается отдельно (/opt/qazcard-landing и деплой на qazcardai.kz)."
           : "Если лендинг на другом домене — sitemap/robots для него настраиваются отдельно.",
     },
     {
