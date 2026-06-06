@@ -163,7 +163,7 @@ function assertPayloadSnapshots(): void {
   assert.ok(!("image_urls" in (b1.input as object)));
 
   const gptI2i = GENERAL_PHASE1_MODELS.find(
-    (m) => m.slug === "gpt-image-2-image-to-image",
+    (m) => m.slug === "gpt-image-2-image-to-image-general",
   )!;
   const b2 = bodyFromDefinition(gptI2i.apiModelId, gptI2i.payloadMapping, {
     aspectRatio: "auto",
@@ -569,7 +569,7 @@ function assertGptResolutionValidationMatrix(): void {
     false,
   );
 
-  const i2i = phase1ModelForValidation("gpt-image-2-image-to-image");
+  const i2i = phase1ModelForValidation("gpt-image-2-image-to-image-general");
   assert.equal(
     validateStrictKieMarketPayload(i2i, promptFixture, {
       ...i2iBase,
@@ -683,7 +683,7 @@ const SETTINGS_FOR_DB_BUILD: Record<
   Record<string, unknown>
 > = {
   "gpt-image-2-text-to-image": { aspectRatio: "auto", resolution: "1K" },
-  "gpt-image-2-image-to-image": {
+  "gpt-image-2-image-to-image-general": {
     aspectRatio: "auto",
     resolution: "1K",
     inputUrls: ["https://example.com/a.png"],

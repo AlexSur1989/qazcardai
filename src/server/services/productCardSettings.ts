@@ -214,7 +214,7 @@ export async function getProductCardSettings(): Promise<ProductCardSettings> {
     maxSourceImages: Math.min(4, Math.max(1, Math.round(asNumber(entries[2], 4, 1)))),
     requiredMainImage: asBool(entries[3], true),
     classifierModelSlug: asString(entries[4], "gemini-2-5-flash-classifier"),
-    conceptImageModelSlug: asString(entries[5], "seedream-4-0-product-concept"),
+    conceptImageModelSlug: asString(entries[5], "gpt-image-2-image-to-image"),
     marketplaceCardModelSlug: asString(entries[6], "gpt-image-2-product-card"),
     cardBuilderModelSlug: asString(entries[7]),
     videoModelSlug: asString(entries[8], "seedance-2-0-product-video"),

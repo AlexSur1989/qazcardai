@@ -51,7 +51,48 @@ async function preserveManualOverrides(slug: string, next: Record<string, unknow
   };
 }
 
+const GPT_I2I_PRODUCT_CARD_SETTINGS = {
+  fields: [
+    { name: "inputUrls", type: "upload-list", label: "Reference image URLs", required: true, maxItems: 16, accept: "image/*" },
+    { name: "aspectRatio", type: "select", label: "Aspect ratio", default: "auto", options: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"], required: true },
+    { name: "resolution", type: "select", label: "Resolution", default: "1K", options: ["1K", "2K", "4K"], required: true },
+  ],
+} as const;
+
+const GPT_I2I_PRODUCT_CARD_PAYLOAD = {
+  adapter: "market-create-task",
+  omitNull: true,
+  required: ["input_urls", "aspect_ratio"],
+  input: {
+    input_urls: "$settings.inputUrls",
+    aspect_ratio: "$settings.aspectRatio",
+    resolution: "$settings.resolution",
+  },
+  coerce: {
+    input_urls: "stringArray",
+    aspect_ratio: "string",
+    resolution: "string",
+  },
+} as const;
+
+async function freeGptI2iSlugForProductCardConcept() {
+  const general = await prisma.aiModel.findUnique({
+    where: { slug: "gpt-image-2-image-to-image" },
+    select: { id: true, scope: true },
+  });
+  if (general?.scope !== "GENERAL") return;
+  await prisma.aiModel.update({
+    where: { id: general.id },
+    data: { slug: "gpt-image-2-image-to-image-general" },
+  });
+  console.log(
+    "[seed:product-card-models] GENERAL slug gpt-image-2-image-to-image → gpt-image-2-image-to-image-general",
+  );
+}
+
 async function main() {
+  await freeGptI2iSlugForProductCardConcept();
+
   const rows = [
     {
       name: "Gemini 2.5 Flash Product Classifier",
@@ -64,20 +105,18 @@ async function main() {
       supportsImageInput: true,
     },
     {
-      name: "Seedream 4.0 Product Concept",
-      slug: "seedream-4-0-product-concept",
+      name: "GPT Image 2 Product Concept",
+      slug: "gpt-image-2-image-to-image",
       type: "IMAGE" as const,
       productCardModelType: "PRODUCT_CONCEPT_IMAGE",
-      apiModelId: "bytedance/seedream-v4-edit",
+      apiModelId: "gpt-image-2-image-to-image",
       endpoint: KIE_ENDPOINT,
       statusEndpoint: KIE_STATUS,
-      costCredits: 15,
-      pricingSchema: productCardImagePricing(15, 0.03),
+      costCredits: 25,
+      pricingSchema: productCardImagePricing(25, 0.05),
       supportsImageInput: true,
-      payloadMapping: {
-        prompt: "input.prompt",
-        imageUrls: "input.image_urls",
-      },
+      settingsSchema: GPT_I2I_PRODUCT_CARD_SETTINGS,
+      payloadMapping: GPT_I2I_PRODUCT_CARD_PAYLOAD,
     },
     {
       name: "GPT Image 2 Card Builder",
@@ -90,28 +129,8 @@ async function main() {
       costCredits: 25,
       pricingSchema: productCardImagePricing(25, 0.05),
       supportsImageInput: true,
-      settingsSchema: {
-        fields: [
-          { name: "inputUrls", type: "upload-list", label: "Reference image URLs", required: true, maxItems: 16, accept: "image/*" },
-          { name: "aspectRatio", type: "select", label: "Aspect ratio", default: "auto", options: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"], required: true },
-          { name: "resolution", type: "select", label: "Resolution", default: "1K", options: ["1K", "2K", "4K"], required: true },
-        ],
-      },
-      payloadMapping: {
-        adapter: "market-create-task",
-        omitNull: true,
-        required: ["input_urls", "aspect_ratio"],
-        input: {
-          input_urls: "$settings.inputUrls",
-          aspect_ratio: "$settings.aspectRatio",
-          resolution: "$settings.resolution",
-        },
-        coerce: {
-          input_urls: "stringArray",
-          aspect_ratio: "string",
-          resolution: "string",
-        },
-      },
+      settingsSchema: GPT_I2I_PRODUCT_CARD_SETTINGS,
+      payloadMapping: GPT_I2I_PRODUCT_CARD_PAYLOAD,
     },
     {
       name: "GPT Image 2 Product Card",
@@ -124,28 +143,8 @@ async function main() {
       costCredits: 25,
       pricingSchema: productCardImagePricing(25, 0.05),
       supportsImageInput: true,
-      settingsSchema: {
-        fields: [
-          { name: "inputUrls", type: "upload-list", label: "Reference image URLs", required: true, maxItems: 16, accept: "image/*" },
-          { name: "aspectRatio", type: "select", label: "Aspect ratio", default: "auto", options: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"], required: true },
-          { name: "resolution", type: "select", label: "Resolution", default: "1K", options: ["1K", "2K", "4K"], required: true },
-        ],
-      },
-      payloadMapping: {
-        adapter: "market-create-task",
-        omitNull: true,
-        required: ["input_urls", "aspect_ratio"],
-        input: {
-          input_urls: "$settings.inputUrls",
-          aspect_ratio: "$settings.aspectRatio",
-          resolution: "$settings.resolution",
-        },
-        coerce: {
-          input_urls: "stringArray",
-          aspect_ratio: "string",
-          resolution: "string",
-        },
-      },
+      settingsSchema: GPT_I2I_PRODUCT_CARD_SETTINGS,
+      payloadMapping: GPT_I2I_PRODUCT_CARD_PAYLOAD,
     },
     {
       name: "Seedance 2.0 Product Video",
@@ -242,7 +241,7 @@ async function main() {
 
   const defaults = {
     PRODUCT_CARD_DEFAULT_CLASSIFIER_MODEL_SLUG: "gemini-2-5-flash-classifier",
-    PRODUCT_CARD_DEFAULT_CONCEPT_IMAGE_MODEL_SLUG: "seedream-4-0-product-concept",
+    PRODUCT_CARD_DEFAULT_CONCEPT_IMAGE_MODEL_SLUG: "gpt-image-2-image-to-image",
     PRODUCT_CARD_DEFAULT_MARKETPLACE_CARD_MODEL_SLUG: "gpt-image-2-product-card",
     PRODUCT_CARD_DEFAULT_VIDEO_MODEL_SLUG: "seedance-2-0-product-video",
     PRODUCT_CARD_DEFAULT_CARD_BUILDER_MODEL_SLUG: "",
@@ -254,6 +253,11 @@ async function main() {
       update: { value, type: "string", description: `Product Card default ${key}.` },
     });
   }
+
+  await prisma.aiModel.updateMany({
+    where: { slug: "seedream-4-0-product-concept" },
+    data: { isActive: false },
+  });
 
   console.log("[seed:product-card-models] OK");
 }

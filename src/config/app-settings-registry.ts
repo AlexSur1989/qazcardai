@@ -351,7 +351,7 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
     label: "PRODUCT_CARD_DEFAULT_CONCEPT_IMAGE_MODEL_SLUG / Фото с концепциями",
     description: "Product Card IMAGE модель для фото с концепциями.",
     type: "string",
-    defaultValue: "seedream-4-0-product-concept",
+    defaultValue: "gpt-image-2-image-to-image",
     editable: true,
     sensitive: false,
   },

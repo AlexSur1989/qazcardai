@@ -34,7 +34,7 @@ export function normalizeGptImage2AspectIfOmittedForKie(
 
 export const GENERAL_PHASE1_SLUG_ORDER = [
   "gpt-image-2-text-to-image",
-  "gpt-image-2-image-to-image",
+  "gpt-image-2-image-to-image-general",
   "kling-2-6-text-to-video",
   "kling-2-6-image-to-video",
 ] as const;
@@ -346,7 +346,7 @@ export const GENERAL_PHASE1_MODELS: readonly Phase1SeedRow[] = [
     realCost: 0.03,
   },
   {
-    slug: "gpt-image-2-image-to-image",
+    slug: "gpt-image-2-image-to-image-general",
     name: "GPT Image 2 — Image to Image",
     type: "IMAGE",
     apiModelId: "gpt-image-2-image-to-image",

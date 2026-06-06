@@ -134,7 +134,7 @@ const GPT_IMAGE_2_FAMILY_VARIANTS: readonly {
     optionLabel: "Текст → изображение",
   },
   {
-    slug: "gpt-image-2-image-to-image",
+    slug: "gpt-image-2-image-to-image-general",
     optionLabel: "Изображение → изображение",
   },
 ];
