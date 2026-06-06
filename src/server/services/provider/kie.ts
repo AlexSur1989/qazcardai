@@ -1,6 +1,6 @@
 
 /** Таймаут HTTP к Kie.ai (генерация и polling). Переопределение: KIE_FETCH_TIMEOUT_MS. */
-import { normalizeGptImage2AspectIfOmittedForKie } from "@/server/kie/general-phase1-models";
+import { normalizeGptImage2AspectIfOmittedForKie } from "@/server/kie/kie-shared-utils";
 import {
   buildKieMarketPayloadFromMapping,
   defaultKieCallBackUrl,

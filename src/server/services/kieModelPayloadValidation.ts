@@ -1,7 +1,7 @@
 import {
   normalizeGptImage2AspectIfOmittedForKie,
   phase1SlugByApiModelId,
-} from "@/server/kie/general-phase1-models";
+} from "@/server/kie/kie-shared-utils";
 import {
   generalKieAllowedSettingsKeysForApiModel,
   generalKieDefinitionByApiModelId,

@@ -9,4 +9,4 @@ export const KIE_GENERAL_ACTIVE_SLUG_ORDER = [
   ...KIE_GENERAL_MODEL_DEFINITION_SLUG_ORDER,
 ] as const;
 
-export type KieGeneralActiveSlug = (typeof KIE_GENERAL_ACTIVE_SLUG_ORDER)[number];
+export type KieGeneralActiveSlug = string;

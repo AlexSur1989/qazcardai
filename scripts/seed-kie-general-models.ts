@@ -20,6 +20,13 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
+  if (KIE_GENERAL_MODEL_DEFINITIONS.length === 0) {
+    console.log(
+      "[seed:kie-general-models] SKIP — реестр пуст, нечего сидировать (режим пересборки каталога).",
+    );
+    return;
+  }
+
   let created = 0;
   let updated = 0;
   const slugs: string[] = [];
