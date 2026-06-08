@@ -167,6 +167,40 @@ Checklist (записать значения «до теста»):
 
 ---
 
-## 10. Deploy checklist
+## 10. First successful production test
+
+**Дата:** 2026-06-08 (production VPS)
+
+| Поле | Значение |
+|------|----------|
+| Scenario | `PRODUCT_MARKETPLACE_CARD` |
+| Model slug | `gpt-image-2-product-marketplace-card` |
+| apiModelId | `gpt-image-2-image-to-image` |
+| endpoint | `/api/v1/jobs/createTask` |
+| statusEndpoint | `/api/v1/jobs/recordInfo` |
+| Payload shape | `input.input_urls[]`, `aspect_ratio`, `resolution`, `prompt` |
+| Result | **COMPLETED** |
+| Billing | RESERVE −25 → CAPTURE 0 |
+| Final price | **25 tokens** |
+| S3 upload | OK |
+| Worker | OK |
+| Webhook / polling | OK (`poll/complete`) |
+
+**Audit trail (user flow):**
+
+- generationId: `cmq5mlard00000us8n11rj8o2`
+- providerTaskId: `c36ded7b886bdc5343ca2ad68472a8a7`
+- user: `utpk-metal@…` (test account)
+- balance: 385 → 360
+
+**Admin direct Kie test** (отдельно от user flow): Kie `success`, без Generation / списания в нашей системе.
+
+**Quality note:** pipeline и billing прошли успешно; визуально карточка сохранила товар с исходного фото (автохимия), а пользовательский текст описывал кружку — несоответствие «фото ↔ текст». Для следующих тестов использовать согласованные фото и описание; при необходимости усилить prompt про product identity.
+
+После каждого real test см. [POST_REAL_KIE_TEST_CHECKLIST.md](./POST_REAL_KIE_TEST_CHECKLIST.md).
+
+---
+
+## 11. Deploy checklist
 
 См. [DEPLOY_PRODUCT_CARD_MARKETPLACE_READY.md](./DEPLOY_PRODUCT_CARD_MARKETPLACE_READY.md).

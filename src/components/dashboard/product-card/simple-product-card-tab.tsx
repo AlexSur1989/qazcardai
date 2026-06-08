@@ -192,6 +192,7 @@ export function SimpleProductCardTab({
   const userTextTouchedRef = useRef(false);
   const productLabelTouchedRef = useRef(false);
   const visionRequestRef = useRef<string | null>(null);
+  const autoVisionRanForPhotoRef = useRef<Set<string>>(new Set());
 
   const defaultProductPhotoId = useMemo(() => {
     const main = photosWithId.find((p) => p.role === "main") ?? photosWithId[0];
@@ -205,11 +206,10 @@ export function SimpleProductCardTab({
       const pid = projectId;
       const photoId = options?.photoId ?? selectedProductPhotoId;
       if (!pid || !initDone || !photoId.trim()) return;
-      if (!options?.force && analyzedPhotoId === photoId && visionSummary && !visionSummary.analysisFailed) {
+      if (!options?.force && analyzedPhotoId === photoId && visionSummary) {
         return;
       }
-      if (visionRequestRef.current === photoId && visionLoading) return;
-
+      if (visionRequestRef.current === photoId) return;
       visionRequestRef.current = photoId;
       setVisionLoading(true);
       try {
@@ -221,7 +221,8 @@ export function SimpleProductCardTab({
         const parsed = await readJsonSafe<SimpleCardVisionResponse>(res);
         if (visionRequestRef.current !== photoId) return;
         if (!parsed.ok || !res.ok) {
-          toast.error(parsed.ok ? "Не удалось распознать товар" : parsed.message);
+          setVisionSummary({ analysisFailed: true, warnings: [parsed.ok ? "Не удалось распознать товар" : parsed.message] });
+          setAnalyzedPhotoId(photoId);
           return;
         }
         const d = parsed.data;
@@ -229,10 +230,6 @@ export function SimpleProductCardTab({
         setAnalyzedPhotoId(photoId);
 
         if (d.analysisFailed) {
-          const msg =
-            d.warnings?.find((w) => typeof w === "string" && w.trim())?.trim() ??
-            "Не удалось распознать товар — заполните данные вручную.";
-          toast.error(msg);
           return;
         }
 
@@ -250,11 +247,13 @@ export function SimpleProductCardTab({
         }
       }
     },
-    [projectId, initDone, selectedProductPhotoId, analyzedPhotoId, visionSummary, visionLoading],
+    [projectId, initDone, selectedProductPhotoId, analyzedPhotoId, visionSummary],
   );
 
   useEffect(() => {
     if (!projectId || !initDone || !selectedProductPhotoId.trim()) return;
+    if (autoVisionRanForPhotoRef.current.has(selectedProductPhotoId)) return;
+    autoVisionRanForPhotoRef.current.add(selectedProductPhotoId);
     void runVisionAnalysis({ photoId: selectedProductPhotoId });
   }, [projectId, initDone, selectedProductPhotoId, runVisionAnalysis]);
 
@@ -659,10 +658,18 @@ export function SimpleProductCardTab({
           <CardHeader>
             <CardTitle className="text-base">Что это за товар?</CardTitle>
             <CardDescription>
-              AI определяет товар по выбранному фото. Вы можете оставить предложенное название или изменить его.
+              Заполните название и преимущества вручную. Автораспознавание подключим позже — для генерации карточки оно не обязательно.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            {visionSummary?.analysisFailed ? (
+              <Alert>
+                <AlertDescription>
+                  {visionSummary.warnings?.[0] ??
+                    "Распознавание недоступно — укажите название и преимущества вручную."}
+                </AlertDescription>
+              </Alert>
+            ) : null}
             {visionLoading && !productLabel.trim() ? (
               <div className="text-muted-foreground flex items-center gap-2 text-sm">
                 <Loader2 className="size-4 animate-spin" />
