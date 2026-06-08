@@ -7,6 +7,8 @@ import { ProductCardAdminLinksTab } from "@/components/admin/product-card-admin-
 import { ProductCardAdminOverview } from "@/components/admin/product-card-admin-overview";
 import { ProductCardAiStatusPanel } from "@/components/admin/product-card-ai-status-panel";
 import { ProductCardModelBindingsPanel } from "@/components/admin/product-card-model-bindings-panel";
+import { ProductCardMarketplacePricingPanel } from "@/components/admin/product-card-marketplace-pricing-panel";
+import { ProductCardPreflightPanel } from "@/components/admin/product-card-preflight-panel";
 import { ProductCardAdminTextsTab } from "@/components/admin/product-card-admin-texts-tab";
 import { ProductCardScenariosForm } from "@/components/admin/product-card-scenarios-form";
 import { ProductCardScenariosPanel } from "@/components/admin/product-card-scenarios-panel";
@@ -29,6 +31,8 @@ import {
 } from "@/server/services/productCardPricing";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
 import { getProductCardModelSetupOverview } from "@/server/services/productCardModelSetup";
+import { getMarketplaceCardPricingSummary } from "@/server/services/marketplaceCardPricingSummary";
+import type { MarketplaceCardPricingSummary } from "@/server/services/marketplaceCardPricingSummary";
 
 export const metadata = {
   title: "AI-карточки товара — админка",
@@ -160,6 +164,22 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
 
   const canEditBindings = hasPermission(adminUser.role, "models.product_card.manage");
 
+  const marketplaceModel = models.find(
+    (m) =>
+      m.isActive &&
+      m.scope === "PRODUCT_CARD" &&
+      m.productCardModelType === "PRODUCT_MARKETPLACE_CARD" &&
+      m.slug === productSettings.marketplaceCardModelSlug,
+  );
+
+  let marketplacePricing: MarketplaceCardPricingSummary | null = null;
+  if (marketplaceModel) {
+    marketplacePricing = await getMarketplaceCardPricingSummary(
+      marketplaceModel,
+      productSettings,
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -191,6 +211,11 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
       {!showAdvancedSection && activeTab === "overview" ? (
         <>
           <ProductCardAiStatusPanel slots={modelSetup.slots} />
+          <ProductCardMarketplacePricingPanel
+            pricing={marketplacePricing}
+            missingModel={!marketplaceModel}
+          />
+          <ProductCardPreflightPanel />
           <ProductCardModelBindingsPanel
             initial={{
               classifierModelSlug: productSettings.classifierModelSlug,

@@ -23,6 +23,8 @@ import {
 } from "../src/server/services/adminModelPayloadDryRun";
 import { defaultSlugForProductCardType, getProductCardSettings } from "../src/server/services/productCardSettings";
 import { calculateProductCardMarketplaceCardCredits } from "../src/server/services/productCardPricing";
+import { getMarketplaceCardPricingSummary } from "../src/server/services/marketplaceCardPricingSummary";
+import { runMarketplaceCardPreflight } from "../src/server/services/marketplaceCardPreflight";
 import { buildKieMarketPayloadFromMapping, isStrictKiePayloadMapping } from "../src/server/services/kiePayloadMapping";
 
 const MARKETPLACE_MODEL_SLUG = "gpt-image-2-product-marketplace-card";
@@ -324,6 +326,83 @@ async function main() {
   }
   if (priceBreakdown.modelSlug !== MARKETPLACE_MODEL_SLUG) {
     fail(`marketplace estimate modelSlug=${priceBreakdown.modelSlug}`);
+  }
+
+  const pricingSummary = await getMarketplaceCardPricingSummary(
+    marketplaceModel,
+    pcSettings,
+  );
+  if (pricingSummary.modelBaseCredits !== marketplaceModel.costCredits) {
+    fail(
+      `pricing summary modelBaseCredits=${pricingSummary.modelBaseCredits} expected ${marketplaceModel.costCredits}`,
+    );
+  }
+  if (pricingSummary.minScenarioTokens !== pcSettings.minMarketplaceCardTokens) {
+    fail(
+      `pricing summary minScenarioTokens=${pricingSummary.minScenarioTokens} expected ${pcSettings.minMarketplaceCardTokens}`,
+    );
+  }
+  if (pricingSummary.finalCredits !== priceBreakdown.credits) {
+    fail(
+      `pricing summary finalCredits=${pricingSummary.finalCredits} != estimate ${priceBreakdown.credits}`,
+    );
+  }
+  const expectedFinal = Math.max(
+    pcSettings.minMarketplaceCardTokens,
+    marketplaceModel.costCredits,
+  );
+  if (pricingSummary.finalCredits < expectedFinal) {
+    fail(
+      `pricing summary finalCredits=${pricingSummary.finalCredits} below max(min=${pcSettings.minMarketplaceCardTokens}, cost=${marketplaceModel.costCredits})`,
+    );
+  }
+  if (
+    pcSettings.minMarketplaceCardTokens > marketplaceModel.costCredits &&
+    pricingSummary.finalCredits !== pcSettings.minMarketplaceCardTokens
+  ) {
+    fail(
+      `when minMarketplaceCardTokens > costCredits, final must equal min (${pcSettings.minMarketplaceCardTokens})`,
+    );
+  }
+  console.log(
+    `  pricing breakdown: base=${pricingSummary.modelBaseCredits} min=${pricingSummary.minScenarioTokens} final=${pricingSummary.finalCredits}`,
+  );
+
+  const genBeforePreflight = await prisma.generation.count();
+  const txBeforePreflight = await prisma.creditTransaction.count();
+  const preflight = await runMarketplaceCardPreflight();
+  const genAfterPreflight = await prisma.generation.count();
+  const txAfterPreflight = await prisma.creditTransaction.count();
+  if (genAfterPreflight !== genBeforePreflight) {
+    fail("preflight must not create Generation");
+  }
+  if (txAfterPreflight !== txBeforePreflight) {
+    fail("preflight must not create CreditTransaction");
+  }
+  if (!preflight.ok) fail("preflight returned ok=false");
+  if (!Array.isArray(preflight.checks) || preflight.checks.length === 0) {
+    fail("preflight checks empty");
+  }
+  const modelCheck = preflight.checks.find((c) => c.key === "marketplaceModel");
+  if (!modelCheck || modelCheck.status !== "ok") {
+    fail(`preflight marketplaceModel status=${modelCheck?.status ?? "missing"}`);
+  }
+  const dryRunCheck = preflight.checks.find((c) => c.key === "dryRunPayload");
+  if (!dryRunCheck || dryRunCheck.status !== "ok") {
+    fail(`preflight dryRunPayload status=${dryRunCheck?.status ?? "missing"}`);
+  }
+  if (preflight.finalCredits !== pricingSummary.finalCredits) {
+    fail(
+      `preflight finalCredits=${preflight.finalCredits} != pricing ${pricingSummary.finalCredits}`,
+    );
+  }
+  console.log(
+    `  preflight: readyForRealTest=${preflight.readyForRealTest} checks=${preflight.checks.length} mockKie=${preflight.mockKie}`,
+  );
+  if (!preflight.readyForRealTest) {
+    console.log(
+      `  preflight warnings (expected in dev without full env): ${preflight.warnings.join("; ") || "—"}`,
+    );
   }
 
   const fakeUrl = "https://app.qazcardai.kz/uploads/verify/product-sample.jpg";

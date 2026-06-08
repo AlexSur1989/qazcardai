@@ -584,6 +584,16 @@ export function SimpleProductCardTab({
 
   const textLen = graphemeLen(userText);
   const clientErr = validateClient();
+  const resolutionLabel = "1K";
+  const insufficientBalance =
+    displayEstimateCredits != null && balanceCredits < displayEstimateCredits;
+  const canGenerate =
+    !generating &&
+    !estimating &&
+    canEstimate &&
+    clientErr == null &&
+    displayEstimateCredits != null &&
+    !insufficientBalance;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
@@ -895,17 +905,63 @@ export function SimpleProductCardTab({
                 <AlertDescription>{clientErr}</AlertDescription>
               </Alert>
             ) : null}
-            <div className="text-sm">
-              Стоимость:{" "}
-              {estimating ? (
-                <Loader2 className="inline size-4 animate-spin" />
-              ) : displayEstimateCredits != null ? (
-                <span className="font-semibold">{displayEstimateCredits} токенов</span>
-              ) : (
-                "—"
-              )}
+            <div className="space-y-2 rounded-lg border border-border/80 bg-muted/20 p-3 text-sm">
+              <p className="font-medium">Перед созданием карточки</p>
+              <dl className="text-muted-foreground space-y-1 text-xs">
+                <div className="flex justify-between gap-2">
+                  <dt>Категория</dt>
+                  <dd className="text-foreground text-right">
+                    {selectedCategoryLabel?.trim() || "— выберите выше —"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt>Преимущества</dt>
+                  <dd className="text-foreground max-w-[60%] truncate text-right">
+                    {userText.trim() || "—"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt>Формат</dt>
+                  <dd className="text-foreground">{aspectRatio}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt>Разрешение</dt>
+                  <dd className="text-foreground">{resolutionLabel}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt>Стоимость</dt>
+                  <dd className="text-foreground font-semibold">
+                    {estimating ? (
+                      "…"
+                    ) : displayEstimateCredits != null ? (
+                      `${displayEstimateCredits} токенов`
+                    ) : (
+                      "—"
+                    )}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt>Ваш баланс</dt>
+                  <dd
+                    className={
+                      insufficientBalance ? "text-destructive font-medium" : "text-foreground"
+                    }
+                  >
+                    {balanceCredits} токенов
+                  </dd>
+                </div>
+              </dl>
+              {insufficientBalance ? (
+                <Alert variant="destructive" className="mt-2">
+                  <AlertDescription className="space-y-2">
+                    <p>Недостаточно токенов для создания карточки.</p>
+                    <Link href="/dashboard/billing" className="text-primary font-medium underline">
+                      Пополнить баланс
+                    </Link>
+                  </AlertDescription>
+                </Alert>
+              ) : null}
             </div>
-            <div className="text-muted-foreground text-xs">Баланс: {balanceCredits} токенов</div>
             <Button
               type="button"
               variant="outline"
@@ -982,16 +1038,18 @@ export function SimpleProductCardTab({
             ) : null}
             <Button
               className="w-full"
-              disabled={generating || estimating || !canEstimate || clientErr != null || displayEstimateCredits == null}
+              disabled={!canGenerate}
               onClick={() => void handleGenerate()}
             >
               {generating ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
-                  Генерация…
+                  Создаём карточку…
                 </>
+              ) : insufficientBalance ? (
+                "Недостаточно токенов"
               ) : (
-                "Сгенерировать"
+                "Создать карточку"
               )}
             </Button>
             {genError ? <p className="text-destructive text-sm">{genError}</p> : null}
