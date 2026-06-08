@@ -33,6 +33,9 @@ function mappingHasImageInput(model: AiModel): boolean {
 function mappingHasPrompt(model: AiModel): boolean {
   const pm = model.payloadMapping;
   if (!isRecord(pm)) return false;
+  if (pm.adapter === "market-create-task") {
+    return true;
+  }
   const input = pm.input;
   if (!isRecord(input)) return false;
   return "prompt" in input || Object.values(input).some((v) => v === "$prompt");
@@ -41,6 +44,102 @@ function mappingHasPrompt(model: AiModel): boolean {
 function isPlaceholderApiModelId(apiModelId: string): boolean {
   const t = apiModelId.trim().toUpperCase();
   return t === "PLACEHOLDER" || t === "CHANGE_ME" || t.startsWith("PASTE_");
+}
+
+export function collectGptImage2ResolutionWarnings(
+  apiModelId: string,
+  settings: Record<string, unknown>,
+): string[] {
+  if (
+    apiModelId !== "gpt-image-2-text-to-image" &&
+    apiModelId !== "gpt-image-2-image-to-image"
+  ) {
+    return [];
+  }
+
+  const warnings: string[] = [];
+  const resolution = String(settings.resolution ?? "").trim();
+  const rawAspect = settings.aspectRatio;
+  const aspectMissing =
+    rawAspect === undefined ||
+    rawAspect === null ||
+    String(rawAspect).trim() === "";
+  const aspectRatio = aspectMissing ? "" : String(rawAspect).trim();
+
+  if (aspectRatio === "1:1" && resolution === "4K") {
+    warnings.push("GPT Image 2: 1:1 does not support 4K.");
+  }
+  if (aspectRatio === "auto" && resolution && resolution !== "1K") {
+    warnings.push("GPT Image 2: auto aspect_ratio should use only 1K.");
+  }
+  if (aspectMissing && resolution && resolution !== "1K") {
+    warnings.push("GPT Image 2: missing aspect_ratio should use only 1K.");
+  }
+
+  return warnings;
+}
+
+const CRITICAL_DRY_RUN_WARNING_PATTERNS = [
+  /^missing apiModelId$/,
+  /^apiModelId is PLACEHOLDER$/,
+  /^missing endpoint$/,
+  /^empty payloadMapping$/,
+  /^payloadMapping\.input missing$/,
+  /^no prompt mapping$/,
+  /^no image input mapping$/,
+  /^productCardModelType requires supportsImageInput/,
+  /^costCredits must be greater than 0$/,
+  /^pricingSchema missing$/,
+  /^empty settingsSchema$/,
+  /^dry-run payload missing model$/,
+  /^dry-run payload missing input\.prompt$/,
+  /^dry-run payload input\.input_urls is not an array$/,
+  /^dry-run payload missing input\.input_urls$/,
+];
+
+export function isCriticalModelDryRunWarning(warning: string): boolean {
+  return CRITICAL_DRY_RUN_WARNING_PATTERNS.some((re) => re.test(warning));
+}
+
+export function validateDryRunPayloadShape(
+  payload: unknown,
+  model: Pick<AiModel, "apiModelId" | "supportsImageInput">,
+): string[] {
+  const warnings: string[] = [];
+  if (!isRecord(payload)) {
+    warnings.push("dry-run payload is not an object");
+    return warnings;
+  }
+
+  const modelId = String(payload.model ?? "").trim();
+  if (!modelId) {
+    warnings.push("dry-run payload missing model");
+  } else if (modelId !== model.apiModelId.trim()) {
+    warnings.push(
+      `dry-run payload model mismatch: ${modelId} !== ${model.apiModelId}`,
+    );
+  }
+
+  const input = payload.input;
+  if (!isRecord(input)) {
+    warnings.push("dry-run payload missing input object");
+    return warnings;
+  }
+
+  if (!String(input.prompt ?? "").trim()) {
+    warnings.push("dry-run payload missing input.prompt");
+  }
+
+  if (model.supportsImageInput) {
+    if (!("input_urls" in input) && !("image_urls" in input) && !("image_url" in input)) {
+      warnings.push("dry-run payload missing input.input_urls");
+    }
+    if ("input_urls" in input && !Array.isArray(input.input_urls)) {
+      warnings.push("dry-run payload input.input_urls is not an array");
+    }
+  }
+
+  return warnings;
 }
 
 export function collectModelDryRunWarnings(model: AiModel): string[] {
@@ -138,10 +237,16 @@ export async function buildDryRunKiePayloadForModel(
     return { ok: false, error: built.error };
   }
 
+  const gptWarnings = collectGptImage2ResolutionWarnings(
+    model.apiModelId,
+    testInput.settings,
+  );
+  const payloadWarnings = validateDryRunPayloadShape(built.payload, model);
+
   return {
     ok: true,
     payload: built.payload,
-    warnings: [...warnings, ...built.warnings],
+    warnings: [...warnings, ...built.warnings, ...gptWarnings, ...payloadWarnings],
     costCredits: built.costCredits,
   };
 }

@@ -24,6 +24,7 @@
     "seed:kie-general-models": "npx tsx scripts/seed-kie-general-models.ts",
     "seed:product-card-models": "npx tsx scripts/seed-product-card-models.ts",
     "seed:qazcard-product-card-models": "npx tsx scripts/seed-qazcard-product-card-models.ts",
+    "seed:gpt-image-2-product-marketplace-card": "npx tsx scripts/seed-gpt-image-2-product-marketplace-card.ts",
     "verify:product-card-model-setup": "npx tsx scripts/verify-product-card-model-setup.ts",
     "purge:all-ai-models": "npx tsx scripts/purge-all-ai-models.ts",
     "worker": "npx tsx scripts/worker.ts",

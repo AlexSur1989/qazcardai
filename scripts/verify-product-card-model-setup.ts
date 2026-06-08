@@ -16,8 +16,15 @@ import {
 import { getProductCardModelSetupOverview } from "../src/server/services/productCardModelSetup";
 import {
   buildDryRunKiePayloadForModel,
+  collectGptImage2ResolutionWarnings,
   collectModelDryRunWarnings,
+  isCriticalModelDryRunWarning,
+  validateDryRunPayloadShape,
 } from "../src/server/services/adminModelPayloadDryRun";
+import { defaultSlugForProductCardType, getProductCardSettings } from "../src/server/services/productCardSettings";
+
+const MARKETPLACE_MODEL_SLUG = "gpt-image-2-product-marketplace-card";
+const MARKETPLACE_APP_SETTING_KEY = "PRODUCT_CARD_DEFAULT_MARKETPLACE_CARD_MODEL_SLUG";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("В .env нужен DATABASE_URL");
@@ -194,8 +201,139 @@ async function main() {
   if (genAfter !== genBefore) fail("dry-run must not create Generation");
   if (txAfter !== txBefore) fail("dry-run must not create CreditTransaction");
 
+  const marketplaceModel = await prisma.aiModel.findUnique({
+    where: { slug: MARKETPLACE_MODEL_SLUG },
+  });
+  if (!marketplaceModel) {
+    fail(`missing configured marketplace model ${MARKETPLACE_MODEL_SLUG}`);
+  }
+  if (marketplaceModel.scope !== "PRODUCT_CARD") {
+    fail(`${MARKETPLACE_MODEL_SLUG}: scope=${marketplaceModel.scope}`);
+  }
+  if (marketplaceModel.productCardModelType !== "PRODUCT_MARKETPLACE_CARD") {
+    fail(
+      `${MARKETPLACE_MODEL_SLUG}: productCardModelType=${marketplaceModel.productCardModelType}`,
+    );
+  }
+  if (marketplaceModel.type !== "IMAGE") {
+    fail(`${MARKETPLACE_MODEL_SLUG}: type=${marketplaceModel.type}`);
+  }
+  if (!marketplaceModel.isActive) {
+    fail(`${MARKETPLACE_MODEL_SLUG}: must be active`);
+  }
+  if (marketplaceModel.isPublic) {
+    fail(`${MARKETPLACE_MODEL_SLUG}: must stay non-public`);
+  }
+  if (!marketplaceModel.supportsImageInput) {
+    fail(`${MARKETPLACE_MODEL_SLUG}: supportsImageInput=false`);
+  }
+  if (marketplaceModel.apiModelId !== "gpt-image-2-image-to-image") {
+    fail(`${MARKETPLACE_MODEL_SLUG}: apiModelId=${marketplaceModel.apiModelId}`);
+  }
+  if (marketplaceModel.endpoint !== "/api/v1/jobs/createTask") {
+    fail(`${MARKETPLACE_MODEL_SLUG}: endpoint=${marketplaceModel.endpoint}`);
+  }
+  if (marketplaceModel.statusEndpoint !== "/api/v1/jobs/recordInfo") {
+    fail(`${MARKETPLACE_MODEL_SLUG}: statusEndpoint=${marketplaceModel.statusEndpoint}`);
+  }
+  if (marketplaceModel.costCredits !== 12) {
+    fail(`${MARKETPLACE_MODEL_SLUG}: costCredits=${marketplaceModel.costCredits}`);
+  }
+  const ps = marketplaceModel.pricingSchema as Record<string, unknown> | null;
+  if (!ps || ps.type !== "fixed" || ps.credits !== 12) {
+    fail(`${MARKETPLACE_MODEL_SLUG}: pricingSchema invalid`);
+  }
+  const pm = marketplaceModel.payloadMapping as Record<string, unknown> | null;
+  if (!pm || !pm.input || typeof pm.input !== "object") {
+    fail(`${MARKETPLACE_MODEL_SLUG}: payloadMapping.input missing`);
+  }
+  const pmInput = pm.input as Record<string, unknown>;
+  if (pmInput.input_urls !== "$inputFiles") {
+    fail(`${MARKETPLACE_MODEL_SLUG}: payloadMapping input_urls must map to $inputFiles`);
+  }
+
+  const assignedSetting = await prisma.appSetting.findUnique({
+    where: { key: MARKETPLACE_APP_SETTING_KEY },
+  });
+  const assignedSlug =
+    typeof assignedSetting?.value === "string"
+      ? assignedSetting.value
+      : String(assignedSetting?.value ?? "");
+  if (assignedSlug !== MARKETPLACE_MODEL_SLUG) {
+    fail(
+      `${MARKETPLACE_APP_SETTING_KEY}=${assignedSlug || "empty"}, expected ${MARKETPLACE_MODEL_SLUG}`,
+    );
+  }
+
+  const pcSettings = await getProductCardSettings();
+  if (pcSettings.marketplaceCardModelSlug !== MARKETPLACE_MODEL_SLUG) {
+    fail(
+      `getProductCardSettings marketplaceCardModelSlug=${pcSettings.marketplaceCardModelSlug}`,
+    );
+  }
+  const defaultSlug = defaultSlugForProductCardType(
+    pcSettings,
+    "PRODUCT_MARKETPLACE_CARD",
+  );
+  if (defaultSlug !== MARKETPLACE_MODEL_SLUG) {
+    fail(`defaultSlugForProductCardType=${defaultSlug}`);
+  }
+
+  const marketplaceDryRun = await buildDryRunKiePayloadForModel(marketplaceModel);
+  if (!marketplaceDryRun.ok) {
+    fail(`marketplace dry-run failed: ${marketplaceDryRun.error}`);
+  }
+  const marketplaceCritical = marketplaceDryRun.warnings.filter(
+    isCriticalModelDryRunWarning,
+  );
+  if (marketplaceCritical.length > 0) {
+    fail(`marketplace dry-run critical warnings: ${marketplaceCritical.join("; ")}`);
+  }
+  const payloadInput = (marketplaceDryRun.payload as { input?: Record<string, unknown> })
+    .input;
+  if (!payloadInput || !Array.isArray(payloadInput.input_urls)) {
+    fail("marketplace dry-run payload input.input_urls is not an array");
+  }
+  if (!String(payloadInput.prompt ?? "").trim()) {
+    fail("marketplace dry-run payload missing input.prompt");
+  }
+  const shapeWarnings = validateDryRunPayloadShape(
+    marketplaceDryRun.payload,
+    marketplaceModel,
+  );
+  const shapeCritical = shapeWarnings.filter(isCriticalModelDryRunWarning);
+  if (shapeCritical.length > 0) {
+    fail(`marketplace payload shape: ${shapeCritical.join("; ")}`);
+  }
+
+  const gptBad = collectGptImage2ResolutionWarnings(
+    marketplaceModel.apiModelId,
+    { aspectRatio: "1:1", resolution: "4K" },
+  );
+  if (!gptBad.some((w) => w.includes("1:1 does not support 4K"))) {
+    fail("GPT Image 2 resolution rule: 1:1 + 4K warning missing");
+  }
+  const gptAutoBad = collectGptImage2ResolutionWarnings(
+    marketplaceModel.apiModelId,
+    { aspectRatio: "auto", resolution: "2K" },
+  );
+  if (!gptAutoBad.some((w) => w.includes("auto aspect_ratio"))) {
+    fail("GPT Image 2 resolution rule: auto + 2K warning missing");
+  }
+
   const overview = await getProductCardModelSetupOverview();
   if (overview.slots.length !== 4) fail(`setup slots=${overview.slots.length}`);
+
+  const marketplaceSlot = overview.byType.PRODUCT_MARKETPLACE_CARD;
+  if (!marketplaceSlot) fail("marketplace slot missing");
+  if (marketplaceSlot.readinessStatus !== "Ready") {
+    fail(
+      `marketplace slot readiness=${marketplaceSlot.readinessStatus} issues=${marketplaceSlot.readinessIssues.join(", ")}`,
+    );
+  }
+  if (!marketplaceSlot.generationReady) {
+    fail("marketplace slot generationReady=false");
+  }
 
   console.log("[verify:product-card-model-setup] OK");
   for (const s of overview.slots) {
@@ -203,7 +341,12 @@ async function main() {
       `  ${s.label}: ${s.readinessStatus} (${s.status}) slug=${s.assignedSlug || "—"}`,
     );
   }
-  console.log(`  dry-run marketplace warnings: ${dryWarnings.join(", ")}`);
+  console.log(`  dry-run marketplace stub warnings: ${dryWarnings.join(", ")}`);
+  console.log(
+    `  marketplace model ${MARKETPLACE_MODEL_SLUG}: active, dry-run OK, input_urls array confirmed`,
+  );
+  console.log(`  ${MARKETPLACE_APP_SETTING_KEY}=${assignedSlug}`);
+  console.log(`  marketplace slot: ${marketplaceSlot.readinessStatus}`);
 }
 
 main()
