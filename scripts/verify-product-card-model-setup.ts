@@ -1,6 +1,14 @@
 /**
  * Проверка seed Product Card моделей, Import Wizard helpers и diagnostics.
  * npm run verify:product-card-model-setup
+ *
+ * Read-only гарантии (кроме безопасного wizard test create/delete по slug kie-import-wizard-verify-test):
+ * - не вызывает Kie.ai и не обращается к внешним URL
+ * - не создаёт Generation / CreditTransaction
+ * - не меняет balanceCredits пользователей
+ * - не меняет AppSetting и боевые AiModel (только transient wizard row)
+ *
+ * Production (Docker): docker compose run --rm app npm run verify:product-card-model-setup
  */
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -70,6 +78,9 @@ function fail(msg: string): never {
 }
 
 async function main() {
+  const balanceBefore = await prisma.user.aggregate({ _sum: { balanceCredits: true } });
+  const appSettingCountBefore = await prisma.appSetting.count();
+
   for (const exp of EXPECTED_STUBS) {
     const row = await prisma.aiModel.findUnique({
       where: { slug: exp.slug },
@@ -483,6 +494,25 @@ async function main() {
   }
   if (!marketplaceSlot.generationReady) {
     fail("other missing slots must not block marketplace Ready");
+  }
+
+  if (
+    pcSettings.minMarketplaceCardTokens === 25 &&
+    marketplaceModel.costCredits === 12 &&
+    pricingSummary.finalCredits !== 25
+  ) {
+    fail(
+      `expected final marketplace estimate=25 (min=25, costCredits=12), got ${pricingSummary.finalCredits}`,
+    );
+  }
+
+  const balanceAfter = await prisma.user.aggregate({ _sum: { balanceCredits: true } });
+  if (balanceAfter._sum.balanceCredits !== balanceBefore._sum.balanceCredits) {
+    fail("verify must not change user balanceCredits");
+  }
+  const appSettingCountAfter = await prisma.appSetting.count();
+  if (appSettingCountAfter !== appSettingCountBefore) {
+    fail("verify must not create or delete AppSetting rows");
   }
 
   console.log("[verify:product-card-model-setup] OK");

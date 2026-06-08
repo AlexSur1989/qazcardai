@@ -134,6 +134,39 @@ POST /api/admin/product-card/preflight/marketplace-card
 
 # Verify (CI/local, без Kie):
 npm run verify:product-card-model-setup
+
+# Verify на production Docker:
+docker compose run --rm app npm run verify:product-card-model-setup
 ```
 
 Сервер **не обновлять** без отдельного деплоя.
+
+---
+
+## 9. Перед нажатием Real test вручную
+
+> **Нельзя нажимать Real test, если preflight не Ready** (`readyForRealTest: false`).
+
+Checklist (записать значения «до теста»):
+
+- [ ] `docker compose run --rm app npm run verify:product-card-model-setup` → **OK**
+- [ ] `/admin/product-card` → Product Card AI status: **Marketplace card = Ready**
+- [ ] Preflight → **readyForRealTest = true**
+- [ ] Тестовый USER-аккаунт: баланс ≥ **25** токенов (записать баланс до теста)
+- [ ] Тестовое фото загружено через Product Card flow
+- [ ] S3 URL фото открывается **публично** (Kie должен достучаться)
+- [ ] `docker compose logs --tail=100 worker` — без ошибок
+- [ ] `docker compose logs --tail=100 app` — без ошибок
+- [ ] `MOCK_KIE=false`
+- [ ] `KIE_API_KEY` = configured (значение не логировать)
+- [ ] Redis OK (preflight `redisReachable: ok`)
+- [ ] Записать **Generation count** до теста (admin / SQL)
+- [ ] Явное подтверждение оператора на списание Kie credits
+
+Только после всех пунктов — Real test (вариант A или B ниже).
+
+---
+
+## 10. Deploy checklist
+
+См. [DEPLOY_PRODUCT_CARD_MARKETPLACE_READY.md](./DEPLOY_PRODUCT_CARD_MARKETPLACE_READY.md).
