@@ -50,6 +50,23 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
+  if (model.productCardModelType === "PRODUCT_CLASSIFIER") {
+    const { buildDryRunClassifierPayloadForModel } = await import(
+      "@/server/services/adminClassifierPayloadDryRun"
+    );
+    const result = await buildDryRunClassifierPayloadForModel(model);
+    if (!result.ok) {
+      return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+    }
+    return NextResponse.json({
+      ok: true,
+      payload: result.payload,
+      warnings: result.warnings,
+      costCredits: result.costCredits,
+      adapter: "chat-completions",
+    });
+  }
+
   const result = await buildDryRunKiePayloadForModel(model, {
     prompt: parsed.data.prompt,
     settings: parsed.data.settings as Record<string, unknown> | undefined,

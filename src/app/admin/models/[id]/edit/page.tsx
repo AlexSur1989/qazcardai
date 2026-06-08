@@ -66,6 +66,7 @@ export default async function AdminEditModelPage({ params }: Props) {
           statusEndpoint: m.statusEndpoint,
           isActive: m.isActive,
           settingsSchema: m.settingsSchema,
+          productCardModelType: m.productCardModelType,
         }}
         canRunRealKie={canRunRealKie}
         mockKieEnabled={mockKieEnabled}

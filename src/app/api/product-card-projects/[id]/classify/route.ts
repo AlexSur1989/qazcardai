@@ -60,10 +60,12 @@ export async function POST(req: Request, ctx: Ctx) {
 
   const outcome = await runSafeProductClassifierFlow({
     devMockCategory: devMockKey,
+    imageUrl: url,
   });
 
   if (!outcome.ok) {
-    const status = outcome.code === "setup" ? 503 : 400;
+    const status =
+      outcome.code === "setup" ? 503 : outcome.code === "invalid_mock" ? 400 : 502;
     return NextResponse.json({ ok: false, error: outcome.error }, { status });
   }
 

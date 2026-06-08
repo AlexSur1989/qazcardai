@@ -25,6 +25,7 @@ export type AdminModelTestPanelModel = {
   statusEndpoint: string | null;
   isActive: boolean;
   settingsSchema: unknown;
+  productCardModelType?: string | null;
 };
 
 type Props = {
@@ -143,6 +144,8 @@ export function ModelTestPanel({
     () => getSchemaFields(model.settingsSchema),
     [model.settingsSchema],
   );
+
+  const isClassifierModel = model.productCardModelType === "PRODUCT_CLASSIFIER";
 
   const setDynField = useCallback((name: string, value: unknown) => {
     setDynSettings((prev) => ({ ...prev, [name]: value }));
@@ -395,7 +398,11 @@ export function ModelTestPanel({
           disabled={!!loading}
           onClick={() => void runDryRun()}
         >
-          {loading === "dryRun" ? "…" : "Проверить payload без запуска"}
+          {loading === "dryRun"
+            ? "…"
+            : isClassifierModel
+              ? "Проверить classifier payload без запуска"
+              : "Проверить payload без запуска"}
         </Button>
         <Button
           type="button"
@@ -502,7 +509,14 @@ export function ModelTestPanel({
               costCredits: <strong>{dryRunData.costCredits}</strong>
             </p>
           ) : null}
-          <JsonBlock title="Итоговый Kie payload" value={dryRunData.payload} />
+          <JsonBlock
+            title={
+              isClassifierModel
+                ? "Classifier chat/completions payload"
+                : "Итоговый Kie payload"
+            }
+            value={dryRunData.payload}
+          />
         </div>
       )}
 

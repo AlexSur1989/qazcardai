@@ -2,11 +2,20 @@ import type { ProductCategoryId } from "@/config/product-card-categories";
 import { PRODUCT_CATEGORY_IDS } from "@/config/product-card-categories";
 import {
   type ProductClassifierResult,
+  PRODUCT_CLASSIFIER_KIE_ERROR,
+  PRODUCT_CLASSIFIER_PARSE_ERROR,
   PRODUCT_CLASSIFIER_SETUP_ERROR,
   resolveClassifierCategoryLabel,
   sanitizeProductClassifierResult,
 } from "@/lib/product-classifier-result";
+import { resolveDefaultProductClassifierModel } from "@/server/services/productCardModelResolver";
 import { getProductCardModelSetupOverview } from "@/server/services/productCardModelSetup";
+import {
+  classifyProductWithKieChat,
+  ProductClassifierKieHttpError,
+  ProductClassifierKieNotEnabledError,
+  ProductClassifierParseError,
+} from "@/server/services/productClassifierKieChat";
 
 function parseStrictProductCategoryId(raw: unknown): ProductCategoryId {
   if (typeof raw !== "string") return "other";
@@ -49,8 +58,8 @@ const DEV_MOCK_CATEGORIES: Record<string, Partial<ProductClassifierResult>> = {
 };
 
 export type ProductClassifierFlowOutcome =
-  | { ok: true; result: ProductClassifierResult; source: "dev_mock" | "stub" }
-  | { ok: false; error: string; code: "setup" | "invalid_mock" };
+  | { ok: true; result: ProductClassifierResult; source: "dev_mock" | "kie" }
+  | { ok: false; error: string; code: "setup" | "invalid_mock" | "kie" | "parse" };
 
 export function isDevClassifierMockEnabled(): boolean {
   return process.env.NODE_ENV === "development";
@@ -97,11 +106,12 @@ export function buildDevMockClassifierResult(
 }
 
 /**
- * Безопасный classifier без Kie.ai, Generation и списания credits.
- * Real Kie подключается отдельно после настройки модели и явного флага.
+ * Classifier flow: dev mock → setup error if Missing → Kie chat/completions if Ready.
+ * Не создаёт Generation, CreditTransaction и не запускает worker.
  */
 export async function runSafeProductClassifierFlow(args: {
   devMockCategory?: string | null;
+  imageUrl?: string | null;
 }): Promise<ProductClassifierFlowOutcome> {
   const mockCategory = parseDevClassifierMockCategory(args.devMockCategory);
   if (mockCategory) {
@@ -113,9 +123,37 @@ export async function runSafeProductClassifierFlow(args: {
     return { ok: false, error: PRODUCT_CLASSIFIER_SETUP_ERROR, code: "setup" };
   }
 
+  const imageUrl = args.imageUrl?.trim() ?? "";
+  if (!imageUrl) {
+    return {
+      ok: false,
+      error: "Сначала загрузите фото товара",
+      code: "setup",
+    };
+  }
+
+  const model = await resolveDefaultProductClassifierModel();
+  if (!model) {
+    return { ok: false, error: PRODUCT_CLASSIFIER_SETUP_ERROR, code: "setup" };
+  }
+
   if (process.env.PRODUCT_CLASSIFIER_ALLOW_REAL_KIE !== "true") {
     return { ok: false, error: PRODUCT_CLASSIFIER_SETUP_ERROR, code: "setup" };
   }
 
-  return { ok: false, error: PRODUCT_CLASSIFIER_SETUP_ERROR, code: "setup" };
+  try {
+    const result = await classifyProductWithKieChat({ imageUrl, model });
+    return { ok: true, result, source: "kie" };
+  } catch (e) {
+    if (e instanceof ProductClassifierParseError) {
+      return { ok: false, error: PRODUCT_CLASSIFIER_PARSE_ERROR, code: "parse" };
+    }
+    if (e instanceof ProductClassifierKieHttpError) {
+      return { ok: false, error: PRODUCT_CLASSIFIER_KIE_ERROR, code: "kie" };
+    }
+    if (e instanceof ProductClassifierKieNotEnabledError) {
+      return { ok: false, error: PRODUCT_CLASSIFIER_SETUP_ERROR, code: "setup" };
+    }
+    return { ok: false, error: PRODUCT_CLASSIFIER_KIE_ERROR, code: "kie" };
+  }
 }

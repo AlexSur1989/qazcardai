@@ -25,6 +25,10 @@ import { getProductCardModelSetupOverview } from "../src/server/services/product
 import { runSafeProductClassifierFlow } from "../src/server/services/productClassifierFlow";
 import { PRODUCT_CLASSIFIER_SETUP_ERROR } from "../src/lib/product-classifier-result";
 import {
+  buildDryRunClassifierPayloadForModel,
+  validateClassifierDryRunPayloadShape,
+} from "../src/server/services/adminClassifierPayloadDryRun";
+import {
   buildDryRunKiePayloadForModel,
   collectGptImage2ResolutionWarnings,
   collectModelDryRunWarnings,
@@ -38,6 +42,7 @@ import { runMarketplaceCardPreflight } from "../src/server/services/marketplaceC
 import { buildKieMarketPayloadFromMapping, isStrictKiePayloadMapping } from "../src/server/services/kiePayloadMapping";
 
 const MARKETPLACE_MODEL_SLUG = "gpt-image-2-product-marketplace-card";
+const CLASSIFIER_MODEL_SLUG = "gemini-3-flash-product-classifier";
 const MARKETPLACE_APP_SETTING_KEY = "PRODUCT_CARD_DEFAULT_MARKETPLACE_CARD_MODEL_SLUG";
 
 const connectionString = process.env.DATABASE_URL;
@@ -497,6 +502,32 @@ async function main() {
       fail(`classifier setup error mismatch: ${missingFlow.error}`);
     }
     console.log("  classifier Missing: setup error OK, no Kie path");
+  }
+
+  const classifierModel = await prisma.aiModel.findUnique({
+    where: { slug: CLASSIFIER_MODEL_SLUG },
+  });
+  if (classifierModel) {
+    if (classifierModel.productCardModelType !== "PRODUCT_CLASSIFIER") {
+      fail(`${CLASSIFIER_MODEL_SLUG}: wrong productCardModelType`);
+    }
+    if (!classifierModel.isActive) {
+      console.log(`  ${CLASSIFIER_MODEL_SLUG}: seeded inactive (expected before real test)`);
+    }
+    const classifierDryRun = await buildDryRunClassifierPayloadForModel(classifierModel);
+    if (!classifierDryRun.ok) {
+      fail(`classifier dry-run failed: ${classifierDryRun.error}`);
+    }
+    const shapeIssues = validateClassifierDryRunPayloadShape(classifierDryRun.payload);
+    if (shapeIssues.length > 0) {
+      fail(`classifier dry-run shape: ${shapeIssues.join("; ")}`);
+    }
+    const cp = classifierDryRun.payload as { model?: string; stream?: boolean };
+    if (cp.model !== "gemini-3-flash") fail("classifier dry-run model must be gemini-3-flash");
+    if (cp.stream !== false) fail("classifier dry-run stream must be false");
+    console.log("  classifier chat/completions dry-run OK");
+  } else {
+    console.log(`  note: ${CLASSIFIER_MODEL_SLUG} not seeded — run seed:gemini-3-flash-product-classifier`);
   }
 
   const classifierSetting = await prisma.appSetting.findUnique({

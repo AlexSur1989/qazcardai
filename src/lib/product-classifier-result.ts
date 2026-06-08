@@ -1,6 +1,29 @@
 import type { ProductCategoryId } from "@/config/product-card-categories";
+import { PRODUCT_CATEGORY_IDS } from "@/config/product-card-categories";
 import { getProductCategoryById } from "@/config/product-card-categories";
-import { getManualProductCategoryLabel } from "@/config/product-card-manual-categories";
+import { getManualProductCategoryLabel, MANUAL_PRODUCT_CATEGORY_OPTIONS } from "@/config/product-card-manual-categories";
+
+const MANUAL_CATEGORY_IDS = new Set(
+  MANUAL_PRODUCT_CATEGORY_OPTIONS.map((o) => o.id as ProductCategoryId),
+);
+
+export const PRODUCT_CLASSIFIER_KIE_ERROR =
+  "Не удалось распознать товар. Выберите категорию вручную или попробуйте позже.";
+
+export const PRODUCT_CLASSIFIER_PARSE_ERROR =
+  "Не удалось разобрать результат распознавания. Выберите данные вручную.";
+
+export function normalizeClassifierCategoryId(raw: unknown): ProductCategoryId {
+  if (typeof raw !== "string") return "universal";
+  const t = raw.trim();
+  if (MANUAL_CATEGORY_IDS.has(t as ProductCategoryId)) {
+    return t as ProductCategoryId;
+  }
+  if ((PRODUCT_CATEGORY_IDS as readonly string[]).includes(t)) {
+    return t as ProductCategoryId;
+  }
+  return "universal";
+}
 
 export type ProductClassifierDetectedAttribute = {
   label: string;
@@ -64,7 +87,7 @@ export function sanitizeProductClassifierResult(
     productTitle: raw.productTitle?.trim() || "",
     visibleProduct: raw.visibleProduct?.trim() || "",
     suggestedBenefits: Array.isArray(raw.suggestedBenefits)
-      ? raw.suggestedBenefits.map((b) => String(b).trim()).filter(Boolean).slice(0, 8)
+      ? raw.suggestedBenefits.map((b) => String(b).trim()).filter(Boolean).slice(0, 7)
       : [],
     detectedAttributes: Array.isArray(raw.detectedAttributes)
       ? raw.detectedAttributes
@@ -77,7 +100,7 @@ export function sanitizeProductClassifierResult(
                 : 0.5,
           }))
           .filter((a) => a.label && a.value)
-          .slice(0, 12)
+          .slice(0, 10)
       : [],
     confidence,
     warnings: Array.isArray(raw.warnings)

@@ -88,7 +88,66 @@ Preset mock: `home_goods`, `apparel`, `electronics` — см. `productClassifier
 - `isActive = true`
 - валидный `apiModelId`, `endpoint`, `payloadMapping`, `pricingSchema`
 
-Stub `product-classifier-kie` остаётся inactive / PLACEHOLDER до подключения Kie.
+Stub `product-classifier-kie` остаётся inactive / PLACEHOLDER (legacy). Кандидат для real test: **`gemini-3-flash-product-classifier`**.
+
+## Gemini 3 Flash classifier candidate
+
+**Kie endpoint:** `POST /gemini-3-flash/v1/chat/completions`  
+**apiModelId:** `gemini-3-flash`  
+**Adapter:** chat/completions (синхронный ответ, без worker / polling / Generation)
+
+### Payload structure
+
+```json
+{
+  "model": "gemini-3-flash",
+  "stream": false,
+  "response_format": { "type": "json_object" },
+  "messages": [
+    { "role": "system", "content": "..." },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "..." },
+        { "type": "image_url", "image_url": { "url": "https://..." } }
+      ]
+    }
+  ]
+}
+```
+
+- **image_url input:** публичный HTTPS URL фото товара (или data URL с сервера, если локальный storage).
+- **Ответ:** `choices[0].message.content` — JSON (может быть в ```json fences).
+
+### Expected JSON → ProductClassifierResult
+
+См. `normalizeProductClassifierResult()` в `productClassifierKieChat.ts`.
+
+### Normalization rules
+
+- `category` — один из `MANUAL_PRODUCT_CATEGORY_OPTIONS`; неизвестная → **`universal`**
+- `confidence` — clamp 0..1
+- `suggestedBenefits` — max **7**
+- `detectedAttributes` — max **10**
+- пустые строки удаляются
+- USER не видит технические ошибки Kie/parse
+
+### Error fallback
+
+| Ошибка | USER message |
+|--------|----------------|
+| Kie HTTP / network | «Не удалось распознать товар. Выберите категорию вручную или попробуйте позже.» |
+| JSON parse fail | «Не удалось разобрать результат распознавания. Выберите данные вручную.» |
+| Missing / inactive | «Автоматическое распознавание товара пока настраивается…» |
+
+### Real test
+
+**Запрещён** без отдельного подтверждения. См. `docs/KIE_PRODUCT_CLASSIFIER_REAL_TEST_RUNBOOK.md`.
+
+Сервисный слой: `src/server/services/productClassifierKieChat.ts` (отдельно от `generationProcessor`).
+
+Seed: `npm run seed:gemini-3-flash-product-classifier`  
+Preflight: `/admin/product-card` → «Проверить готовность classifier»
 
 ## Admin status (`/admin/product-card`)
 
@@ -117,6 +176,7 @@ Admin hints (только админка): slug, apiModelId, costCredits, dry-ru
 ```bash
 npm run verify:product-card-model-setup
 npm run smoke:product-card-marketplace
+npm run smoke:product-card-classifier
 ```
 
 Проверяют:
@@ -124,4 +184,5 @@ npm run smoke:product-card-marketplace
 - classifier Missing не ломает marketplace Ready;
 - setup error без Kie / Generation / CreditTransaction;
 - dev mock `home_goods` в development;
+- chat/completions dry-run payload (если модель seeded);
 - ключ `PRODUCT_CARD_DEFAULT_CLASSIFIER_MODEL_SLUG` поддерживается resolver.

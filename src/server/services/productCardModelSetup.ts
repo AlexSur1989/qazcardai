@@ -140,6 +140,9 @@ function computeReadinessIssues(
   ) {
     issues.push("supportsImageInput=false");
   }
+  if (productCardModelType === "PRODUCT_CLASSIFIER" && !model.supportsImageInput) {
+    issues.push("supportsImageInput=false");
+  }
   return issues;
 }
 

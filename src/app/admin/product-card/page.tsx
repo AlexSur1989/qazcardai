@@ -9,6 +9,7 @@ import { ProductCardAiStatusPanel } from "@/components/admin/product-card-ai-sta
 import { ProductCardModelBindingsPanel } from "@/components/admin/product-card-model-bindings-panel";
 import { ProductCardMarketplacePricingPanel } from "@/components/admin/product-card-marketplace-pricing-panel";
 import { ProductCardPreflightPanel } from "@/components/admin/product-card-preflight-panel";
+import { ProductCardClassifierPreflightPanel } from "@/components/admin/product-card-classifier-preflight-panel";
 import { ProductCardAdminTextsTab } from "@/components/admin/product-card-admin-texts-tab";
 import { ProductCardScenariosForm } from "@/components/admin/product-card-scenarios-form";
 import { ProductCardScenariosPanel } from "@/components/admin/product-card-scenarios-panel";
@@ -216,6 +217,7 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
             missingModel={!marketplaceModel}
           />
           <ProductCardPreflightPanel />
+          <ProductCardClassifierPreflightPanel />
           <ProductCardModelBindingsPanel
             initial={{
               classifierModelSlug: productSettings.classifierModelSlug,
