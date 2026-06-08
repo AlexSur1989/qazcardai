@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useId } from "react";
 import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState, useId } from "react";
 import { Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
@@ -36,6 +36,11 @@ import {
 } from "@/lib/generation-display";
 import { cn } from "@/lib/utils";
 import { mergeSimpleCardProductLabelIntoUserText } from "@/lib/simple-product-card-vision-text";
+import {
+  hasEnoughProductBenefits,
+  SIMPLE_CARD_BENEFITS_REQUIRED_MESSAGE,
+} from "@/lib/simple-product-card-benefits";
+import { mapProductCardModelErrorForUser } from "@/lib/product-card-scenario-setup-copy";
 import type { SimpleProductCardRequest } from "@/lib/validations/simple-product-card";
 
 import type { ProductSourceImageValue, SourceImagesValue } from "./source-images-upload";
@@ -74,6 +79,27 @@ type Props = {
   ensureProjectId: () => Promise<string | null>;
   sourceImages: SourceImagesValue;
   balanceCredits: number;
+  selectedCategoryLabel?: string | null;
+  showAdminHints?: boolean;
+};
+
+type PlanPreviewResponse = {
+  ready: boolean;
+  readinessStatus: "Ready" | "Not ready";
+  userMessage: string;
+  categoryLabel: string | null;
+  productLabel: string | null;
+  benefitsText: string;
+  aspectRatio: string;
+  resolution: string;
+  credits: number;
+  issues: string[];
+  admin?: {
+    modelSlug: string;
+    apiModelId: string;
+    adminModelEditUrl: string;
+    payloadDryRunUrl: string;
+  };
 };
 
 function isValidRefImage(file: File): boolean {
@@ -123,6 +149,8 @@ export function SimpleProductCardTab({
   ensureProjectId,
   sourceImages,
   balanceCredits,
+  selectedCategoryLabel = null,
+  showAdminHints = false,
 }: Props) {
   const refFieldId = useId();
   const photosWithId = useMemo(
@@ -149,6 +177,9 @@ export function SimpleProductCardTab({
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [refUploading, setRefUploading] = useState(false);
+  const [planPreview, setPlanPreview] = useState<PlanPreviewResponse | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     generationId: string;
     status: string;
@@ -306,7 +337,7 @@ export function SimpleProductCardTab({
     projectId &&
       initDone &&
       selectedProductPhotoId.trim() &&
-      effectiveCardText.trim() &&
+      hasEnoughProductBenefits(userText) &&
       (styleMode !== "reference" || referenceImage?.fileId) &&
       (styleMode !== "classic" || !classicUseReference || referenceImage?.fileId),
   );
@@ -336,7 +367,8 @@ export function SimpleProductCardTab({
       return;
     }
     if (!res.ok) {
-      setEstErr(parsed.data.error ?? "Оценка недоступна");
+      const msg = parsed.data.error ?? "Оценка недоступна";
+      setEstErr(mapProductCardModelErrorForUser(msg) ?? msg);
       setEstimateCredits(null);
       if (parsed.data.code === "REFERENCE_UNSUPPORTED") {
         setSupportsReference(false);
@@ -402,8 +434,8 @@ export function SimpleProductCardTab({
 
   const validateClient = (): string | null => {
     if (!selectedProductPhotoId.trim()) return "Выберите фото товара.";
-    if (!effectiveCardText.trim()) {
-      return "Добавьте название товара или хотя бы одну фразу для карточки.";
+    if (!hasEnoughProductBenefits(userText)) {
+      return SIMPLE_CARD_BENEFITS_REQUIRED_MESSAGE;
     }
     if (styleMode === "classic" && classicUseReference && !referenceImage?.fileId) {
       return "Загрузите фото-референс или выключите эту опцию.";
@@ -416,6 +448,47 @@ export function SimpleProductCardTab({
     }
     return null;
   };
+
+  const runPlanPreview = useCallback(async () => {
+    const err = validateClient();
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    const pid = projectId ?? (await ensureProjectId());
+    if (!pid) {
+      toast.error("Сначала загрузите фото товара.");
+      return;
+    }
+    setPlanLoading(true);
+    setPlanError(null);
+    const res = await fetch(`/api/product-card-projects/${pid}/preview/simple-card-plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload, productLabel: productLabel.trim() || undefined }),
+    });
+    const parsed = await readJsonSafe<PlanPreviewResponse & { error?: string }>(res);
+    setPlanLoading(false);
+    if (!parsed.ok || !res.ok) {
+      const msg = parsed.ok ? (parsed.data.error ?? "Не удалось проверить план") : parsed.message;
+      setPlanError(mapProductCardModelErrorForUser(msg) ?? msg);
+      setPlanPreview(null);
+      return;
+    }
+    setPlanPreview(parsed.data);
+  }, [
+    projectId,
+    ensureProjectId,
+    payload,
+    productLabel,
+    selectedProductPhotoId,
+    userText,
+    styleMode,
+    classicUseReference,
+    referenceImage,
+    usesReference,
+    supportsReference,
+  ]);
 
   const handleGenerate = async () => {
     const err = validateClient();
@@ -648,10 +721,9 @@ export function SimpleProductCardTab({
 
         <Card className="rounded-2xl border-border">
           <CardHeader>
-            <CardTitle className="text-base">Какой текст хотите видеть на карточке?</CardTitle>
+            <CardTitle className="text-base">Преимущества и характеристики товара</CardTitle>
             <CardDescription>
-              Напишите свободно: название, преимущества, размеры, объём, вес, материал, комплектацию, скидку,
-              доставку или гарантию. AI сам разложит это по карточке.
+              Напишите факты о товаре. ИИ превратит их в короткие продающие преимущества.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -667,20 +739,20 @@ export function SimpleProductCardTab({
                 userTextTouchedRef.current = true;
                 setUserText(e.target.value);
               }}
-              placeholder="Например: Джойстик для PlayStation. Не боится падений. Размер 60×27×32 мм. Доставка по Алматы."
+              placeholder="Например: 20 л, 700 Вт, LED дисплей, быстрый старт, разморозка"
               rows={5}
               maxLength={SIMPLE_CARD_USER_TEXT_MAX}
               className="resize-y"
             />
             <div className="text-muted-foreground flex justify-between gap-3 text-xs">
-              <span>
-                AI сам разложит текст по карточке: размеры покажет стрелками, преимущества — плашками,
-                характеристики — аккуратным блоком.
-              </span>
+              <span>Укажите 2–3 факта через запятую или с новой строки.</span>
               <span>
                 {textLen} / {SIMPLE_CARD_USER_TEXT_MAX}
               </span>
             </div>
+            {userText.trim() && !hasEnoughProductBenefits(userText) ? (
+              <p className="text-destructive text-xs">{SIMPLE_CARD_BENEFITS_REQUIRED_MESSAGE}</p>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -834,6 +906,80 @@ export function SimpleProductCardTab({
               )}
             </div>
             <div className="text-muted-foreground text-xs">Баланс: {balanceCredits} токенов</div>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={planLoading || !selectedProductPhotoId.trim()}
+              onClick={() => void runPlanPreview()}
+            >
+              {planLoading ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Проверяем план…
+                </>
+              ) : (
+                "Проверить план карточки"
+              )}
+            </Button>
+            {planError ? <p className="text-destructive text-sm">{planError}</p> : null}
+            {planPreview ? (
+              <div className="space-y-2 rounded-lg border border-border/80 bg-muted/30 p-3 text-sm">
+                <p className="font-medium">{planPreview.userMessage}</p>
+                <dl className="text-muted-foreground space-y-1 text-xs">
+                  {planPreview.categoryLabel || selectedCategoryLabel ? (
+                    <div className="flex justify-between gap-2">
+                      <dt>Категория</dt>
+                      <dd className="text-foreground text-right">
+                        {planPreview.categoryLabel ?? selectedCategoryLabel}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {planPreview.productLabel ? (
+                    <div className="flex justify-between gap-2">
+                      <dt>Название</dt>
+                      <dd className="text-foreground text-right">{planPreview.productLabel}</dd>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between gap-2">
+                    <dt>Формат</dt>
+                    <dd className="text-foreground">{planPreview.aspectRatio}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt>Разрешение</dt>
+                    <dd className="text-foreground">{planPreview.resolution}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt>Стоимость</dt>
+                    <dd className="text-foreground font-medium">{planPreview.credits} токенов</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt>Готовность</dt>
+                    <dd className="text-foreground">{planPreview.readinessStatus}</dd>
+                  </div>
+                </dl>
+                {planPreview.issues.length > 0 ? (
+                  <ul className="text-destructive list-inside list-disc text-xs">
+                    {planPreview.issues.map((issue) => (
+                      <li key={issue}>{issue}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {showAdminHints && planPreview.admin ? (
+                  <div className="border-border/60 space-y-1 border-t pt-2 font-mono text-[10px] leading-relaxed">
+                    <p>model: {planPreview.admin.modelSlug}</p>
+                    <p>apiModelId: {planPreview.admin.apiModelId}</p>
+                    <p>
+                      <Link href={planPreview.admin.adminModelEditUrl} className="text-primary underline">
+                        Редактировать модель
+                      </Link>
+                      {" · "}
+                      <span>dry-run: POST {planPreview.admin.payloadDryRunUrl}</span>
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <Button
               className="w-full"
               disabled={generating || estimating || !canEstimate || clientErr != null || displayEstimateCredits == null}

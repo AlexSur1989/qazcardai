@@ -5,6 +5,8 @@ import {
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
 import { simpleProductCardGenerateSchema } from "@/lib/validations/simple-product-card";
+import { mapProductCardModelErrorForUser } from "@/lib/product-card-scenario-setup-copy";
+import { publicUserErrorMessage } from "@/lib/user-facing-copy";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { assertMarketplaceCardScenarioEnabled } from "@/server/services/productCardScenarios";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
@@ -60,7 +62,9 @@ export async function POST(req: Request, ctx: Ctx) {
     parsed.data.productLabel,
   );
   if (!res.ok) {
-    return NextResponse.json({ error: res.error, code: res.code }, { status: res.status });
+    const friendly =
+      mapProductCardModelErrorForUser(res.error) ?? publicUserErrorMessage(res.error);
+    return NextResponse.json({ error: friendly, code: res.code }, { status: res.status });
   }
 
   return NextResponse.json({

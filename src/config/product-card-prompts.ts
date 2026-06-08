@@ -139,6 +139,14 @@ const BY_CATEGORY: Record<ProductCategoryId, ConceptMap> = {
   gadgets_and_tech: GADGETS,
   home_and_furniture: HOME,
   other: OTHER,
+  electronics: GADGETS,
+  home_appliances: GADGETS,
+  footwear: APPAREL,
+  home_goods: HOME,
+  kids: OTHER,
+  furniture: HOME,
+  auto: OTHER,
+  universal: OTHER,
 };
 
 const LEGACY_CONCEPT_ALIASES: Record<string, string> = {

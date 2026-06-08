@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getPublicProductCategories } from "@/config/product-card-categories";
+import { getManualProductCategoryLabel } from "@/config/product-card-manual-categories";
 import type {
   ProductCardScenarioKey,
   ProductCardScenarioToggles,
@@ -299,6 +300,14 @@ export function ProductCardPage({
                 projectId={projectId}
                 sourceImages={sourceImages}
                 balanceCredits={balanceDisplay}
+                selectedCategoryLabel={
+                  selectedCategory
+                    ? getManualProductCategoryLabel(selectedCategory) ??
+                      CATEGORIES.find((c) => c.id === selectedCategory)?.label ??
+                      selectedCategory
+                    : null
+                }
+                showAdminHints={showAdminHints}
               />
             )}
           </TabsContent>

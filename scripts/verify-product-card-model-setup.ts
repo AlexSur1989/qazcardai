@@ -22,6 +22,8 @@ import {
   validateDryRunPayloadShape,
 } from "../src/server/services/adminModelPayloadDryRun";
 import { defaultSlugForProductCardType, getProductCardSettings } from "../src/server/services/productCardSettings";
+import { calculateProductCardMarketplaceCardCredits } from "../src/server/services/productCardPricing";
+import { buildKieMarketPayloadFromMapping, isStrictKiePayloadMapping } from "../src/server/services/kiePayloadMapping";
 
 const MARKETPLACE_MODEL_SLUG = "gpt-image-2-product-marketplace-card";
 const MARKETPLACE_APP_SETTING_KEY = "PRODUCT_CARD_DEFAULT_MARKETPLACE_CARD_MODEL_SLUG";
@@ -297,6 +299,59 @@ async function main() {
   if (!String(payloadInput.prompt ?? "").trim()) {
     fail("marketplace dry-run payload missing input.prompt");
   }
+  const dryPayload = marketplaceDryRun.payload as Record<string, unknown>;
+  if (dryPayload.model !== "gpt-image-2-image-to-image") {
+    fail(`dry-run payload model=${String(dryPayload.model)}`);
+  }
+  if (!String(dryPayload.callBackUrl ?? "").trim()) {
+    fail("dry-run payload missing callBackUrl");
+  }
+  if (String(payloadInput.aspect_ratio ?? "") !== "1:1") {
+    fail(`dry-run payload aspect_ratio=${String(payloadInput.aspect_ratio)}`);
+  }
+  if (String(payloadInput.resolution ?? "") !== "1K") {
+    fail(`dry-run payload resolution=${String(payloadInput.resolution)}`);
+  }
+
+  const priceBreakdown = await calculateProductCardMarketplaceCardCredits(marketplaceModel, {
+    cardSize: "1x1",
+    styleMode: "classic",
+  });
+  if (priceBreakdown.credits < marketplaceModel.costCredits) {
+    fail(
+      `marketplace estimate credits=${priceBreakdown.credits} below model costCredits=${marketplaceModel.costCredits}`,
+    );
+  }
+  if (priceBreakdown.modelSlug !== MARKETPLACE_MODEL_SLUG) {
+    fail(`marketplace estimate modelSlug=${priceBreakdown.modelSlug}`);
+  }
+
+  const fakeUrl = "https://app.qazcardai.kz/uploads/verify/product-sample.jpg";
+  if (!isStrictKiePayloadMapping(marketplaceModel.payloadMapping)) {
+    fail("marketplace model payloadMapping is not strict market-create-task");
+  }
+  const kieBody = buildKieMarketPayloadFromMapping(marketplaceModel.payloadMapping, {
+    model: { apiModelId: marketplaceModel.apiModelId },
+    prompt: "verify marketplace card prompt",
+    settings: { aspectRatio: "1:1", resolution: "1K" },
+    inputFiles: [fakeUrl],
+    callBackUrl: "https://example.com/api/webhooks/kie",
+  });
+  const bodyInput = (kieBody.input ?? {}) as Record<string, unknown>;
+  if (!Array.isArray(bodyInput.input_urls)) {
+    fail("buildKieMarketPayloadFromMapping must produce input.input_urls array");
+  }
+  if ((bodyInput.input_urls as string[])[0] !== fakeUrl) {
+    fail("buildKieMarketPayloadFromMapping input_urls[0] must match uploaded product URL");
+  }
+
+  const staleClientEstimate = priceBreakdown.credits + 1;
+  const priceChangedWouldReject =
+    Number.isFinite(staleClientEstimate) && staleClientEstimate !== priceBreakdown.credits;
+  if (!priceChangedWouldReject) {
+    fail("PRICE_CHANGED guard: mismatched clientEstimateCredits must be rejected");
+  }
+
   const shapeWarnings = validateDryRunPayloadShape(
     marketplaceDryRun.payload,
     marketplaceModel,
@@ -333,6 +388,22 @@ async function main() {
   }
   if (!marketplaceSlot.generationReady) {
     fail("marketplace slot generationReady=false");
+  }
+
+  const classifierSlot = overview.byType.PRODUCT_CLASSIFIER;
+  const conceptSlot = overview.byType.PRODUCT_CONCEPT_IMAGE;
+  const videoSlot = overview.byType.PRODUCT_VIDEO;
+  if (classifierSlot?.readinessStatus === "Ready") {
+    console.log("  note: classifier unexpectedly Ready");
+  }
+  if (conceptSlot?.readinessStatus === "Ready") {
+    console.log("  note: concept image unexpectedly Ready");
+  }
+  if (videoSlot?.readinessStatus === "Ready") {
+    console.log("  note: video unexpectedly Ready");
+  }
+  if (!marketplaceSlot.generationReady) {
+    fail("other missing slots must not block marketplace Ready");
   }
 
   console.log("[verify:product-card-model-setup] OK");

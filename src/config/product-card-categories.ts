@@ -10,6 +10,15 @@ export const PRODUCT_CATEGORY_IDS = [
   "gadgets_and_tech",
   "home_and_furniture",
   "other",
+  /** Ручной выбор (marketplace flow, classifier missing) */
+  "electronics",
+  "home_appliances",
+  "footwear",
+  "home_goods",
+  "kids",
+  "furniture",
+  "auto",
+  "universal",
 ] as const;
 
 export type ProductCategoryId = (typeof PRODUCT_CATEGORY_IDS)[number];

@@ -4,14 +4,11 @@ import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
-import { simpleProductCardEstimateSchema } from "@/lib/validations/simple-product-card";
-import { mapProductCardModelErrorForUser } from "@/lib/product-card-scenario-setup-copy";
 import { isAdminRole } from "@/lib/permissions";
-import { publicUserErrorMessage } from "@/lib/user-facing-copy";
+import { simpleProductCardEstimateSchema } from "@/lib/validations/simple-product-card";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { assertMarketplaceCardScenarioEnabled } from "@/server/services/productCardScenarios";
-import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
-import { estimateSimpleProductCard } from "@/server/services/simpleProductCardGeneration";
+import { previewSimpleProductCardPlan } from "@/server/services/simpleProductCardPlanPreview";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -30,10 +27,6 @@ export async function POST(req: Request, ctx: Ctx) {
   if (!gate.ok) {
     return NextResponse.json({ error: gate.error, code: gate.code }, { status: gate.status });
   }
-
-  const userId = current.user.id;
-  const rate = await enforceGenerationRateLimit(userId);
-  if (rate) return rate;
 
   const tooLarge = rejectOversizedBody(req, getMaxJsonBodyBytes());
   if (tooLarge) return tooLarge;
@@ -54,19 +47,21 @@ export async function POST(req: Request, ctx: Ctx) {
   }
 
   const { id } = await ctx.params;
-  const res = await estimateSimpleProductCard(userId, id, parsed.data.payload);
-  if (!res.ok) {
-    const friendly =
-      mapProductCardModelErrorForUser(res.error) ?? publicUserErrorMessage(res.error);
-    return NextResponse.json({ error: friendly, code: res.code }, { status: res.status });
-  }
-
   const isAdmin = isAdminRole(current.user.role);
 
-  return NextResponse.json({
-    credits: res.credits,
-    planHash: res.planHash,
-    supportsReference: res.supportsReference,
-    ...(isAdmin ? { modelSlug: res.modelSlug } : {}),
-  });
+  const res = await previewSimpleProductCardPlan(
+    current.user.id,
+    id,
+    parsed.data.payload,
+    {
+      productLabel: parsed.data.productLabel,
+      isAdmin,
+    },
+  );
+
+  if (!res.ok) {
+    return NextResponse.json({ error: res.error, code: res.code }, { status: res.status });
+  }
+
+  return NextResponse.json(res);
 }

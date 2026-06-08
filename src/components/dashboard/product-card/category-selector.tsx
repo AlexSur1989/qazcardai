@@ -8,8 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import type { ProductCategory, ProductCategoryId } from "@/config/product-card-categories";
+import { MANUAL_PRODUCT_CATEGORY_OPTIONS } from "@/config/product-card-manual-categories";
 import { formatProductCategoryClassifierReason } from "@/lib/product-card-classifier-ui";
-import { PRODUCT_CARD_CLASSIFIER_MANUAL_HINT } from "@/lib/product-card-scenario-setup-copy";
+import {
+  PRODUCT_CARD_CLASSIFIER_MANUAL_HINT,
+  PRODUCT_CARD_CLASSIFIER_MANUAL_TITLE,
+} from "@/lib/product-card-scenario-setup-copy";
 import { publicUserErrorMessage } from "@/lib/user-facing-copy";
 
 import type { CategorySourceUi, ClassifyInfo, ClassifyFlowState } from "./use-product-card-project";
@@ -29,6 +33,46 @@ type Props = {
   autoClassifyReady?: boolean;
   classifierAdminHint?: string | null;
 };
+
+function ManualCategoryPicker({
+  selectedCategory,
+  onSelectCategory,
+  canPersist,
+}: {
+  selectedCategory: ProductCategoryId | null;
+  onSelectCategory: (id: ProductCategoryId) => void;
+  canPersist: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="pcat-manual-select">{PRODUCT_CARD_CLASSIFIER_MANUAL_TITLE}</Label>
+      <select
+        id="pcat-manual-select"
+        className="border-input w-full max-w-md rounded-xl border bg-card px-3 py-2.5 text-sm text-foreground shadow-sm"
+        value={selectedCategory ?? ""}
+        disabled={!canPersist}
+        onChange={(e) => {
+          const v = e.target.value as ProductCategoryId;
+          if (v) onSelectCategory(v);
+        }}
+      >
+        <option value="" disabled>
+          Выберите категорию…
+        </option>
+        {MANUAL_PRODUCT_CATEGORY_OPTIONS.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.label}
+          </option>
+        ))}
+      </select>
+      {!canPersist ? (
+        <p className="text-muted-foreground text-xs">
+          Сначала дождитесь загрузки фото на сервер.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export function CategorySelector({
   hasImage,
@@ -50,10 +94,34 @@ export function CategorySelector({
       <div className="space-y-2">
         <h3 className="text-foreground text-base font-semibold">Категория товара</h3>
         <p className="text-muted-foreground text-sm">
-          После сохранения фото на сервер категория определяется автоматически. При необходимости
-          скорректируйте её вручную.
+          После загрузки фото выберите категорию — это поможет ИИ лучше оформить карточку.
         </p>
       </div>
+    );
+  }
+
+  if (!autoClassifyReady) {
+    return (
+      <Card>
+        <CardHeader className="space-y-0 pb-2">
+          <CardTitle className="text-lg">{PRODUCT_CARD_CLASSIFIER_MANUAL_TITLE}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert>
+            <AlertDescription>{PRODUCT_CARD_CLASSIFIER_MANUAL_HINT}</AlertDescription>
+          </Alert>
+          {classifierAdminHint ? (
+            <p className="text-muted-foreground border-border/60 border-t pt-2 font-mono text-[10px]">
+              Admin: {classifierAdminHint}
+            </p>
+          ) : null}
+          <ManualCategoryPicker
+            selectedCategory={selectedCategory}
+            onSelectCategory={onSelectCategory}
+            canPersist={canPersist}
+          />
+        </CardContent>
+      </Card>
     );
   }
 
@@ -74,20 +142,6 @@ export function CategorySelector({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!autoClassifyReady && (
-          <Alert>
-            <AlertTitle>Категория вручную</AlertTitle>
-            <AlertDescription className="space-y-2">
-              <p>{PRODUCT_CARD_CLASSIFIER_MANUAL_HINT}</p>
-              {classifierAdminHint ? (
-                <p className="text-muted-foreground font-mono text-[10px]">
-                  Admin: {classifierAdminHint}
-                </p>
-              ) : null}
-            </AlertDescription>
-          </Alert>
-        )}
-
         {showMockProviderHint && (
           <Alert>
             <Sparkles className="h-4 w-4" />
@@ -130,7 +184,7 @@ export function CategorySelector({
           </p>
         )}
 
-        {classifyFlow === "error" && classifyError && autoClassifyReady && (
+        {classifyFlow === "error" && classifyError && (
           <Alert variant="destructive">
             <AlertTitle>Классификация</AlertTitle>
             <AlertDescription>{publicUserErrorMessage(classifyError)}</AlertDescription>
