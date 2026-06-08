@@ -3,6 +3,8 @@
  * Админка и сиды могут оставаться техническими.
  */
 
+import { mapProductCardModelErrorForUser } from "@/lib/product-card-scenario-setup-copy";
+
 const TECH_SUBSTRINGS =
   /kie\.ai|kie_ai|kieaudio|kie\.?ai|\bkie\b|apiModelId|providerTaskId|payloadMapping|modelSlug|endpoint|queue job|воркер|worker|payload|KIE_API|MOCK_KIE|REDIS_URL|KIE_BASE_URL|docs\.kie|playground|gemini-omni-audio/i;
 
@@ -82,6 +84,8 @@ export function publicUserErrorMessage(
   fallback = "Не удалось выполнить запрос. Попробуйте позже.",
 ): string {
   if (!message?.trim()) return fallback;
+  const pc = mapProductCardModelErrorForUser(message);
+  if (pc) return pc;
   return sanitizeUserFacingErrorMessage(message) ?? fallback;
 }
 

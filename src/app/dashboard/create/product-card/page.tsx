@@ -11,13 +11,12 @@ import { ProductCardPage } from "@/components/dashboard/product-card/product-car
 import { PageHeader } from "@/components/layout/page-header";
 
 import { canAccessAdminPanel } from "@/lib/auth";
-
+import { isAdminRole } from "@/lib/permissions";
 import { getBalance } from "@/server/services/credits";
-
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
-
 import { getProductCardSettings } from "@/server/services/productCardSettings";
 import { listActiveProductVideoModels } from "@/server/services/productCardModelResolver";
+import { getProductCardModelSetupOverview } from "@/server/services/productCardModelSetup";
 
 
 
@@ -41,15 +40,15 @@ export default async function ProductCardCreatePage() {
 
 
 
-  const [balanceCredits, productCardSettings, productVideoModels] = await Promise.all([
+  const [balanceCredits, productCardSettings, productVideoModels, modelSetup] =
+    await Promise.all([
+      getBalance(current.user.id),
+      getProductCardSettings(),
+      listActiveProductVideoModels(),
+      getProductCardModelSetupOverview(),
+    ]);
 
-    getBalance(current.user.id),
-
-    getProductCardSettings(),
-
-    listActiveProductVideoModels(),
-
-  ]);
+  const showAdminHints = isAdminRole(current.user.role);
 
 
 
@@ -78,23 +77,18 @@ export default async function ProductCardCreatePage() {
       <Suspense fallback={<CreateFormSkeleton />}>
 
         <ProductCardPage
-
           balanceCredits={balanceCredits}
-
           scenarios={productCardSettings.scenarios}
-
           conceptImageSizes={productCardSettings.conceptImageSizes}
-
           marketplaceCardSizes={productCardSettings.marketplaceCardSizes}
-
           videoPresets={productCardSettings.videoPresets}
-
           productVideoModels={productVideoModels}
-
           defaultProductVideoModelSlug={productCardSettings.videoModelSlug}
-
           canMarketplaceLayoutDebug={canAccessAdminPanel(current.user.role)}
-
+          modelSetupByScenario={modelSetup.byScenario}
+          autoClassifyReady={modelSetup.byType.PRODUCT_CLASSIFIER.autoClassifyReady}
+          classifierAdminHint={modelSetup.byType.PRODUCT_CLASSIFIER.adminHint}
+          showAdminHints={showAdminHints}
         />
 
       </Suspense>

@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import type { ProductCategory, ProductCategoryId } from "@/config/product-card-categories";
 import { formatProductCategoryClassifierReason } from "@/lib/product-card-classifier-ui";
+import { PRODUCT_CARD_CLASSIFIER_MANUAL_HINT } from "@/lib/product-card-scenario-setup-copy";
 import { publicUserErrorMessage } from "@/lib/user-facing-copy";
 
 import type { CategorySourceUi, ClassifyInfo, ClassifyFlowState } from "./use-product-card-project";
@@ -25,6 +26,8 @@ type Props = {
   classifyInfo: ClassifyInfo;
   onClassify: () => void | Promise<void>;
   onSelectCategory: (id: ProductCategoryId) => void;
+  autoClassifyReady?: boolean;
+  classifierAdminHint?: string | null;
 };
 
 export function CategorySelector({
@@ -39,6 +42,8 @@ export function CategorySelector({
   classifyInfo,
   onClassify,
   onSelectCategory,
+  autoClassifyReady = true,
+  classifierAdminHint = null,
 }: Props) {
   if (!hasImage) {
     return (
@@ -69,6 +74,20 @@ export function CategorySelector({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {!autoClassifyReady && (
+          <Alert>
+            <AlertTitle>Категория вручную</AlertTitle>
+            <AlertDescription className="space-y-2">
+              <p>{PRODUCT_CARD_CLASSIFIER_MANUAL_HINT}</p>
+              {classifierAdminHint ? (
+                <p className="text-muted-foreground font-mono text-[10px]">
+                  Admin: {classifierAdminHint}
+                </p>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {showMockProviderHint && (
           <Alert>
             <Sparkles className="h-4 w-4" />
@@ -111,7 +130,7 @@ export function CategorySelector({
           </p>
         )}
 
-        {classifyFlow === "error" && classifyError && (
+        {classifyFlow === "error" && classifyError && autoClassifyReady && (
           <Alert variant="destructive">
             <AlertTitle>Классификация</AlertTitle>
             <AlertDescription>{publicUserErrorMessage(classifyError)}</AlertDescription>

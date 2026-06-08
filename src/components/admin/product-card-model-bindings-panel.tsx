@@ -142,13 +142,26 @@ export function ProductCardModelBindingsPanel({
                   setValues((v) => ({ ...v, [row.key]: e.target.value }))
                 }
               >
-                <option value="">— не назначено —</option>
+                <option value="">
+                  {opts.length === 0
+                    ? "— нет активных моделей —"
+                    : "— не назначено —"}
+                </option>
                 {opts.map((m) => (
                   <option key={m.slug} value={m.slug}>
                     {m.name} ({m.slug})
                   </option>
                 ))}
               </select>
+              {opts.length === 0 ? (
+                <p className="text-muted-foreground text-xs">
+                  Нет активных моделей для «{row.label}». Создайте модель в{" "}
+                  <Link href="/admin/models" className="underline">
+                    AI-моделях
+                  </Link>{" "}
+                  (scope PRODUCT_CARD, тип {row.label}), заполните Kie Model ID и активируйте.
+                </p>
+              ) : null}
               {warnings[row.warningKey] ? (
                 <p className="text-amber-700 text-xs">{warnings[row.warningKey]}</p>
               ) : null}

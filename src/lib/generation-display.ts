@@ -1,6 +1,7 @@
 import type { GenerationStatus, GenerationType } from "@/generated/prisma/enums";
 import { getPublicProductCategories } from "@/config/product-card-categories";
 import { getFirstOutputPreviewUrl, parseOutputFilesList } from "@/lib/generation-output-utils";
+import { mapProductCardModelErrorForUser } from "@/lib/product-card-scenario-setup-copy";
 import { sanitizeUserFacingErrorMessage } from "@/lib/user-facing-copy";
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -219,6 +220,8 @@ export function mapGenerationErrorToUserMessage(
   if (/moderation|blocked|MODERATION|проверк/i.test(raw)) {
     return "Запрос не прошёл проверку. Измените текст или изображение.";
   }
+  const pcErr = mapProductCardModelErrorForUser(raw);
+  if (pcErr) return pcErr;
   if (
     /KIE_AI|kie\.ai|providerTaskId|apiModelId|payload|modelSlug|endpoint|queue job/i.test(
       raw,

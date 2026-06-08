@@ -5,6 +5,7 @@ import { ProductCardAdminAdvancedPanel } from "@/components/admin/product-card-a
 import { ProductCardAdminLayout } from "@/components/admin/product-card-admin-layout";
 import { ProductCardAdminLinksTab } from "@/components/admin/product-card-admin-links-tab";
 import { ProductCardAdminOverview } from "@/components/admin/product-card-admin-overview";
+import { ProductCardAiStatusPanel } from "@/components/admin/product-card-ai-status-panel";
 import { ProductCardModelBindingsPanel } from "@/components/admin/product-card-model-bindings-panel";
 import { ProductCardAdminTextsTab } from "@/components/admin/product-card-admin-texts-tab";
 import { ProductCardScenariosForm } from "@/components/admin/product-card-scenarios-form";
@@ -27,6 +28,7 @@ import {
   type ProductCardPriceBreakdown,
 } from "@/server/services/productCardPricing";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
+import { getProductCardModelSetupOverview } from "@/server/services/productCardModelSetup";
 
 export const metadata = {
   title: "AI-карточки товара — админка",
@@ -49,13 +51,14 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
     isSuperAdmin(adminUser.role) || adminUser.role === "ADMIN";
   const showAdvancedSection = showAdvanced && canToggleAdvanced;
 
-  const [settingsRows, productSettings, models] = await Promise.all([
+  const [settingsRows, productSettings, models, modelSetup] = await Promise.all([
     getAppSettingsByGroup("productCard"),
     getProductCardSettings(),
     prisma.aiModel.findMany({
       where: { scope: "PRODUCT_CARD" },
       orderBy: [{ productCardModelType: "asc" }, { name: "asc" }],
     }),
+    getProductCardModelSetupOverview(),
   ]);
 
   const scenariosSetting = settingsRows.find((row) => row.key === "PRODUCT_CARD_SCENARIOS")?.value;
@@ -187,6 +190,7 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
 
       {!showAdvancedSection && activeTab === "overview" ? (
         <>
+          <ProductCardAiStatusPanel slots={modelSetup.slots} />
           <ProductCardModelBindingsPanel
             initial={{
               classifierModelSlug: productSettings.classifierModelSlug,

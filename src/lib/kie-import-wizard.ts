@@ -146,8 +146,8 @@ export function detectFieldsFromKieInput(
   let supportsSeed = false;
 
   for (const kieKey of Object.keys(input)) {
-    if (SKIP_INPUT_KEYS.has(kieKey)) continue;
     detectedFields.push(kieKey);
+    if (SKIP_INPUT_KEYS.has(kieKey)) continue;
 
     const rule = KIE_TO_SETTINGS[kieKey];
     if (!rule) continue;

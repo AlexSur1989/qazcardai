@@ -11,6 +11,9 @@ import type {
   ProductCardScenarioKey,
   ProductCardScenarioToggles,
 } from "@/server/services/productCardSettings";
+import type { ProductCardModelSlotDiagnostics } from "@/server/services/productCardModelSetup";
+
+import { ScenarioSetupNotice } from "./scenario-setup-notice";
 
 import { SimpleProductCardTab } from "./simple-product-card-tab";
 import { CategorySelector } from "./category-selector";
@@ -68,6 +71,12 @@ type Props = {
   defaultProductVideoModelSlug: string;
   /** Показать режим разметки оверлея (админ) */
   canMarketplaceLayoutDebug?: boolean;
+  modelSetupByScenario: Partial<
+    Record<ProductCardScenarioKey, ProductCardModelSlotDiagnostics>
+  >;
+  autoClassifyReady: boolean;
+  classifierAdminHint: string;
+  showAdminHints: boolean;
 };
 
 export function ProductCardPage({
@@ -79,6 +88,10 @@ export function ProductCardPage({
   productVideoModels,
   defaultProductVideoModelSlug,
   canMarketplaceLayoutDebug = false,
+  modelSetupByScenario,
+  autoClassifyReady,
+  classifierAdminHint,
+  showAdminHints,
 }: Props) {
   const {
     initDone,
@@ -129,7 +142,22 @@ export function ProductCardPage({
     );
   }
 
+  const scenarioReady = (scenario: ProductCardScenarioKey): boolean =>
+    modelSetupByScenario[scenario]?.generationReady ?? false;
+
+  const tabReady = (id: TabId): boolean => {
+    const row = SCENARIO_TAB.find((t) => t.id === id);
+    if (!row) return false;
+    return scenarioReady(row.scenario);
+  };
+
   const balanceDisplay = Number.isFinite(Number(balanceCredits)) ? Math.round(Number(balanceCredits)) : 0;
+
+  const adminHintForTab = (id: TabId): string | null => {
+    const row = SCENARIO_TAB.find((t) => t.id === id);
+    if (!row || !showAdminHints) return null;
+    return modelSetupByScenario[row.scenario]?.adminHint ?? null;
+  };
 
   const tabLabel = (scenario: ProductCardScenarioKey): string => {
     const lbl = scenarios[scenario]?.label?.trim();
@@ -192,6 +220,8 @@ export function ProductCardPage({
         classifyInfo={classifyInfo}
         onClassify={runClassify}
         onSelectCategory={setManualCategory}
+        autoClassifyReady={autoClassifyReady}
+        classifierAdminHint={showAdminHints ? classifierAdminHint : null}
       />
 
       <section className="space-y-3" aria-label="Сценарии">
@@ -227,47 +257,70 @@ export function ProductCardPage({
             variant="line"
             className="h-auto w-full max-w-3xl flex-wrap justify-start gap-1.5 rounded-xl border border-border bg-white p-1.5"
           >
-            {visibleTabs.map((t) => (
-              <TabsTrigger
-                key={t.id}
-                value={t.id}
-                disabled={!hasImage}
-                className="rounded-lg border border-transparent px-4 py-2.5 text-sm data-active:border-primary data-active:bg-primary/10 data-active:shadow-sm"
-              >
-                {tabLabel(t.scenario)}
-              </TabsTrigger>
-            ))}
+            {visibleTabs.map((t) => {
+              const ready = tabReady(t.id);
+              return (
+                <TabsTrigger
+                  key={t.id}
+                  value={t.id}
+                  disabled={!hasImage}
+                  className="rounded-lg border border-transparent px-4 py-2.5 text-sm data-active:border-primary data-active:bg-primary/10 data-active:shadow-sm"
+                >
+                  {tabLabel(t.scenario)}
+                  {hasImage && !ready ? (
+                    <span className="text-muted-foreground ml-1 text-[10px]">· настройка</span>
+                  ) : null}
+                </TabsTrigger>
+              );
+            })}
           </TabsList>
 
           <TabsContent value="concepts" className="mt-4">
-            <ConceptPhotoTab
-              selectedCategory={selectedCategory}
-              hasImage={hasImage}
-              canUseBackend={canUseBackend}
-              projectId={projectId}
-              balanceCredits={balanceDisplay}
-              sizePresets={conceptImageSizes}
-            />
+            {!tabReady("concepts") ? (
+              <ScenarioSetupNotice adminHint={adminHintForTab("concepts")} showAdminLink={showAdminHints} />
+            ) : (
+              <ConceptPhotoTab
+                selectedCategory={selectedCategory}
+                hasImage={hasImage}
+                canUseBackend={canUseBackend}
+                projectId={projectId}
+                balanceCredits={balanceDisplay}
+                sizePresets={conceptImageSizes}
+              />
+            )}
           </TabsContent>
           <TabsContent value="card" className="mt-4">
-            <SimpleProductCardTab
-              initDone={initDone}
-              ensureProjectId={ensureProjectId}
-              projectId={projectId}
-              sourceImages={sourceImages}
-              balanceCredits={balanceDisplay}
-            />
+            {!tabReady("card") ? (
+              <ScenarioSetupNotice adminHint={adminHintForTab("card")} showAdminLink={showAdminHints} />
+            ) : (
+              <SimpleProductCardTab
+                initDone={initDone}
+                ensureProjectId={ensureProjectId}
+                projectId={projectId}
+                sourceImages={sourceImages}
+                balanceCredits={balanceDisplay}
+              />
+            )}
           </TabsContent>
           <TabsContent value="video" className="mt-4">
-            <ProductVideoTab
-              hasImage={hasImage}
-              canUseBackend={canUseBackend}
-              projectId={projectId}
-              balanceCredits={balanceDisplay}
-              videoPresets={videoPresets}
-              productVideoModels={productVideoModels}
-              defaultProductVideoModelSlug={defaultProductVideoModelSlug}
-            />
+            {!tabReady("video") ? (
+              <ScenarioSetupNotice
+                title="Видео для товаров скоро"
+                body="Мы подключаем AI-модель для видео. Попробуйте позже или обратитесь в поддержку."
+                adminHint={adminHintForTab("video")}
+                showAdminLink={showAdminHints}
+              />
+            ) : (
+              <ProductVideoTab
+                hasImage={hasImage}
+                canUseBackend={canUseBackend}
+                projectId={projectId}
+                balanceCredits={balanceDisplay}
+                videoPresets={videoPresets}
+                productVideoModels={productVideoModels}
+                defaultProductVideoModelSlug={defaultProductVideoModelSlug}
+              />
+            )}
           </TabsContent>
         </Tabs>
       </section>

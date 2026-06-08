@@ -40,7 +40,7 @@ function AdminModelsTable({ rows }: { rows: AdminModelsListRow[] }) {
             <TableHead>Scope</TableHead>
             <TableHead>Product Card / использование</TableHead>
             <TableHead>Type</TableHead>
-            <TableHead>Kie Model ID</TableHead>
+            <TableHead>Kie Model ID (apiModelId)</TableHead>
             <TableHead className="text-right">{adminTerm("costCredits")}</TableHead>
             <TableHead>Active</TableHead>
             <TableHead>Public</TableHead>
@@ -64,12 +64,12 @@ function AdminModelsTable({ rows }: { rows: AdminModelsListRow[] }) {
               <TableCell className="text-right text-xs tabular-nums">{m.costCredits}</TableCell>
               <TableCell className="text-xs">
                 <Badge variant={m.isActive ? "qazBlue" : "outline"}>
-                  {m.isActive ? "Active" : "Inactive"}
+                  {m.isActive ? "Активна" : "Неактивна"}
                 </Badge>
               </TableCell>
               <TableCell className="text-xs">
                 <Badge variant={m.isActive && m.isPublic ? "qazGold" : "outline"}>
-                  {m.isActive && m.isPublic ? "Public" : "Hidden"}
+                  {m.isActive && m.isPublic ? "Публичная" : "Скрыта"}
                 </Badge>
               </TableCell>
               <TableCell>
