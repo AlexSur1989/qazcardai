@@ -1,29 +1,27 @@
-import type { LucideIcon } from "lucide-react";
-import {
-  History,
-  LayoutDashboard,
-  Package,
-  Settings,
-  Sparkles,
-  Wallet,
-} from "lucide-react";
-
 import type { UserRole } from "@/generated/prisma/enums";
 import { isAdminRole } from "@/lib/permissions";
+
+export type DashboardNavIconKey =
+  | "package"
+  | "layout-dashboard"
+  | "sparkles"
+  | "history"
+  | "wallet"
+  | "settings";
 
 export type DashboardNavItem = {
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: DashboardNavIconKey;
 };
 
 const ALL_ITEMS: DashboardNavItem[] = [
-  { href: "/dashboard/create/product-card", label: "Создать карточку товара", icon: Package },
-  { href: "/dashboard", label: "Обзор", icon: LayoutDashboard },
-  { href: "/dashboard/models", label: "AI модели", icon: Sparkles },
-  { href: "/dashboard/history", label: "История", icon: History },
-  { href: "/dashboard/billing", label: "Биллинг", icon: Wallet },
-  { href: "/dashboard/settings", label: "Настройки", icon: Settings },
+  { href: "/dashboard/create/product-card", label: "Создать карточку товара", icon: "package" },
+  { href: "/dashboard", label: "Обзор", icon: "layout-dashboard" },
+  { href: "/dashboard/models", label: "AI модели", icon: "sparkles" },
+  { href: "/dashboard/history", label: "История", icon: "history" },
+  { href: "/dashboard/billing", label: "Биллинг", icon: "wallet" },
+  { href: "/dashboard/settings", label: "Настройки", icon: "settings" },
 ];
 
 /** @deprecated используйте getDashboardNavItemsForRole */
