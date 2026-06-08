@@ -99,9 +99,9 @@ export function ModelTestPanel({
   const [dynSettings, setDynSettings] = useState<Record<string, unknown>>(() =>
     defaultsFromSchema(model.settingsSchema),
   );
-  const [loading, setLoading] = useState<"preview" | "mock" | "real" | null>(
-    null,
-  );
+  const [loading, setLoading] = useState<
+    "preview" | "mock" | "real" | "dryRun" | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<{
     model: { id: string; name: string; apiModelId: string; endpoint: string | null };
@@ -123,6 +123,12 @@ export function ModelTestPanel({
     message: string;
   } | null>(null);
   const [realConfirmOpen, setRealConfirmOpen] = useState(false);
+  const [dryRunData, setDryRunData] = useState<{
+    ok: boolean;
+    payload: unknown;
+    warnings: string[];
+    costCredits?: number;
+  } | null>(null);
   const [realData, setRealData] = useState<{
     ok?: boolean;
     providerTaskId?: string | null;
@@ -149,6 +155,49 @@ export function ModelTestPanel({
     }),
     [prompt, dynSettings],
   );
+
+  const runDryRun = async () => {
+    setError(null);
+    setLoading("dryRun");
+    setDryRunData(null);
+    try {
+      const res = await fetch(
+        `/api/admin/models/${model.id}/test/payload-dry-run`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            prompt.trim()
+              ? bodyPayload
+              : { settings: dynSettings },
+          ),
+        },
+      );
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        payload?: unknown;
+        warnings?: string[];
+        costCredits?: number;
+      };
+      if (!res.ok || !data.ok) {
+        setError(
+          typeof data.error === "string" ? data.error : `HTTP ${res.status}`,
+        );
+        return;
+      }
+      setDryRunData({
+        ok: true,
+        payload: data.payload,
+        warnings: data.warnings ?? [],
+        costCredits: data.costCredits,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка запроса");
+    } finally {
+      setLoading(null);
+    }
+  };
 
   const runPreview = async () => {
     setError(null);
@@ -305,7 +354,15 @@ export function ModelTestPanel({
       </div>
 
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold">Форма / Test form</h3>
+        <h3 className="text-sm font-semibold">Проверка модели</h3>
+        {!model.isActive ? (
+          <Alert>
+            <AlertTitle>Модель выключена</AlertTitle>
+            <AlertDescription>
+              Модель выключена для пользователей, но тест можно выполнить вручную.
+            </AlertDescription>
+          </Alert>
+        ) : null}
         <div className="space-y-2">
           <Label htmlFor="admin-model-test-prompt">Prompt</Label>
           <Textarea
@@ -332,6 +389,14 @@ export function ModelTestPanel({
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={!!loading}
+          onClick={() => void runDryRun()}
+        >
+          {loading === "dryRun" ? "…" : "Проверить payload без запуска"}
+        </Button>
         <Button
           type="button"
           variant="secondary"
@@ -372,7 +437,7 @@ export function ModelTestPanel({
         description={
           mockKieEnabled
             ? "MOCK_KIE=true: запрос к Kie не уйдёт, тест будет эмулирован. Токены приложения не списываются."
-            : "Тестовая генерация может списать средства у Kie.ai. Продолжить? Токены пользователей приложения не списываются."
+            : "Тестовая генерация отправит запрос в Kie.ai и может списать средства на стороне провайдера. Продолжить?"
         }
         confirmLabel="Продолжить"
         variant="destructive"
@@ -420,6 +485,25 @@ export function ModelTestPanel({
             {error}
           </AlertDescription>
         </Alert>
+      )}
+
+      {dryRunData && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">Payload dry-run (без Kie.ai)</h3>
+          {dryRunData.warnings.length > 0 ? (
+            <ul className="list-inside list-disc text-xs text-amber-700">
+              {dryRunData.warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          ) : null}
+          {typeof dryRunData.costCredits === "number" ? (
+            <p className="text-sm">
+              costCredits: <strong>{dryRunData.costCredits}</strong>
+            </p>
+          ) : null}
+          <JsonBlock title="Итоговый Kie payload" value={dryRunData.payload} />
+        </div>
       )}
 
       {previewData && (

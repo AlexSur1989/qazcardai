@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isRecord } from "@/lib/model-pricing-shared";
 import { labelProductCardModelType } from "@/lib/product-card-model-type-labels";
 import {
   defaultSlugForProductCardType,
@@ -14,6 +15,12 @@ export type ProductCardModelSlotStatus =
   | "inactive"
   | "wrong_scope";
 
+export type ProductCardReadinessStatus =
+  | "Ready"
+  | "Missing"
+  | "Inactive"
+  | "Misconfigured";
+
 export type ProductCardModelSlotDiagnostics = {
   productCardModelType: ProductCardModelType;
   scenarioKey: ProductCardScenarioKey | null;
@@ -21,14 +28,31 @@ export type ProductCardModelSlotDiagnostics = {
   appSettingKey: string;
   assignedSlug: string;
   status: ProductCardModelSlotStatus;
+  readinessStatus: ProductCardReadinessStatus;
+  readinessIssues: string[];
   modelId: string | null;
   modelName: string | null;
   modelSlug: string | null;
   adminHint: string;
-  /** Можно запускать AI-генерацию для сценария */
   generationReady: boolean;
-  /** Автоклассификация доступна (только classifier) */
   autoClassifyReady: boolean;
+};
+
+type ModelRow = {
+  id: string;
+  slug: string;
+  name: string;
+  isActive: boolean;
+  scope: string;
+  productCardModelType: string | null;
+  type: string;
+  apiModelId: string;
+  endpoint: string | null;
+  supportsImageInput: boolean;
+  costCredits: number;
+  payloadMapping: unknown;
+  pricingSchema: unknown;
+  settingsSchema: unknown;
 };
 
 const SLOT_DEFS: Array<{
@@ -62,17 +86,95 @@ function expectedType(t: ProductCardModelType): "IMAGE" | "VIDEO" {
   return t === "PRODUCT_VIDEO" ? "VIDEO" : "IMAGE";
 }
 
+function isPlaceholderApiModelId(apiModelId: string): boolean {
+  const t = apiModelId.trim().toUpperCase();
+  return t === "PLACEHOLDER" || t === "CHANGE_ME" || t.startsWith("PASTE_");
+}
+
+function computeReadinessIssues(
+  model: ModelRow | null,
+  assignedSlug: string,
+  productCardModelType: ProductCardModelType,
+): string[] {
+  const issues: string[] = [];
+  if (!assignedSlug.trim()) {
+    issues.push("assigned slug missing");
+    return issues;
+  }
+  if (!model) {
+    issues.push("AppSetting slug points to missing model");
+    return issues;
+  }
+  if (model.scope !== "PRODUCT_CARD") {
+    issues.push("wrong scope");
+  }
+  if (model.productCardModelType !== productCardModelType) {
+    issues.push("wrong productCardModelType");
+  }
+  if (model.type !== expectedType(productCardModelType)) {
+    issues.push(`type must be ${expectedType(productCardModelType)}`);
+  }
+  if (!model.isActive) {
+    issues.push("model is inactive");
+  }
+  if (!model.apiModelId?.trim()) {
+    issues.push("missing apiModelId");
+  } else if (isPlaceholderApiModelId(model.apiModelId)) {
+    issues.push("apiModelId is PLACEHOLDER");
+  }
+  if (!model.endpoint?.trim()) {
+    issues.push("endpoint missing");
+  }
+  if (!isRecord(model.payloadMapping) || Object.keys(model.payloadMapping).length === 0) {
+    issues.push("payloadMapping missing");
+  }
+  if (!isRecord(model.pricingSchema) || Object.keys(model.pricingSchema).length === 0) {
+    issues.push("pricingSchema missing");
+  }
+  if (model.costCredits <= 0) {
+    issues.push("costCredits must be greater than 0");
+  }
+  if (
+    productCardModelType === "PRODUCT_MARKETPLACE_CARD" &&
+    !model.supportsImageInput
+  ) {
+    issues.push("supportsImageInput=false");
+  }
+  return issues;
+}
+
+function resolveReadinessStatus(
+  slotStatus: ProductCardModelSlotStatus,
+  issues: string[],
+): ProductCardReadinessStatus {
+  if (slotStatus === "missing_assignment" || slotStatus === "missing_model") {
+    return "Missing";
+  }
+  if (slotStatus === "inactive") {
+    return "Inactive";
+  }
+  if (slotStatus === "wrong_scope" || issues.length > 0) {
+    return "Misconfigured";
+  }
+  return "Ready";
+}
+
 function buildAdminHint(args: {
   status: ProductCardModelSlotStatus;
+  readinessStatus: ProductCardReadinessStatus;
+  readinessIssues: string[];
   productCardModelType: ProductCardModelType;
   appSettingKey: string;
   assignedSlug: string;
   modelSlug: string | null;
 }): string {
+  if (args.readinessIssues.length > 0) {
+    return args.readinessIssues.join("; ");
+  }
   const typeLabel = labelProductCardModelType(args.productCardModelType);
   switch (args.status) {
     case "ready":
-      return `Модель «${args.modelSlug}» активна и назначена.`;
+      return `Модель «${args.modelSlug}» активна и назначена (${args.readinessStatus}).`;
     case "missing_assignment":
       return `AppSetting ${args.appSettingKey} пуст — назначьте slug активной модели (${typeLabel}) в /admin/product-card.`;
     case "missing_model":
@@ -108,11 +210,18 @@ export async function getProductCardModelSetupOverview(): Promise<{
             scope: true,
             productCardModelType: true,
             type: true,
+            apiModelId: true,
+            endpoint: true,
+            supportsImageInput: true,
+            costCredits: true,
+            payloadMapping: true,
+            pricingSchema: true,
+            settingsSchema: true,
           },
         })
       : [];
 
-  const bySlug = new Map(models.map((m) => [m.slug, m]));
+  const bySlug = new Map(models.map((m) => [m.slug, m as ModelRow]));
 
   const slots: ProductCardModelSlotDiagnostics[] = SLOT_DEFS.map((def) => {
     const assignedSlug = defaultSlugForProductCardType(
@@ -124,41 +233,39 @@ export async function getProductCardModelSetupOverview(): Promise<{
     let modelId: string | null = null;
     let modelName: string | null = null;
     let modelSlug: string | null = null;
+    let modelRow: ModelRow | null = null;
 
     if (assignedSlug) {
       const row = bySlug.get(assignedSlug);
       if (!row) {
         status = "missing_model";
         modelSlug = assignedSlug;
-      } else if (row.scope !== "PRODUCT_CARD") {
-        status = "wrong_scope";
-        modelId = row.id;
-        modelName = row.name;
-        modelSlug = row.slug;
-      } else if (row.productCardModelType !== def.productCardModelType) {
-        status = "wrong_scope";
-        modelId = row.id;
-        modelName = row.name;
-        modelSlug = row.slug;
-      } else if (row.type !== expectedType(def.productCardModelType)) {
-        status = "wrong_scope";
-        modelId = row.id;
-        modelName = row.name;
-        modelSlug = row.slug;
-      } else if (!row.isActive) {
-        status = "inactive";
-        modelId = row.id;
-        modelName = row.name;
-        modelSlug = row.slug;
       } else {
-        status = "ready";
+        modelRow = row;
         modelId = row.id;
         modelName = row.name;
         modelSlug = row.slug;
+        if (row.scope !== "PRODUCT_CARD") {
+          status = "wrong_scope";
+        } else if (row.productCardModelType !== def.productCardModelType) {
+          status = "wrong_scope";
+        } else if (row.type !== expectedType(def.productCardModelType)) {
+          status = "wrong_scope";
+        } else if (!row.isActive) {
+          status = "inactive";
+        } else {
+          status = "ready";
+        }
       }
     }
 
-    const generationReady = status === "ready";
+    const readinessIssues = computeReadinessIssues(
+      modelRow,
+      assignedSlug,
+      def.productCardModelType,
+    );
+    const readinessStatus = resolveReadinessStatus(status, readinessIssues);
+    const generationReady = readinessStatus === "Ready";
     const autoClassifyReady =
       def.productCardModelType === "PRODUCT_CLASSIFIER" && generationReady;
 
@@ -169,11 +276,15 @@ export async function getProductCardModelSetupOverview(): Promise<{
       appSettingKey: def.appSettingKey,
       assignedSlug,
       status,
+      readinessStatus,
+      readinessIssues,
       modelId,
       modelName,
       modelSlug,
       adminHint: buildAdminHint({
         status,
+        readinessStatus,
+        readinessIssues,
         productCardModelType: def.productCardModelType,
         appSettingKey: def.appSettingKey,
         assignedSlug,

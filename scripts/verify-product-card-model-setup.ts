@@ -14,6 +14,10 @@ import {
   parseKiePayloadJson,
 } from "../src/lib/kie-import-wizard";
 import { getProductCardModelSetupOverview } from "../src/server/services/productCardModelSetup";
+import {
+  buildDryRunKiePayloadForModel,
+  collectModelDryRunWarnings,
+} from "../src/server/services/adminModelPayloadDryRun";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("В .env нужен DATABASE_URL");
@@ -101,13 +105,14 @@ async function main() {
         aspect_ratio: "1:1",
         resolution: "1K",
         image_urls: ["https://example.com/a.jpg"],
+        input_image: "https://example.com/b.jpg",
         callBackUrl: "https://example.com/cb",
       },
     }),
   );
   if (!parsed.ok) fail(`parseKiePayloadJson: ${parsed.error}`);
   const detected = detectFieldsFromKieInput(parsed.input);
-  for (const f of ["prompt", "aspect_ratio", "resolution", "image_urls", "callBackUrl"]) {
+  for (const f of ["prompt", "aspect_ratio", "resolution", "image_urls", "callBackUrl", "input_image"]) {
     if (!detected.detectedFields.includes(f)) fail(`detectFields missing ${f}`);
   }
   if (!detected.supportsImageInput) fail("supportsImageInput not inferred");
@@ -157,13 +162,48 @@ async function main() {
   }
   await prisma.aiModel.delete({ where: { id: wizard.id } });
 
+  const marketplaceStub = await prisma.aiModel.findUnique({
+    where: { slug: "product-marketplace-card-kie" },
+  });
+  if (!marketplaceStub) fail("product-marketplace-card-kie missing for dry-run");
+
+  const genBefore = await prisma.generation.count();
+  const txBefore = await prisma.creditTransaction.count();
+
+  const dryWarnings = collectModelDryRunWarnings(marketplaceStub);
+  if (!dryWarnings.some((w) => w.includes("PLACEHOLDER"))) {
+    fail("dry-run: expected PLACEHOLDER warning for marketplace stub");
+  }
+  if (!dryWarnings.some((w) => w.includes("inactive"))) {
+    fail("dry-run: expected inactive warning for marketplace stub");
+  }
+
+  const dryRun = await buildDryRunKiePayloadForModel(marketplaceStub);
+  if (dryRun.ok) {
+    if (!dryRun.payload || typeof dryRun.payload !== "object") {
+      fail("dry-run payload empty");
+    }
+  } else {
+    console.log(
+      `  dry-run build note (placeholder stub): ${dryRun.error}`,
+    );
+  }
+
+  const genAfter = await prisma.generation.count();
+  const txAfter = await prisma.creditTransaction.count();
+  if (genAfter !== genBefore) fail("dry-run must not create Generation");
+  if (txAfter !== txBefore) fail("dry-run must not create CreditTransaction");
+
   const overview = await getProductCardModelSetupOverview();
   if (overview.slots.length !== 4) fail(`setup slots=${overview.slots.length}`);
 
   console.log("[verify:product-card-model-setup] OK");
   for (const s of overview.slots) {
-    console.log(`  ${s.label}: ${s.status} slug=${s.assignedSlug || "—"}`);
+    console.log(
+      `  ${s.label}: ${s.readinessStatus} (${s.status}) slug=${s.assignedSlug || "—"}`,
+    );
   }
+  console.log(`  dry-run marketplace warnings: ${dryWarnings.join(", ")}`);
 }
 
 main()

@@ -10,6 +10,8 @@ import {
 } from "@/server/actions/kie-import-model";
 import {
   detectFieldsFromKieInput,
+  getImportDetectWarnings,
+  MARKETPLACE_CARD_IMPORT_HINT,
   parseKiePayloadJson,
 } from "@/lib/kie-import-wizard";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -66,6 +68,34 @@ export function KieImportWizard() {
     if (!parsedPayload?.ok) return null;
     return detectFieldsFromKieInput(parsedPayload.input);
   }, [parsedPayload]);
+
+  const importWarnings = useMemo(() => {
+    if (!parsedPayload?.ok || !detected) return [];
+    return getImportDetectWarnings(
+      parsedPayload.input,
+      detected,
+      basics.productCardModelType as
+        | "PRODUCT_CLASSIFIER"
+        | "PRODUCT_CONCEPT_IMAGE"
+        | "PRODUCT_MARKETPLACE_CARD"
+        | "PRODUCT_VIDEO"
+        | null,
+    );
+  }, [parsedPayload, detected, basics.productCardModelType]);
+
+  const isMarketplacePreset =
+    basics.scope === "PRODUCT_CARD" &&
+    basics.productCardModelType === "PRODUCT_MARKETPLACE_CARD";
+
+  function applyProductCardRole(value: string) {
+    setBasics((b) => {
+      const next = { ...b, productCardModelType: value };
+      if (b.scope === "PRODUCT_CARD" && value === "PRODUCT_MARKETPLACE_CARD") {
+        next.type = "IMAGE";
+      }
+      return next;
+    });
+  }
 
   function validateStep(current: number): boolean {
     if (current === 0) {
@@ -130,6 +160,18 @@ export function KieImportWizard() {
 
       {step === 0 && (
         <section className="space-y-4">
+          {isMarketplacePreset ? (
+            <Alert>
+              <AlertTitle>Product Card: карточка товара</AlertTitle>
+              <AlertDescription className="space-y-1">
+                <p>
+                  Preset: type=IMAGE, supportsImageInput=true, isActive=false, isPublic=false,
+                  fixed pricing.
+                </p>
+                <p className="text-amber-800 text-xs">{MARKETPLACE_CARD_IMPORT_HINT}</p>
+              </AlertDescription>
+            </Alert>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="wiz-name">Название *</Label>
@@ -183,7 +225,7 @@ export function KieImportWizard() {
                 className="border-border bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
                 value={basics.productCardModelType}
                 onChange={(e) =>
-                  setBasics((b) => ({ ...b, productCardModelType: e.target.value }))
+                  applyProductCardRole(e.target.value)
                 }
               >
                 <option value="PRODUCT_CLASSIFIER">PRODUCT_CLASSIFIER</option>
@@ -249,6 +291,12 @@ export function KieImportWizard() {
 
       {step === 2 && detected && (
         <section className="space-y-3">
+          {importWarnings.map((w) => (
+            <Alert key={w} variant="destructive">
+              <AlertTitle>Предупреждение</AlertTitle>
+              <AlertDescription>{w}</AlertDescription>
+            </Alert>
+          ))}
           <p className="text-muted-foreground text-sm">
             Обнаружено полей в input: {detected.detectedFields.join(", ") || "—"}
           </p>

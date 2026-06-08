@@ -2,25 +2,34 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { ProductCardModelSlotDiagnostics } from "@/server/services/productCardModelSetup";
+import type {
+  ProductCardModelSlotDiagnostics,
+  ProductCardReadinessStatus,
+} from "@/server/services/productCardModelSetup";
 
 const STATUS_LABEL: Record<ProductCardModelSlotDiagnostics["status"], string> = {
-  ready: "Настроено",
+  ready: "Назначено",
   missing_assignment: "Не назначено",
   missing_model: "Slug не найден",
   inactive: "Неактивна",
   wrong_scope: "Неверная конфигурация",
 };
 
-const STATUS_VARIANT: Record<
-  ProductCardModelSlotDiagnostics["status"],
+const READINESS_LABEL: Record<ProductCardReadinessStatus, string> = {
+  Ready: "Ready",
+  Missing: "Missing",
+  Inactive: "Inactive",
+  Misconfigured: "Misconfigured",
+};
+
+const READINESS_VARIANT: Record<
+  ProductCardReadinessStatus,
   "qazBlue" | "outline" | "destructive"
 > = {
-  ready: "qazBlue",
-  missing_assignment: "outline",
-  missing_model: "destructive",
-  inactive: "outline",
-  wrong_scope: "destructive",
+  Ready: "qazBlue",
+  Missing: "outline",
+  Inactive: "outline",
+  Misconfigured: "destructive",
 };
 
 type Props = {
@@ -35,16 +44,16 @@ export function ProductCardAiStatusPanel({ slots }: Props) {
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-muted-foreground text-xs">
-          Диагностика назначенных моделей для сценариев карточки товара. Генерация работает
-          только при статусе «Настроено».
+          Readiness для сценариев карточки товара. Генерация доступна пользователям только при
+          статусе Ready.
         </p>
         <div className="divide-border/80 divide-y rounded-lg border border-border/80">
           {slots.map((slot) => (
             <div
               key={slot.productCardModelType}
-              className="flex flex-col gap-1.5 px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
+              className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
             >
-              <div className="min-w-0 space-y-0.5">
+              <div className="min-w-0 space-y-1">
                 <p className="text-sm font-medium">{slot.label}</p>
                 <p className="text-muted-foreground font-mono text-[10px]">
                   {slot.appSettingKey}
@@ -61,18 +70,26 @@ export function ProductCardAiStatusPanel({ slots }: Props) {
                     {slot.modelSlug ? (
                       <>
                         {" "}
-                        (
-                        <span className="font-mono">{slot.modelSlug}</span>)
+                        (<span className="font-mono">{slot.modelSlug}</span>)
                       </>
                     ) : null}
                   </p>
                 ) : null}
-                <p className="text-muted-foreground text-xs">{slot.adminHint}</p>
+                {slot.readinessIssues.length > 0 ? (
+                  <ul className="text-muted-foreground list-inside list-disc text-xs">
+                    {slot.readinessIssues.map((issue) => (
+                      <li key={issue}>{issue}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted-foreground text-xs">{slot.adminHint}</p>
+                )}
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <Badge variant={STATUS_VARIANT[slot.status]}>
-                  {STATUS_LABEL[slot.status]}
+                <Badge variant={READINESS_VARIANT[slot.readinessStatus]}>
+                  {READINESS_LABEL[slot.readinessStatus]}
                 </Badge>
+                <Badge variant="outline">{STATUS_LABEL[slot.status]}</Badge>
                 {slot.modelId ? (
                   <Link
                     href={`/admin/models/${slot.modelId}/edit`}

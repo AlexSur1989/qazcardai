@@ -9,7 +9,9 @@ import {
   buildFixedPricingSchema,
   buildImportMetadata,
   detectFieldsFromKieInput,
+  getImportDetectWarnings,
   parseKiePayloadJson,
+  resolveImportSupportsImageInput,
   type KieImportBasics,
 } from "@/lib/kie-import-wizard";
 import { prisma } from "@/lib/prisma";
@@ -101,11 +103,23 @@ export async function createKieImportModelAction(
   );
 
   const detected = detectFieldsFromKieInput(parsedPayload.input);
+  const importWarnings = getImportDetectWarnings(
+    parsedPayload.input,
+    detected,
+    basics.productCardModelType,
+  );
   const metadata = buildImportMetadata({
     rawPayloadExample: parsedPayload.parsed,
     detectedFields: detected.detectedFields,
     docsUrl: String(formData.get("docsUrl") ?? ""),
+    productCardModelType: basics.productCardModelType,
+    importWarnings: importWarnings.length > 0 ? importWarnings : undefined,
   });
+
+  const supportsImageInput = resolveImportSupportsImageInput(
+    detected,
+    basics.productCardModelType,
+  );
 
   try {
     const created = await prisma.aiModel.create({
@@ -122,7 +136,7 @@ export async function createKieImportModelAction(
         costCredits: fixedCredits,
         isActive: false,
         isPublic: false,
-        supportsImageInput: detected.supportsImageInput,
+        supportsImageInput,
         supportsVideoInput: detected.supportsVideoInput,
         supportsNegativePrompt: detected.supportsNegativePrompt,
         supportsSeed: detected.supportsSeed,
