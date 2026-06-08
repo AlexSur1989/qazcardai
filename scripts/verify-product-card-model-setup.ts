@@ -22,6 +22,8 @@ import {
   parseKiePayloadJson,
 } from "../src/lib/kie-import-wizard";
 import { getProductCardModelSetupOverview } from "../src/server/services/productCardModelSetup";
+import { runSafeProductClassifierFlow } from "../src/server/services/productClassifierFlow";
+import { PRODUCT_CLASSIFIER_SETUP_ERROR } from "../src/lib/product-classifier-result";
 import {
   buildDryRunKiePayloadForModel,
   collectGptImage2ResolutionWarnings,
@@ -485,6 +487,44 @@ async function main() {
   const videoSlot = overview.byType.PRODUCT_VIDEO;
   if (classifierSlot?.readinessStatus === "Ready") {
     console.log("  note: classifier unexpectedly Ready");
+  } else {
+    if (classifierSlot?.autoClassifyReady) {
+      fail("classifier autoClassifyReady must be false while Missing/Inactive");
+    }
+    const missingFlow = await runSafeProductClassifierFlow({});
+    if (missingFlow.ok) fail("classifier flow must not succeed when model Missing");
+    if (missingFlow.error !== PRODUCT_CLASSIFIER_SETUP_ERROR) {
+      fail(`classifier setup error mismatch: ${missingFlow.error}`);
+    }
+    console.log("  classifier Missing: setup error OK, no Kie path");
+  }
+
+  const classifierSetting = await prisma.appSetting.findUnique({
+    where: { key: "PRODUCT_CARD_DEFAULT_CLASSIFIER_MODEL_SLUG" },
+    select: { value: true },
+  });
+  const classifierSettingValue =
+    typeof classifierSetting?.value === "string" ? classifierSetting.value.trim() : "";
+  if (!classifierSettingValue) {
+    console.log("  note: PRODUCT_CARD_DEFAULT_CLASSIFIER_MODEL_SLUG uses registry default");
+  }
+
+  const genCountBeforeClassifier = await prisma.generation.count();
+  const txCountBeforeClassifier = await prisma.creditTransaction.count();
+  if (process.env.NODE_ENV === "development") {
+    const mockFlow = await runSafeProductClassifierFlow({ devMockCategory: "home_goods" });
+    if (!mockFlow.ok || mockFlow.result.category !== "home_goods") {
+      fail("dev classifier mock home_goods failed");
+    }
+    console.log("  dev mock home_goods: OK");
+  }
+  const genCountAfterClassifier = await prisma.generation.count();
+  const txCountAfterClassifier = await prisma.creditTransaction.count();
+  if (genCountAfterClassifier !== genCountBeforeClassifier) {
+    fail("classifier verify must not create Generation");
+  }
+  if (txCountAfterClassifier !== txCountBeforeClassifier) {
+    fail("classifier verify must not create CreditTransaction");
   }
   if (conceptSlot?.readinessStatus === "Ready") {
     console.log("  note: concept image unexpectedly Ready");

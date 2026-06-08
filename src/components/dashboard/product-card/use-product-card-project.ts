@@ -5,7 +5,10 @@ import { toast } from "sonner";
 
 import { getProductCategoryById, type ProductCategoryId } from "@/config/product-card-categories";
 import { readJsonSafe } from "@/lib/fetch-json-safe";
-import { formatProductCategoryClassifierReason } from "@/lib/product-card-classifier-ui";
+import {
+  benefitsToUserText,
+  type ProductClassifierResult,
+} from "@/lib/product-classifier-result";
 
 import type { SourceImageValue } from "./source-image-upload";
 import type {
@@ -132,7 +135,17 @@ function unwrapProject(
   return null;
 }
 
-export function useProductCardProject() {
+export type ClassifierPrefillPayload = {
+  productTitle: string;
+  benefitsText: string;
+};
+
+export type ClassifierPrefill = ClassifierPrefillPayload & {
+  appliedAt: number;
+} | null;
+
+export function useProductCardProject(options?: { classifierDevMock?: string | null }) {
+  const classifierDevMock = options?.classifierDevMock?.trim() || null;
   const [projectId, setProjectId] = useState<string | null>(null);
   const [source, setSourceState] = useState<SourceImageValue>(null);
   const [sourceImages, setSourceImagesState] = useState<SourceImagesValue>([]);
@@ -141,6 +154,12 @@ export function useProductCardProject() {
   const [classifyInfo, setClassifyInfo] = useState<ClassifyInfo>(null);
   const [classifyFlow, setClassifyFlow] = useState<ClassifyFlowState>("not_started");
   const [classifyError, setClassifyError] = useState<string | null>(null);
+  const [pendingClassifierResult, setPendingClassifierResult] =
+    useState<ProductClassifierResult | null>(null);
+  const [showClassifierResult, setShowClassifierResult] = useState(false);
+  const simpleCardPrefillHandlerRef = useRef<
+    ((payload: ClassifierPrefillPayload) => void) | null
+  >(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [initDone, setInitDone] = useState(false);
 
@@ -429,23 +448,17 @@ export function useProductCardProject() {
     }
     setClassifyFlow("loading");
     setClassifyError(null);
+    setShowClassifierResult(false);
     try {
-      const res = await fetch(`/api/product-card-projects/${projectId}/classify`, {
+      const query = classifierDevMock ? `?classifierMock=${encodeURIComponent(classifierDevMock)}` : "";
+      const res = await fetch(`/api/product-card-projects/${projectId}/classify${query}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify(classifierDevMock ? { classifierMock: classifierDevMock } : {}),
       });
       const parsed = await readJsonSafe<{
-        category?: string;
-        label?: string;
-        detectedCategory?: string;
-        selectedCategory?: string;
-        categorySource?: string;
-        confidence?: number;
-        reason?: string;
-        provider?: string;
-        model?: string;
-        classifierFailed?: boolean;
+        ok?: boolean;
+        result?: ProductClassifierResult;
         error?: string;
       }>(res);
       if (!parsed.ok) {
@@ -454,48 +467,80 @@ export function useProductCardProject() {
         toast.error(parsed.message);
         return;
       }
-      if (!res.ok) {
-        const msg = parsed.data.error ?? "Классификация не удалась";
+      const d = parsed.data;
+      if (!res.ok || d.ok === false) {
+        const msg = d.error ?? "Распознавание не удалось";
         setClassifyFlow("error");
         setClassifyError(msg);
         toast.error(msg);
         return;
       }
-      const d = parsed.data;
-      setSelectedCategory((prev) => {
-        if (d.selectedCategory != null && d.selectedCategory !== "") {
-          return d.selectedCategory as ProductCategoryId;
-        }
-        if (d.classifierFailed) {
-          return (prev ?? "other") as ProductCategoryId;
-        }
-        return (d.detectedCategory ?? d.category ?? "other") as ProductCategoryId;
-      });
-      setCategorySource(categorySourceToUi(d.categorySource));
-      if (d.confidence != null) {
-        setClassifyInfo({
-          confidence: d.confidence,
-          reason: typeof d.reason === "string" ? d.reason : "",
-          provider: d.provider ?? "unknown",
-          model: d.model,
-          label: d.label,
-          classifierFailed: d.classifierFailed === true,
-        });
+      if (!d.result) {
+        setClassifyFlow("error");
+        setClassifyError("Пустой ответ сервера");
+        return;
       }
+      setPendingClassifierResult(d.result);
+      setShowClassifierResult(true);
       setClassifyFlow("success");
-      if (d.classifierFailed) {
-        const detail = formatProductCategoryClassifierReason(d.reason, true);
-        setClassifyError(detail);
-        toast.error(detail);
-      } else {
-        setClassifyError(null);
-        toast.success("Категория обновлена");
-      }
+      setClassifyError(null);
     } catch {
       setClassifyFlow("error");
       setClassifyError("Сеть или сервер недоступен");
     }
-  }, [projectId]);
+  }, [classifierDevMock, projectId]);
+
+  const applyClassifierResult = useCallback(async () => {
+    if (!projectId || !pendingClassifierResult) return;
+    const result = pendingClassifierResult;
+    const benefitsText = benefitsToUserText(result.suggestedBenefits);
+    await patchProject({
+      title: result.productTitle.trim() || undefined,
+      selectedCategory: result.category,
+      categorySource: "ai",
+      metadata: {
+        classifierConfidence: result.confidence,
+        classifierAppliedAt: new Date().toISOString(),
+        classifierResult: result,
+        marketplaceCard: {
+          simpleCard: {
+            settings: {
+              productLabel: result.productTitle.trim(),
+              userText: benefitsText,
+            },
+          },
+        },
+      },
+    });
+    setSelectedCategory(result.category);
+    setCategorySource("ai");
+    setClassifyInfo({
+      confidence: result.confidence,
+      reason: result.visibleProduct,
+      provider: "ai",
+      label: result.categoryLabel,
+      classifierFailed: false,
+    });
+    simpleCardPrefillHandlerRef.current?.({
+      productTitle: result.productTitle.trim(),
+      benefitsText,
+    });
+    setShowClassifierResult(false);
+    setPendingClassifierResult(null);
+    toast.success("Данные применены");
+  }, [patchProject, pendingClassifierResult, projectId]);
+
+  const dismissClassifierResult = useCallback(() => {
+    setShowClassifierResult(false);
+    setPendingClassifierResult(null);
+  }, []);
+
+  const registerSimpleCardPrefillHandler = useCallback(
+    (handler: ((payload: ClassifierPrefillPayload) => void) | null) => {
+      simpleCardPrefillHandlerRef.current = handler;
+    },
+    [],
+  );
 
   const setManualCategory = useCallback(
     (id: ProductCategoryId) => {
@@ -534,6 +579,12 @@ export function useProductCardProject() {
     ensureProjectId,
     classifyLoading: classifyFlow === "loading",
     runClassify,
+    applyClassifierResult,
+    dismissClassifierResult,
+    pendingClassifierResult,
+    showClassifierResult,
+    registerSimpleCardPrefillHandler,
+    classifierDevMockActive: Boolean(classifierDevMock),
     setManualCategory,
     reloadProject,
   };

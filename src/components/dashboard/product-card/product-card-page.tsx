@@ -17,7 +17,7 @@ import type { ProductCardModelSlotDiagnostics } from "@/server/services/productC
 import { ScenarioSetupNotice } from "./scenario-setup-notice";
 
 import { SimpleProductCardTab } from "./simple-product-card-tab";
-import { CategorySelector } from "./category-selector";
+import { ProductClassifierPanel } from "./product-classifier-panel";
 import { ConceptPhotoTab } from "./concept-photo-tab";
 import { ProductVideoTab } from "./product-video-tab";
 import { SourceImagesUpload, type UploadFlowState } from "./source-images-upload";
@@ -78,6 +78,7 @@ type Props = {
   autoClassifyReady: boolean;
   classifierAdminHint: string;
   showAdminHints: boolean;
+  classifierDevMock?: string | null;
 };
 
 export function ProductCardPage({
@@ -93,6 +94,7 @@ export function ProductCardPage({
   autoClassifyReady,
   classifierAdminHint,
   showAdminHints,
+  classifierDevMock = null,
 }: Props) {
   const {
     initDone,
@@ -104,15 +106,21 @@ export function ProductCardPage({
     setLoadError,
     selectedCategory,
     categorySource,
-    classifyInfo,
-    classifyFlow,
     classifyError,
     canUseBackend,
     ensureProjectId,
     classifyLoading,
     runClassify,
+    applyClassifierResult,
+    dismissClassifierResult,
+    pendingClassifierResult,
+    showClassifierResult,
+    registerSimpleCardPrefillHandler,
+    classifierDevMockActive,
     setManualCategory,
-  } = useProductCardProject();
+  } = useProductCardProject({ classifierDevMock });
+
+  const classifierEnabled = autoClassifyReady || classifierDevMockActive;
 
   const visibleTabs = useMemo(
     () =>
@@ -209,20 +217,24 @@ export function ProductCardPage({
         />
       </div>
 
-      <CategorySelector
+      <ProductClassifierPanel
         hasImage={hasImage}
         canPersist={canUseBackend}
         categories={CATEGORIES}
         selectedCategory={selectedCategory}
         categorySource={categorySource}
+        classifierEnabled={classifierEnabled}
         classifyLoading={classifyLoading}
-        classifyFlow={classifyFlow}
         classifyError={classifyError}
-        classifyInfo={classifyInfo}
+        pendingResult={pendingClassifierResult}
+        showResult={showClassifierResult}
         onClassify={runClassify}
+        onApply={applyClassifierResult}
+        onEditManually={dismissClassifierResult}
+        onRetry={runClassify}
         onSelectCategory={setManualCategory}
-        autoClassifyReady={autoClassifyReady}
         classifierAdminHint={showAdminHints ? classifierAdminHint : null}
+        devMockActive={classifierDevMockActive}
       />
 
       <section className="space-y-3" aria-label="Сценарии">
@@ -308,6 +320,7 @@ export function ProductCardPage({
                     : null
                 }
                 showAdminHints={showAdminHints}
+                registerPrefillHandler={registerSimpleCardPrefillHandler}
               />
             )}
           </TabsContent>

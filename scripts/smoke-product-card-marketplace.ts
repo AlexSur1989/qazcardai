@@ -19,10 +19,13 @@ import {
   validateDryRunPayloadShape,
 } from "../src/server/services/adminModelPayloadDryRun";
 import { getProductCardSettings } from "../src/server/services/productCardSettings";
+import { getProductCardModelSetupOverview } from "../src/server/services/productCardModelSetup";
 import {
   serializeGenerationPollSnapshotForUser,
   serializeGenerationListItemForUser,
 } from "../src/lib/generation-display";
+import { PRODUCT_CLASSIFIER_SETUP_ERROR } from "../src/lib/product-classifier-result";
+import { runSafeProductClassifierFlow } from "../src/server/services/productClassifierFlow";
 import {
   creditTransactionUserTypeLabel,
   shouldShowCreditTransactionToUser,
@@ -144,6 +147,25 @@ async function main() {
     const txCountAfter = await prisma.creditTransaction.count();
     if (genCountAfter !== genCountBefore) fail("Generation count changed during smoke");
     if (txCountAfter !== txCountBefore) fail("CreditTransaction count changed during smoke");
+
+    const modelSetup = await getProductCardModelSetupOverview();
+    const classifierSlot = modelSetup.byType.PRODUCT_CLASSIFIER;
+    const marketplaceSlot = modelSetup.byType.PRODUCT_MARKETPLACE_CARD;
+    if (!classifierSlot) fail("classifier slot missing in model setup");
+    if (classifierSlot.autoClassifyReady && classifierSlot.readinessStatus !== "Ready") {
+      fail("classifier autoClassifyReady inconsistent with readiness");
+    }
+    const classifierFlow = await runSafeProductClassifierFlow({});
+    if (classifierFlow.ok) {
+      fail("classifier must not succeed in smoke without dev mock / real Kie flag");
+    }
+    if (classifierFlow.error !== PRODUCT_CLASSIFIER_SETUP_ERROR) {
+      fail(`classifier smoke setup error mismatch: ${classifierFlow.error}`);
+    }
+    if (!marketplaceSlot?.generationReady) {
+      fail("classifier Missing must not block marketplace Ready");
+    }
+    console.log("[smoke:product-card-marketplace] classifier Missing: manual fallback OK");
 
     console.log("[smoke:product-card-marketplace] OK — dry-run shape valid, no side effects");
   } finally {

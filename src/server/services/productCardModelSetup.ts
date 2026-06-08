@@ -167,9 +167,22 @@ function buildAdminHint(args: {
   appSettingKey: string;
   assignedSlug: string;
   modelSlug: string | null;
+  modelRow: ModelRow | null;
 }): string {
   if (args.readinessIssues.length > 0) {
     return args.readinessIssues.join("; ");
+  }
+  if (
+    args.productCardModelType === "PRODUCT_CLASSIFIER" &&
+    args.modelRow &&
+    args.status === "ready"
+  ) {
+    return [
+      `slug=${args.modelRow.slug}`,
+      `apiModelId=${args.modelRow.apiModelId}`,
+      `costCredits=${args.modelRow.costCredits}`,
+      `dry-run=/admin/models/${args.modelRow.id}/edit?tab=dry-run`,
+    ].join("; ");
   }
   const typeLabel = labelProductCardModelType(args.productCardModelType);
   switch (args.status) {
@@ -289,6 +302,7 @@ export async function getProductCardModelSetupOverview(): Promise<{
         appSettingKey: def.appSettingKey,
         assignedSlug,
         modelSlug,
+        modelRow,
       }),
       generationReady,
       autoClassifyReady,

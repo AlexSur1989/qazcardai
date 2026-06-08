@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
 
-import { getProductCategoryById } from "@/config/product-card-categories";
 import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
-import { classifyProductImage } from "@/server/services/productClassifier";
-import { persistProductCardClassification } from "@/server/services/productCardClassificationPersist";
 import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 import { normalizeProductSourceImages } from "@/server/services/productCardProjects";
 import { enforceProductClassifyRateLimit } from "@/server/services/rateLimitService";
-import type { ProductCategoryId } from "@/config/product-card-categories";
+import { runSafeProductClassifierFlow } from "@/server/services/productClassifierFlow";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -41,33 +38,37 @@ export async function POST(req: Request, ctx: Ctx) {
   const url = main?.url?.trim() ?? project.sourceImageUrl?.trim();
   if (!url) {
     return NextResponse.json(
-      { error: "Сначала загрузите фото товара", code: "NO_SOURCE" },
+      { ok: false, error: "Сначала загрузите фото товара" },
       { status: 400 },
     );
   }
 
-  const result = await classifyProductImage(url);
+  const urlObj = new URL(req.url);
+  const devMockFromQuery = urlObj.searchParams.get("classifierMock");
+  let devMockFromBody: string | null = null;
+  try {
+    const body = await req.clone().json();
+    if (body && typeof body === "object" && !Array.isArray(body)) {
+      const mock = (body as { classifierMock?: unknown }).classifierMock;
+      if (typeof mock === "string") devMockFromBody = mock;
+    }
+  } catch {
+    // empty body is OK
+  }
 
-  const updated = await persistProductCardClassification(
-    project,
-    result,
-    sourceImages,
-  );
+  const devMockKey = devMockFromQuery ?? devMockFromBody;
 
-  const label =
-    getProductCategoryById(result.category)?.label ??
-    getProductCategoryById("other")!.label;
+  const outcome = await runSafeProductClassifierFlow({
+    devMockCategory: devMockKey,
+  });
+
+  if (!outcome.ok) {
+    const status = outcome.code === "setup" ? 503 : 400;
+    return NextResponse.json({ ok: false, error: outcome.error }, { status });
+  }
 
   return NextResponse.json({
-    category: result.category,
-    label,
-    confidence: result.confidence,
-    reason: result.reason,
-    provider: result.provider,
-    model: result.model,
-    classifierFailed: result.classifierFailed === true,
-    detectedCategory: result.category,
-    selectedCategory: updated.selectedCategory as ProductCategoryId,
-    categorySource: updated.categorySource,
+    ok: true,
+    result: outcome.result,
   });
 }

@@ -81,6 +81,9 @@ type Props = {
   balanceCredits: number;
   selectedCategoryLabel?: string | null;
   showAdminHints?: boolean;
+  registerPrefillHandler?: (
+    handler: ((payload: { productTitle: string; benefitsText: string }) => void) | null,
+  ) => void;
 };
 
 type PlanPreviewResponse = {
@@ -151,6 +154,7 @@ export function SimpleProductCardTab({
   balanceCredits,
   selectedCategoryLabel = null,
   showAdminHints = false,
+  registerPrefillHandler,
 }: Props) {
   const refFieldId = useId();
   const photosWithId = useMemo(
@@ -230,6 +234,21 @@ export function SimpleProductCardTab({
   const productLabelTouchedRef = useRef(false);
   const visionRequestRef = useRef<string | null>(null);
   const autoVisionRanForPhotoRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!registerPrefillHandler) return;
+    registerPrefillHandler(({ productTitle, benefitsText }) => {
+      if (productTitle.trim()) {
+        setProductLabel(productTitle.trim());
+        productLabelTouchedRef.current = true;
+      }
+      if (benefitsText.trim()) {
+        setUserText(benefitsText.trim());
+        userTextTouchedRef.current = true;
+      }
+    });
+    return () => registerPrefillHandler(null);
+  }, [registerPrefillHandler]);
 
   const defaultProductPhotoId = useMemo(() => {
     const main = photosWithId.find((p) => p.role === "main") ?? photosWithId[0];

@@ -32,6 +32,14 @@ const READINESS_VARIANT: Record<
   Misconfigured: "destructive",
 };
 
+function classifierUserStatusLabel(
+  slot: ProductCardModelSlotDiagnostics,
+): string | null {
+  if (slot.productCardModelType !== "PRODUCT_CLASSIFIER") return null;
+  if (slot.readinessStatus === "Ready") return "Распознавание товара — готово";
+  return "Распознавание товара — не подключено";
+}
+
 type Props = {
   slots: ProductCardModelSlotDiagnostics[];
 };
@@ -55,6 +63,9 @@ export function ProductCardAiStatusPanel({ slots }: Props) {
             >
               <div className="min-w-0 space-y-1">
                 <p className="text-sm font-medium">{slot.label}</p>
+                {classifierUserStatusLabel(slot) ? (
+                  <p className="text-muted-foreground text-xs">{classifierUserStatusLabel(slot)}</p>
+                ) : null}
                 <p className="text-muted-foreground font-mono text-[10px]">
                   {slot.appSettingKey}
                 </p>

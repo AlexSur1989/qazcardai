@@ -28,7 +28,11 @@ export const metadata = {
 
 
 
-export default async function ProductCardCreatePage() {
+type Props = {
+  searchParams?: Promise<{ classifierMock?: string }>;
+};
+
+export default async function ProductCardCreatePage({ searchParams }: Props) {
 
   const current = await getFreshSessionUser();
 
@@ -49,6 +53,10 @@ export default async function ProductCardCreatePage() {
     ]);
 
   const showAdminHints = isAdminRole(current.user.role);
+
+  const params = await searchParams;
+  const classifierDevMock =
+    process.env.NODE_ENV === "development" ? params?.classifierMock?.trim() || null : null;
 
 
 
@@ -89,6 +97,7 @@ export default async function ProductCardCreatePage() {
           autoClassifyReady={modelSetup.byType.PRODUCT_CLASSIFIER.autoClassifyReady}
           classifierAdminHint={modelSetup.byType.PRODUCT_CLASSIFIER.adminHint}
           showAdminHints={showAdminHints}
+          classifierDevMock={classifierDevMock}
         />
 
       </Suspense>
