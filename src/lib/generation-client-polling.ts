@@ -6,6 +6,10 @@
 export const IMAGE_GENERATION_POLL_MAX_ITERATIONS = 260;
 export const IMAGE_GENERATION_POLL_INTERVAL_MS = 2000;
 
+/** Product Card marketplace card: реже, чем общий image poll (3–5 с). */
+export const PRODUCT_CARD_GENERATION_POLL_INTERVAL_MS = 4000;
+export const PRODUCT_CARD_GENERATION_POLL_MAX_ITERATIONS = 90;
+
 /** Видео у провайдера может занимать заметно дольше минуты-двух. */
 export const VIDEO_GENERATION_POLL_MAX_ITERATIONS = 150;
 export const VIDEO_GENERATION_POLL_INTERVAL_MS = 4000;

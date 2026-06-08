@@ -19,6 +19,15 @@ import {
   validateDryRunPayloadShape,
 } from "../src/server/services/adminModelPayloadDryRun";
 import { getProductCardSettings } from "../src/server/services/productCardSettings";
+import {
+  serializeGenerationPollSnapshotForUser,
+  serializeGenerationListItemForUser,
+} from "../src/lib/generation-display";
+import {
+  creditTransactionUserTypeLabel,
+  shouldShowCreditTransactionToUser,
+} from "../src/lib/credit-labels";
+import type { GenerationStatus, GenerationType } from "../src/generated/prisma/enums";
 
 const MARKETPLACE_MODEL_SLUG = "gpt-image-2-product-marketplace-card";
 
@@ -81,6 +90,54 @@ async function main() {
     const input = (dryRun.payload as { input?: Record<string, unknown> }).input;
     if (!Array.isArray(input?.input_urls)) {
       fail("dry-run payload: input.input_urls must be array");
+    }
+
+    const mockMeta = {
+      productCard: { tab: "marketplace_card", projectId: "smoke-project" },
+      flow: "product_card",
+    };
+    const pollSnapshot = serializeGenerationPollSnapshotForUser({
+      id: "smoke-gen-id",
+      type: "IMAGE" as GenerationType,
+      status: "COMPLETED" as GenerationStatus,
+      costCredits: pricing.finalCredits,
+      createdAt: new Date(),
+      completedAt: new Date(),
+      outputFiles: [{ url: "https://example.com/out.png", kind: "image" }],
+      metadata: mockMeta,
+      errorMessage: null,
+      model: { id: model.id },
+    });
+    const pollJson = JSON.stringify(pollSnapshot);
+    if (/providerTaskId|apiModelId|payloadMapping|endpoint|kie\.ai/i.test(pollJson)) {
+      fail("poll snapshot leaks technical fields for USER");
+    }
+    if (!pollSnapshot.downloadUrl?.includes("/api/generations/")) {
+      fail("poll snapshot missing safe downloadUrl");
+    }
+
+    const listItem = serializeGenerationListItemForUser({
+      id: "smoke-gen-id",
+      type: "IMAGE" as GenerationType,
+      status: "COMPLETED" as GenerationStatus,
+      costCredits: pricing.finalCredits,
+      createdAt: new Date(),
+      outputFiles: [{ url: "https://example.com/out.png", kind: "image" }],
+      metadata: mockMeta,
+      model: { id: model.id },
+    });
+    if (listItem.scenarioLabel !== "Карточка товара") {
+      fail(`history scenarioLabel=${listItem.scenarioLabel}`);
+    }
+    if (!listItem.downloadUrl?.startsWith("/api/generations/")) {
+      fail("history list missing safe downloadUrl");
+    }
+
+    if (creditTransactionUserTypeLabel("RESERVE", "Резерв: карточка товара (фото)") !== "Создание карточки товара") {
+      fail("billing RESERVE label unexpected");
+    }
+    if (shouldShowCreditTransactionToUser({ type: "CAPTURE", amount: 0 })) {
+      fail("CAPTURE 0 must be hidden from user billing");
     }
 
     const genCountAfter = await prisma.generation.count();

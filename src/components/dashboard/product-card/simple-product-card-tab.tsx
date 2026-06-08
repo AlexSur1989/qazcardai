@@ -25,15 +25,11 @@ import {
 } from "@/config/simple-product-card";
 import { SIMPLE_CARD_REFERENCE_UNSUPPORTED_MESSAGE } from "@/lib/simple-product-card-model";
 import {
-  IMAGE_GENERATION_POLL_INTERVAL_MS,
-  IMAGE_GENERATION_POLL_MAX_ITERATIONS,
+  PRODUCT_CARD_GENERATION_POLL_INTERVAL_MS,
+  PRODUCT_CARD_GENERATION_POLL_MAX_ITERATIONS,
 } from "@/lib/generation-client-polling";
 import { readJsonSafe } from "@/lib/fetch-json-safe";
-import { getFirstOutputUrlFromJson } from "@/lib/product-card-output";
-import {
-  getUserFacingGenerationStatusFromRaw,
-  mapGenerationErrorToUserMessage,
-} from "@/lib/generation-display";
+import type { UserFacingGenerationPollSnapshot } from "@/lib/generation-display";
 import { cn } from "@/lib/utils";
 import { mergeSimpleCardProductLabelIntoUserText } from "@/lib/simple-product-card-vision-text";
 import {
@@ -44,6 +40,10 @@ import { mapProductCardModelErrorForUser } from "@/lib/product-card-scenario-set
 import type { SimpleProductCardRequest } from "@/lib/validations/simple-product-card";
 
 import type { ProductSourceImageValue, SourceImagesValue } from "./source-images-upload";
+import {
+  buildProductCardGenerationMock,
+  ProductCardGenerationStatusPanel,
+} from "./product-card-generation-status";
 
 const REF_MAX_MB = 10;
 const REF_MAX_BYTES = REF_MAX_MB * 1024 * 1024;
@@ -180,14 +180,51 @@ export function SimpleProductCardTab({
   const [planPreview, setPlanPreview] = useState<PlanPreviewResponse | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
-  const [result, setResult] = useState<{
-    generationId: string;
-    status: string;
-    costCredits: number;
-    outputUrl: string | null;
-    errorMessage?: string | null;
-  } | null>(null);
+  const [generationSnapshot, setGenerationSnapshot] = useState<UserFacingGenerationPollSnapshot | null>(
+    null,
+  );
+  const [pollStale, setPollStale] = useState(false);
+  const [adminPollDebug, setAdminPollDebug] = useState<Record<string, string | null | undefined> | null>(
+    null,
+  );
 
+  const devMockPhase = useMemo(() => {
+    if (process.env.NODE_ENV === "production") return null;
+    if (typeof window === "undefined") return null;
+    const raw = new URLSearchParams(window.location.search).get("pcGenMock")?.trim().toLowerCase();
+    if (raw === "queued" || raw === "processing" || raw === "completed" || raw === "failed") {
+      return raw;
+    }
+    return null;
+  }, []);
+  const devMockSnapshot = useMemo(
+    () => (devMockPhase ? buildProductCardGenerationMock(devMockPhase) : null),
+    [devMockPhase],
+  );
+
+  const pollTimerRef = useRef<number | null>(null);
+  const pollFailuresRef = useRef(0);
+
+  const clearGenerationPoll = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    pollFailuresRef.current = 0;
+  }, []);
+
+  useEffect(() => () => clearGenerationPoll(), [clearGenerationPoll]);
+
+  const resetGenerationUi = useCallback(() => {
+    clearGenerationPoll();
+    setGenerationSnapshot(null);
+    setPollStale(false);
+    setAdminPollDebug(null);
+    setGenError(null);
+    setGenerating(false);
+  }, [clearGenerationPoll]);
+
+  const activeSnapshot = devMockSnapshot ?? generationSnapshot;
   const refInputRef = useRef<HTMLInputElement>(null);
   const userTextTouchedRef = useRef(false);
   const productLabelTouchedRef = useRef(false);
@@ -509,8 +546,9 @@ export function SimpleProductCardTab({
       return;
     }
 
+    resetGenerationUi();
     setGenerating(true);
-    setGenError(null);
+
     const res = await fetch(`/api/product-card-projects/${pid}/generate/simple-card`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -537,48 +575,91 @@ export function SimpleProductCardTab({
       setGenError("Нет ID генерации");
       return;
     }
-    setResult({
-      generationId: genId,
-      status: parsed.data.status ?? "queued",
+
+    const initialStatus = (parsed.data.status ?? "QUEUED").toUpperCase();
+    setGenerationSnapshot({
+      id: genId,
+      type: "IMAGE",
+      status: initialStatus as UserFacingGenerationPollSnapshot["status"],
+      statusLabel: initialStatus === "PROCESSING" ? "Генерируется" : "Ожидает",
+      statusHint: null,
+      scenarioLabel: "Карточка товара",
+      kindLabel: "Генерация карточки",
       costCredits: parsed.data.costCredits ?? estimateCredits,
-      outputUrl: null,
+      previewUrl: null,
+      downloadUrl: null,
+      canDownload: false,
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+      errorMessage: null,
     });
 
     let iter = 0;
     const poll = async () => {
       iter += 1;
       const gRes = await fetch(`/api/generations/${genId}`);
-      const gParsed = await readJsonSafe<{ status?: string; outputFiles?: unknown; errorMessage?: string | null }>(gRes);
+      const gParsed = await readJsonSafe<
+        UserFacingGenerationPollSnapshot & {
+          admin?: { providerTaskId?: string; modelSlug?: string; apiModelId?: string };
+        }
+      >(gRes);
       if (!gParsed.ok || !gRes.ok) {
-        if (iter < IMAGE_GENERATION_POLL_MAX_ITERATIONS) {
-          window.setTimeout(poll, IMAGE_GENERATION_POLL_INTERVAL_MS);
+        pollFailuresRef.current += 1;
+        if (pollFailuresRef.current >= 3) {
+          setPollStale(true);
+        }
+        if (iter < PRODUCT_CARD_GENERATION_POLL_MAX_ITERATIONS) {
+          pollTimerRef.current = window.setTimeout(poll, PRODUCT_CARD_GENERATION_POLL_INTERVAL_MS);
         } else {
           setGenerating(false);
+          setPollStale(true);
         }
         return;
       }
-      const status = gParsed.data.status ?? "queued";
-      const outputUrl = getFirstOutputUrlFromJson(gParsed.data.outputFiles);
-      setResult((prev) =>
-        prev
-          ? { ...prev, status, outputUrl, errorMessage: gParsed.data.errorMessage ?? null }
-          : prev,
-      );
-      const done = ["COMPLETED", "FAILED", "REFUNDED", "CANCELLED", "BLOCKED"].includes(status);
+
+      pollFailuresRef.current = 0;
+      setPollStale(false);
+      const snap = gParsed.data;
+      setGenerationSnapshot({
+        id: snap.id,
+        type: snap.type,
+        status: snap.status,
+        statusLabel: snap.statusLabel,
+        statusHint: snap.statusHint ?? null,
+        scenarioLabel: snap.scenarioLabel,
+        kindLabel: snap.kindLabel,
+        costCredits: snap.costCredits,
+        previewUrl: snap.previewUrl,
+        downloadUrl: snap.downloadUrl,
+        canDownload: snap.canDownload,
+        createdAt: snap.createdAt,
+        completedAt: snap.completedAt,
+        errorMessage: snap.errorMessage,
+      });
+      if (showAdminHints && gParsed.data.admin) {
+        setAdminPollDebug({
+          providerTaskId: gParsed.data.admin.providerTaskId ?? null,
+          modelSlug: gParsed.data.admin.modelSlug ?? null,
+          apiModelId: gParsed.data.admin.apiModelId ?? null,
+        });
+      }
+
+      const done = ["COMPLETED", "FAILED", "REFUNDED", "CANCELLED", "BLOCKED"].includes(snap.status);
       if (done) {
         setGenerating(false);
-        if (status === "FAILED" && gParsed.data.errorMessage) {
-          setGenError(mapGenerationErrorToUserMessage(gParsed.data.errorMessage));
+        if (snap.status === "FAILED" && snap.errorMessage) {
+          setGenError(snap.errorMessage);
         }
         return;
       }
-      if (iter < IMAGE_GENERATION_POLL_MAX_ITERATIONS) {
-        window.setTimeout(poll, IMAGE_GENERATION_POLL_INTERVAL_MS);
+      if (iter < PRODUCT_CARD_GENERATION_POLL_MAX_ITERATIONS) {
+        pollTimerRef.current = window.setTimeout(poll, PRODUCT_CARD_GENERATION_POLL_INTERVAL_MS);
       } else {
         setGenerating(false);
+        setPollStale(true);
       }
     };
-    window.setTimeout(poll, IMAGE_GENERATION_POLL_INTERVAL_MS);
+    pollTimerRef.current = window.setTimeout(poll, PRODUCT_CARD_GENERATION_POLL_INTERVAL_MS);
   };
 
   const textLen = graphemeLen(userText);
@@ -595,7 +676,8 @@ export function SimpleProductCardTab({
     !insufficientBalance;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+    <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
       <div className="space-y-4">
         <Card className="rounded-2xl border-border">
           <CardHeader>
@@ -744,6 +826,10 @@ export function SimpleProductCardTab({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
+            <p className="text-muted-foreground text-xs">
+              Для лучшего результата используйте описание, которое относится к загруженному фото. Генерация
+              доступна и при несовпадении — вы сами отвечаете за введённый текст.
+            </p>
             {visionLoading && !userText.trim() ? (
               <div className="text-muted-foreground flex items-center gap-2 text-sm">
                 <Loader2 className="size-4 animate-spin" />
@@ -1060,40 +1146,27 @@ export function SimpleProductCardTab({
               )}
             </Button>
             {genError ? <p className="text-destructive text-sm">{genError}</p> : null}
-            {result ? (
-              <div className="space-y-2 border-t pt-3">
-                <div className="text-muted-foreground text-xs">
-                  {getUserFacingGenerationStatusFromRaw(result.status)}
-                </div>
-                {result.outputUrl ? (
-                  <div className="bg-muted overflow-hidden rounded-lg border">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={result.outputUrl} alt="Результат" className="w-full object-contain" />
-                  </div>
-                ) : null}
-                <div className="flex flex-wrap gap-2">
-                  {result.outputUrl && result.status === "COMPLETED" ? (
-                    <a
-                      href={`/api/generations/${result.generationId}/download`}
-                      className="text-primary text-xs font-medium underline"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Скачать
-                    </a>
-                  ) : null}
-                  <Link
-                    href={`/dashboard/history/${result.generationId}`}
-                    className="text-primary text-xs font-medium underline"
-                  >
-                    История
-                  </Link>
-                </div>
-              </div>
-            ) : null}
           </CardContent>
         </Card>
       </div>
+      </div>
+
+      {activeSnapshot ? (
+        <ProductCardGenerationStatusPanel
+          snapshot={activeSnapshot}
+          pollStale={pollStale}
+          showAdminHints={showAdminHints}
+          adminDebug={adminPollDebug ?? undefined}
+          onCreateAnother={devMockPhase ? undefined : resetGenerationUi}
+          onRetry={devMockPhase ? undefined : () => void handleGenerate()}
+        />
+      ) : null}
+
+      {devMockPhase ? (
+        <p className="text-muted-foreground text-center text-xs">
+          Dev mock: ?pcGenMock={devMockPhase} (только development, без Kie)
+        </p>
+      ) : null}
     </div>
   );
 }

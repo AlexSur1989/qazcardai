@@ -290,6 +290,7 @@ export type UserFacingHistoryListItem = {
   slideLabel: string | null;
   marketplaceLabel: string | null;
   statusLabel: string;
+  statusHint: string | null;
   kindLabel: string;
   costCredits: number;
   createdAt: Date;
@@ -302,6 +303,68 @@ export type UserFacingHistoryListItem = {
   /** Для повтора без промпта в URL */
   modelId: string;
 };
+
+/** Подсказка под статусом при ошибке / возврате токенов. */
+export function getUserFacingGenerationStatusHint(
+  status: GenerationStatus,
+  metadata: unknown,
+): string | null {
+  if (status === "REFUNDED") return "Токены возвращены на баланс";
+  if (status === "FAILED" || status === "BLOCKED" || status === "CANCELLED") {
+    if (getUserFacingScenarioLabel(metadata) === "Карточка товара") {
+      return "Токены будут возвращены на баланс";
+    }
+    return "Токены будут возвращены, если списание уже было";
+  }
+  return null;
+}
+
+export type UserFacingGenerationPollSnapshot = {
+  id: string;
+  type: GenerationType;
+  status: GenerationStatus;
+  statusLabel: string;
+  statusHint: string | null;
+  scenarioLabel: string | null;
+  kindLabel: string;
+  costCredits: number;
+  previewUrl: string | null;
+  downloadUrl: string | null;
+  canDownload: boolean;
+  createdAt: string;
+  completedAt: string | null;
+  errorMessage: string | null;
+};
+
+export function serializeGenerationPollSnapshotForUser(
+  row: DetailRowInput,
+): UserFacingGenerationPollSnapshot {
+  const files = parseOutputFilesList(row.outputFiles);
+  const canDownload =
+    row.status === "COMPLETED" &&
+    files.some((f) => Boolean(f.url?.trim() || f.storageKey));
+  const previewUrl = getFirstOutputPreviewUrl(row.outputFiles);
+  const downloadUrl = canDownload
+    ? `/api/generations/${row.id}/download?index=0`
+    : null;
+
+  return {
+    id: row.id,
+    type: row.type,
+    status: row.status,
+    statusLabel: getUserFacingGenerationStatus(row.status),
+    statusHint: getUserFacingGenerationStatusHint(row.status, row.metadata),
+    scenarioLabel: getUserFacingScenarioLabel(row.metadata),
+    kindLabel: getUserFacingGenerationKindLabel(row.type, row.metadata),
+    costCredits: row.costCredits,
+    previewUrl,
+    downloadUrl,
+    canDownload,
+    createdAt: row.createdAt.toISOString(),
+    completedAt: row.completedAt?.toISOString() ?? null,
+    errorMessage: mapGenerationErrorToUserMessage(row.errorMessage, row.metadata),
+  };
+}
 
 export type UserFacingGenerationDetail = {
   id: string;
@@ -373,6 +436,7 @@ export function serializeGenerationListItemForUser(
     slideLabel,
     marketplaceLabel,
     statusLabel: getUserFacingGenerationStatus(row.status),
+    statusHint: getUserFacingGenerationStatusHint(row.status, row.metadata),
     kindLabel: getUserFacingGenerationKindLabel(row.type, row.metadata),
     costCredits: row.costCredits,
     createdAt: row.createdAt,

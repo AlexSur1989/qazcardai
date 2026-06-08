@@ -20,7 +20,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { creditTypeLabel } from "@/lib/credit-labels";
+import {
+  creditTransactionUserComment,
+  creditTransactionUserTypeLabel,
+  shouldShowCreditTransactionToUser,
+} from "@/lib/credit-labels";
 import { formatAdminDateTime } from "@/lib/admin-format";
 import { formatKzt, formatRuDate } from "@/lib/format-kzt";
 import { userTokenPackageStatusLabel } from "@/lib/user-token-package-labels";
@@ -221,19 +225,19 @@ export default async function BillingPage({ searchParams }: PageProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {txs.map((t) => (
+                  {txs.filter(shouldShowCreditTransactionToUser).map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="whitespace-nowrap text-xs">
                         {formatAdminDateTime(t.createdAt)}
                       </TableCell>
                       <TableCell className="text-xs">
-                        {creditTypeLabel(t.type)}
+                        {creditTransactionUserTypeLabel(t.type, t.reason)}
                       </TableCell>
                       <TableCell className="text-right text-xs font-mono tabular-nums">
                         {t.amount > 0 ? `+${t.amount}` : t.amount}
                       </TableCell>
                       <TableCell className="text-muted-foreground max-w-md text-xs">
-                        {t.reason || "—"}
+                        {creditTransactionUserComment(t.type, t.reason) ?? "—"}
                       </TableCell>
                     </TableRow>
                   ))}

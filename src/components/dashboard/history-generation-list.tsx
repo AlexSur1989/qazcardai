@@ -103,6 +103,11 @@ export function HistoryGenerationList({ items }: Props) {
                 >
                   {g.statusLabel}
                 </Badge>
+                {g.statusHint ? (
+                  <Badge variant="outline" className="text-xs text-muted-foreground">
+                    {g.statusHint}
+                  </Badge>
+                ) : null}
               </div>
             </div>
           </div>

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { canAccessAdminPanel } from "@/lib/auth";
 import { fixUtf8MojibakeDisplay } from "@/lib/fix-utf8-mojibake-display";
-import { mapGenerationErrorToUserMessage } from "@/lib/generation-display";
+import { serializeGenerationPollSnapshotForUser } from "@/lib/generation-display";
 import { prisma } from "@/lib/prisma";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 
@@ -24,6 +24,20 @@ export async function GET(_req: Request, context: RouteContext) {
 
   const generation = await prisma.generation.findUnique({
     where: { id },
+    select: {
+      id: true,
+      userId: true,
+      type: true,
+      status: true,
+      outputFiles: true,
+      errorMessage: true,
+      metadata: true,
+      createdAt: true,
+      completedAt: true,
+      costCredits: true,
+      providerTaskId: true,
+      model: { select: { id: true, slug: true, apiModelId: true } },
+    },
   });
   if (!generation) {
     return NextResponse.json({ error: "Не найдено" }, { status: 404 });
@@ -39,16 +53,29 @@ export async function GET(_req: Request, context: RouteContext) {
   const isAdmin = canAccessAdminPanel(current.user.role);
   const errorRaw = fixUtf8MojibakeDisplay(generation.errorMessage);
 
-  return NextResponse.json({
+  const snapshot = serializeGenerationPollSnapshotForUser({
     id: generation.id,
     type: generation.type,
     status: generation.status,
+    costCredits: generation.costCredits,
+    createdAt: generation.createdAt,
+    completedAt: generation.completedAt,
     outputFiles: generation.outputFiles,
-    errorMessage: isAdmin
-      ? errorRaw
-      : mapGenerationErrorToUserMessage(errorRaw, generation.metadata),
-    ...(isAdmin ? { metadata: generation.metadata } : {}),
-    createdAt: generation.createdAt.toISOString(),
-    completedAt: generation.completedAt?.toISOString() ?? null,
+    metadata: generation.metadata,
+    errorMessage: errorRaw,
+    model: generation.model,
+  });
+
+  return NextResponse.json({
+    ...snapshot,
+    ...(isAdmin
+      ? {
+          admin: {
+            providerTaskId: generation.providerTaskId,
+            modelSlug: generation.model.slug,
+            apiModelId: generation.model.apiModelId,
+          },
+        }
+      : {}),
   });
 }
