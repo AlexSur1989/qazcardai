@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { buttonVariants } from "@/components/ui/button";
-import { DASHBOARD_NAV_ITEMS } from "@/lib/dashboard-nav";
+import type { DashboardNavItem } from "@/lib/dashboard-nav";
 import { cn } from "@/lib/utils";
 
 function navItemActive(pathname: string, itemHref: string): boolean {
@@ -12,7 +12,7 @@ function navItemActive(pathname: string, itemHref: string): boolean {
     pathname.startsWith("/dashboard/create/image") ||
     pathname.startsWith("/dashboard/create/video")
   ) {
-    return itemHref === "/dashboard/models";
+    return itemHref === "/dashboard/create/product-card";
   }
 
   if (itemHref === "/dashboard") {
@@ -22,7 +22,11 @@ function navItemActive(pathname: string, itemHref: string): boolean {
   return pathname === itemHref || pathname.startsWith(`${itemHref}/`);
 }
 
-export function DashboardSidebarNav() {
+type Props = {
+  items: DashboardNavItem[];
+};
+
+export function DashboardSidebarNav({ items }: Props) {
   const pathname = usePathname() ?? "";
 
   return (
@@ -30,7 +34,7 @@ export function DashboardSidebarNav() {
       className="flex flex-col gap-0.5 p-2 pb-4"
       aria-label="Разделы личного кабинета"
     >
-      {DASHBOARD_NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+      {items.map(({ href, label, icon: Icon }) => {
         const active = navItemActive(pathname, href);
         return (
           <Link

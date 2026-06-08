@@ -15,6 +15,7 @@ import { CreateFormSkeleton } from "@/components/dashboard/create-form-skeleton"
 import { getBalance } from "@/server/services/credits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { prisma } from "@/lib/prisma";
+import { canAccessDashboardModelsCatalog } from "@/lib/dashboard-nav";
 import { isAiModelVisibleInUserCatalog } from "@/lib/ai-model-public-catalog";
 import { getCreditsUiFloor } from "@/server/services/pricing";
 
@@ -37,6 +38,9 @@ export default async function CreateVideoPage({ searchParams }: PageProps) {
   const current = await getFreshSessionUser();
   if (!current.ok) {
     redirect("/login?next=/dashboard/create/video");
+  }
+  if (!canAccessDashboardModelsCatalog(current.user.role)) {
+    redirect("/dashboard/create/product-card");
   }
 
   const [rows, balanceCredits] = await Promise.all([

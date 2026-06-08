@@ -31,7 +31,6 @@ const coreSchema = z.object({
       "PRODUCT_CLASSIFIER",
       "PRODUCT_CONCEPT_IMAGE",
       "PRODUCT_MARKETPLACE_CARD",
-      "PRODUCT_CARD_BUILDER",
       "PRODUCT_VIDEO",
     ])
     .nullable(),
@@ -128,6 +127,7 @@ export type AiModelFormPayload = AiModelCoreParsed & {
   metadata: unknown;
   settingsSchema: unknown;
   payloadMapping: unknown;
+  pricingSchema: unknown;
   availableAspectRatios: unknown;
   availableResolutions: unknown;
 };
@@ -173,6 +173,10 @@ export function parseAiModelFormData(
   if (!metadataResult.ok) {
     return { ok: false, message: metadataResult.message };
   }
+  const pricingResult = parseJsonField(get("pricingSchemaJson"), "pricingSchema");
+  if (!pricingResult.ok) {
+    return { ok: false, message: pricingResult.message };
+  }
 
   const id = get("id");
   if (mode === "update" && (!id || !id.trim())) {
@@ -193,7 +197,6 @@ export function parseAiModelFormData(
             | "PRODUCT_CLASSIFIER"
             | "PRODUCT_CONCEPT_IMAGE"
             | "PRODUCT_MARKETPLACE_CARD"
-            | "PRODUCT_CARD_BUILDER"
             | "PRODUCT_VIDEO")
         : null,
     apiModelId: get("apiModelId") ?? "",
@@ -259,6 +262,10 @@ export function parseAiModelFormData(
       : {};
   metadata.publicReady = parsed.data.isPublic;
 
+  const pricingSchema =
+    pricingResult.value ??
+    buildDefaultPricingSchema(parsed.data.costCredits);
+
   return {
     ok: true,
     data: {
@@ -266,9 +273,14 @@ export function parseAiModelFormData(
       metadata,
       settingsSchema: settingsResult.value,
       payloadMapping: payloadMapResult.value,
+      pricingSchema,
       availableAspectRatios: arResult.value,
       availableResolutions: resResult.value,
     },
   };
+}
+
+function buildDefaultPricingSchema(costCredits: number): Record<string, unknown> {
+  return { type: "fixed", credits: Math.max(0, Math.floor(costCredits)) };
 }
 

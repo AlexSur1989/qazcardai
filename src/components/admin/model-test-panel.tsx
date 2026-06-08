@@ -11,6 +11,7 @@ import {
   defaultsFromSchema,
   getSchemaFields,
 } from "@/lib/generation-form-settings-schema";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 
 export type AdminModelTestPanelModel = {
@@ -29,6 +30,8 @@ export type AdminModelTestPanelModel = {
 type Props = {
   model: AdminModelTestPanelModel;
   canRunRealKie: boolean;
+  mockKieEnabled: boolean;
+  kieApiKeyConfigured: boolean;
 };
 
 function JsonBlock({
@@ -86,7 +89,12 @@ function InfoRow({
   );
 }
 
-export function ModelTestPanel({ model, canRunRealKie }: Props) {
+export function ModelTestPanel({
+  model,
+  canRunRealKie,
+  mockKieEnabled,
+  kieApiKeyConfigured,
+}: Props) {
   const [prompt, setPrompt] = useState("");
   const [dynSettings, setDynSettings] = useState<Record<string, unknown>>(() =>
     defaultsFromSchema(model.settingsSchema),
@@ -114,6 +122,7 @@ export function ModelTestPanel({ model, canRunRealKie }: Props) {
     payload: unknown;
     message: string;
   } | null>(null);
+  const [realConfirmOpen, setRealConfirmOpen] = useState(false);
   const [realData, setRealData] = useState<{
     ok?: boolean;
     providerTaskId?: string | null;
@@ -207,14 +216,7 @@ export function ModelTestPanel({ model, canRunRealKie }: Props) {
   };
 
   const runReal = async () => {
-    if (!canRunRealKie) return;
-    if (
-      !window.confirm(
-        "Реальный тест может списать баланс Kie.ai. Продолжить?",
-      )
-    ) {
-      return;
-    }
+    if (!canRunRealKie || !kieApiKeyConfigured) return;
     setError(null);
     setLoading("real");
     setRealData(null);
@@ -350,15 +352,50 @@ export function ModelTestPanel({ model, canRunRealKie }: Props) {
           <Button
             type="button"
             variant="default"
-            disabled={!!loading}
-            onClick={() => void runReal()}
+            disabled={!!loading || !kieApiKeyConfigured}
+            title={
+              !kieApiKeyConfigured
+                ? "KIE_API_KEY не настроен"
+                : undefined
+            }
+            onClick={() => setRealConfirmOpen(true)}
           >
             {loading === "real" ? "…" : "Real Kie test / Реальный тест Kie"}
           </Button>
         )}
       </div>
 
-      {canRunRealKie && (
+      <ConfirmDialog
+        open={realConfirmOpen}
+        onOpenChange={setRealConfirmOpen}
+        title="Реальный тест Kie.ai"
+        description={
+          mockKieEnabled
+            ? "MOCK_KIE=true: запрос к Kie не уйдёт, тест будет эмулирован. Токены приложения не списываются."
+            : "Тестовая генерация может списать средства у Kie.ai. Продолжить? Токены пользователей приложения не списываются."
+        }
+        confirmLabel="Продолжить"
+        variant="destructive"
+        onConfirm={() => void runReal()}
+      />
+
+      {mockKieEnabled && canRunRealKie ? (
+        <Alert>
+          <AlertTitle>MOCK_KIE включён</AlertTitle>
+          <AlertDescription>
+            Real test будет выполнен в mock-режиме без реального списания у Kie.ai.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {canRunRealKie && !kieApiKeyConfigured ? (
+        <Alert variant="destructive">
+          <AlertTitle>KIE_API_KEY не настроен</AlertTitle>
+          <AlertDescription>Real test недоступен до настройки KIE_API_KEY в env.</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {canRunRealKie && kieApiKeyConfigured && !mockKieEnabled ? (
         <Alert variant="destructive" className="border-destructive/40">
           <AlertTitle>Реальный тест / Real test</AlertTitle>
           <AlertDescription>
@@ -368,12 +405,11 @@ export function ModelTestPanel({ model, canRunRealKie }: Props) {
             are not debited.
           </AlertDescription>
         </Alert>
-      )}
+      ) : null}
 
       {!canRunRealKie && (
         <p className="text-muted-foreground text-xs">
-          Real Kie test доступен только роли SUPER_ADMIN. /
-          <span className="ml-1">Only SUPER_ADMIN can run a real Kie test.</span>
+          Real Kie test доступен с правом providers.manage.
         </p>
       )}
 

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ModelsCatalogExplore } from "@/components/dashboard/models-catalog-explore";
 import { PageHeader } from "@/components/layout/page-header";
 import { prismaWhereForDashboardModelsCatalog } from "@/lib/ai-models-catalog-db";
+import { canAccessDashboardModelsCatalog } from "@/lib/dashboard-nav";
 import {
   mergeGenerationCatalog,
   visibleInModelsCatalog,
@@ -38,6 +39,9 @@ export default async function DashboardModelsPage({ searchParams }: Props) {
   const current = await getFreshSessionUser();
   if (!current.ok) {
     redirect("/login?next=/dashboard/models");
+  }
+  if (!canAccessDashboardModelsCatalog(current.user.role)) {
+    redirect("/dashboard/create/product-card");
   }
 
   const sp = (await searchParams) ?? {};

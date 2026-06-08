@@ -16,6 +16,7 @@ export type AiModelFormFieldValues = {
   isPublic: boolean;
   metadataJson: string;
   payloadMappingJson: string;
+  pricingSchemaJson: string;
   settingsSchema: string;
   description: string;
   supportsImageInput: boolean;
@@ -42,6 +43,7 @@ export function fromDbModelToFormFields(m: {
   isActive: boolean;
   isPublic?: boolean | null;
   payloadMapping?: unknown | null;
+  pricingSchema?: unknown | null;
   metadata?: unknown | null;
   settingsSchema: unknown;
   description: string | null;
@@ -78,6 +80,10 @@ export function fromDbModelToFormFields(m: {
       m.payloadMapping == null
         ? "{}"
         : JSON.stringify(m.payloadMapping, null, 2),
+    pricingSchemaJson:
+      m.pricingSchema == null
+        ? ""
+        : JSON.stringify(m.pricingSchema, null, 2),
     settingsSchema:
       m.settingsSchema == null
         ? ""

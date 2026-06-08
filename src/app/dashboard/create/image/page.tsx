@@ -16,6 +16,7 @@ import { getBalance } from "@/server/services/credits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { IMAGE_CREATE_MODEL_GROUPS } from "@/config/generation-models";
 import type { CreateImageFormModel } from "@/components/dashboard/create-image-form";
+import { canAccessDashboardModelsCatalog } from "@/lib/dashboard-nav";
 import { isAiModelVisibleInUserCatalog } from "@/lib/ai-model-public-catalog";
 import { prisma } from "@/lib/prisma";
 import { getCreditsUiFloor } from "@/server/services/pricing";
@@ -39,6 +40,9 @@ export default async function CreateImagePage({ searchParams }: PageProps) {
   const current = await getFreshSessionUser();
   if (!current.ok) {
     redirect("/login?next=/dashboard/create/image");
+  }
+  if (!canAccessDashboardModelsCatalog(current.user.role)) {
+    redirect("/dashboard/create/product-card");
   }
 
   const [rows, balanceCredits] = await Promise.all([

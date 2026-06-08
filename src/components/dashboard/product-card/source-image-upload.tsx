@@ -61,9 +61,7 @@ type Props = {
   /** Сообщает родителю о этапе: idle / uploading / uploaded / error */
   onUploadFlowChange?: (state: UploadFlowState) => void;
   /** purpose для POST /api/uploads */
-  uploadPurpose?:
-    | "product_card_source_image"
-    | "product_card_card_builder_source";
+  uploadPurpose?: "product_card_source_image";
   title?: string;
   description?: string;
   /** Сохранение URL/fileId в проект после upload */

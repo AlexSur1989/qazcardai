@@ -1,15 +1,17 @@
 import { DashboardSidebarNav } from "@/components/dashboard/dashboard-sidebar-nav";
+import { getDashboardNavItemsForRole } from "@/lib/dashboard-nav";
 import { getAppName } from "@/lib/app-name";
 import { cn } from "@/lib/utils";
 
 type DashboardSidebarProps = {
   userEmail: string;
+  navItems: ReturnType<typeof getDashboardNavItemsForRole>;
 };
 
 /**
  * Сайдбар: блок бренда/email на сервере, навигация в клиентском поддереве для подсветки текущего раздела.
  */
-export function DashboardSidebar({ userEmail }: DashboardSidebarProps) {
+export function DashboardSidebar({ userEmail, navItems }: DashboardSidebarProps) {
   return (
     <aside
       className={cn(
@@ -28,7 +30,7 @@ export function DashboardSidebar({ userEmail }: DashboardSidebarProps) {
       <p className="text-sidebar-foreground/80 hidden px-3 py-1 text-xs break-all md:block md:px-2">
         {userEmail}
       </p>
-      <DashboardSidebarNav />
+      <DashboardSidebarNav items={navItems} />
     </aside>
   );
 }

@@ -29,6 +29,8 @@ type Props = {
   canEditPricing: boolean;
   testModel: AdminModelTestPanelModel;
   canRunRealKie: boolean;
+  mockKieEnabled: boolean;
+  kieApiKeyConfigured: boolean;
 };
 
 export function AdminModelEditTabs({
@@ -37,6 +39,8 @@ export function AdminModelEditTabs({
   canEditPricing,
   testModel,
   canRunRealKie,
+  mockKieEnabled,
+  kieApiKeyConfigured,
 }: Props) {
   return (
     <Tabs defaultValue="form" className="gap-6">
@@ -64,6 +68,8 @@ export function AdminModelEditTabs({
           key={testModel.id}
           model={testModel}
           canRunRealKie={canRunRealKie}
+          mockKieEnabled={mockKieEnabled}
+          kieApiKeyConfigured={kieApiKeyConfigured}
         />
       </TabsContent>
     </Tabs>

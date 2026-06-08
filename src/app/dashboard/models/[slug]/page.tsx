@@ -17,6 +17,7 @@ import {
   type FamilyImageMode,
   type FamilyVideoMode,
 } from "@/components/dashboard/model-family-generation-hub";
+import { canAccessDashboardModelsCatalog } from "@/lib/dashboard-nav";
 import { prismaWhereForDashboardModelsCatalog } from "@/lib/ai-models-catalog-db";
 import { isAiModelVisibleInUserCatalog } from "@/lib/ai-model-public-catalog";
 import {
@@ -186,6 +187,9 @@ export default async function ModelDetailPage({ params, searchParams }: Props) {
     redirect(
       `/login?next=${encodeURIComponent(`/dashboard/models/${slug}`)}`,
     );
+  }
+  if (!canAccessDashboardModelsCatalog(current.user.role)) {
+    redirect("/dashboard/create/product-card");
   }
 
   const legacyTarget = LEGACY_CATALOG_SLUG_REDIRECTS[slug];

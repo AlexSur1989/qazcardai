@@ -11,10 +11,24 @@ import {
 
 type Ctx = { params: Promise<{ id: string }> };
 
+function isKieApiKeyConfigured(): boolean {
+  const key = process.env.KIE_API_KEY?.trim() ?? "";
+  if (!key) return false;
+  const lower = key.toLowerCase();
+  if (lower === "your_kie_api_key" || lower.startsWith("change_me")) return false;
+  return true;
+}
+
 export async function POST(req: Request, ctx: Ctx) {
   const gate = await requireAdminApiPermission("providers.manage");
   if (!gate.ok) {
     return gate.response;
+  }
+  if (!isKieApiKeyConfigured()) {
+    return NextResponse.json(
+      { error: "KIE_API_KEY не настроен. Real test недоступен." },
+      { status: 503 },
+    );
   }
   const current = gate.user;
   if (rejectOversizedBody(req, getMaxJsonBodyBytes())) {

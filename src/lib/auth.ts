@@ -63,7 +63,7 @@ export function normalizeDeprecatedDashboardNext(raw: string): string {
     return raw;
   }
   if (qIdx === -1) {
-    return "/dashboard/models";
+    return "/dashboard/create/product-card";
   }
   const params = new URLSearchParams(trimmed.slice(qIdx + 1));
   if (
@@ -73,7 +73,7 @@ export function normalizeDeprecatedDashboardNext(raw: string): string {
   ) {
     return raw;
   }
-  return "/dashboard/models";
+  return "/dashboard/create/product-card";
 }
 
 /** Редирект в middleware для уже авторизованных (см. normalizeDeprecatedDashboardNext). */
@@ -94,7 +94,7 @@ export function maybeRedirectImageVideoToModelsCatalog(
   ) {
     return null;
   }
-  return "/dashboard/models";
+  return "/dashboard/create/product-card";
 }
 
 export function firstSearchParam(
@@ -151,5 +151,5 @@ export function postAuthLandingPath(
     }
   }
   if (role && canAccessAdminPanel(role)) return defaultAdminLandingPath(role);
-  return "/dashboard";
+  return "/dashboard/create/product-card";
 }

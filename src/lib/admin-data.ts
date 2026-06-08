@@ -330,6 +330,7 @@ export async function getAdminModelsList() {
         scope: true,
         productCardModelType: true,
         provider: true,
+        apiModelId: true,
         isActive: true,
         isPublic: true,
         costCredits: true,

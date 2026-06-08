@@ -6,6 +6,7 @@ import { AdminModelEditTabs } from "@/components/admin/admin-model-edit-tabs";
 import { fromDbModelToFormFields } from "@/lib/ai-model-form-mappers";
 import { getAdminAiModelById } from "@/lib/ai-model-admin-queries";
 import { hasPermission } from "@/lib/permissions";
+import { isMockKie } from "@/lib/kie-mock";
 import { requireAdminPagePermission } from "@/server/guards/admin-page-guard";
 
 type Props = { params: Promise<{ id: string }> };
@@ -29,6 +30,8 @@ export default async function AdminEditModelPage({ params }: Props) {
   }
   const canEditPricing = hasPermission(sessionUser.role, "models.pricing.manage");
   const canRunRealKie = hasPermission(sessionUser.role, "providers.manage");
+  const mockKieEnabled = isMockKie();
+  const kieApiKeyConfigured = Boolean(process.env.KIE_API_KEY?.trim());
   return (
     <div className="space-y-6">
       <div>
@@ -65,6 +68,8 @@ export default async function AdminEditModelPage({ params }: Props) {
           settingsSchema: m.settingsSchema,
         }}
         canRunRealKie={canRunRealKie}
+        mockKieEnabled={mockKieEnabled}
+        kieApiKeyConfigured={kieApiKeyConfigured}
       />
     </div>
   );

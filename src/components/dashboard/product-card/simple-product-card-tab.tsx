@@ -382,7 +382,7 @@ export function SimpleProductCardTab({
     try {
       const form = new FormData();
       form.set("file", file);
-      form.set("purpose", "product_card_style_reference");
+      form.set("purpose", "product_card_source_image");
       const res = await fetch("/api/uploads", { method: "POST", body: form });
       const data = (await res.json()) as { url?: string; fileId?: string; size?: number; error?: string };
       if (!res.ok || !data.url?.trim() || !data.fileId?.trim()) {

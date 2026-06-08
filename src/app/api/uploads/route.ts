@@ -24,10 +24,6 @@ export type UploadPurpose =
   | "product_card_source"
   /** Алиас для исходника «карточка товара» (то же поведение, что product_card_source) */
   | "product_card_source_image"
-  /** Исходник только для сценария «Создать карточку» */
-  | "product_card_card_builder_source"
-  /** Референс стиля для мастера «Создать карточку» */
-  | "product_card_style_reference"
   | "generation_input"
   | "seedance_reference_image"
   | "seedance_reference_video"
@@ -39,8 +35,6 @@ const ALLOWED_PURPOSES = new Set<string>([
   "kling_motion_video",
   "product_card_source",
   "product_card_source_image",
-  "product_card_card_builder_source",
-  "product_card_style_reference",
   "generation_input",
   "seedance_reference_image",
   "seedance_reference_video",
@@ -222,8 +216,7 @@ export async function POST(req: Request) {
     metaPurpose = "seedance_reference_audio";
   } else if (
     purpose === "product_card_source" ||
-    purpose === "product_card_source_image" ||
-    purpose === "product_card_card_builder_source"
+    purpose === "product_card_source_image"
   ) {
     const v = validateProductCardSourceImageBuffer(
       file.name,
@@ -239,29 +232,11 @@ export async function POST(req: Request) {
     }
     vMime = v.mime;
     fileType = "image";
-    const suffix =
-      purpose === "product_card_card_builder_source"
-        ? "-card-builder-src"
-        : "-product-card";
-    storageKey = `uploads/${userId}/${ts}-${idPart}${suffix}${extForMime(v.mime)}`;
+    storageKey = `uploads/${userId}/${ts}-${idPart}-product-card${extForMime(v.mime)}`;
     metaPurpose =
       purpose === "product_card_source_image"
         ? "product_card_source_image"
-        : purpose === "product_card_card_builder_source"
-          ? "product_card_card_builder_source"
-          : "product_card_source";
-  } else if (purpose === "product_card_style_reference") {
-    const v = validateProductCardSourceImageBuffer(file.name, file.type, file.size, buf);
-    if (!v.ok) {
-      return NextResponse.json(
-        { error: v.message, code: v.code },
-        { status: v.code === "FILE_TOO_LARGE" ? 413 : 400 },
-      );
-    }
-    vMime = v.mime;
-    fileType = "image";
-    storageKey = `uploads/${userId}/${ts}-${idPart}-card-builder-style-ref${extForMime(v.mime)}`;
-    metaPurpose = "product_card_style_reference";
+        : "product_card_source";
   } else if (purpose === "kaspi_manual_receipt") {
     const settings = await getRateUploadSettings();
     const limits = await getUploadSizeLimitBytes("image", settings);

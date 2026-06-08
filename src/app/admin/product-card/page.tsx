@@ -5,6 +5,7 @@ import { ProductCardAdminAdvancedPanel } from "@/components/admin/product-card-a
 import { ProductCardAdminLayout } from "@/components/admin/product-card-admin-layout";
 import { ProductCardAdminLinksTab } from "@/components/admin/product-card-admin-links-tab";
 import { ProductCardAdminOverview } from "@/components/admin/product-card-admin-overview";
+import { ProductCardModelBindingsPanel } from "@/components/admin/product-card-model-bindings-panel";
 import { ProductCardAdminTextsTab } from "@/components/admin/product-card-admin-texts-tab";
 import { ProductCardScenariosForm } from "@/components/admin/product-card-scenarios-form";
 import { ProductCardScenariosPanel } from "@/components/admin/product-card-scenarios-panel";
@@ -114,6 +115,48 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
     calculatorRows = await Promise.all(calculatorPromises);
   }
 
+  const activeByType = (t: string) =>
+    models
+      .filter((m) => m.isActive && m.productCardModelType === t)
+      .map((m) => ({ slug: m.slug, name: m.name }));
+
+  const bindingOptions = {
+    classifier: activeByType("PRODUCT_CLASSIFIER"),
+    conceptImage: activeByType("PRODUCT_CONCEPT_IMAGE"),
+    marketplaceCard: activeByType("PRODUCT_MARKETPLACE_CARD"),
+    video: activeByType("PRODUCT_VIDEO"),
+  };
+
+  function slugWarning(slug: string, type: string): string | undefined {
+    if (!slug.trim()) return undefined;
+    const ok = models.some(
+      (m) =>
+        m.slug === slug &&
+        m.isActive &&
+        m.scope === "PRODUCT_CARD" &&
+        m.productCardModelType === type,
+    );
+    if (!ok) {
+      return `Slug «${slug}» не найден среди активных PRODUCT_CARD моделей с типом ${type}.`;
+    }
+    return undefined;
+  }
+
+  const bindingWarnings = {
+    classifier: slugWarning(productSettings.classifierModelSlug, "PRODUCT_CLASSIFIER"),
+    conceptImage: slugWarning(
+      productSettings.conceptImageModelSlug,
+      "PRODUCT_CONCEPT_IMAGE",
+    ),
+    marketplaceCard: slugWarning(
+      productSettings.marketplaceCardModelSlug,
+      "PRODUCT_MARKETPLACE_CARD",
+    ),
+    video: slugWarning(productSettings.videoModelSlug, "PRODUCT_VIDEO"),
+  };
+
+  const canEditBindings = hasPermission(adminUser.role, "models.product_card.manage");
+
   return (
     <div className="space-y-6">
       <div>
@@ -143,10 +186,23 @@ export default async function AdminProductCardPage({ searchParams }: Props) {
       </Suspense>
 
       {!showAdvancedSection && activeTab === "overview" ? (
-        <ProductCardAdminOverview
-          scenarios={productSettings.scenarios}
-          productCardEnabled={productSettings.enabled}
-        />
+        <>
+          <ProductCardModelBindingsPanel
+            initial={{
+              classifierModelSlug: productSettings.classifierModelSlug,
+              conceptImageModelSlug: productSettings.conceptImageModelSlug,
+              marketplaceCardModelSlug: productSettings.marketplaceCardModelSlug,
+              videoModelSlug: productSettings.videoModelSlug,
+            }}
+            options={bindingOptions}
+            warnings={bindingWarnings}
+            canEdit={canEditBindings}
+          />
+          <ProductCardAdminOverview
+            scenarios={productSettings.scenarios}
+            productCardEnabled={productSettings.enabled}
+          />
+        </>
       ) : null}
 
       {!showAdvancedSection && activeTab === "scenarios" ? (
