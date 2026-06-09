@@ -68,11 +68,22 @@ export function ProductCardClassifierPreflightPanel() {
               <AlertTitle>
                 {result.readyForRealTest ? "Ready for real classifier test" : "Not ready"}
               </AlertTitle>
-              <AlertDescription>
-                {result.readyForRealTest
-                  ? "Можно запускать real classifier test вручную после активации модели."
-                  : "Исправьте пункты ниже. Пока classifier Missing/inactive для USER."}
-              </AlertDescription>
+            <AlertDescription>
+              <div className="space-y-1">
+                <p>
+                  {result.readyForRealTest
+                    ? "Можно запускать controlled real classifier test (admin) после активации runtime gate."
+                    : "Исправьте пункты ниже. Real Kie test для USER пока недоступен."}
+                </p>
+                <p>
+                  USER traffic:{" "}
+                  <strong>{result.readyForUserTraffic ? "ready" : "not ready"}</strong>
+                  {result.commercial
+                    ? ` · access=${result.commercial.accessMode} · cost=${result.commercial.costCredits}`
+                    : null}
+                </p>
+              </div>
+            </AlertDescription>
             </Alert>
             <div className="text-muted-foreground flex flex-wrap gap-3 text-xs">
               <span>

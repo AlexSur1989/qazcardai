@@ -17,6 +17,10 @@ import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
 import { listActiveProductVideoModels } from "@/server/services/productCardModelResolver";
 import { getProductCardModelSetupOverview } from "@/server/services/productCardModelSetup";
+import {
+  getProductClassifierCommercialSettings,
+  resolveClassifierAccessForUser,
+} from "@/server/services/productClassifierCommercialSettings";
 
 
 
@@ -44,13 +48,21 @@ export default async function ProductCardCreatePage({ searchParams }: Props) {
 
 
 
-  const [balanceCredits, productCardSettings, productVideoModels, modelSetup] =
+  const [balanceCredits, productCardSettings, productVideoModels, modelSetup, commercial] =
     await Promise.all([
       getBalance(current.user.id),
       getProductCardSettings(),
       listActiveProductVideoModels(),
       getProductCardModelSetupOverview(),
+      getProductClassifierCommercialSettings(),
     ]);
+
+  const classifierAccess = resolveClassifierAccessForUser({
+    role: current.user.role,
+    balanceCredits,
+    commercial,
+    modelSlot: modelSetup.byType.PRODUCT_CLASSIFIER,
+  });
 
   const showAdminHints = isAdminRole(current.user.role);
 
@@ -94,7 +106,7 @@ export default async function ProductCardCreatePage({ searchParams }: Props) {
           defaultProductVideoModelSlug={productCardSettings.videoModelSlug}
           canMarketplaceLayoutDebug={canAccessAdminPanel(current.user.role)}
           modelSetupByScenario={modelSetup.byScenario}
-          autoClassifyReady={modelSetup.byType.PRODUCT_CLASSIFIER.autoClassifyReady}
+          classifierAccess={classifierAccess}
           classifierAdminHint={modelSetup.byType.PRODUCT_CLASSIFIER.adminHint}
           showAdminHints={showAdminHints}
           classifierDevMock={classifierDevMock}

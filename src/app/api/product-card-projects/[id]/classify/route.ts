@@ -7,10 +7,20 @@ import {
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
 import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
 import { normalizeProductSourceImages } from "@/server/services/productCardProjects";
-import { enforceProductClassifyRateLimit } from "@/server/services/rateLimitService";
-import { runSafeProductClassifierFlow } from "@/server/services/productClassifierFlow";
+import {
+  enforceProductClassifyRateLimit,
+} from "@/server/services/rateLimitService";
+import { executeProductClassifierClassify } from "@/server/services/productClassifierClassifyRequest";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+function classifyErrorStatus(code: string): number {
+  if (code === "setup") return 503;
+  if (code === "insufficient_credits") return 402;
+  if (code === "daily_limit" || code === "cooldown") return 429;
+  if (code === "invalid_mock") return 400;
+  return 502;
+}
 
 export async function POST(req: Request, ctx: Ctx) {
   const current = await getFreshSessionUser();
@@ -58,22 +68,35 @@ export async function POST(req: Request, ctx: Ctx) {
 
   const devMockKey = devMockFromQuery ?? devMockFromBody;
 
-  const outcome = await runSafeProductClassifierFlow({
-    devMockCategory: devMockKey,
+  const outcome = await executeProductClassifierClassify({
+    userId,
+    userRole: current.user.role,
+    projectId: id,
     imageUrl: url,
+    devMockCategory: devMockKey,
   });
 
   if (!outcome.ok) {
-    const status =
-      outcome.code === "setup" ? 503 : outcome.code === "invalid_mock" ? 400 : 502;
+    const status = classifyErrorStatus(outcome.code);
     return NextResponse.json(
-      { ok: false, error: outcome.error, code: outcome.code },
-      { status },
+      {
+        ok: false,
+        error: outcome.error,
+        code: outcome.code,
+        ...(outcome.retryAfter != null ? { retryAfter: outcome.retryAfter } : {}),
+      },
+      {
+        status,
+        ...(outcome.retryAfter != null
+          ? { headers: { "Retry-After": String(outcome.retryAfter) } }
+          : {}),
+      },
     );
   }
 
   return NextResponse.json({
     ok: true,
     result: outcome.result,
+    ...(outcome.billing ? { billing: outcome.billing } : {}),
   });
 }

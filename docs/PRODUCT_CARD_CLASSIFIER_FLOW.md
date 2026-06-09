@@ -66,13 +66,47 @@ Readiness statuses для classifier:
 4. Результат: **«ИИ предложил данные»** + кнопки **Применить** / **Изменить вручную** / **Распознать заново**.
 5. **Применить** → `title`, `selectedCategory`, `categorySource=ai`, benefits в metadata/simpleCard, `classifierConfidence` в metadata.
 
+## Commercial safety (AppSettings)
+
+Помимо runtime gate в `.env`, доступ и биллинг управляются AppSettings (группа `classifier`, блок **Classifier access & pricing** в `/admin/product-card`):
+
+| Key | Default | Назначение |
+|-----|---------|------------|
+| `PRODUCT_CLASSIFIER_ACCESS_MODE` | `disabled` | `disabled` · `admin_only` · `beta_users` (TODO) · `all_users` |
+| `PRODUCT_CLASSIFIER_COST_CREDITS` | `1` | Списание внутренних токенов за успешное Kie-распознавание |
+| `PRODUCT_CLASSIFIER_DAILY_LIMIT` | `10` | Лимит Kie-попыток на USER за 24ч (Redis) |
+| `PRODUCT_CLASSIFIER_COOLDOWN_SECONDS` | `10` | Пауза между попытками |
+
+**USER-ready** (кнопка «Распознать»):
+
+```
+model active (Ready)
+× PRODUCT_CLASSIFIER_ALLOW_REAL_KIE=true
+× PRODUCT_CLASSIFIER_ACCESS_MODE=all_users
+× balance ≥ cost (если cost > 0)
+× daily limit / cooldown (на запросе)
+```
+
+Даже при `all_users` и active model, без env gate classifier **не работает** для USER.
+
+### Billing
+
+- Цена classifier **отдельна** от marketplace card (25 tokens).
+- Перед Kie: **RESERVE** → успех: **CAPTURE** → ошибка Kie/parse: **REFUND**.
+- Без `Generation`: `CreditTransaction.metadata.operationRef` + `kind=product_classifier`.
+- Setup/gate/access errors **не списывают** токены.
+
+### Audit
+
+Попытки пишутся в `ApiLog` (`provider=QAZCARD_CLASSIFIER`) без секретов и полных URL.
+
 ## API
 
 `POST /api/product-card-projects/[id]/classify`
 
 - Auth + owner project.
 - Требует загруженное фото.
-- Проверяет readiness `PRODUCT_CLASSIFIER` (через `productCardModelSetup`).
+- Проверяет readiness, runtime gate, access mode, limits, balance.
 - **Не вызывает Kie.ai** без `PRODUCT_CLASSIFIER_ALLOW_REAL_KIE=true`.
 
 Успех:
@@ -80,11 +114,12 @@ Readiness statuses для classifier:
 ```json
 {
   "ok": true,
-  "result": { "...ProductClassifierResult" }
+  "result": { "...ProductClassifierResult" },
+  "billing": { "credits": 1 }
 }
 ```
 
-Missing model / gate disabled:
+Missing model / gate disabled / access disabled:
 
 ```json
 {
@@ -93,6 +128,10 @@ Missing model / gate disabled:
   "error": "Автоматическое распознавание товара пока настраивается. Выберите категорию вручную."
 }
 ```
+
+Недостаточно токенов: HTTP **402**, `code: "insufficient_credits"`.
+
+Daily limit / cooldown: HTTP **429**, `code: "daily_limit"` / `"cooldown"`.
 
 ## Dev mock (только development)
 

@@ -328,6 +328,194 @@ export async function adminManualRefundGeneration(args: {
   });
 }
 
+export type ClassifierCreditMetadata = {
+  kind: "product_classifier";
+  operationRef: string;
+  projectId: string;
+};
+
+async function findClassifierReserveByOperationRef(
+  tx: Prisma.TransactionClient,
+  operationRef: string,
+) {
+  return tx.creditTransaction.findFirst({
+    where: {
+      type: "RESERVE",
+      metadata: {
+        path: ["operationRef"],
+        equals: operationRef,
+      },
+    },
+  });
+}
+
+/** Резерв токенов под classifier (без Generation). */
+export async function reserveClassifierCredits(args: {
+  userId: string;
+  amount: number;
+  operationRef: string;
+  projectId: string;
+  reason?: string;
+}) {
+  const { userId, amount, operationRef, projectId, reason = "Резерв под распознавание товара" } =
+    args;
+  if (amount <= 0 || !Number.isInteger(amount)) {
+    throw new CreditServiceError("INVALID", "Резерв classifier: целое amount > 0");
+  }
+  return prisma.$transaction(async (tx) => {
+    const existing = await findClassifierReserveByOperationRef(tx, operationRef);
+    if (existing) {
+      throw new CreditServiceError("CONFLICT", "Резерв classifier уже создан");
+    }
+    const u = await tx.user.findUnique({
+      where: { id: userId },
+      select: { balanceCredits: true },
+    });
+    if (!u) {
+      throw new CreditServiceError("NOT_FOUND", "Пользователь не найден");
+    }
+    if (u.balanceCredits < amount) {
+      throw new CreditServiceError("INSUFFICIENT", "Недостаточно кредитов");
+    }
+    const user = await tx.user.update({
+      where: { id: userId },
+      data: { balanceCredits: { decrement: amount } },
+      select: { balanceCredits: true },
+    });
+    if (user.balanceCredits < 0) {
+      throw new CreditServiceError("INSUFFICIENT", "Недостаточно кредитов");
+    }
+    const metadata: ClassifierCreditMetadata = {
+      kind: "product_classifier",
+      operationRef,
+      projectId,
+    };
+    await tx.creditTransaction.create({
+      data: {
+        userId,
+        type: "RESERVE",
+        amount: -amount,
+        reason: reason.slice(0, 512),
+        metadata: metadata as Prisma.InputJsonValue,
+      },
+    });
+    return { balance: user.balanceCredits };
+  }).then((r) => {
+    void trySendLowBalanceEmail(userId);
+    return r;
+  });
+}
+
+/** Подтверждение списания classifier после успешного Kie. */
+export async function captureClassifierCredits(operationRef: string) {
+  return prisma.$transaction(async (tx) => {
+    const reserve = await findClassifierReserveByOperationRef(tx, operationRef);
+    if (!reserve) {
+      throw new CreditServiceError("NOT_FOUND", "Нет RESERVE classifier");
+    }
+    const hasCapture = await tx.creditTransaction.findFirst({
+      where: {
+        type: "CAPTURE",
+        metadata: { path: ["operationRef"], equals: operationRef },
+      },
+    });
+    if (hasCapture) {
+      const b = await tx.user.findUnique({
+        where: { id: reserve.userId },
+        select: { balanceCredits: true },
+      });
+      return { idempotent: true as const, balance: b?.balanceCredits ?? 0 };
+    }
+    const hasRefund = await tx.creditTransaction.findFirst({
+      where: {
+        type: "REFUND",
+        metadata: { path: ["operationRef"], equals: operationRef },
+      },
+    });
+    if (hasRefund) {
+      throw new CreditServiceError("CONFLICT", "Уже выполнен возврат classifier");
+    }
+    const meta = reserve.metadata as ClassifierCreditMetadata | null;
+    await tx.creditTransaction.create({
+      data: {
+        userId: reserve.userId,
+        type: "CAPTURE",
+        amount: 0,
+        reason: "Списание за распознавание товара",
+        metadata: (meta ?? {
+          kind: "product_classifier",
+          operationRef,
+          projectId: "",
+        }) as Prisma.InputJsonValue,
+      },
+    });
+    const bRow = await tx.user.findUnique({
+      where: { id: reserve.userId },
+      select: { balanceCredits: true },
+    });
+    return { idempotent: false as const, balance: bRow?.balanceCredits ?? 0 };
+  });
+}
+
+/** Возврат токенов classifier при ошибке Kie/parse. */
+export async function refundClassifierCredits(
+  operationRef: string,
+  reason = "Возврат: ошибка распознавания товара",
+) {
+  return prisma.$transaction(async (tx) => {
+    const reserve = await findClassifierReserveByOperationRef(tx, operationRef);
+    if (!reserve) {
+      throw new CreditServiceError("NOT_FOUND", "Нет RESERVE classifier");
+    }
+    const hasRefund = await tx.creditTransaction.findFirst({
+      where: {
+        type: "REFUND",
+        metadata: { path: ["operationRef"], equals: operationRef },
+      },
+    });
+    if (hasRefund) {
+      const b = await tx.user.findUnique({
+        where: { id: reserve.userId },
+        select: { balanceCredits: true },
+      });
+      return { idempotent: true as const, balance: b?.balanceCredits ?? 0 };
+    }
+    const hasCapture = await tx.creditTransaction.findFirst({
+      where: {
+        type: "CAPTURE",
+        metadata: { path: ["operationRef"], equals: operationRef },
+      },
+    });
+    if (hasCapture) {
+      throw new CreditServiceError("CONFLICT", "Возврат невозможен: списание уже подтверждено");
+    }
+    const back = -reserve.amount;
+    if (back <= 0) {
+      throw new CreditServiceError("INVALID", "Некорректная сумма возврата");
+    }
+    const user = await tx.user.update({
+      where: { id: reserve.userId },
+      data: { balanceCredits: { increment: back } },
+      select: { balanceCredits: true },
+    });
+    const meta = reserve.metadata as ClassifierCreditMetadata | null;
+    await tx.creditTransaction.create({
+      data: {
+        userId: reserve.userId,
+        type: "REFUND",
+        amount: back,
+        reason: reason.slice(0, 512),
+        metadata: (meta ?? {
+          kind: "product_classifier",
+          operationRef,
+          projectId: "",
+        }) as Prisma.InputJsonValue,
+      },
+    });
+    return { idempotent: false as const, balance: user.balanceCredits };
+  });
+}
+
 export async function listTransactions(userId: string, options: ListTxOptions = {}) {
   const take = Math.min(options.take ?? 100, 500);
   return prisma.creditTransaction.findMany({

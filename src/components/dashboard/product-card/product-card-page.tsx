@@ -13,6 +13,7 @@ import type {
   ProductCardScenarioToggles,
 } from "@/server/services/productCardSettings";
 import type { ProductCardModelSlotDiagnostics } from "@/server/services/productCardModelSetup";
+import type { ClassifierAccessForUser } from "@/server/services/productClassifierCommercialSettings";
 
 import { ScenarioSetupNotice } from "./scenario-setup-notice";
 
@@ -75,7 +76,7 @@ type Props = {
   modelSetupByScenario: Partial<
     Record<ProductCardScenarioKey, ProductCardModelSlotDiagnostics>
   >;
-  autoClassifyReady: boolean;
+  classifierAccess: ClassifierAccessForUser;
   classifierAdminHint: string;
   showAdminHints: boolean;
   classifierDevMock?: string | null;
@@ -91,7 +92,7 @@ export function ProductCardPage({
   defaultProductVideoModelSlug,
   canMarketplaceLayoutDebug = false,
   modelSetupByScenario,
-  autoClassifyReady,
+  classifierAccess,
   classifierAdminHint,
   showAdminHints,
   classifierDevMock = null,
@@ -120,7 +121,7 @@ export function ProductCardPage({
     setManualCategory,
   } = useProductCardProject({ classifierDevMock });
 
-  const classifierEnabled = autoClassifyReady || classifierDevMockActive;
+  const classifierEnabled = classifierAccess.uiEnabled || classifierDevMockActive;
 
   const visibleTabs = useMemo(
     () =>
@@ -235,6 +236,11 @@ export function ProductCardPage({
         onSelectCategory={setManualCategory}
         classifierAdminHint={showAdminHints ? classifierAdminHint : null}
         devMockActive={classifierDevMockActive}
+        costCredits={classifierAccess.costCredits}
+        dailyLimit={classifierAccess.dailyLimit}
+        balanceCredits={balanceCredits}
+        canClassify={classifierAccess.canClassify}
+        insufficientCredits={classifierAccess.insufficientCredits}
       />
 
       <section className="space-y-3" aria-label="Сценарии">

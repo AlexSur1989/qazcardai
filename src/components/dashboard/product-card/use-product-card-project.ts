@@ -460,6 +460,8 @@ export function useProductCardProject(options?: { classifierDevMock?: string | n
         ok?: boolean;
         result?: ProductClassifierResult;
         error?: string;
+        code?: string;
+        billing?: { credits: number };
       }>(res);
       if (!parsed.ok) {
         setClassifyFlow("error");
@@ -484,6 +486,9 @@ export function useProductCardProject(options?: { classifierDevMock?: string | n
       setShowClassifierResult(true);
       setClassifyFlow("success");
       setClassifyError(null);
+      if (d.billing?.credits && d.billing.credits > 0) {
+        toast.success(`Списано ${d.billing.credits} токен(ов) за распознавание`);
+      }
     } catch {
       setClassifyFlow("error");
       setClassifyError("Сеть или сервер недоступен");

@@ -33,7 +33,14 @@ docker compose run --rm app npm run seed:gemini-3-flash-product-classifier
 3. **Тест модели** → «Проверить classifier payload без запуска»
 4. Активировать модель (`isActive=true`) — **только** если dry-run без critical warnings
 
-## 4. Preflight
+## 4. Preflight & commercial settings
+
+Перед включением для USER проверить `/admin/product-card` → **Classifier access & pricing**:
+
+- [ ] `PRODUCT_CLASSIFIER_ACCESS_MODE=disabled` (до осознанного go-live)
+- [ ] `PRODUCT_CLASSIFIER_COST_CREDITS=1` (или согласованная цена)
+- [ ] `PRODUCT_CLASSIFIER_DAILY_LIMIT=10`
+- [ ] `PRODUCT_CLASSIFIER_COOLDOWN_SECONDS=10`
 
 ```bash
 docker compose run --rm app npm run smoke:product-card-classifier
@@ -41,14 +48,9 @@ docker compose run --rm app npm run smoke:product-card-classifier
 
 Или в UI: `/admin/product-card` → **Проверить готовность classifier**
 
-`readyForRealTest=true` только если:
+`readyForRealTest=true` — controlled admin real test (gate + model + env keys).
 
-- модель active
-- apiModelId не PLACEHOLDER
-- endpoint + supportsImageInput
-- dry-run chat payload shape OK
-- env keys configured
-- **`PRODUCT_CLASSIFIER_ALLOW_REAL_KIE=true`** (runtime gate enabled)
+`readyForUserTraffic=true` — только если gate **enabled** и `accessMode=all_users`.
 
 Пока gate выключен: admin status **ConfiguredDisabled**, USER — manual fallback, preflight **false**.
 
@@ -66,6 +68,7 @@ docker compose run --rm app npm run smoke:product-card-classifier
 4. Проверить `ProductClassifierResult` в UI
 5. **Применить** → title, category, benefits заполняются
 6. Проверить в БД: **нет** новой `Generation`, **нет** marketplace `CreditTransaction` на 25 tokens
+7. Если `PRODUCT_CLASSIFIER_COST_CREDITS>0` и access mode разрешает USER — проверить списание **1** токена (RESERVE→CAPTURE), не 25
 
 ## 7. UI checks
 
@@ -76,6 +79,7 @@ docker compose run --rm app npm run smoke:product-card-classifier
 ## 8. Stop conditions — немедленно остановиться если
 
 - Kie списывает неожиданные credits
+- Classifier billing не работает (RESERVE без CAPTURE/REFUND) → **gate off**
 - Создаётся `Generation` / worker job для classifier
 - Marketplace flow ломается
 - JSON consistently invalid → рассмотреть **Gemini 3 Pro** как fallback

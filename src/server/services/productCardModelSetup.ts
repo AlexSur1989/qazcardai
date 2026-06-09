@@ -11,6 +11,7 @@ import {
   type ProductCardModelType,
   type ProductCardScenarioKey,
 } from "@/server/services/productCardSettings";
+import { getProductClassifierCommercialSettings } from "@/server/services/productClassifierCommercialSettings";
 
 export type ProductCardModelSlotStatus =
   | "ready"
@@ -222,6 +223,7 @@ export async function getProductCardModelSetupOverview(): Promise<{
   byScenario: Partial<Record<ProductCardScenarioKey, ProductCardModelSlotDiagnostics>>;
 }> {
   const settings = await getProductCardSettings();
+  const commercial = await getProductClassifierCommercialSettings();
   const slugs = SLOT_DEFS.map((d) =>
     defaultSlugForProductCardType(settings, d.productCardModelType).trim(),
   ).filter(Boolean);
@@ -302,7 +304,9 @@ export async function getProductCardModelSetupOverview(): Promise<{
     }
     const generationReady = readinessStatus === "Ready";
     const autoClassifyReady =
-      def.productCardModelType === "PRODUCT_CLASSIFIER" && generationReady;
+      def.productCardModelType === "PRODUCT_CLASSIFIER" &&
+      generationReady &&
+      commercial.accessMode === "all_users";
 
     return {
       productCardModelType: def.productCardModelType,

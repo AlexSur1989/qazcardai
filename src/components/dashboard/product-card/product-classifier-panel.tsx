@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Loader2, Sparkles } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -38,6 +39,11 @@ type Props = {
   onSelectCategory: (id: ProductCategoryId) => void;
   classifierAdminHint?: string | null;
   devMockActive?: boolean;
+  costCredits?: number;
+  dailyLimit?: number;
+  balanceCredits?: number;
+  canClassify?: boolean;
+  insufficientCredits?: boolean;
 };
 
 function ManualCategoryPicker({
@@ -104,6 +110,11 @@ export function ProductClassifierPanel({
   onSelectCategory,
   classifierAdminHint = null,
   devMockActive = false,
+  costCredits = 0,
+  dailyLimit = 10,
+  balanceCredits = 0,
+  canClassify = true,
+  insufficientCredits = false,
 }: Props) {
   if (!hasImage) {
     return (
@@ -144,11 +155,35 @@ export function ProductClassifierPanel({
                   ИИ может предложить название, категорию и преимущества по фото. Вы всегда можете
                   исправить данные вручную.
                 </p>
+                {!devMockActive && costCredits > 0 ? (
+                  <ul className="text-muted-foreground space-y-0.5 text-xs">
+                    <li>
+                      Стоимость: <strong className="text-foreground">{costCredits}</strong>{" "}
+                      {costCredits === 1 ? "токен" : "токена"}
+                    </li>
+                    <li>До {dailyLimit} распознаваний в день</li>
+                    <li>
+                      Ваш баланс:{" "}
+                      <strong className="text-foreground tabular-nums">{balanceCredits}</strong>{" "}
+                      токенов
+                    </li>
+                  </ul>
+                ) : null}
+                {insufficientCredits ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      Недостаточно токенов.{" "}
+                      <Link href="/dashboard/billing" className="text-primary underline">
+                        Пополнить баланс
+                      </Link>
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
                 <Button
                   type="button"
                   variant="default"
                   onClick={() => void onClassify()}
-                  disabled={!canPersist || classifyLoading}
+                  disabled={!canPersist || classifyLoading || !canClassify}
                 >
                   {classifyLoading ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -200,9 +235,10 @@ export function ProductClassifierPanel({
                     type="button"
                     variant="ghost"
                     onClick={() => void onRetry()}
-                    disabled={classifyLoading}
+                    disabled={classifyLoading || !canClassify}
                   >
                     Распознать заново
+                    {!devMockActive && costCredits > 0 ? ` (${costCredits} ток.)` : ""}
                   </Button>
                 </div>
               </div>

@@ -17,6 +17,7 @@ import {
 } from "../src/server/services/adminClassifierPayloadDryRun";
 import { runClassifierPreflight } from "../src/server/services/classifierPreflight";
 import { runSafeProductClassifierFlow } from "../src/server/services/productClassifierFlow";
+import { getProductClassifierCommercialSettings } from "../src/server/services/productClassifierCommercialSettings";
 import { getProductCardModelSetupOverview } from "../src/server/services/productCardModelSetup";
 import { isClassifierRuntimeEnabled } from "../src/lib/product-classifier-runtime-gate";
 
@@ -61,6 +62,26 @@ async function main() {
     }
     console.log("[smoke:product-card-classifier] missing/inactive setup error OK");
 
+    const commercial = await getProductClassifierCommercialSettings();
+    if (commercial.accessMode !== "disabled") {
+      console.log(
+        `[smoke:product-card-classifier] note: accessMode=${commercial.accessMode} (default disabled expected in prod prep)`,
+      );
+    }
+    if (commercial.costCredits !== 1 || commercial.dailyLimit !== 10 || commercial.cooldownSeconds !== 10) {
+      console.log(
+        `[smoke:product-card-classifier] commercial: cost=${commercial.costCredits} daily=${commercial.dailyLimit} cooldown=${commercial.cooldownSeconds}`,
+      );
+    } else {
+      console.log("[smoke:product-card-classifier] commercial defaults OK");
+    }
+
+    if (!classifierSlot.autoClassifyReady && isClassifierRuntimeEnabled()) {
+      if (commercial.accessMode !== "all_users") {
+        console.log("[smoke:product-card-classifier] autoClassifyReady=false with gate (access mode not all_users) OK");
+      }
+    }
+
     const model = await prisma.aiModel.findUnique({ where: { slug: CLASSIFIER_SLUG } });
     if (model) {
       const dryRun = await buildDryRunClassifierPayloadForModel(model);
@@ -103,8 +124,11 @@ async function main() {
       fail("preflight readyForRealTest must be false when runtime gate disabled");
     }
     console.log(
-      `[smoke:product-card-classifier] preflight readyForRealTest=${preflight.readyForRealTest}`,
+      `[smoke:product-card-classifier] preflight readyForRealTest=${preflight.readyForRealTest} readyForUserTraffic=${preflight.readyForUserTraffic}`,
     );
+    if (preflight.readyForUserTraffic && !isClassifierRuntimeEnabled()) {
+      fail("preflight readyForUserTraffic must be false when runtime gate disabled");
+    }
 
     const marketplaceSlot = setup.byType.PRODUCT_MARKETPLACE_CARD;
     if (!marketplaceSlot?.generationReady) {

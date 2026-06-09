@@ -10,6 +10,7 @@ import {
 import { getProductCardModelSetupOverview } from "@/server/services/productCardModelSetup";
 import { resolveDefaultProductClassifierModel } from "@/server/services/productCardModelResolver";
 import { getProductCardSettings } from "@/server/services/productCardSettings";
+import { getProductClassifierCommercialSettings } from "@/server/services/productClassifierCommercialSettings";
 import type { PreflightCheck, PreflightCheckStatus } from "@/server/services/marketplaceCardPreflight";
 
 export type { PreflightCheck, PreflightCheckStatus };
@@ -17,10 +18,17 @@ export type { PreflightCheck, PreflightCheckStatus };
 export type ClassifierPreflightResult = {
   ok: true;
   readyForRealTest: boolean;
+  readyForUserTraffic: boolean;
   checks: PreflightCheck[];
   warnings: string[];
   modelSlug: string | null;
   mockKie: boolean;
+  commercial: {
+    accessMode: string;
+    costCredits: number;
+    dailyLimit: number;
+    cooldownSeconds: number;
+  };
 };
 
 function isPlaceholderApiModelId(apiModelId: string): boolean {
@@ -125,8 +133,10 @@ export async function runClassifierPreflight(): Promise<ClassifierPreflightResul
   const checks: PreflightCheck[] = [];
   const warnings: string[] = [];
   let ready = true;
+  let readyForUserTraffic = true;
   const mockKie = isMockKie();
 
+  const commercial = await getProductClassifierCommercialSettings();
   await getProductCardSettings();
   const setup = await getProductCardModelSetupOverview();
   const classifierSlot = setup.byType.PRODUCT_CLASSIFIER;
@@ -260,6 +270,61 @@ export async function runClassifierPreflight(): Promise<ClassifierPreflightResul
   );
   if (!runtimeGateEnabled) ready = false;
 
+  pushCheck(
+    checks,
+    warnings,
+    {
+      key: "classifierAccessMode",
+      label: "PRODUCT_CLASSIFIER_ACCESS_MODE",
+      status:
+        commercial.accessMode === "disabled"
+          ? "warning"
+          : commercial.accessMode === "all_users"
+            ? "ok"
+            : "configured",
+      message: commercial.accessMode,
+    },
+    commercial.accessMode === "disabled",
+  );
+  if (commercial.accessMode === "disabled") {
+    ready = false;
+    readyForUserTraffic = false;
+  } else if (commercial.accessMode !== "all_users") {
+    readyForUserTraffic = false;
+  }
+
+  pushCheck(checks, warnings, {
+    key: "classifierCostCredits",
+    label: "Classifier cost credits",
+    status: "configured",
+    message: String(commercial.costCredits),
+  });
+  pushCheck(checks, warnings, {
+    key: "classifierDailyLimit",
+    label: "Classifier daily limit",
+    status: "configured",
+    message: String(commercial.dailyLimit),
+  });
+  pushCheck(checks, warnings, {
+    key: "classifierCooldown",
+    label: "Classifier cooldown seconds",
+    status: "configured",
+    message: String(commercial.cooldownSeconds),
+  });
+
+  pushCheck(checks, warnings, {
+    key: "classifierBilling",
+    label: "Classifier billing (RESERVE/CAPTURE/REFUND)",
+    status: "ok",
+    message: "operationRef in CreditTransaction.metadata, без Generation",
+  });
+
+  if (!runtimeGateEnabled || commercial.accessMode !== "all_users") {
+    readyForUserTraffic = false;
+  } else if (!ready) {
+    readyForUserTraffic = false;
+  }
+
   const kieKey = process.env.KIE_API_KEY?.trim();
   pushCheck(
     checks,
@@ -313,9 +378,16 @@ export async function runClassifierPreflight(): Promise<ClassifierPreflightResul
   return {
     ok: true,
     readyForRealTest: ready,
+    readyForUserTraffic,
     checks,
     warnings,
     modelSlug: model?.slug ?? null,
     mockKie,
+    commercial: {
+      accessMode: commercial.accessMode,
+      costCredits: commercial.costCredits,
+      dailyLimit: commercial.dailyLimit,
+      cooldownSeconds: commercial.cooldownSeconds,
+    },
   };
 }

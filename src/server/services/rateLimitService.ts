@@ -43,7 +43,16 @@ function wallMinute(): number {
  * Скользящее окно ~1 мин (по идентификатору) — Redis: фикс. минута; память: от первого запроса.
  */
 export async function checkRateLimit(
-  kind: "login" | "register" | "generation" | "upload" | "admin" | "classify" | "forgot_password" | "reset_password",
+  kind:
+    | "login"
+    | "register"
+    | "generation"
+    | "upload"
+    | "admin"
+    | "classify"
+    | "classify_daily"
+    | "forgot_password"
+    | "reset_password",
   id: string,
   limit: number,
   windowSec = 60,
@@ -52,7 +61,7 @@ export async function checkRateLimit(
   const r = getRateLimitRedis();
   if (r) {
     try {
-      const w = wallMinute();
+      const w = windowSec >= 86_400 ? Math.floor(Date.now() / 86_400_000) : wallMinute();
       const key = `rl:v1:${kind}:${encodeURIComponent(safe)}:${w}`;
       const n = await r.incr(key);
       if (n === 1) {
@@ -78,6 +87,48 @@ export async function checkRateLimit(
   }
   b.count += 1;
   if (b.count > limit) {
+    const ra = Math.max(1, Math.ceil((b.resetAt - now) / 1000));
+    return { allowed: false, message: RU_MSG, retryAfterSec: ra };
+  }
+  return { allowed: true };
+}
+
+/** Проверка лимита без инкремента (для classifier daily limit до Kie). */
+export async function peekRateLimit(
+  kind:
+    | "login"
+    | "register"
+    | "generation"
+    | "upload"
+    | "admin"
+    | "classify"
+    | "classify_daily"
+    | "forgot_password"
+    | "reset_password",
+  id: string,
+  limit: number,
+  windowSec = 60,
+): Promise<RateLimitResult> {
+  const safe = id.slice(0, 256) || "unknown";
+  const r = getRateLimitRedis();
+  if (r) {
+    try {
+      const w = windowSec >= 86_400 ? Math.floor(Date.now() / 86_400_000) : wallMinute();
+      const key = `rl:v1:${kind}:${encodeURIComponent(safe)}:${w}`;
+      const raw = await r.get(key);
+      const n = raw ? Number(raw) : 0;
+      if (Number.isFinite(n) && n >= limit) {
+        return { allowed: false, message: RU_MSG, retryAfterSec: windowSec };
+      }
+      return { allowed: true };
+    } catch {
+      // fall through
+    }
+  }
+  const key = `mem:${kind}:${encodeURIComponent(safe)}`;
+  const now = Date.now();
+  const b = memBuckets.get(key);
+  if (b && now < b.resetAt && b.count >= limit) {
     const ra = Math.max(1, Math.ceil((b.resetAt - now) / 1000));
     return { allowed: false, message: RU_MSG, retryAfterSec: ra };
   }
@@ -188,6 +239,100 @@ export async function enforceProductClassifyRateLimit(
   const res = await checkRateLimit("classify", userId, 15, 60);
   if (res.allowed) return null;
   return rateLimitToResponse(res);
+}
+
+export async function enforceProductClassifyDailyLimit(
+  userId: string,
+  dailyLimit: number,
+): Promise<NextResponse | null> {
+  const res = await peekRateLimit("classify_daily", userId, dailyLimit, 86_400);
+  if (res.allowed) return null;
+  return NextResponse.json(
+    {
+      ok: false,
+      code: "daily_limit" as const,
+      error:
+        "Лимит распознаваний на сегодня исчерпан. Выберите категорию вручную.",
+      retryAfter: res.retryAfterSec,
+    },
+    {
+      status: 429,
+      headers: { "Retry-After": String(res.retryAfterSec) },
+    },
+  );
+}
+
+const classifyCooldownMem = new Map<string, number>();
+
+export async function checkProductClassifyCooldown(
+  userId: string,
+  _cooldownSeconds: number,
+): Promise<{ allowed: true } | { allowed: false; retryAfterSec: number }> {
+  const safe = userId.slice(0, 256) || "unknown";
+  const r = getRateLimitRedis();
+  const key = `rl:v1:classify_cooldown:${encodeURIComponent(safe)}`;
+  if (r) {
+    try {
+      const ttl = await r.ttl(key);
+      if (ttl > 0) {
+        return { allowed: false, retryAfterSec: ttl };
+      }
+      return { allowed: true };
+    } catch {
+      // fall through
+    }
+  }
+  const until = classifyCooldownMem.get(safe) ?? 0;
+  const now = Date.now();
+  if (until > now) {
+    return { allowed: false, retryAfterSec: Math.max(1, Math.ceil((until - now) / 1000)) };
+  }
+  return { allowed: true };
+}
+
+export async function markProductClassifyCooldown(
+  userId: string,
+  cooldownSeconds: number,
+): Promise<void> {
+  const safe = userId.slice(0, 256) || "unknown";
+  const r = getRateLimitRedis();
+  const key = `rl:v1:classify_cooldown:${encodeURIComponent(safe)}`;
+  if (r) {
+    try {
+      await r.set(key, "1", "EX", cooldownSeconds);
+      return;
+    } catch {
+      // fall through
+    }
+  }
+  classifyCooldownMem.set(safe, Date.now() + cooldownSeconds * 1000);
+}
+
+export async function enforceProductClassifyCooldown(
+  userId: string,
+  cooldownSeconds: number,
+): Promise<NextResponse | null> {
+  const res = await checkProductClassifyCooldown(userId, cooldownSeconds);
+  if (res.allowed) return null;
+  return NextResponse.json(
+    {
+      ok: false,
+      code: "cooldown" as const,
+      error: "Подождите несколько секунд перед повторным распознаванием.",
+      retryAfter: res.retryAfterSec,
+    },
+    {
+      status: 429,
+      headers: { "Retry-After": String(res.retryAfterSec) },
+    },
+  );
+}
+
+/** Учитывает попытку Kie classifier в суточном лимите. */
+export async function recordProductClassifyDailyAttempt(
+  userId: string,
+): Promise<void> {
+  await checkRateLimit("classify_daily", userId, Number.MAX_SAFE_INTEGER, 86_400);
 }
 
 /**

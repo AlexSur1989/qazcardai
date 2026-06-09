@@ -22,6 +22,7 @@ import {
   parseKiePayloadJson,
 } from "../src/lib/kie-import-wizard";
 import { getProductCardModelSetupOverview } from "../src/server/services/productCardModelSetup";
+import { getProductClassifierCommercialSettings } from "../src/server/services/productClassifierCommercialSettings";
 import { runClassifierPreflight } from "../src/server/services/classifierPreflight";
 import { runSafeProductClassifierFlow } from "../src/server/services/productClassifierFlow";
 import { PRODUCT_CLASSIFIER_SETUP_ERROR } from "../src/lib/product-classifier-result";
@@ -518,6 +519,16 @@ async function main() {
       fail("classifier preflight readyForRealTest must be false when runtime gate disabled");
     }
     console.log("  classifier active + runtime gate disabled: USER not ready, preflight false");
+    const commercial = await getProductClassifierCommercialSettings();
+    if (commercial.accessMode !== "disabled") {
+      console.log(`  note: classifier accessMode=${commercial.accessMode} (registry default disabled)`);
+    }
+    if (preflight.readyForUserTraffic) {
+      fail("classifier preflight readyForUserTraffic must be false when gate disabled");
+    }
+    console.log(
+      `  classifier commercial: cost=${commercial.costCredits} daily=${commercial.dailyLimit} cooldown=${commercial.cooldownSeconds}s`,
+    );
   } else if (classifierSlot?.readinessStatus === "Ready") {
     console.log("  note: classifier Ready (model active + runtime gate enabled)");
   } else {
