@@ -25,6 +25,7 @@ import {
   serializeGenerationListItemForUser,
 } from "../src/lib/generation-display";
 import { PRODUCT_CLASSIFIER_SETUP_ERROR } from "../src/lib/product-classifier-result";
+import { isClassifierRuntimeEnabled } from "../src/lib/product-classifier-runtime-gate";
 import { runSafeProductClassifierFlow } from "../src/server/services/productClassifierFlow";
 import {
   creditTransactionUserTypeLabel,
@@ -152,10 +153,18 @@ async function main() {
     const classifierSlot = modelSetup.byType.PRODUCT_CLASSIFIER;
     const marketplaceSlot = modelSetup.byType.PRODUCT_MARKETPLACE_CARD;
     if (!classifierSlot) fail("classifier slot missing in model setup");
-    if (classifierSlot.autoClassifyReady && classifierSlot.readinessStatus !== "Ready") {
-      fail("classifier autoClassifyReady inconsistent with readiness");
+    if (classifierSlot.autoClassifyReady && !isClassifierRuntimeEnabled()) {
+      fail("classifier autoClassifyReady must be false when runtime gate disabled");
     }
-    const classifierFlow = await runSafeProductClassifierFlow({});
+    if (
+      classifierSlot.readinessStatus === "ConfiguredDisabled" &&
+      classifierSlot.autoClassifyReady
+    ) {
+      fail("ConfiguredDisabled slot must not have autoClassifyReady=true");
+    }
+    const classifierFlow = await runSafeProductClassifierFlow({
+      imageUrl: "https://example.com/product.jpg",
+    });
     if (classifierFlow.ok) {
       fail("classifier must not succeed in smoke without dev mock / real Kie flag");
     }
@@ -163,9 +172,11 @@ async function main() {
       fail(`classifier smoke setup error mismatch: ${classifierFlow.error}`);
     }
     if (!marketplaceSlot?.generationReady) {
-      fail("classifier Missing must not block marketplace Ready");
+      fail("classifier not real-ready must not block marketplace Ready");
     }
-    console.log("[smoke:product-card-marketplace] classifier Missing: manual fallback OK");
+    console.log(
+      `[smoke:product-card-marketplace] classifier ${classifierSlot.readinessStatus}: manual fallback OK`,
+    );
 
     console.log("[smoke:product-card-marketplace] OK — dry-run shape valid, no side effects");
   } finally {

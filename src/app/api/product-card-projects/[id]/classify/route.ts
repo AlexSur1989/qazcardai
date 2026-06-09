@@ -66,7 +66,10 @@ export async function POST(req: Request, ctx: Ctx) {
   if (!outcome.ok) {
     const status =
       outcome.code === "setup" ? 503 : outcome.code === "invalid_mock" ? 400 : 502;
-    return NextResponse.json({ ok: false, error: outcome.error }, { status });
+    return NextResponse.json(
+      { ok: false, error: outcome.error, code: outcome.code },
+      { status },
+    );
   }
 
   return NextResponse.json({

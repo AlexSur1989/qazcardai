@@ -1,6 +1,7 @@
 import type { AiModel } from "@/generated/prisma/client";
 import { isRecord } from "@/lib/model-pricing-shared";
 import { isMockKie } from "@/lib/kie-mock";
+import { isClassifierRuntimeEnabled } from "@/lib/product-classifier-runtime-gate";
 import { PRODUCT_CLASSIFIER_DRY_RUN_SAMPLE_IMAGE } from "@/config/product-classifier-kie-prompt";
 import {
   buildDryRunClassifierPayloadForModel,
@@ -217,7 +218,11 @@ export async function runClassifierPreflight(): Promise<ClassifierPreflightResul
     }
   }
 
-  if (classifierSlot && classifierSlot.readinessStatus !== "Ready") {
+  if (classifierSlot && !classifierSlot.autoClassifyReady) {
+    const slotMessage =
+      classifierSlot.readinessStatus === "ConfiguredDisabled"
+        ? "Configured but disabled: runtime gate off"
+        : `${classifierSlot.readinessStatus}: ${classifierSlot.readinessIssues.join(", ") || classifierSlot.adminHint}`;
     pushCheck(
       checks,
       warnings,
@@ -225,7 +230,7 @@ export async function runClassifierPreflight(): Promise<ClassifierPreflightResul
         key: "classifierSlot",
         label: "Classifier slot readiness",
         status: "warning",
-        message: `${classifierSlot.readinessStatus}: ${classifierSlot.readinessIssues.join(", ") || classifierSlot.adminHint}`,
+        message: slotMessage,
       },
       true,
     );
@@ -238,6 +243,22 @@ export async function runClassifierPreflight(): Promise<ClassifierPreflightResul
       message: "Ready",
     });
   }
+
+  const runtimeGateEnabled = isClassifierRuntimeEnabled();
+  pushCheck(
+    checks,
+    warnings,
+    {
+      key: "classifierRuntimeGate",
+      label: "PRODUCT_CLASSIFIER_ALLOW_REAL_KIE",
+      status: runtimeGateEnabled ? "ok" : "warning",
+      message: runtimeGateEnabled
+        ? "enabled"
+        : "Real Kie classifier disabled. Set PRODUCT_CLASSIFIER_ALLOW_REAL_KIE=true before real test.",
+    },
+    !runtimeGateEnabled,
+  );
+  if (!runtimeGateEnabled) ready = false;
 
   const kieKey = process.env.KIE_API_KEY?.trim();
   pushCheck(

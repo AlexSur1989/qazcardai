@@ -9,6 +9,7 @@ Real classifier test **запрещён** без явного подтвержд
 - [ ] `MOCK_KIE=false` на production
 - [ ] Backup БД перед активацией модели
 - [ ] Тестовый USER с балансом (classifier пока **не** списывает marketplace 25 tokens, но может списать classifier credits позже)
+- [ ] **`PRODUCT_CLASSIFIER_ALLOW_REAL_KIE=true`** в окружении app перед real test (без gate USER не видит кнопку classifier)
 
 ## 2. Seed
 
@@ -47,6 +48,9 @@ docker compose run --rm app npm run smoke:product-card-classifier
 - endpoint + supportsImageInput
 - dry-run chat payload shape OK
 - env keys configured
+- **`PRODUCT_CLASSIFIER_ALLOW_REAL_KIE=true`** (runtime gate enabled)
+
+Пока gate выключен: admin status **ConfiguredDisabled**, USER — manual fallback, preflight **false**.
 
 ## 5. Test user / project
 
@@ -78,10 +82,10 @@ docker compose run --rm app npm run smoke:product-card-classifier
 
 ## 9. Rollback / deactivate
 
-1. `isActive=false` для `gemini-3-flash-product-classifier`
-2. Убрать `PRODUCT_CLASSIFIER_ALLOW_REAL_KIE` или `=false`
+1. **`PRODUCT_CLASSIFIER_ALLOW_REAL_KIE=false`** или удалить переменную — немедленно отключает real Kie для USER и preflight
+2. Деактивировать модель (`isActive=false`) в `/admin/models` при необходимости
 3. `docker compose up -d app`
-4. Verify: classifier slot → Inactive/Missing, marketplace остаётся Ready
+4. Verify: classifier slot → ConfiguredDisabled или Inactive, marketplace остаётся Ready
 
 ```bash
 docker compose run --rm app npm run verify:product-card-model-setup

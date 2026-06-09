@@ -27,16 +27,41 @@
 | Состояние | Поведение |
 |-----------|-----------|
 | `PRODUCT_CLASSIFIER` Missing / Inactive / Misconfigured | Кнопка «Распознать товар» скрыта/disabled, текст про ручной выбор категории |
-| API `/classify` при Missing | `{ ok: false, error: "Автоматическое распознавание…" }`, HTTP 503 |
+| Модель active, но `PRODUCT_CLASSIFIER_ALLOW_REAL_KIE !== "true"` | **ConfiguredDisabled** — для USER not ready; текст «скоро будет доступно»; preflight `readyForRealTest=false` |
+| API `/classify` при not ready | `{ ok: false, code: "setup", error: "Автоматическое распознавание…" }`, HTTP 503 |
 | Ошибка распознавания | Клиент выбирает категорию и заполняет поля вручную |
-| Classifier Failed (будущий real flow) | Категория «Прочее» или прежний выбор, без блокировки |
+| Classifier Failed (real flow) | Категория «Прочее» или прежний выбор, без блокировки |
+
+## Runtime gate
+
+Модель classifier может быть **настроена и active** в admin (`/admin/models`, dry-run OK), но **real Kie вызовы запрещены**, пока в окружении app не установлено:
+
+```env
+PRODUCT_CLASSIFIER_ALLOW_REAL_KIE=true
+```
+
+Правила:
+
+- **Admin** видит slug, `apiModelId`, endpoint, `costCredits` и статус runtime gate (`enabled` / `disabled`).
+- **USER** не видит кнопку «Распознать товар по фото», пока gate выключен — только текст «Автоматическое распознавание товара скоро будет доступно…» и ручной выбор категории.
+- **Preflight** (`/admin/product-card` → «Проверить готовность classifier»): `readyForRealTest=false`, пока gate выключен — даже если модель active.
+- **POST /classify** возвращает setup error (503) без технических полей — защита от случайного Kie.ai расхода.
+- Marketplace flow (25 tokens, «Проверить план карточки») **не блокируется**.
+
+Readiness statuses для classifier:
+
+| Status | Условие |
+|--------|---------|
+| Missing / Inactive | Модель не назначена, не найдена или `isActive=false` |
+| ConfiguredDisabled | Модель active + конфиг OK, но runtime gate off |
+| Ready | Модель active + конфиг OK + `PRODUCT_CLASSIFIER_ALLOW_REAL_KIE=true` |
 
 ## UI flow (`/dashboard/create/product-card`)
 
 1. Клиент загружает фото.
 2. Блок **«Распознавание товара»**:
-   - Missing → подсказка «скоро будет доступно», ручной `<select>` категории.
-   - Ready (или dev mock) → кнопка **«Распознать товар по фото»**.
+   - Missing / Inactive / gate disabled → подсказка «скоро будет доступно», ручной `<select>` категории.
+   - Ready (модель active **и** runtime gate enabled; или dev mock) → кнопка **«Распознать товар по фото»**.
 3. Loading: «ИИ анализирует фото товара…»
 4. Результат: **«ИИ предложил данные»** + кнопки **Применить** / **Изменить вручную** / **Распознать заново**.
 5. **Применить** → `title`, `selectedCategory`, `categorySource=ai`, benefits в metadata/simpleCard, `classifierConfidence` в metadata.
@@ -59,11 +84,12 @@
 }
 ```
 
-Missing model:
+Missing model / gate disabled:
 
 ```json
 {
   "ok": false,
+  "code": "setup",
   "error": "Автоматическое распознавание товара пока настраивается. Выберите категорию вручную."
 }
 ```

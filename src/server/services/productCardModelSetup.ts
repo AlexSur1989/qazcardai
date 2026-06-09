@@ -2,6 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { isRecord } from "@/lib/model-pricing-shared";
 import { labelProductCardModelType } from "@/lib/product-card-model-type-labels";
 import {
+  classifierRuntimeGateLabel,
+  isClassifierRuntimeEnabled,
+} from "@/lib/product-classifier-runtime-gate";
+import {
   defaultSlugForProductCardType,
   getProductCardSettings,
   type ProductCardModelType,
@@ -19,7 +23,9 @@ export type ProductCardReadinessStatus =
   | "Ready"
   | "Missing"
   | "Inactive"
-  | "Misconfigured";
+  | "Misconfigured"
+  /** Модель настроена и active, но PRODUCT_CLASSIFIER_ALLOW_REAL_KIE выключен */
+  | "ConfiguredDisabled";
 
 export type ProductCardModelSlotDiagnostics = {
   productCardModelType: ProductCardModelType;
@@ -180,12 +186,18 @@ function buildAdminHint(args: {
     args.modelRow &&
     args.status === "ready"
   ) {
-    return [
+    const parts = [
       `slug=${args.modelRow.slug}`,
       `apiModelId=${args.modelRow.apiModelId}`,
+      `endpoint=${args.modelRow.endpoint ?? "—"}`,
       `costCredits=${args.modelRow.costCredits}`,
+      `runtime gate=${classifierRuntimeGateLabel()}`,
       `dry-run=/admin/models/${args.modelRow.id}/edit?tab=dry-run`,
-    ].join("; ");
+    ];
+    if (args.readinessStatus === "ConfiguredDisabled") {
+      parts.push("real Kie disabled — set PRODUCT_CLASSIFIER_ALLOW_REAL_KIE=true before real test");
+    }
+    return parts.join("; ");
   }
   const typeLabel = labelProductCardModelType(args.productCardModelType);
   switch (args.status) {
@@ -280,7 +292,14 @@ export async function getProductCardModelSetupOverview(): Promise<{
       assignedSlug,
       def.productCardModelType,
     );
-    const readinessStatus = resolveReadinessStatus(status, readinessIssues);
+    let readinessStatus = resolveReadinessStatus(status, readinessIssues);
+    if (
+      def.productCardModelType === "PRODUCT_CLASSIFIER" &&
+      readinessStatus === "Ready" &&
+      !isClassifierRuntimeEnabled()
+    ) {
+      readinessStatus = "ConfiguredDisabled";
+    }
     const generationReady = readinessStatus === "Ready";
     const autoClassifyReady =
       def.productCardModelType === "PRODUCT_CLASSIFIER" && generationReady;

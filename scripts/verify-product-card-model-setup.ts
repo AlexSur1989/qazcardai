@@ -22,8 +22,10 @@ import {
   parseKiePayloadJson,
 } from "../src/lib/kie-import-wizard";
 import { getProductCardModelSetupOverview } from "../src/server/services/productCardModelSetup";
+import { runClassifierPreflight } from "../src/server/services/classifierPreflight";
 import { runSafeProductClassifierFlow } from "../src/server/services/productClassifierFlow";
 import { PRODUCT_CLASSIFIER_SETUP_ERROR } from "../src/lib/product-classifier-result";
+import { isClassifierRuntimeEnabled } from "../src/lib/product-classifier-runtime-gate";
 import {
   buildDryRunClassifierPayloadForModel,
   validateClassifierDryRunPayloadShape,
@@ -490,23 +492,46 @@ async function main() {
   const classifierSlot = overview.byType.PRODUCT_CLASSIFIER;
   const conceptSlot = overview.byType.PRODUCT_CONCEPT_IMAGE;
   const videoSlot = overview.byType.PRODUCT_VIDEO;
-  if (classifierSlot?.readinessStatus === "Ready") {
-    console.log("  note: classifier unexpectedly Ready");
+
+  const classifierModel = await prisma.aiModel.findUnique({
+    where: { slug: CLASSIFIER_MODEL_SLUG },
+  });
+
+  if (classifierModel?.isActive && !isClassifierRuntimeEnabled()) {
+    if (classifierSlot?.autoClassifyReady) {
+      fail("classifier autoClassifyReady must be false when runtime gate disabled");
+    }
+    if (classifierSlot?.readinessStatus !== "ConfiguredDisabled") {
+      fail(
+        `classifier readiness must be ConfiguredDisabled when active + gate off, got ${classifierSlot?.readinessStatus}`,
+      );
+    }
+    const missingFlow = await runSafeProductClassifierFlow({
+      imageUrl: "https://example.com/product.jpg",
+    });
+    if (missingFlow.ok) fail("classifier flow must not succeed when runtime gate disabled");
+    if (missingFlow.error !== PRODUCT_CLASSIFIER_SETUP_ERROR) {
+      fail(`classifier setup error mismatch: ${missingFlow.error}`);
+    }
+    const preflight = await runClassifierPreflight();
+    if (preflight.readyForRealTest) {
+      fail("classifier preflight readyForRealTest must be false when runtime gate disabled");
+    }
+    console.log("  classifier active + runtime gate disabled: USER not ready, preflight false");
+  } else if (classifierSlot?.readinessStatus === "Ready") {
+    console.log("  note: classifier Ready (model active + runtime gate enabled)");
   } else {
     if (classifierSlot?.autoClassifyReady) {
-      fail("classifier autoClassifyReady must be false while Missing/Inactive");
+      fail("classifier autoClassifyReady must be false while Missing/Inactive/ConfiguredDisabled");
     }
     const missingFlow = await runSafeProductClassifierFlow({});
     if (missingFlow.ok) fail("classifier flow must not succeed when model Missing");
     if (missingFlow.error !== PRODUCT_CLASSIFIER_SETUP_ERROR) {
       fail(`classifier setup error mismatch: ${missingFlow.error}`);
     }
-    console.log("  classifier Missing: setup error OK, no Kie path");
+    console.log("  classifier Missing/Inactive: setup error OK, no Kie path");
   }
 
-  const classifierModel = await prisma.aiModel.findUnique({
-    where: { slug: CLASSIFIER_MODEL_SLUG },
-  });
   if (classifierModel) {
     if (classifierModel.productCardModelType !== "PRODUCT_CLASSIFIER") {
       fail(`${CLASSIFIER_MODEL_SLUG}: wrong productCardModelType`);

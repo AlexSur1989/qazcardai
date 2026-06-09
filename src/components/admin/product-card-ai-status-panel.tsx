@@ -20,6 +20,7 @@ const READINESS_LABEL: Record<ProductCardReadinessStatus, string> = {
   Missing: "Missing",
   Inactive: "Inactive",
   Misconfigured: "Misconfigured",
+  ConfiguredDisabled: "ConfiguredDisabled",
 };
 
 const READINESS_VARIANT: Record<
@@ -30,6 +31,7 @@ const READINESS_VARIANT: Record<
   Missing: "outline",
   Inactive: "outline",
   Misconfigured: "destructive",
+  ConfiguredDisabled: "outline",
 };
 
 function classifierUserStatusLabel(
@@ -37,6 +39,12 @@ function classifierUserStatusLabel(
 ): string | null {
   if (slot.productCardModelType !== "PRODUCT_CLASSIFIER") return null;
   if (slot.readinessStatus === "Ready") return "Распознавание товара — готово";
+  if (slot.readinessStatus === "ConfiguredDisabled") {
+    return "Распознавание товара — настроено, но real Kie выключен";
+  }
+  if (slot.readinessStatus === "Inactive") {
+    return "Распознавание товара — модель выключена";
+  }
   return "Распознавание товара — не подключено";
 }
 

@@ -18,6 +18,7 @@ import {
 import { runClassifierPreflight } from "../src/server/services/classifierPreflight";
 import { runSafeProductClassifierFlow } from "../src/server/services/productClassifierFlow";
 import { getProductCardModelSetupOverview } from "../src/server/services/productCardModelSetup";
+import { isClassifierRuntimeEnabled } from "../src/lib/product-classifier-runtime-gate";
 
 const CLASSIFIER_SLUG = "gemini-3-flash-product-classifier";
 
@@ -42,8 +43,12 @@ async function main() {
     if (!classifierSlot) fail("classifier slot missing");
 
     console.log(
-      `[smoke:product-card-classifier] classifier slot: ${classifierSlot.readinessStatus} slug=${classifierSlot.assignedSlug}`,
+      `[smoke:product-card-classifier] classifier slot: ${classifierSlot.readinessStatus} slug=${classifierSlot.assignedSlug} autoClassifyReady=${classifierSlot.autoClassifyReady}`,
     );
+
+    if (classifierSlot.autoClassifyReady && !isClassifierRuntimeEnabled()) {
+      fail("autoClassifyReady must be false when PRODUCT_CLASSIFIER_ALLOW_REAL_KIE is unset");
+    }
 
     const missingFlow = await runSafeProductClassifierFlow({
       imageUrl: "https://example.com/product.jpg",
@@ -94,6 +99,9 @@ async function main() {
 
     const preflight = await runClassifierPreflight();
     if (!preflight.ok) fail("preflight returned ok=false");
+    if (preflight.readyForRealTest && !isClassifierRuntimeEnabled()) {
+      fail("preflight readyForRealTest must be false when runtime gate disabled");
+    }
     console.log(
       `[smoke:product-card-classifier] preflight readyForRealTest=${preflight.readyForRealTest}`,
     );
