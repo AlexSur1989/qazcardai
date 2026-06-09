@@ -96,9 +96,48 @@ docker compose run --rm app npm run verify:product-card-model-setup
 docker compose run --rm app npm run smoke:product-card-marketplace
 ```
 
+## Paid classifier test attempt: fetch failed / refund verified
+
+**Дата:** 2026-06-09 (production, controlled test после commercial safety `5bfcc87`).
+
+| Параметр | Значение |
+|----------|----------|
+| accessMode | `admin_only` |
+| cost | 1 QazCard token |
+| gate | временно `PRODUCT_CLASSIFIER_ALLOW_REAL_KIE=true`, затем restore backup → **disabled** |
+| test account | SUPER_ADMIN (admin panel), project с фото автохимии (MITSUJI Oil Film Cleaner) |
+
+### Результат
+
+- Real Kie HTTP attempt: **1** (endpoint `gemini-3-flash/v1/chat/completions`)
+- Ответ Kie: **`fetch failed`** (transient network при старте/rebuild app; позже из контейнера endpoint отвечал HTTP 200)
+- Classifier API: **502** `code=kie`
+- Success path (**CAPTURE 0**, apply, `categorySource=ai`) — **не достигнут**, pending retry
+
+### Billing (verified on failure)
+
+- **RESERVE −1** → Kie error → **REFUND +1**
+- Net QazCard balance change: **0**
+- **Generation не создана**
+- Marketplace generation **не запускалась**
+- «Создать карточку» **не нажималась**
+
+### Bugfix перед retry
+
+До успешного real test был найден баг: `isProductClassifierReady()` ошибочно требовал `autoClassifyReady` (`all_users`), из‑за чего `admin_only` получал **503 setup** без вызова Kie. Исправлено на `generationReady` + отдельная проверка access mode (commit после этого runbook).
+
+### Before retry checklist
+
+- [ ] Readiness fix закоммичен
+- [ ] `npm run verify:product-card-model-setup` + `smoke:product-card-classifier` OK
+- [ ] Gate **disabled** до явного подтверждения
+- [ ] Backup `.env` перед включением gate
+- [ ] Один controlled POST `/classify`, затем gate off
+
 ## Связанные файлы
 
 - `src/server/services/productClassifierKieChat.ts`
 - `src/server/services/productClassifierFlow.ts`
 - `scripts/seed-gemini-3-flash-product-classifier.ts`
 - `docs/PRODUCT_CARD_CLASSIFIER_FLOW.md`
+- `docs/PRODUCT_CLASSIFIER_COMMERCIAL_SAFETY.md`

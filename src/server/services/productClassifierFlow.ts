@@ -76,7 +76,9 @@ export function parseDevClassifierMockCategory(
 
 export async function isProductClassifierReady(): Promise<boolean> {
   const overview = await getProductCardModelSetupOverview();
-  return overview.byType.PRODUCT_CLASSIFIER?.autoClassifyReady === true;
+  const slot = overview.byType.PRODUCT_CLASSIFIER;
+  // generationReady = модель Ready + gate on; autoClassifyReady дополнительно требует all_users
+  return slot?.generationReady === true;
 }
 
 export function buildDevMockClassifierResult(

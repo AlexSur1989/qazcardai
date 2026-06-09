@@ -16,8 +16,15 @@ import {
   validateClassifierDryRunPayloadShape,
 } from "../src/server/services/adminClassifierPayloadDryRun";
 import { runClassifierPreflight } from "../src/server/services/classifierPreflight";
-import { runSafeProductClassifierFlow } from "../src/server/services/productClassifierFlow";
-import { getProductClassifierCommercialSettings } from "../src/server/services/productClassifierCommercialSettings";
+import {
+  isProductClassifierReady,
+  runSafeProductClassifierFlow,
+} from "../src/server/services/productClassifierFlow";
+import {
+  getProductClassifierCommercialSettings,
+  isClassifierAccessModeAllowedForRole,
+  isClassifierUserTrafficReady,
+} from "../src/server/services/productClassifierCommercialSettings";
 import { getProductCardModelSetupOverview } from "../src/server/services/productCardModelSetup";
 import { isClassifierRuntimeEnabled } from "../src/lib/product-classifier-runtime-gate";
 
@@ -80,6 +87,33 @@ async function main() {
       if (commercial.accessMode !== "all_users") {
         console.log("[smoke:product-card-classifier] autoClassifyReady=false with gate (access mode not all_users) OK");
       }
+    }
+
+    if (commercial.accessMode === "admin_only") {
+      if (classifierSlot.autoClassifyReady) {
+        fail("admin_only: autoClassifyReady must stay false (USER traffic)");
+      }
+      const modelReady = await isProductClassifierReady();
+      if (modelReady !== classifierSlot.generationReady) {
+        fail("isProductClassifierReady must follow generationReady, not autoClassifyReady");
+      }
+      if (!isClassifierAccessModeAllowedForRole("admin_only", "SUPER_ADMIN")) {
+        fail("admin_only must allow SUPER_ADMIN classify access");
+      }
+      if (isClassifierAccessModeAllowedForRole("admin_only", "USER")) {
+        fail("admin_only must deny USER classify access");
+      }
+      const theoreticalReadySlot = {
+        ...classifierSlot,
+        readinessStatus: "Ready" as const,
+        generationReady: true,
+      };
+      if (isClassifierUserTrafficReady({ commercial, modelSlot: theoreticalReadySlot })) {
+        fail("admin_only must keep readyForUserTraffic false when model Ready");
+      }
+      console.log(
+        "[smoke:product-card-classifier] admin_only readiness OK (generationReady helper, USER traffic false)",
+      );
     }
 
     const model = await prisma.aiModel.findUnique({ where: { slug: CLASSIFIER_SLUG } });

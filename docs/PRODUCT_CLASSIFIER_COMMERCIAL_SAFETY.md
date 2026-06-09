@@ -55,6 +55,14 @@ cp .env backups/env_before_classifier_$(date +%F_%H-%M).env
 - **Не** создаёт `Generation`.
 - RESERVE → CAPTURE (success) / REFUND (Kie or parse error).
 - Setup, gate, access denied, limits — **без списания**.
+- При **Kie/network error** после RESERVE обязателен **REFUND** (net balance без изменений).
+- Failed Kie calls **не** создают `Generation` и **не** запускают marketplace worker.
+- После failed controlled test **gate выключать обратно** (restore backup `.env` → `docker compose up -d app`).
+- Перед retry: закоммитить readiness fix (`isProductClassifierReady` → `generationReady`, не `autoClassifyReady`), прогнать verify/smoke, gate оставить disabled до явного подтверждения.
+
+### Paid test attempt 2026-06-09 (admin_only, fetch failed)
+
+Controlled production test: `admin_only`, cost **1**, Kie вернул `fetch failed`. Billing error path подтверждён: RESERVE −1 → REFUND +1, balance net **0**, ApiLog `QAZCARD_CLASSIFIER` + Kie log без секретов. Success path (CAPTURE 0, apply) — pending. Подробнее: `docs/KIE_PRODUCT_CLASSIFIER_REAL_TEST_RUNBOOK.md`.
 
 ## Метрики
 

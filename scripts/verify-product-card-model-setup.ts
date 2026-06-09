@@ -24,7 +24,14 @@ import {
 import { getProductCardModelSetupOverview } from "../src/server/services/productCardModelSetup";
 import { getProductClassifierCommercialSettings } from "../src/server/services/productClassifierCommercialSettings";
 import { runClassifierPreflight } from "../src/server/services/classifierPreflight";
-import { runSafeProductClassifierFlow } from "../src/server/services/productClassifierFlow";
+import {
+  isProductClassifierReady,
+  runSafeProductClassifierFlow,
+} from "../src/server/services/productClassifierFlow";
+import {
+  isClassifierAccessModeAllowedForRole,
+  isClassifierUserTrafficReady,
+} from "../src/server/services/productClassifierCommercialSettings";
 import { PRODUCT_CLASSIFIER_SETUP_ERROR } from "../src/lib/product-classifier-result";
 import { isClassifierRuntimeEnabled } from "../src/lib/product-classifier-runtime-gate";
 import {
@@ -529,6 +536,30 @@ async function main() {
     console.log(
       `  classifier commercial: cost=${commercial.costCredits} daily=${commercial.dailyLimit} cooldown=${commercial.cooldownSeconds}s`,
     );
+    if (commercial.accessMode === "admin_only" && classifierSlot) {
+      if (classifierSlot.autoClassifyReady) {
+        fail("admin_only: autoClassifyReady must stay false");
+      }
+      const modelReady = await isProductClassifierReady();
+      if (modelReady !== classifierSlot.generationReady) {
+        fail("isProductClassifierReady must follow generationReady, not autoClassifyReady");
+      }
+      if (!isClassifierAccessModeAllowedForRole("admin_only", "SUPER_ADMIN")) {
+        fail("admin_only must allow SUPER_ADMIN classify access");
+      }
+      if (isClassifierAccessModeAllowedForRole("admin_only", "USER")) {
+        fail("admin_only must deny USER classify access");
+      }
+      const theoreticalReadySlot = {
+        ...classifierSlot,
+        readinessStatus: "Ready" as const,
+        generationReady: true,
+      };
+      if (isClassifierUserTrafficReady({ commercial, modelSlot: theoreticalReadySlot })) {
+        fail("admin_only must keep USER traffic readiness false when model Ready");
+      }
+      console.log("  admin_only readiness: generationReady helper OK, USER traffic false");
+    }
   } else if (classifierSlot?.readinessStatus === "Ready") {
     console.log("  note: classifier Ready (model active + runtime gate enabled)");
   } else {
