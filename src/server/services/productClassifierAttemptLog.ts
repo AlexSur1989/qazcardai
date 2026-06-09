@@ -8,6 +8,7 @@ export type ProductClassifierAttemptReason =
   | "cooldown"
   | "image_unavailable"
   | "setup"
+  | "upstream_maintenance"
   | "kie_error"
   | "parse_error"
   | "success";

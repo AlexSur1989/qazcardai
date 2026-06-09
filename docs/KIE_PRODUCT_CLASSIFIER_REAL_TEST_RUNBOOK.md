@@ -160,6 +160,37 @@ docker compose run --rm app npm run smoke:product-card-marketplace
 - Billing: RESERVE −1 → REFUND +1, balance net **0**.
 - Success path CAPTURE — pending.
 
+### Paid classifier test #3: Kie HTTP 200 + maintenance body
+
+**Дата:** 2026-06-09 (commit `bc387d1` deployed).
+
+- Kie HTTP **200**, body: `{"msg":"The server is currently being maintained…","code":500}` — **не** chat/completions.
+- До fix классифицировалось как `parse_error`; после fix — **`upstream_maintenance`** → USER `code=kie`, REFUND.
+- Retry только после operator confirmation; **no automatic retry**.
+
+## Kie HTTP 200 with provider error body
+
+Kie может вернуть **HTTP 200**, но JSON без `choices`:
+
+```json
+{
+  "msg": "The server is currently being maintained, please try again later~",
+  "code": 500
+}
+```
+
+### Поведение QazCard
+
+| Шаг | Действие |
+|-----|----------|
+| Detection | `detectKieProviderErrorBody()` **до** parse |
+| errorType | `upstream_maintenance` или `upstream_error` |
+| USER API | `code=kie`, безопасное сообщение (без raw body) |
+| ApiLog KIE_AI | `providerCode`, `providerMessage` (≤200 символов), `elapsedMs`, `operationRef` |
+| ApiLog QAZCARD_CLASSIFIER | `upstream_maintenance` или `kie_error` — **не** `parse_error` |
+| Billing | RESERVE → **REFUND** |
+| Retry | **Только** после явного подтверждения оператора |
+
 ## Связанные файлы
 
 - `src/server/services/productClassifierKieChat.ts`

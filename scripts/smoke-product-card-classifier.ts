@@ -30,6 +30,10 @@ import {
 } from "../src/server/services/productClassifierCommercialSettings";
 import { getProductCardModelSetupOverview } from "../src/server/services/productCardModelSetup";
 import { isClassifierRuntimeEnabled } from "../src/lib/product-classifier-runtime-gate";
+import {
+  detectKieProviderErrorBody,
+  KIE_MAINTENANCE_BODY_FIXTURE,
+} from "../src/server/services/detectKieProviderErrorBody";
 
 const CLASSIFIER_SLUG = "gemini-3-flash-product-classifier";
 
@@ -71,6 +75,20 @@ async function main() {
       fail(`setup error mismatch: ${missingFlow.error}`);
     }
     console.log("[smoke:product-card-classifier] missing/inactive setup error OK");
+
+    const maintenanceDetect = detectKieProviderErrorBody(KIE_MAINTENANCE_BODY_FIXTURE);
+    if (!maintenanceDetect.isProviderError) {
+      fail("Kie maintenance fixture must be detected as provider error");
+    }
+    if (maintenanceDetect.errorType !== "upstream_maintenance") {
+      fail(`maintenance fixture errorType=${maintenanceDetect.errorType}, expected upstream_maintenance`);
+    }
+    if (maintenanceDetect.providerCode !== 500) {
+      fail(`maintenance fixture providerCode=${maintenanceDetect.providerCode}`);
+    }
+    console.log(
+      "[smoke:product-card-classifier] Kie maintenance fixture → upstream_maintenance (not parse_error)",
+    );
 
     const commercial = await getProductClassifierCommercialSettings();
     if (commercial.accessMode !== "disabled") {

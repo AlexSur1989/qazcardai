@@ -269,7 +269,10 @@ export async function executeProductClassifierClassify(args: {
         projectId: args.projectId,
         modelSlug,
         status: "failed",
-        reason: "kie_error",
+        reason:
+          e.upstreamErrorType === "upstream_maintenance"
+            ? "upstream_maintenance"
+            : "kie_error",
         costCredits: 0,
         httpStatus: 502,
       });

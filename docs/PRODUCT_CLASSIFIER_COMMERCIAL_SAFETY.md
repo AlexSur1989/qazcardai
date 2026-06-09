@@ -58,6 +58,7 @@ cp .env backups/env_before_classifier_$(date +%F_%H-%M).env
 - При **Kie/network error** после RESERVE обязателен **REFUND** (net balance без изменений).
 - Failed Kie calls **не** создают `Generation` и **не** запускают marketplace worker.
 - **Timeout / fetch failed** → REFUND; **automatic retry запрещён** (риск двойного Kie spend). Retry только controlled + operator confirmation.
+- **Kie HTTP 200 + provider error body** (`code≥400`, `msg`/`error` без `choices`, maintenance text) → **upstream_maintenance** / **upstream_error**, не `parse_error`; RESERVE → **REFUND**; USER **не** видит raw provider body; ApiLog — `providerCode`, `providerMessage` (≤200 символов), без секретов.
 - **Image URL precheck** (HTTPS HEAD/GET, ~8s) — **до RESERVE**; при fail Kie не вызывается, billing не трогается.
 - После failed controlled test **gate выключать обратно** (restore backup `.env` → `docker compose up -d app`).
 - Перед retry: preflight admin_only fix, timeout 120s, verify/smoke, gate disabled до явного подтверждения.
@@ -82,8 +83,9 @@ Controlled production test: `admin_only`, cost **1**.
 
 1. **fetch failed** — RESERVE −1 → REFUND +1.
 2. **Kie timeout (~60s)** — RESERVE −1 → REFUND +1.
+3. **Kie HTTP 200 + maintenance body** — RESERVE −1 → REFUND +1; `upstream_maintenance`, не `parse_error`.
 
-Balance net **0** оба раза. Success path (CAPTURE 0) — pending. Подробнее: `docs/KIE_PRODUCT_CLASSIFIER_REAL_TEST_RUNBOOK.md`.
+Balance net **0** все три раза. Success path (CAPTURE 0) — pending. Подробнее: `docs/KIE_PRODUCT_CLASSIFIER_REAL_TEST_RUNBOOK.md`.
 
 ## Метрики
 

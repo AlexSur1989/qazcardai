@@ -13,6 +13,7 @@ import {
   PRODUCT_CLASSIFIER_KIE_SYSTEM_PROMPT,
 } from "@/config/product-classifier-kie-prompt";
 import { createApiLog } from "@/server/services/api-log";
+import { detectKieProviderErrorBody } from "@/server/services/detectKieProviderErrorBody";
 import { readImageForVision } from "@/server/services/productClassifierVision";
 import {
   assertKieModelIdSet,
@@ -39,7 +40,9 @@ export type ClassifierKieErrorType =
   | "timeout"
   | "fetch_failed"
   | "http_error"
-  | "parse_error";
+  | "parse_error"
+  | "upstream_maintenance"
+  | "upstream_error";
 
 export class ProductClassifierKieNotEnabledError extends Error {
   constructor() {
@@ -49,9 +52,15 @@ export class ProductClassifierKieNotEnabledError extends Error {
 }
 
 export class ProductClassifierKieHttpError extends Error {
-  constructor(message: string) {
+  readonly upstreamErrorType?: "upstream_maintenance" | "upstream_error";
+
+  constructor(
+    message: string,
+    upstreamErrorType?: "upstream_maintenance" | "upstream_error",
+  ) {
     super(message);
     this.name = "ProductClassifierKieHttpError";
+    this.upstreamErrorType = upstreamErrorType;
   }
 }
 
@@ -210,6 +219,8 @@ async function logClassifierKieDiagnostics(args: {
   elapsedMs: number;
   timeoutMs: number;
   errorType?: ClassifierKieErrorType;
+  providerCode?: number | null;
+  providerMessage?: string | null;
   diagnostics?: ClassifierKieChatInput["diagnostics"];
   apiModelId: string;
 }): Promise<void> {
@@ -228,6 +239,8 @@ async function logClassifierKieDiagnostics(args: {
         elapsedMs: args.elapsedMs,
         timeoutMs: args.timeoutMs,
         errorType: args.errorType ?? null,
+        providerCode: args.providerCode ?? null,
+        providerMessage: args.providerMessage ?? null,
       },
       payload: sanitizeClassifierRequestForLog(args.body),
     } as unknown,
@@ -340,6 +353,28 @@ export async function classifyProductWithKieChat(
         apiModelId: modelIdForLog,
       });
       throw new ProductClassifierKieHttpError(mapKieHttpError(resBody, httpStatus));
+    }
+
+    const providerErr = detectKieProviderErrorBody(resBody);
+    if (providerErr.isProviderError) {
+      await logClassifierKieDiagnostics({
+        endpoint: endpointForLog,
+        body,
+        responsePayload: resBody,
+        httpStatus,
+        errorMessage: PRODUCT_CLASSIFIER_KIE_ERROR,
+        elapsedMs,
+        timeoutMs,
+        errorType: providerErr.errorType,
+        providerCode: providerErr.providerCode ?? null,
+        providerMessage: providerErr.providerMessage ?? null,
+        diagnostics: input.diagnostics,
+        apiModelId: modelIdForLog,
+      });
+      throw new ProductClassifierKieHttpError(
+        PRODUCT_CLASSIFIER_KIE_ERROR,
+        providerErr.errorType,
+      );
     }
 
     const parsed = parseProductClassifierChatResponse(resBody);
