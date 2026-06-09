@@ -718,6 +718,17 @@ export const APP_SETTINGS_REGISTRY: AppSettingRegistryEntry[] = [
     sensitive: false,
   },
   {
+    key: "PRODUCT_CLASSIFIER_TIMEOUT_MS",
+    group: "classifier",
+    label: "PRODUCT_CLASSIFIER_TIMEOUT_MS / Таймаут Kie classifier, мс",
+    description:
+      "AbortSignal.timeout для chat/completions classifier. Default 120000, clamp 30000–180000.",
+    type: "number",
+    defaultValue: 120000,
+    editable: true,
+    sensitive: false,
+  },
+  {
     key: "MAINTENANCE_MODE",
     group: "maintenance",
     label: "MAINTENANCE_MODE / Режим техобслуживания",

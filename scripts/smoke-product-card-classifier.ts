@@ -15,7 +15,7 @@ import {
   isCriticalClassifierDryRunWarning,
   validateClassifierDryRunPayloadShape,
 } from "../src/server/services/adminClassifierPayloadDryRun";
-import { runClassifierPreflight } from "../src/server/services/classifierPreflight";
+import { runClassifierPreflight, classifierSlotBlocksReadyForRealTest } from "../src/server/services/classifierPreflight";
 import {
   isProductClassifierReady,
   runSafeProductClassifierFlow,
@@ -24,6 +24,9 @@ import {
   getProductClassifierCommercialSettings,
   isClassifierAccessModeAllowedForRole,
   isClassifierUserTrafficReady,
+  PRODUCT_CLASSIFIER_TIMEOUT_MS_DEFAULT,
+  PRODUCT_CLASSIFIER_TIMEOUT_MS_MAX,
+  PRODUCT_CLASSIFIER_TIMEOUT_MS_MIN,
 } from "../src/server/services/productClassifierCommercialSettings";
 import { getProductCardModelSetupOverview } from "../src/server/services/productCardModelSetup";
 import { isClassifierRuntimeEnabled } from "../src/lib/product-classifier-runtime-gate";
@@ -82,6 +85,19 @@ async function main() {
     } else {
       console.log("[smoke:product-card-classifier] commercial defaults OK");
     }
+    if (
+      commercial.timeoutMs < PRODUCT_CLASSIFIER_TIMEOUT_MS_MIN ||
+      commercial.timeoutMs > PRODUCT_CLASSIFIER_TIMEOUT_MS_MAX
+    ) {
+      fail(`timeoutMs out of clamp: ${commercial.timeoutMs}`);
+    }
+    if (commercial.timeoutMs !== PRODUCT_CLASSIFIER_TIMEOUT_MS_DEFAULT) {
+      console.log(
+        `[smoke:product-card-classifier] timeoutMs=${commercial.timeoutMs} (default ${PRODUCT_CLASSIFIER_TIMEOUT_MS_DEFAULT})`,
+      );
+    } else {
+      console.log("[smoke:product-card-classifier] timeout default 120000ms OK");
+    }
 
     if (!classifierSlot.autoClassifyReady && isClassifierRuntimeEnabled()) {
       if (commercial.accessMode !== "all_users") {
@@ -110,6 +126,12 @@ async function main() {
       };
       if (isClassifierUserTrafficReady({ commercial, modelSlot: theoreticalReadySlot })) {
         fail("admin_only must keep readyForUserTraffic false when model Ready");
+      }
+      if (
+        theoreticalReadySlot.generationReady &&
+        classifierSlotBlocksReadyForRealTest(theoreticalReadySlot)
+      ) {
+        fail("preflight must not block admin_only when generationReady=true");
       }
       console.log(
         "[smoke:product-card-classifier] admin_only readiness OK (generationReady helper, USER traffic false)",

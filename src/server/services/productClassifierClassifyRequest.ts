@@ -20,6 +20,10 @@ import {
   refundClassifierCredits,
   reserveClassifierCredits,
 } from "@/server/services/credits";
+import {
+  precheckClassifierImageUrl,
+  PRODUCT_CLASSIFIER_IMAGE_UNAVAILABLE_ERROR,
+} from "@/server/services/productClassifierImagePrecheck";
 import { logProductClassifierAttempt } from "@/server/services/productClassifierAttemptLog";
 import {
   getProductClassifierCommercialSettings,
@@ -59,6 +63,7 @@ export type ProductClassifierClassifyApiOutcome =
         | "insufficient_credits"
         | "daily_limit"
         | "cooldown"
+        | "image_unavailable"
         | "invalid_mock"
         | "kie"
         | "parse";
@@ -169,6 +174,24 @@ export async function executeProductClassifierClassify(args: {
     }
   }
 
+  const imagePrecheck = await precheckClassifierImageUrl(imageUrl);
+  if (!imagePrecheck.ok) {
+    await logProductClassifierAttempt({
+      userId: args.userId,
+      projectId: args.projectId,
+      modelSlug,
+      status: "blocked",
+      reason: "image_unavailable",
+      costCredits: 0,
+      httpStatus: 503,
+    });
+    return {
+      ok: false,
+      error: PRODUCT_CLASSIFIER_IMAGE_UNAVAILABLE_ERROR,
+      code: "image_unavailable",
+    };
+  }
+
   const operationRef = randomUUID();
   let reserved = false;
 
@@ -186,7 +209,18 @@ export async function executeProductClassifierClassify(args: {
     await markProductClassifyCooldown(args.userId, commercial.cooldownSeconds);
     await recordProductClassifyDailyAttempt(args.userId);
 
-    const result = await classifyProductWithKieChat({ imageUrl, model });
+    const result = await classifyProductWithKieChat({
+      imageUrl,
+      model,
+      timeoutMs: commercial.timeoutMs,
+      diagnostics: {
+        operationRef,
+        projectId: args.projectId,
+        userId: args.userId,
+        modelSlug,
+        costCredits,
+      },
+    });
 
     if (costCredits > 0) {
       await captureClassifierCredits(operationRef);

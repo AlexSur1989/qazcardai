@@ -128,11 +128,37 @@ docker compose run --rm app npm run smoke:product-card-marketplace
 
 ### Before retry checklist
 
-- [ ] Readiness fix закоммичен
+- [x] Readiness fix закоммичен (`4a1762b`)
+- [ ] Preflight admin_only fix + timeout 120s (`PRODUCT_CLASSIFIER_TIMEOUT_MS`)
 - [ ] `npm run verify:product-card-model-setup` + `smoke:product-card-classifier` OK
 - [ ] Gate **disabled** до явного подтверждения
 - [ ] Backup `.env` перед включением gate
 - [ ] Один controlled POST `/classify`, затем gate off
+- [ ] **No automatic retry** — только ручной controlled test после operator confirmation
+
+## Timeout handling
+
+| Параметр | Значение |
+|----------|----------|
+| AppSetting | `PRODUCT_CLASSIFIER_TIMEOUT_MS` |
+| Default | **120000** ms (120 sec) |
+| Clamp | 30000–180000 ms |
+
+### Поведение при timeout / fetch failed
+
+- Kie chat/completions использует `AbortSignal.timeout(timeoutMs)`.
+- **Timeout или network error → REFUND** (если RESERVE уже был).
+- **Automatic retry не выполняется** — повторный запрос может создать двойной расход Kie.ai.
+- Retry только после **явного подтверждения оператора** и проверки Kie latency / ApiLog (`errorType`: `timeout`, `fetch_failed`, `http_error`).
+- Image URL **precheck** (HEAD/GET, 8s) выполняется **до RESERVE**; при недоступном фото Kie не вызывается.
+
+### Paid classifier retry attempt: Kie timeout / refund verified
+
+**Дата:** 2026-06-09 (после preflight fix `4a1762b`).
+
+- Real Kie attempt: **1**, ответ **`The operation was aborted due to timeout`** (~60s, до увеличения timeout).
+- Billing: RESERVE −1 → REFUND +1, balance net **0**.
+- Success path CAPTURE — pending.
 
 ## Связанные файлы
 

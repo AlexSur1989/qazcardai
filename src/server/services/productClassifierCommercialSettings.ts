@@ -13,7 +13,12 @@ export type ProductClassifierCommercialSettings = {
   costCredits: number;
   dailyLimit: number;
   cooldownSeconds: number;
+  timeoutMs: number;
 };
+
+export const PRODUCT_CLASSIFIER_TIMEOUT_MS_DEFAULT = 120_000;
+export const PRODUCT_CLASSIFIER_TIMEOUT_MS_MIN = 30_000;
+export const PRODUCT_CLASSIFIER_TIMEOUT_MS_MAX = 180_000;
 
 function clampNonNegativeInt(raw: unknown, fallback: number): number {
   const n = typeof raw === "number" ? raw : Number(raw);
@@ -21,12 +26,22 @@ function clampNonNegativeInt(raw: unknown, fallback: number): number {
   return Math.floor(n);
 }
 
+export function clampClassifierTimeoutMs(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n)) return PRODUCT_CLASSIFIER_TIMEOUT_MS_DEFAULT;
+  const ms = Math.floor(n);
+  if (ms < PRODUCT_CLASSIFIER_TIMEOUT_MS_MIN) return PRODUCT_CLASSIFIER_TIMEOUT_MS_MIN;
+  if (ms > PRODUCT_CLASSIFIER_TIMEOUT_MS_MAX) return PRODUCT_CLASSIFIER_TIMEOUT_MS_MAX;
+  return ms;
+}
+
 export async function getProductClassifierCommercialSettings(): Promise<ProductClassifierCommercialSettings> {
-  const [accessRaw, costRaw, dailyRaw, cooldownRaw] = await Promise.all([
+  const [accessRaw, costRaw, dailyRaw, cooldownRaw, timeoutRaw] = await Promise.all([
     getAppSetting("PRODUCT_CLASSIFIER_ACCESS_MODE"),
     getAppSetting("PRODUCT_CLASSIFIER_COST_CREDITS"),
     getAppSetting("PRODUCT_CLASSIFIER_DAILY_LIMIT"),
     getAppSetting("PRODUCT_CLASSIFIER_COOLDOWN_SECONDS"),
+    getAppSetting("PRODUCT_CLASSIFIER_TIMEOUT_MS"),
   ]);
 
   return {
@@ -34,6 +49,7 @@ export async function getProductClassifierCommercialSettings(): Promise<ProductC
     costCredits: clampNonNegativeInt(costRaw, 1),
     dailyLimit: Math.max(1, clampNonNegativeInt(dailyRaw, 10)),
     cooldownSeconds: Math.max(1, clampNonNegativeInt(cooldownRaw, 10)),
+    timeoutMs: clampClassifierTimeoutMs(timeoutRaw),
   };
 }
 
@@ -111,6 +127,7 @@ export function validateClassifierCommercialPatch(input: {
   costCredits?: number;
   dailyLimit?: number;
   cooldownSeconds?: number;
+  timeoutMs?: number;
 }): { ok: true } | { ok: false; error: string } {
   if (input.accessMode !== undefined) {
     const mode = parseProductClassifierAccessMode(input.accessMode);
@@ -134,6 +151,20 @@ export function validateClassifierCommercialPatch(input: {
   if (input.cooldownSeconds !== undefined) {
     if (!Number.isInteger(input.cooldownSeconds) || input.cooldownSeconds < 1) {
       return { ok: false, error: "cooldownSeconds: целое число ≥ 1" };
+    }
+  }
+  if (input.timeoutMs !== undefined) {
+    if (!Number.isInteger(input.timeoutMs)) {
+      return { ok: false, error: "timeoutMs: целое число миллисекунд" };
+    }
+    if (
+      input.timeoutMs < PRODUCT_CLASSIFIER_TIMEOUT_MS_MIN ||
+      input.timeoutMs > PRODUCT_CLASSIFIER_TIMEOUT_MS_MAX
+    ) {
+      return {
+        ok: false,
+        error: `timeoutMs: от ${PRODUCT_CLASSIFIER_TIMEOUT_MS_MIN} до ${PRODUCT_CLASSIFIER_TIMEOUT_MS_MAX}`,
+      };
     }
   }
   return { ok: true };

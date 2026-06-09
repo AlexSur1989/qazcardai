@@ -19,6 +19,7 @@ type CommercialState = {
   costCredits: number;
   dailyLimit: number;
   cooldownSeconds: number;
+  timeoutMs: number;
 };
 
 type Props = {
@@ -66,6 +67,7 @@ export function ProductCardClassifierCommercialPanel({ canEdit }: Props) {
         costCredits: state.costCredits,
         dailyLimit: state.dailyLimit,
         cooldownSeconds: state.cooldownSeconds,
+        timeoutMs: state.timeoutMs,
       }),
     });
     const parsed = await readJsonSafe<{ ok?: boolean; error?: string }>(res);
@@ -109,6 +111,12 @@ export function ProductCardClassifierCommercialPanel({ canEdit }: Props) {
               <div className="rounded-lg border border-border/80 bg-muted/20 p-3">
                 <dt className="text-muted-foreground text-xs">Cost per recognition</dt>
                 <dd className="font-semibold tabular-nums">{state.costCredits} токен(ов)</dd>
+              </div>
+              <div className="rounded-lg border border-border/80 bg-muted/20 p-3">
+                <dt className="text-muted-foreground text-xs">Kie timeout</dt>
+                <dd className="font-semibold tabular-nums">
+                  {Math.round(state.timeoutMs / 1000)} sec
+                </dd>
               </div>
             </dl>
 
@@ -173,6 +181,24 @@ export function ProductCardClassifierCommercialPanel({ canEdit }: Props) {
                     }
                   />
                 </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="pc-classifier-timeout">Timeout (ms)</Label>
+                  <input
+                    id="pc-classifier-timeout"
+                    type="number"
+                    min={30000}
+                    max={180000}
+                    step={1000}
+                    className="border-input w-full rounded-xl border bg-card px-3 py-2 text-sm tabular-nums"
+                    value={state.timeoutMs}
+                    onChange={(e) =>
+                      setState({ ...state, timeoutMs: Number(e.target.value) })
+                    }
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    30 000–180 000 ms (default 120 000). Без automatic retry.
+                  </p>
+                </div>
               </div>
             ) : (
               <ul className="text-muted-foreground space-y-1 text-xs">
@@ -181,6 +207,7 @@ export function ProductCardClassifierCommercialPanel({ canEdit }: Props) {
                 </li>
                 <li>Daily limit: {state.dailyLimit}</li>
                 <li>Cooldown: {state.cooldownSeconds}s</li>
+                <li>Timeout: {Math.round(state.timeoutMs / 1000)}s</li>
               </ul>
             )}
 

@@ -57,12 +57,33 @@ cp .env backups/env_before_classifier_$(date +%F_%H-%M).env
 - Setup, gate, access denied, limits — **без списания**.
 - При **Kie/network error** после RESERVE обязателен **REFUND** (net balance без изменений).
 - Failed Kie calls **не** создают `Generation` и **не** запускают marketplace worker.
+- **Timeout / fetch failed** → REFUND; **automatic retry запрещён** (риск двойного Kie spend). Retry только controlled + operator confirmation.
+- **Image URL precheck** (HTTPS HEAD/GET, ~8s) — **до RESERVE**; при fail Kie не вызывается, billing не трогается.
 - После failed controlled test **gate выключать обратно** (restore backup `.env` → `docker compose up -d app`).
-- Перед retry: закоммитить readiness fix (`isProductClassifierReady` → `generationReady`, не `autoClassifyReady`), прогнать verify/smoke, gate оставить disabled до явного подтверждения.
+- Перед retry: preflight admin_only fix, timeout 120s, verify/smoke, gate disabled до явного подтверждения.
 
-### Paid test attempt 2026-06-09 (admin_only, fetch failed)
+### Preflight: admin_only ≠ user traffic
 
-Controlled production test: `admin_only`, cost **1**, Kie вернул `fetch failed`. Billing error path подтверждён: RESERVE −1 → REFUND +1, balance net **0**, ApiLog `QAZCARD_CLASSIFIER` + Kie log без секретов. Success path (CAPTURE 0, apply) — pending. Подробнее: `docs/KIE_PRODUCT_CLASSIFIER_REAL_TEST_RUNBOOK.md`.
+- `readyForRealTest` — controlled admin/beta test: модель **generationReady**, gate on, `accessMode ≠ disabled`, env OK. **`admin_only` → true** при gate on.
+- `readyForUserTraffic` — только **`all_users`** + gate + model Ready. **`admin_only` → false** (USER кнопку не видит).
+- Slot check в preflight использует **`generationReady`**, не `autoClassifyReady`.
+
+### Timeout setting
+
+| Setting | Default | Clamp |
+|---------|---------|-------|
+| `PRODUCT_CLASSIFIER_TIMEOUT_MS` | 120000 | 30000–180000 |
+
+Admin UI: `/admin/product-card` → Classifier access & pricing → Timeout (sec).
+
+### Paid test attempts 2026-06-09
+
+Controlled production test: `admin_only`, cost **1**.
+
+1. **fetch failed** — RESERVE −1 → REFUND +1.
+2. **Kie timeout (~60s)** — RESERVE −1 → REFUND +1.
+
+Balance net **0** оба раза. Success path (CAPTURE 0) — pending. Подробнее: `docs/KIE_PRODUCT_CLASSIFIER_REAL_TEST_RUNBOOK.md`.
 
 ## Метрики
 

@@ -25,7 +25,21 @@ import {
 export type ClassifierKieChatInput = {
   imageUrl: string;
   model: AiModel;
+  timeoutMs?: number;
+  diagnostics?: {
+    operationRef?: string;
+    projectId?: string;
+    userId?: string;
+    modelSlug?: string | null;
+    costCredits?: number;
+  };
 };
+
+export type ClassifierKieErrorType =
+  | "timeout"
+  | "fetch_failed"
+  | "http_error"
+  | "parse_error";
 
 export class ProductClassifierKieNotEnabledError extends Error {
   constructor() {
@@ -179,6 +193,51 @@ export function normalizeProductClassifierResult(parsed: unknown): ProductClassi
   });
 }
 
+function classifyKieErrorType(e: unknown, httpStatus: number): ClassifierKieErrorType {
+  if (e instanceof ProductClassifierParseError) return "parse_error";
+  if (httpStatus >= 400) return "http_error";
+  const msg = e instanceof Error ? e.message.toLowerCase() : "";
+  if (msg.includes("timeout") || msg.includes("aborted")) return "timeout";
+  return "fetch_failed";
+}
+
+async function logClassifierKieDiagnostics(args: {
+  endpoint: string;
+  body: unknown;
+  responsePayload?: unknown;
+  httpStatus: number | null;
+  errorMessage: string | null;
+  elapsedMs: number;
+  timeoutMs: number;
+  errorType?: ClassifierKieErrorType;
+  diagnostics?: ClassifierKieChatInput["diagnostics"];
+  apiModelId: string;
+}): Promise<void> {
+  const diag = args.diagnostics ?? {};
+  await createApiLog({
+    provider: "KIE_AI",
+    endpoint: args.endpoint,
+    requestPayload: {
+      diagnostics: {
+        model: args.apiModelId,
+        operationRef: diag.operationRef ?? null,
+        projectId: diag.projectId ?? null,
+        userId: diag.userId ?? null,
+        modelSlug: diag.modelSlug ?? null,
+        costCredits: diag.costCredits ?? null,
+        elapsedMs: args.elapsedMs,
+        timeoutMs: args.timeoutMs,
+        errorType: args.errorType ?? null,
+      },
+      payload: sanitizeClassifierRequestForLog(args.body),
+    } as unknown,
+    responsePayload: args.responsePayload
+      ? (redactKieLogPayload(args.responsePayload) as unknown)
+      : undefined,
+    statusCode: args.httpStatus,
+    errorMessage: args.errorMessage,
+  });
+}
 function mapKieHttpError(body: unknown, status: number): string {
   if (body && typeof body === "object" && !Array.isArray(body)) {
     const o = body as Record<string, unknown>;
@@ -241,6 +300,8 @@ export async function classifyProductWithKieChat(
     chatCompletionsPathForModel(apiModelId),
   );
   const endpointForLog = requestUrl.split("?")[0]!.slice(0, 2048);
+  const timeoutMs = input.timeoutMs ?? 120_000;
+  const startedAt = performance.now();
 
   let httpStatus = 0;
   try {
@@ -251,7 +312,7 @@ export async function classifyProductWithKieChat(
         Authorization: `Bearer ${getKieApiKeySafe()}`,
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     httpStatus = res.status;
     const text = await res.text();
@@ -262,23 +323,53 @@ export async function classifyProductWithKieChat(
       resBody = { raw: text.slice(0, 2000) };
     }
 
-    await createApiLog({
-      provider: "KIE_AI",
-      endpoint: endpointForLog,
-      requestPayload: sanitizeClassifierRequestForLog(body) as unknown,
-      responsePayload: redactKieLogPayload(resBody) as unknown,
-      statusCode: httpStatus,
-      errorMessage: res.ok ? null : mapKieHttpError(resBody, httpStatus),
-    });
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    const modelIdForLog = trimKieApiModelId(assertKieModelIdSet(apiModelId));
 
     if (!res.ok) {
+      await logClassifierKieDiagnostics({
+        endpoint: endpointForLog,
+        body,
+        responsePayload: resBody,
+        httpStatus,
+        errorMessage: mapKieHttpError(resBody, httpStatus),
+        elapsedMs,
+        timeoutMs,
+        errorType: "http_error",
+        diagnostics: input.diagnostics,
+        apiModelId: modelIdForLog,
+      });
       throw new ProductClassifierKieHttpError(mapKieHttpError(resBody, httpStatus));
     }
 
     const parsed = parseProductClassifierChatResponse(resBody);
     if (!parsed) {
+      await logClassifierKieDiagnostics({
+        endpoint: endpointForLog,
+        body,
+        responsePayload: resBody,
+        httpStatus,
+        errorMessage: PRODUCT_CLASSIFIER_PARSE_ERROR,
+        elapsedMs,
+        timeoutMs,
+        errorType: "parse_error",
+        diagnostics: input.diagnostics,
+        apiModelId: modelIdForLog,
+      });
       throw new ProductClassifierParseError(PRODUCT_CLASSIFIER_PARSE_ERROR);
     }
+
+    await logClassifierKieDiagnostics({
+      endpoint: endpointForLog,
+      body,
+      responsePayload: resBody,
+      httpStatus,
+      errorMessage: null,
+      elapsedMs,
+      timeoutMs,
+      diagnostics: input.diagnostics,
+      apiModelId: modelIdForLog,
+    });
     return normalizeProductClassifierResult(parsed);
   } catch (e) {
     if (
@@ -288,13 +379,20 @@ export async function classifyProductWithKieChat(
     ) {
       throw e;
     }
-    await createApiLog({
-      provider: "KIE_AI",
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    const errorType = classifyKieErrorType(e, httpStatus);
+    const errMsg =
+      e instanceof Error ? e.message.slice(0, 10_000) : "network error";
+    await logClassifierKieDiagnostics({
       endpoint: endpointForLog,
-      requestPayload: sanitizeClassifierRequestForLog(body) as unknown,
-      responsePayload: undefined,
-      statusCode: httpStatus || null,
-      errorMessage: e instanceof Error ? e.message.slice(0, 10_000) : "network error",
+      body,
+      httpStatus: httpStatus || null,
+      errorMessage: errMsg,
+      elapsedMs,
+      timeoutMs,
+      errorType,
+      diagnostics: input.diagnostics,
+      apiModelId: trimKieApiModelId(assertKieModelIdSet(apiModelId)),
     });
     throw new ProductClassifierKieHttpError(PRODUCT_CLASSIFIER_KIE_ERROR);
   }

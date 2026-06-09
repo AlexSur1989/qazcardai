@@ -6,6 +6,7 @@ export type ProductClassifierAttemptReason =
   | "insufficient_credits"
   | "daily_limit"
   | "cooldown"
+  | "image_unavailable"
   | "setup"
   | "kie_error"
   | "parse_error"

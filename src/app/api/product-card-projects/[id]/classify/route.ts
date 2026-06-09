@@ -17,6 +17,7 @@ type Ctx = { params: Promise<{ id: string }> };
 function classifyErrorStatus(code: string): number {
   if (code === "setup") return 503;
   if (code === "insufficient_credits") return 402;
+  if (code === "image_unavailable") return 503;
   if (code === "daily_limit" || code === "cooldown") return 429;
   if (code === "invalid_mock") return 400;
   return 502;

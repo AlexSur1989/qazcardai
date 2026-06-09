@@ -23,7 +23,7 @@ import {
 } from "../src/lib/kie-import-wizard";
 import { getProductCardModelSetupOverview } from "../src/server/services/productCardModelSetup";
 import { getProductClassifierCommercialSettings } from "../src/server/services/productClassifierCommercialSettings";
-import { runClassifierPreflight } from "../src/server/services/classifierPreflight";
+import { runClassifierPreflight, classifierSlotBlocksReadyForRealTest } from "../src/server/services/classifierPreflight";
 import {
   isProductClassifierReady,
   runSafeProductClassifierFlow,
@@ -31,6 +31,9 @@ import {
 import {
   isClassifierAccessModeAllowedForRole,
   isClassifierUserTrafficReady,
+  PRODUCT_CLASSIFIER_TIMEOUT_MS_DEFAULT,
+  PRODUCT_CLASSIFIER_TIMEOUT_MS_MAX,
+  PRODUCT_CLASSIFIER_TIMEOUT_MS_MIN,
 } from "../src/server/services/productClassifierCommercialSettings";
 import { PRODUCT_CLASSIFIER_SETUP_ERROR } from "../src/lib/product-classifier-result";
 import { isClassifierRuntimeEnabled } from "../src/lib/product-classifier-runtime-gate";
@@ -534,8 +537,14 @@ async function main() {
       fail("classifier preflight readyForUserTraffic must be false when gate disabled");
     }
     console.log(
-      `  classifier commercial: cost=${commercial.costCredits} daily=${commercial.dailyLimit} cooldown=${commercial.cooldownSeconds}s`,
+      `  classifier commercial: cost=${commercial.costCredits} daily=${commercial.dailyLimit} cooldown=${commercial.cooldownSeconds}s timeout=${commercial.timeoutMs}ms`,
     );
+    if (
+      commercial.timeoutMs < PRODUCT_CLASSIFIER_TIMEOUT_MS_MIN ||
+      commercial.timeoutMs > PRODUCT_CLASSIFIER_TIMEOUT_MS_MAX
+    ) {
+      fail(`classifier timeoutMs out of clamp: ${commercial.timeoutMs}`);
+    }
     if (commercial.accessMode === "admin_only" && classifierSlot) {
       if (classifierSlot.autoClassifyReady) {
         fail("admin_only: autoClassifyReady must stay false");
@@ -558,7 +567,13 @@ async function main() {
       if (isClassifierUserTrafficReady({ commercial, modelSlot: theoreticalReadySlot })) {
         fail("admin_only must keep USER traffic readiness false when model Ready");
       }
-      console.log("  admin_only readiness: generationReady helper OK, USER traffic false");
+      const theoreticalBlocks = classifierSlotBlocksReadyForRealTest(theoreticalReadySlot);
+      if (theoreticalReadySlot.generationReady && theoreticalBlocks) {
+        fail("preflight slot check must use generationReady, not autoClassifyReady");
+      }
+      console.log(
+        "  admin_only readiness: generationReady helper OK, USER traffic false, theoretical readyForRealTest OK",
+      );
     }
   } else if (classifierSlot?.readinessStatus === "Ready") {
     console.log("  note: classifier Ready (model active + runtime gate enabled)");

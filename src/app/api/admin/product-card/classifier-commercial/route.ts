@@ -18,6 +18,7 @@ const patchSchema = z.object({
   costCredits: z.number().int().optional(),
   dailyLimit: z.number().int().optional(),
   cooldownSeconds: z.number().int().optional(),
+  timeoutMs: z.number().int().optional(),
 });
 
 const COMMERCIAL_KEYS = [
@@ -25,6 +26,7 @@ const COMMERCIAL_KEYS = [
   ["PRODUCT_CLASSIFIER_COST_CREDITS", "costCredits"],
   ["PRODUCT_CLASSIFIER_DAILY_LIMIT", "dailyLimit"],
   ["PRODUCT_CLASSIFIER_COOLDOWN_SECONDS", "cooldownSeconds"],
+  ["PRODUCT_CLASSIFIER_TIMEOUT_MS", "timeoutMs"],
 ] as const;
 
 export async function GET() {

@@ -28,8 +28,16 @@ export type ClassifierPreflightResult = {
     costCredits: number;
     dailyLimit: number;
     cooldownSeconds: number;
+    timeoutMs: number;
   };
 };
+
+/** Для verify/smoke: slot блокирует readyForRealTest, если модель не generationReady. */
+export function classifierSlotBlocksReadyForRealTest(
+  slot: { generationReady: boolean } | undefined,
+): boolean {
+  return !slot?.generationReady;
+}
 
 function isPlaceholderApiModelId(apiModelId: string): boolean {
   const t = apiModelId.trim().toUpperCase();
@@ -228,7 +236,7 @@ export async function runClassifierPreflight(): Promise<ClassifierPreflightResul
     }
   }
 
-  if (classifierSlot && !classifierSlot.autoClassifyReady) {
+  if (classifierSlot && classifierSlotBlocksReadyForRealTest(classifierSlot)) {
     const slotMessage =
       classifierSlot.readinessStatus === "ConfiguredDisabled"
         ? "Configured but disabled: runtime gate off"
@@ -250,7 +258,7 @@ export async function runClassifierPreflight(): Promise<ClassifierPreflightResul
       key: "classifierSlot",
       label: "Classifier slot readiness",
       status: "ok",
-      message: "Ready",
+      message: classifierSlot.generationReady ? "Ready (generationReady)" : "Ready",
     });
   }
 
@@ -310,6 +318,12 @@ export async function runClassifierPreflight(): Promise<ClassifierPreflightResul
     label: "Classifier cooldown seconds",
     status: "configured",
     message: String(commercial.cooldownSeconds),
+  });
+  pushCheck(checks, warnings, {
+    key: "classifierTimeoutMs",
+    label: "Classifier Kie timeout (ms)",
+    status: "configured",
+    message: String(commercial.timeoutMs),
   });
 
   pushCheck(checks, warnings, {
@@ -388,6 +402,7 @@ export async function runClassifierPreflight(): Promise<ClassifierPreflightResul
       costCredits: commercial.costCredits,
       dailyLimit: commercial.dailyLimit,
       cooldownSeconds: commercial.cooldownSeconds,
+      timeoutMs: commercial.timeoutMs,
     },
   };
 }
