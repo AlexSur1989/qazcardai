@@ -253,15 +253,21 @@ No mockup UI outside the card.`;
 export const SIMPLE_CARD_REFERENCE_RULES_CLASSIC_NO_REF = `No reference image is provided.
 Create the design from the product image, user text and selected classic style only.`;
 
-export const SIMPLE_CARD_REFERENCE_RULES_CLASSIC_WITH_REF = `A reference image is provided as optional style inspiration.
-Use it softly.
-Do not let it dominate the card.
+export const SIMPLE_CARD_REFERENCE_RULES_CLASSIC_WITH_REF = `A reference image is provided as optional style inspiration (Image B).
+Use the first image as the actual product.
+Use the second image only as a design/style reference: background, layout, composition, typography mood, lighting and visual presentation.
+Do not replace the product with objects from the reference image.
+Keep the product identity from the first image.
+Use the reference softly — do not let it dominate the card.
 The result must remain a classic marketplace product card.
 Do not copy reference text, logos, brands or watermarks.`;
 
-export const SIMPLE_CARD_REFERENCE_RULES_REFERENCE = `A reference image is required and provided.
-Use it as the main visual style guide.
-But the actual product must come from the main product image.
+export const SIMPLE_CARD_REFERENCE_RULES_REFERENCE = `A reference image is required and provided (Image B).
+Use the first image as the actual product.
+Use the second image only as a design/style reference: background, layout, composition, typography mood, lighting and visual presentation.
+Do not replace the product with objects from the reference image.
+Keep the product identity from the first image.
+Use the reference as the main visual style guide.
 Do not copy reference text, logos, badges, watermarks or numbers.`;
 
 export const SIMPLE_CARD_REFERENCE_RULES_PREMIUM = `No reference image is allowed for premium mode.

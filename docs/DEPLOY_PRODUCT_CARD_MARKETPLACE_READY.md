@@ -128,7 +128,7 @@ docker compose exec app npm run verify:product-card-model-setup
 
 Verify **не** вызывает Kie.ai, **не** создаёт Generation/CreditTransaction, **не** меняет балансы.
 
-Ожидание: `[verify:product-card-model-setup] OK`, marketplace slot **Ready**, `input_urls` array confirmed, final estimate **25** (при min=25, costCredits=12).
+Ожидание: `[verify:product-card-model-setup] OK`, marketplace slot **Ready**, `input_urls` array confirmed (1 product / 2 with design reference), final estimate **25** (при min=25, costCredits=12).
 
 ---
 

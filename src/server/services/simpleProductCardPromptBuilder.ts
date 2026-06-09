@@ -158,7 +158,11 @@ function imageInputBlock(usesReference: boolean): string {
   if (usesReference) {
     return `Image inputs:
 Image A = main product image (product identity source of truth).
-Image B = style reference image (style/composition reference only).`;
+Image B = style reference image (style/composition reference only).
+Use the first image as the actual product.
+Use the second image only as a design/style reference: background, layout, composition, typography mood, lighting and visual presentation.
+Do not replace the product with objects from the reference image.
+Keep the product identity from the first image.`;
   }
   return `Image input:
 Image A = main product image (product identity source of truth).`;

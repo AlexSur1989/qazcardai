@@ -53,6 +53,10 @@ import { calculateProductCardMarketplaceCardCredits } from "../src/server/servic
 import { getMarketplaceCardPricingSummary } from "../src/server/services/marketplaceCardPricingSummary";
 import { runMarketplaceCardPreflight } from "../src/server/services/marketplaceCardPreflight";
 import { buildKieMarketPayloadFromMapping, isStrictKiePayloadMapping } from "../src/server/services/kiePayloadMapping";
+import { modelSupportsSimpleCardReferenceImage } from "../src/lib/simple-product-card-model";
+import { getSchemaFields } from "../src/lib/generation-form-settings-schema";
+import { buildSimpleProductCardPrompt } from "../src/server/services/simpleProductCardPromptBuilder";
+import { mergeSimpleProductCardPromptsWithDefaults } from "../src/lib/validations/simple-product-card-prompts-setting";
 
 const MARKETPLACE_MODEL_SLUG = "gpt-image-2-product-marketplace-card";
 const CLASSIFIER_MODEL_SLUG = "gemini-3-flash-product-classifier";
@@ -454,6 +458,98 @@ async function main() {
   if ((bodyInput.input_urls as string[])[0] !== fakeUrl) {
     fail("buildKieMarketPayloadFromMapping input_urls[0] must match uploaded product URL");
   }
+
+  const schemaFields = getSchemaFields(marketplaceModel.settingsSchema);
+  const inputUrlsField = schemaFields.find((f) => f.name === "inputUrls");
+  if (
+    !inputUrlsField ||
+    typeof inputUrlsField.maxItems !== "number" ||
+    inputUrlsField.maxItems < 2
+  ) {
+    fail(`${MARKETPLACE_MODEL_SLUG}: inputUrls.maxItems must be >= 2 (run seed:gpt-image-2-product-marketplace-card)`);
+  }
+  if (!modelSupportsSimpleCardReferenceImage(marketplaceModel)) {
+    fail(`${MARKETPLACE_MODEL_SLUG}: modelSupportsSimpleCardReferenceImage must be true`);
+  }
+
+  const refUrl = "https://app.qazcardai.kz/uploads/verify/reference-sample.jpg";
+
+  const kieBodySingle = buildKieMarketPayloadFromMapping(marketplaceModel.payloadMapping, {
+    model: { apiModelId: marketplaceModel.apiModelId },
+    prompt: "verify marketplace card prompt",
+    settings: { aspectRatio: "1:1", resolution: "1K" },
+    inputFiles: [fakeUrl],
+    callBackUrl: "https://example.com/api/webhooks/kie",
+  });
+  const singleUrls = ((kieBodySingle.input ?? {}) as Record<string, unknown>).input_urls as
+    | string[]
+    | undefined;
+  if (!Array.isArray(singleUrls) || singleUrls.length !== 1) {
+    fail(`without reference: input_urls.length=${singleUrls?.length ?? 0}, expected 1`);
+  }
+  if (singleUrls[0] !== fakeUrl) {
+    fail("without reference: input_urls[0] must be product URL");
+  }
+
+  const kieBodyDual = buildKieMarketPayloadFromMapping(marketplaceModel.payloadMapping, {
+    model: { apiModelId: marketplaceModel.apiModelId },
+    prompt: "verify marketplace card prompt with reference",
+    settings: { aspectRatio: "1:1", resolution: "1K" },
+    inputFiles: [fakeUrl, refUrl],
+    callBackUrl: "https://example.com/api/webhooks/kie",
+  });
+  const dualInput = (kieBodyDual.input ?? {}) as Record<string, unknown>;
+  const dualUrls = dualInput.input_urls as string[] | undefined;
+  if (!Array.isArray(dualUrls) || dualUrls.length !== 2) {
+    fail("with reference: input.input_urls must have length 2");
+  }
+  if (dualUrls[0] !== fakeUrl || dualUrls[1] !== refUrl) {
+    fail("with reference: input_urls order must be [product, reference]");
+  }
+
+  const mergedPrompts = mergeSimpleProductCardPromptsWithDefaults(null).prompts;
+  const promptWithRef = buildSimpleProductCardPrompt({
+    payload: {
+      productPhotoId: "verify-photo",
+      userText: "700 Вт, LED дисплей, быстрый старт",
+      styleMode: "reference",
+      useReference: true,
+      referenceImageId: "verify-ref",
+      referenceCreativity: 50,
+      aspectRatio: "1:1",
+    },
+    prompts: mergedPrompts,
+    aspectRatio: "1:1",
+  });
+  const promptLower = promptWithRef.prompt.toLowerCase();
+  if (!promptLower.includes("image a")) {
+    fail("reference prompt must mention Image A (product)");
+  }
+  if (!promptLower.includes("image b")) {
+    fail("reference prompt must mention Image B (style reference)");
+  }
+  if (!promptLower.includes("first image")) {
+    fail("reference prompt must mention first image = product");
+  }
+  if (!promptLower.includes("second image")) {
+    fail("reference prompt must mention second image = style reference");
+  }
+  if (!promptLower.includes("do not replace the product")) {
+    fail("reference prompt must forbid replacing product with reference objects");
+  }
+
+  const priceWithRef = await calculateProductCardMarketplaceCardCredits(marketplaceModel, {
+    cardSize: "1x1",
+    styleMode: "reference",
+  });
+  if (priceWithRef.credits !== priceBreakdown.credits) {
+    fail(
+      `reference styleMode credits=${priceWithRef.credits} != classic ${priceBreakdown.credits}`,
+    );
+  }
+  console.log(
+    `  design reference: inputUrls.maxItems=${inputUrlsField.maxItems}, dual input_urls OK, prompt rules OK`,
+  );
 
   const staleClientEstimate = priceBreakdown.credits + 1;
   const priceChangedWouldReject =

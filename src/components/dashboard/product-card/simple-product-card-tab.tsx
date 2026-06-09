@@ -318,7 +318,15 @@ export function SimpleProductCardTab({
     let cancelled = false;
     void (async () => {
       const res = await fetch(`/api/product-card-projects/${projectId}`);
-      const parsed = await readJsonSafe<{ project?: { metadata?: Record<string, unknown> } }>(res);
+      const parsed = await readJsonSafe<{
+        project?: { metadata?: Record<string, unknown> };
+        simpleCardReferencePreview?: {
+          fileId: string;
+          url: string;
+          fileName: string;
+          size: number;
+        };
+      }>(res);
       if (cancelled || !parsed.ok || !res.ok) return;
       const meta = parsed.data.project?.metadata as {
         marketplaceCard?: { simpleCard?: SavedSimpleCardBlock };
@@ -342,6 +350,19 @@ export function SimpleProductCardTab({
       if (saved.referenceCreativity != null) setReferenceCreativity(saved.referenceCreativity);
       if (saved.productPhotoId && photosWithId.some((p) => p.fileId === saved.productPhotoId)) {
         setProductPhotoId(saved.productPhotoId);
+      }
+      const refPreview = parsed.data.simpleCardReferencePreview;
+      if (
+        refPreview?.fileId &&
+        saved.referenceImageId === refPreview.fileId &&
+        refPreview.url
+      ) {
+        setReferenceImage({
+          fileId: refPreview.fileId,
+          url: refPreview.url,
+          fileName: refPreview.fileName,
+          size: refPreview.size,
+        });
       }
       if (block?.vision && !block.vision.analysisFailed) {
         setVisionSummary(block.vision);
@@ -918,12 +939,15 @@ export function SimpleProductCardTab({
         {styleMode === "classic" ? (
           <Card className="rounded-2xl border-border">
             <CardHeader>
-              <CardTitle className="text-base">Фото-референс (необязательно)</CardTitle>
+              <CardTitle className="text-base">По фото-референсу</CardTitle>
               <CardDescription>
-                Необязательно. AI может взять из референса фон, стиль, композицию и настроение.
+                Загрузите пример дизайна. AI возьмёт из него стиль, фон, композицию и визуальную подачу.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {!supportsReference ? (
+                <p className="text-muted-foreground text-xs">{SIMPLE_CARD_REFERENCE_UNSUPPORTED_MESSAGE}</p>
+              ) : null}
               <div className="flex items-center gap-2">
                 <input
                   id={`${refFieldId}-classic-toggle`}
@@ -959,13 +983,15 @@ export function SimpleProductCardTab({
         {styleMode === "reference" ? (
           <Card className="rounded-2xl border-border">
             <CardHeader>
-              <CardTitle className="text-base">Загрузите фото-референс</CardTitle>
+              <CardTitle className="text-base">По фото-референсу</CardTitle>
               <CardDescription>
-                AI возьмёт из референса стиль, фон, композицию, цвета и настроение. Товар будет взят с вашего основного
-                фото.
+                Загрузите пример дизайна. AI возьмёт из него стиль, фон, композицию и визуальную подачу.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {!supportsReference ? (
+                <p className="text-destructive text-xs">{SIMPLE_CARD_REFERENCE_UNSUPPORTED_MESSAGE}</p>
+              ) : null}
               <ReferenceUploadBlock
                 referenceImage={referenceImage}
                 refUploading={refUploading}
@@ -1223,10 +1249,23 @@ function ReferenceUploadBlock({
           </div>
           <div className="min-w-0 flex-1 text-xs">
             <div className="truncate font-medium">{referenceImage.fileName}</div>
-            <Button type="button" variant="ghost" size="sm" className="mt-1 h-7 px-2" onClick={onRemove}>
-              <Trash2 className="mr-1 size-3.5" />
-              Удалить
-            </Button>
+            <div className="mt-1 flex flex-wrap gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2"
+                disabled={refUploading}
+                onClick={() => refInputRef.current?.click()}
+              >
+                <Upload className="mr-1 size-3.5" />
+                Заменить
+              </Button>
+              <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={onRemove}>
+                <Trash2 className="mr-1 size-3.5" />
+                Удалить
+              </Button>
+            </div>
           </div>
         </div>
       ) : (
@@ -1241,6 +1280,9 @@ function ReferenceUploadBlock({
           Загрузить референс
         </Button>
       )}
+      <p className="text-muted-foreground text-xs">
+        Референс используется только для стиля. Товар берётся с основного фото.
+      </p>
       <p className="text-muted-foreground text-xs">PNG, JPG, WebP · до {REF_MAX_MB} МБ</p>
     </div>
   );

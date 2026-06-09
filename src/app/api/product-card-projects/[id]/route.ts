@@ -13,6 +13,7 @@ import {
   updateProductCardProject,
 } from "@/server/services/productCardProjects";
 import { getOwnedProjectOrNull } from "@/server/services/productCardProjectAccess";
+import { resolveSimpleCardReferencePreview } from "@/server/services/simpleCardReferencePreview";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 import { PRODUCT_CATEGORY_IDS } from "@/config/product-card-categories";
 
@@ -52,7 +53,14 @@ export async function GET(_req: Request, ctx: Ctx) {
   if (!p) {
     return NextResponse.json({ error: "Не найдено" }, { status: 404 });
   }
-  return NextResponse.json({ project: p });
+  const simpleCardReferencePreview = await resolveSimpleCardReferencePreview(
+    current.user.id,
+    id,
+  );
+  return NextResponse.json({
+    project: p,
+    ...(simpleCardReferencePreview ? { simpleCardReferencePreview } : {}),
+  });
 }
 
 export async function PATCH(req: Request, ctx: Ctx) {

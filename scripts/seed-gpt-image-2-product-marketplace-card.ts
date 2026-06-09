@@ -74,6 +74,9 @@ function buildSettingsSchema(
     if (field.name === "inputUrls") {
       field.type = "hidden";
       field.label = "Product photo (system)";
+      field.maxItems = 2;
+      field.helpText =
+        "System: [0] product photo, [1] optional design reference. Hidden from USER.";
     }
     if (field.name === "resolution") {
       field.type = "select";
@@ -126,6 +129,8 @@ async function main() {
     kieNotes: {
       inputImageField: "input.input_urls",
       inputImageType: "array",
+      maxInputImages: 2,
+      inputImageOrder: "product first, design reference second",
       supportedAspectRatios: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
       supportedResolutions: ["1K", "2K", "4K"],
       resolutionWarning:

@@ -31,6 +31,10 @@ import {
   creditTransactionUserTypeLabel,
   shouldShowCreditTransactionToUser,
 } from "../src/lib/credit-labels";
+import { modelSupportsSimpleCardReferenceImage } from "../src/lib/simple-product-card-model";
+import { buildSimpleProductCardPrompt } from "../src/server/services/simpleProductCardPromptBuilder";
+import { mergeSimpleProductCardPromptsWithDefaults } from "../src/lib/validations/simple-product-card-prompts-setting";
+import { calculateProductCardMarketplaceCardCredits } from "../src/server/services/productCardPricing";
 import type { GenerationStatus, GenerationType } from "../src/generated/prisma/enums";
 
 const MARKETPLACE_MODEL_SLUG = "gpt-image-2-product-marketplace-card";
@@ -95,6 +99,69 @@ async function main() {
     if (!Array.isArray(input?.input_urls)) {
       fail("dry-run payload: input.input_urls must be array");
     }
+    if ((input.input_urls as string[]).length !== 1) {
+      fail("dry-run without reference: input_urls.length must be 1");
+    }
+
+    const productUrl = "https://example.com/smoke-product.jpg";
+    const referenceUrl = "https://example.com/smoke-reference.jpg";
+
+    if (!modelSupportsSimpleCardReferenceImage(model)) {
+      fail("marketplace model must support simple card design reference (inputUrls.maxItems >= 2)");
+    }
+
+    const dryRunWithRef = await buildDryRunKiePayloadForModel(model, {
+      prompt: "Smoke dry-run with design reference.",
+      settings: { aspectRatio: "1:1", resolution: "1K" },
+      inputFiles: [productUrl, referenceUrl],
+    });
+    if (!("payload" in dryRunWithRef)) fail(dryRunWithRef.error);
+    const refInput = (dryRunWithRef.payload as { input?: Record<string, unknown> }).input;
+    const refUrls = refInput?.input_urls as string[] | undefined;
+    if (!Array.isArray(refUrls) || refUrls.length !== 2) {
+      fail("dry-run with reference: input_urls.length must be 2");
+    }
+    if (refUrls[0] !== productUrl || refUrls[1] !== referenceUrl) {
+      fail("dry-run with reference: input_urls order must be [product, reference]");
+    }
+
+    const priceClassic = await calculateProductCardMarketplaceCardCredits(model, {
+      cardSize: "1x1",
+      styleMode: "classic",
+    });
+    const priceWithRef = await calculateProductCardMarketplaceCardCredits(model, {
+      cardSize: "1x1",
+      styleMode: "reference",
+    });
+    if (priceClassic.credits !== pricing.finalCredits) {
+      fail(`classic estimate ${priceClassic.credits} != preflight ${pricing.finalCredits}`);
+    }
+    if (priceWithRef.credits !== pricing.finalCredits) {
+      fail(`reference estimate ${priceWithRef.credits} != preflight ${pricing.finalCredits}`);
+    }
+    console.log(
+      `[smoke:product-card-marketplace] design reference: 1-image OK, 2-image OK, estimate ${pricing.finalCredits} unchanged`,
+    );
+
+    const mergedPrompts = mergeSimpleProductCardPromptsWithDefaults(null).prompts;
+    const promptBuilt = buildSimpleProductCardPrompt({
+      payload: {
+        productPhotoId: "smoke-photo",
+        userText: "700 Вт, LED дисплей, быстрый старт",
+        styleMode: "reference",
+        useReference: true,
+        referenceImageId: "smoke-ref",
+        referenceCreativity: 50,
+        aspectRatio: "1:1",
+      },
+      prompts: mergedPrompts,
+      aspectRatio: "1:1",
+    });
+    const pl = promptBuilt.prompt.toLowerCase();
+    if (!pl.includes("image a") || !pl.includes("image b") || !pl.includes("do not replace the product")) {
+      fail("reference prompt missing Image A/B or product-identity rules");
+    }
+    console.log("[smoke:product-card-marketplace] reference prompt rules OK");
 
     const mockMeta = {
       productCard: { tab: "marketplace_card", projectId: "smoke-project" },
