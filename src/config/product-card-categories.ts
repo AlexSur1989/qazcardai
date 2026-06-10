@@ -2,6 +2,11 @@
  * Категории, подкатегории и концепции (публичные UI-данные).
  * Скрытые system prompts — только в `product-card-prompts.ts` (server-only).
  */
+import {
+  getManualConceptCategory,
+  getManualConceptsForCategory,
+  MANUAL_CONCEPT_CATEGORIES,
+} from "@/config/product-card-concept-catalog";
 export const PRODUCT_CATEGORY_IDS = [
   "apparel",
   "accessories",
@@ -440,7 +445,12 @@ export function getProductCategoryById(
   id: string | null | undefined,
 ): ProductCategory | undefined {
   if (!id) return undefined;
-  return CATEGORIES.find((c) => c.id === id);
+  const direct = MANUAL_CONCEPT_CATEGORIES.find((c) => c.id === id);
+  if (direct) return direct;
+  const legacy = CATEGORIES.find((c) => c.id === id);
+  if (legacy) return legacy;
+  const resolved = getManualConceptCategory(id);
+  return MANUAL_CONCEPT_CATEGORIES.find((c) => c.id === resolved.id) ?? legacy;
 }
 
 /** @deprecated Используйте getProductCategoryById */
@@ -449,14 +459,14 @@ export const getCategoryGroup = getProductCategoryById;
 export function getConceptsForCategory(
   categoryId: string | null | undefined,
 ): ProductConcept[] {
-  return getProductCategoryById(categoryId)?.concepts ?? CATEGORIES[6].concepts;
+  return getManualConceptsForCategory(categoryId);
 }
 
 /**
- * Категории и концепции для UI: без systemPrompt.
+ * Категории с концепциями для UI «Фото с conцепциями» (11 manual categories).
  */
 export function getPublicProductCategories(): readonly PublicProductCategory[] {
-  return CATEGORIES;
+  return MANUAL_CONCEPT_CATEGORIES;
 }
 
 export function getPublicMarketplaceCardStyles() {

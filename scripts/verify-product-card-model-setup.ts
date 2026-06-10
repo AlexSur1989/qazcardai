@@ -58,9 +58,14 @@ import { getSchemaFields } from "../src/lib/generation-form-settings-schema";
 import { buildSimpleProductCardPrompt } from "../src/server/services/simpleProductCardPromptBuilder";
 import { hasConfirmedMeasurements } from "../src/lib/simple-product-card-parsed-content";
 import { mergeSimpleProductCardPromptsWithDefaults } from "../src/lib/validations/simple-product-card-prompts-setting";
+import {
+  getManualConceptsForCategory,
+  MANUAL_CONCEPT_CATEGORY_IDS,
+} from "../src/config/product-card-concept-catalog";
 
 const MARKETPLACE_MODEL_SLUG = "gpt-image-2-product-marketplace-card";
-const CLASSIFIER_MODEL_SLUG = "gemini-3-flash-product-classifier";
+const CONCEPT_MODEL_SLUG = "gpt-image-2-product-concept-image";
+const CLASSIFIER_MODEL_SLUG = "gemini-2.5-flash-product-classifier";
 const MARKETPLACE_APP_SETTING_KEY = "PRODUCT_CARD_DEFAULT_MARKETPLACE_CARD_MODEL_SLUG";
 
 const connectionString = process.env.DATABASE_URL;
@@ -725,7 +730,10 @@ async function main() {
       fail(`classifier dry-run shape: ${shapeIssues.join("; ")}`);
     }
     const cp = classifierDryRun.payload as { model?: string; stream?: boolean };
-    if (cp.model !== "gemini-3-flash") fail("classifier dry-run model must be gemini-3-flash");
+    const expectedApiModelId = classifierModel.apiModelId.trim();
+    if (cp.model !== expectedApiModelId) {
+      fail(`classifier dry-run model must be ${expectedApiModelId}, got ${cp.model ?? "—"}`);
+    }
     if (cp.stream !== false) fail("classifier dry-run stream must be false");
     console.log("  classifier chat/completions dry-run OK");
   } else {
@@ -759,9 +767,45 @@ async function main() {
   if (txCountAfterClassifier !== txCountBeforeClassifier) {
     fail("classifier verify must not create CreditTransaction");
   }
-  if (conceptSlot?.readinessStatus === "Ready") {
-    console.log("  note: concept image unexpectedly Ready");
+  if (MANUAL_CONCEPT_CATEGORY_IDS.length !== 11) {
+    fail(`manual concept categories must be 11, got ${MANUAL_CONCEPT_CATEGORY_IDS.length}`);
   }
+  for (const catId of MANUAL_CONCEPT_CATEGORY_IDS) {
+    const concepts = getManualConceptsForCategory(catId);
+    if (concepts.length < 3) {
+      fail(`category ${catId} must have at least 3 concepts, got ${concepts.length}`);
+    }
+  }
+  console.log("  manual concept categories (11) OK");
+
+  const conceptModel = await prisma.aiModel.findUnique({
+    where: { slug: CONCEPT_MODEL_SLUG },
+  });
+  if (conceptModel) {
+    if (!conceptModel.isActive) fail(`${CONCEPT_MODEL_SLUG} must be active`);
+    if (conceptModel.productCardModelType !== "PRODUCT_CONCEPT_IMAGE") {
+      fail(`${CONCEPT_MODEL_SLUG} wrong productCardModelType`);
+    }
+    if (conceptModel.costCredits !== 20) {
+      fail(`${CONCEPT_MODEL_SLUG} costCredits must be 20, got ${conceptModel.costCredits}`);
+    }
+    if (conceptModel.apiModelId !== "gpt-image-2-image-to-image") {
+      fail(`${CONCEPT_MODEL_SLUG} apiModelId must be gpt-image-2-image-to-image`);
+    }
+    const conceptDryRun = await buildDryRunKiePayloadForModel(conceptModel);
+    if (!conceptDryRun.ok) fail(`concept dry-run failed: ${conceptDryRun.error}`);
+    const conceptInput = (conceptDryRun.payload as { input?: Record<string, unknown> }).input;
+    if (!conceptInput || !Array.isArray(conceptInput.input_urls)) {
+      fail("concept dry-run input.input_urls must be array");
+    }
+    if (!conceptSlot?.generationReady) {
+      fail(`concept slot generationReady=false issues=${conceptSlot?.readinessIssues.join(", ")}`);
+    }
+    console.log(`  concept model ${CONCEPT_MODEL_SLUG}: active, dry-run OK, costCredits=20`);
+  } else {
+    console.log(`  note: ${CONCEPT_MODEL_SLUG} not seeded — run seed:gpt-image-2-product-concept-image`);
+  }
+
   if (videoSlot?.readinessStatus === "Ready") {
     console.log("  note: video unexpectedly Ready");
   }

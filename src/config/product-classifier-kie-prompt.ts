@@ -25,6 +25,19 @@ export function getProductClassifierKieUserText(): string {
 Allowed category ids (use exactly one): ${CATEGORY_IDS}.
 If unsure, use category "universal".
 
+Category hints (pick the best match; never default to apparel unless the product is worn clothing):
+- home_appliances: large home/fitness equipment (treadmill, exercise bike, elliptical), kitchen appliances, vacuum cleaners, climate devices
+- electronics: phones, tablets, laptops, headphones, TVs, cameras, small gadgets, gaming devices
+- apparel: clothing worn on the body (shirts, pants, dresses, jackets)
+- footwear: shoes, sneakers, boots
+- furniture: tables, chairs, sofas, beds, cabinets
+- home_goods: decor, kitchenware, textiles, storage, small home items (not large appliances)
+- auto: car parts and accessories
+- beauty_and_care: cosmetics, skincare, hair care
+- kids: children's products
+- accessories: bags, watches, jewelry, glasses (not clothing)
+- universal: mixed or unclear
+
 Use Russian language for categoryLabel, productTitle, visibleProduct, suggestedBenefits and detectedAttributes labels/values.
 Do not invent brand names or technical specs if they are not visible on the photo.
 Return at most 7 suggestedBenefits and at most 10 detectedAttributes.

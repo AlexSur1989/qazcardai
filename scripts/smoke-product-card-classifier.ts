@@ -35,7 +35,7 @@ import {
   KIE_MAINTENANCE_BODY_FIXTURE,
 } from "../src/server/services/detectKieProviderErrorBody";
 
-const CLASSIFIER_SLUG = "gemini-3-flash-product-classifier";
+const CLASSIFIER_SLUG = "gemini-2.5-flash-product-classifier";
 
 function fail(msg: string): never {
   console.error(`[smoke:product-card-classifier] FAIL: ${msg}`);

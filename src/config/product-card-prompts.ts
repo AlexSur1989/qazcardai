@@ -1,5 +1,6 @@
 import "server-only";
 
+import { resolveManualConceptCategoryId } from "@/config/product-card-concept-catalog";
 import {
   type MarketplaceCardStyle,
   PRODUCT_CATEGORY_IDS,
@@ -92,36 +93,6 @@ const BEAUTY: ConceptMap = {
     "Mode: hands or model. Application pose, clear product visibility, clean skin, professional beauty advertising look.",
 };
 
-const GADGETS: ConceptMap = {
-  studio_catalog:
-    "Mode: tech studio. Neutral or subtle gradient background, perfect edges, controlled reflections, no extra logos.",
-  tech_ads:
-    "Mode: high-tech ad. Blue/teal or tasteful color grade, light streaks, premium gadget campaign vibe, still product-accurate.",
-  in_use:
-    "Mode: in use. Show believable user hands/interaction, sharp device legibility, natural environment lighting.",
-  detail_closeup:
-    "Mode: hardware macro. Buttons, ports, display pixels (without inventing a different model), clean technical macro.",
-  desk_setup:
-    "Mode: desk setup. Modern workspace context, correct scale, minimal cable clutter, premium work aesthetic.",
-  hero_poster:
-    "Mode: hero poster. One dominant device, strong rim light, dramatic but controlled, with negative space for copy if needed (visual only).",
-};
-
-const HOME: ConceptMap = {
-  studio_catalog:
-    "Mode: furniture catalog. Neutral backdrop, true wood/fabric colors, product-scale clarity, not a different product.",
-  in_interior:
-    "Mode: in interior. Believable room placement, correct perspective/scale, warm natural or soft diffused light.",
-  minimal:
-    "Mode: minimal interior. Few objects, lots of breathing room, design-magazine calm composition, product is focal.",
-  cozy:
-    "Mode: cozy lifestyle. Soft warm light, home comfort cues, the product is clearly the subject within the room.",
-  material_closeup:
-    "Mode: material macro. Emphasize fabric grain, wood grain, metal finish, and tactile quality.",
-  premium_poster:
-    "Mode: premium interior poster. High-end real-estate/decor look, editorial staging, not replacing the item.",
-};
-
 const OTHER: ConceptMap = {
   studio_catalog:
     "Mode: clean studio. Versatile e-commerce look, one hero object, no clutter, true-to-image identity.",
@@ -131,22 +102,129 @@ const OTHER: ConceptMap = {
     "Mode: in use. Show believable real-world usage, natural interaction or context, sharp product legibility, honest environment lighting.",
 };
 
-const BY_CATEGORY: Record<ProductCategoryId, ConceptMap> = {
+const UNIVERSAL: ConceptMap = OTHER;
+
+const ELECTRONICS: ConceptMap = {
+  studio_catalog:
+    "Mode: consumer electronics catalog. Neutral or subtle gradient backdrop, crisp edges, accurate screen/port color, no invented logos or UI text.",
+  tech_ads:
+    "Mode: electronics ad campaign. Premium tech lighting, controlled reflections on glass/metal, modern color grade, product remains the exact model from reference.",
+  in_use:
+    "Mode: electronics in use. Believable hands or desk interaction, natural environment light, device stays recognizable and dominant.",
+  detail_closeup:
+    "Mode: electronics macro. Ports, buttons, bezels, camera modules or key hardware details; sharp, honest, no model swap.",
+  desk_setup:
+    "Mode: desk / workspace. Laptop, phone, headphones or peripherals in a tidy modern setup; correct scale and cable discipline.",
+  hero_poster:
+    "Mode: electronics hero poster. Single hero device, dramatic rim/key light, negative space, campaign polish without fake on-screen text.",
+};
+
+const HOME_APPLIANCES: ConceptMap = {
+  studio_catalog:
+    "Mode: appliance catalog. Large or small home appliance on clean background; true proportions, color and branding; treadmill/vacuum/kitchen appliance identity preserved.",
+  in_home:
+    "Mode: appliance in home. Plausible room context (kitchen, living room, home gym); correct scale; product is the hero, not a different appliance.",
+  in_use:
+    "Mode: appliance in use. Person using treadmill, blender, vacuum or similar; safe believable pose; product controls and form stay accurate.",
+  detail_panel:
+    "Mode: control panel / detail. Display, knobs, buttons, filters or functional details; commercial macro clarity.",
+  lifestyle_room:
+    "Mode: home lifestyle. Warm inviting room around the appliance; cozy but uncluttered; product remains central and unchanged.",
+  hero_poster:
+    "Mode: appliance hero ad. Strong commercial composition for large home/fitness tech; bold lighting, premium retail feel.",
+};
+
+const FOOTWEAR: ConceptMap = {
+  on_feet:
+    "Mode: footwear on feet. Natural walking or standing pose; accurate shoe shape, sole and upper; no shoe model swap.",
+  studio_catalog:
+    "Mode: footwear pair catalog. Both shoes visible on neutral background; true color and material; e-commerce clarity.",
+  flat_lay:
+    "Mode: footwear flat lay. Pair arranged from above; editorial spacing; soft shadows; premium sneaker/boot presentation.",
+  lifestyle_street:
+    "Mode: street lifestyle. Urban or casual outdoor context; shoes clearly visible; authentic pavement/park vibe.",
+  material_closeup:
+    "Mode: footwear macro. Leather mesh, stitching, sole tread or logo area; tactile detail without inventing new branding.",
+  hero_poster:
+    "Mode: footwear hero poster. Dynamic angle, strong contrast, campaign energy; exact shoe from reference.",
+};
+
+const HOME_GOODS: ConceptMap = {
+  studio_catalog:
+    "Mode: home goods catalog. Decor, textiles, kitchenware or storage on neutral background; honest colors and shape.",
+  styled_shelf:
+    "Mode: styled shelf. Product on shelf, console or sideboard; tasteful props; product remains the anchor item.",
+  in_kitchen:
+    "Mode: kitchen context. Counter, table or pantry setting suited to cookware, containers or utensils; clean realistic kitchen.",
+  lifestyle:
+    "Mode: home lifestyle. Everyday domestic scene; warm light; product integrated naturally but still legible.",
+  detail_closeup:
+    "Mode: home goods macro. Texture, glaze, weave, lid mechanism or material quality; sharp product truth.",
+  gift_composition:
+    "Mode: gift still life. Presentable arrangement for gifting; ribbon or box accents allowed but no readable text; hero product unchanged.",
+};
+
+const KIDS: ConceptMap = {
+  studio_catalog:
+    "Mode: kids product catalog. Bright clean studio; toy, clothing or gear centered; cheerful but not chaotic.",
+  playful_scene:
+    "Mode: playful kids scene. Soft colorful environment; safe playful mood; product is clear hero; age-appropriate styling.",
+  in_use_child:
+    "Mode: child using product. Gentle realistic use scenario; product identity preserved; safe family-friendly look.",
+  nursery:
+    "Mode: nursery / kids room. Pastel or cozy room context; crib, shelf or play corner; correct product scale.",
+  detail_safe:
+    "Mode: kids product detail. Materials, seams, rounded edges, buttons; macro clarity; trustworthy quality cues.",
+  bright_ad:
+    "Mode: kids commercial poster. Bold friendly colors, high clarity, product dominant; no scary or adult themes.",
+};
+
+const FURNITURE: ConceptMap = {
+  studio_catalog:
+    "Mode: furniture catalog. Sofa, chair, table or cabinet on neutral backdrop; correct proportions and materials.",
+  in_interior:
+    "Mode: furniture in room. Living room, bedroom or dining context; believable perspective and scale.",
+  minimal:
+    "Mode: minimal interior. Sparse modern room; breathing space; design-magazine calm; furniture is focal.",
+  cozy:
+    "Mode: cozy interior. Warm lamp light, soft textiles, homely atmosphere; furniture unchanged.",
+  material_closeup:
+    "Mode: furniture material macro. Wood grain, upholstery weave, metal legs; tactile premium detail.",
+  premium_poster:
+    "Mode: furniture editorial poster. High-end interior campaign; dramatic but realistic staging.",
+};
+
+const AUTO: ConceptMap = {
+  studio_catalog:
+    "Mode: automotive product catalog. Car accessory or part on clean background; accurate shape and finish.",
+  in_garage:
+    "Mode: garage / workshop. Tool, organizer or car care product in believable garage context; gritty-clean balance.",
+  in_car:
+    "Mode: car interior. Seat, dashboard or trunk context for automotive accessories; realistic scale inside vehicle.",
+  detail_closeup:
+    "Mode: automotive macro. Texture, mount, connector or material; sharp technical product shot.",
+  lifestyle_drive:
+    "Mode: driving lifestyle. Road trip or parking context hint; product visible and unchanged; no fake license plates with readable text.",
+  hero_poster:
+    "Mode: automotive hero ad. Strong commercial automotive aesthetic; product as hero; dynamic lighting.",
+};
+
+const BY_CATEGORY: Record<string, ConceptMap> = {
+  electronics: ELECTRONICS,
+  home_appliances: HOME_APPLIANCES,
   apparel: APPAREL,
-  accessories: ACCESSORIES,
-  food_and_drinks: FOOD,
+  footwear: FOOTWEAR,
   beauty_and_care: BEAUTY,
-  gadgets_and_tech: GADGETS,
-  home_and_furniture: HOME,
-  other: OTHER,
-  electronics: GADGETS,
-  home_appliances: GADGETS,
-  footwear: APPAREL,
-  home_goods: HOME,
-  kids: OTHER,
-  furniture: HOME,
-  auto: OTHER,
-  universal: OTHER,
+  home_goods: HOME_GOODS,
+  kids: KIDS,
+  accessories: ACCESSORIES,
+  furniture: FURNITURE,
+  auto: AUTO,
+  universal: UNIVERSAL,
+  food_and_drinks: FOOD,
+  gadgets_and_tech: ELECTRONICS,
+  home_and_furniture: FURNITURE,
+  other: UNIVERSAL,
 };
 
 const LEGACY_CONCEPT_ALIASES: Record<string, string> = {
@@ -158,6 +236,11 @@ const LEGACY_CONCEPT_ALIASES: Record<string, string> = {
   ad_poster: "lifestyle",
   clean_studio: "studio_catalog",
 };
+
+/** Нормализация legacy concept id для валидации и промптов. */
+export function normalizeConceptId(conceptId: string): string {
+  return LEGACY_CONCEPT_ALIASES[conceptId] ?? conceptId;
+}
 
 // --- Classifier (strict JSON) ---
 
@@ -189,19 +272,17 @@ Rules:
 // --- Concept helpers ---
 
 function resolveConceptId(categoryId: ProductCategoryId, conceptId: string): string {
-  return LEGACY_CONCEPT_ALIASES[conceptId] ?? conceptId;
+  return normalizeConceptId(conceptId);
 }
 
 /**
  * Скрытая инструкция по концепции (только сценовый «режим»; без BASE).
  */
 export function getConceptPrompt(categoryId: string, conceptId: string): string {
-  const cat: ProductCategoryId = isProductCategoryId(categoryId)
-    ? categoryId
-    : "other";
+  const cat = resolveManualConceptCategoryId(categoryId) as ProductCategoryId;
   const key = resolveConceptId(cat, conceptId);
-  const table = BY_CATEGORY[cat];
-  const line = table[key] ?? table.studio_catalog ?? OTHER.studio_catalog;
+  const table = BY_CATEGORY[cat] ?? UNIVERSAL;
+  const line = table[key] ?? table.studio_catalog ?? UNIVERSAL.studio_catalog!;
   return line;
 }
 

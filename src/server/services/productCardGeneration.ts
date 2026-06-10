@@ -4,6 +4,7 @@ import {
   buildConceptPhotoPrompt,
   buildMarketplaceCardPrompt,
   buildProductVideoPrompt,
+  normalizeConceptId,
 } from "@/config/product-card-prompts";
 import {
   getProductCategoryById,
@@ -85,7 +86,8 @@ export function isConceptInCategory(
   conceptId: string,
 ): boolean {
   const c = getProductCategoryById(categoryId);
-  return Boolean(c?.concepts.some((x) => x.id === conceptId));
+  const normalized = normalizeConceptId(conceptId);
+  return Boolean(c?.concepts.some((x) => x.id === conceptId || x.id === normalized));
 }
 
 function buildConceptPhotoModelSettings(

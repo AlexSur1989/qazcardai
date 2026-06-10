@@ -24,6 +24,22 @@ function classifyErrorStatus(code: string): number {
 }
 
 export async function POST(req: Request, ctx: Ctx) {
+  try {
+    return await handleProductClassifierClassifyPost(req, ctx);
+  } catch (e) {
+    console.error("[product-card/classify]", e);
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Не удалось выполнить распознавание. Попробуйте позже.",
+        code: "internal",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+async function handleProductClassifierClassifyPost(req: Request, ctx: Ctx) {
   const current = await getFreshSessionUser();
   if (!current.ok) {
     if (current.reason === "inactive") {
