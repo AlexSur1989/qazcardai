@@ -82,6 +82,16 @@ Do not invent additional product facts.
 Do not add unsupported claims.
 Do not add text that was not provided by the user.
 
+NO INVENTED SPECS (mandatory):
+- Do not invent exact dimensions, weight, volume, warranty, certificates, model numbers, material composition, country of origin, or technical specifications unless they are explicitly provided by the user.
+- Use exact numbers only when the user clearly provided them as verified product facts.
+- If exact specs are not provided, use only generic benefit wording without numbers.
+- Never create fake measurements in mm, cm, kg, g, L, W, V, mAh, or similar units.
+- If user text contains placeholder-like dimensions or uncertain values, do not present them as verified facts.
+- Do not render measurement lines, spec badges, warranty badges, or certificate labels unless the matching facts are explicitly confirmed in user content.
+
+(RU — смысловая инструкция: не придумывай точные размеры, вес, гарантию, сертификаты и технические характеристики; используй точные цифры только если они явно указаны пользователем; если данных нет — лучше нейтральные преимущества без цифр.)
+
 ==================================================
 VISUAL CONTENT RULES
 ==================================================

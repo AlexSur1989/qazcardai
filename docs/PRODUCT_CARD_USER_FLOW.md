@@ -80,6 +80,21 @@ Polling: каждые **4 с** пока `QUEUED` или `PROCESSING`; остан
 
 Подсказка в UI: *«Референс используется только для стиля. Товар берётся с основного фото.»*
 
+### Reference Real Test (2026-05) — успех
+
+| Поле | Значение |
+|------|----------|
+| generationId | `cmq7npl0p000201of5pnfkxzm` |
+| status | COMPLETED |
+| input_urls | length **2** — product first, reference second |
+| Provider URLs | Kie File Upload → `tempfile.redpandaai.co` |
+| Billing | RESERVE −25 → CAPTURE 0 (баланс −25) |
+| Classifier | не запускался (`PRODUCT_CLASSIFIER_ALLOW_REAL_KIE` disabled) |
+
+**Визуальный результат:** товар сохранён, стиль взят из reference, товар не заменён объектами reference, формат 9:16 корректный.
+
+**Ограничение для production:** точные размеры, вес, гарантия, сертификаты и технические характеристики должны быть **явно указаны пользователем**. AI не должен выдумывать mm/cm/kg и не должен показывать placeholder-подобные размеры как проверенные факты. Референс влияет только на стиль/фон/композицию; идентичность товара — из основного фото.
+
 ---
 
 ## 5. Что USER не видит

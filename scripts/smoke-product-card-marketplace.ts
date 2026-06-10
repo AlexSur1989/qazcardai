@@ -33,6 +33,7 @@ import {
 } from "../src/lib/credit-labels";
 import { modelSupportsSimpleCardReferenceImage } from "../src/lib/simple-product-card-model";
 import { buildSimpleProductCardPrompt } from "../src/server/services/simpleProductCardPromptBuilder";
+import { hasConfirmedMeasurements } from "../src/lib/simple-product-card-parsed-content";
 import { mergeSimpleProductCardPromptsWithDefaults } from "../src/lib/validations/simple-product-card-prompts-setting";
 import { calculateProductCardMarketplaceCardCredits } from "../src/server/services/productCardPricing";
 import type { GenerationStatus, GenerationType } from "../src/generated/prisma/enums";
@@ -161,7 +162,36 @@ async function main() {
     if (!pl.includes("image a") || !pl.includes("image b") || !pl.includes("do not replace the product")) {
       fail("reference prompt missing Image A/B or product-identity rules");
     }
-    console.log("[smoke:product-card-marketplace] reference prompt rules OK");
+    if (
+      !pl.includes("do not invent exact dimensions") &&
+      !pl.includes("no invented specs")
+    ) {
+      fail("reference prompt missing anti-fake-spec rules");
+    }
+    if (!pl.includes("never create fake measurements")) {
+      fail("reference prompt missing fake measurements guard");
+    }
+
+    const promptWithFakeDims = buildSimpleProductCardPrompt({
+      payload: {
+        productPhotoId: "smoke-photo",
+        userText: "Wireless Controller\nРазмер 60×27×32 мм\nудобный хват",
+        styleMode: "reference",
+        useReference: true,
+        referenceImageId: "smoke-ref",
+        referenceCreativity: 50,
+        aspectRatio: "9:16",
+      },
+      prompts: mergedPrompts,
+      aspectRatio: "9:16",
+    });
+    if (hasConfirmedMeasurements(promptWithFakeDims.parsedContent.measurements)) {
+      fail("implausible triple mm (60×27×32) must not be treated as confirmed measurements");
+    }
+    if (!promptWithFakeDims.prompt.toLowerCase().includes("do not create measurement lines")) {
+      fail("implausible dimensions prompt must instruct no measurement lines");
+    }
+    console.log("[smoke:product-card-marketplace] reference prompt rules OK (Image A/B + anti-fake-specs)");
 
     const mockMeta = {
       productCard: { tab: "marketplace_card", projectId: "smoke-project" },

@@ -107,6 +107,11 @@ If dimensions are missing, do not create measurement lines with fake values.
 If only one dimension is provided, show only that dimension.
 If product shape does not allow clear measurement visualization, use a clean specs callout block instead.
 
+Do not invent exact dimensions, weight, volume, warranty, certificates, model numbers, material composition, country of origin, or technical specifications unless explicitly provided by the user.
+If exact specs are not provided, use only generic benefit wording without numbers.
+Never create fake measurements in mm/cm/kg.
+If user text contains placeholder-like dimensions or uncertain values, do not present them as verified facts.
+
 Output:
 Generate one final product card in the selected aspect ratio.`;
 
@@ -189,11 +194,12 @@ Do not copy from reference:
 - ratings;
 - discounts.
 
-If reference image is provided and user also provides dimensions/specs:
+If reference image is provided and user also provides confirmed dimensions/specs:
 Use the reference for style, background and composition mood, but integrate the confirmed dimensions in a clean way.
 Do not copy fake measurements from the reference.
-Only use measurements from userText.
+Only use measurements from userText when they are explicitly confirmed — never invent specs.
 Adapt measurement lines and labels to match the reference style, while keeping them readable.
+If user did not provide confirmed specs, borrow only visual style from the reference — no fake size/weight/warranty/certificate text.
 
 If the reference style conflicts with readability:
 Prioritize clean product card readability over exact reference copying.
@@ -239,7 +245,8 @@ Simplify it. Prioritize product readability and clean commercial design.
 If user provides confirmed dimensions/specs:
 Integrate them into the reference-inspired design as premium callouts, measurement arrows, side labels or spec panels.
 Borrow the reference's visual mood, but do not copy any unconfirmed numbers or claims from the reference image.
-Use only user-provided dimensions/specs.
+Use only user-provided dimensions/specs that are explicitly confirmed — never invent warranty, certificates, weight, or model numbers.
+If specs are missing, keep generic benefit wording without numeric claims.
 
 For dimension visualization:
 - height should appear along the vertical side of the product;

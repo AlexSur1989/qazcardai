@@ -346,13 +346,21 @@ export function parseSimpleProductCardContent(
   for (const segment of segments) {
     const triple = parseTripleDimension(segment);
     if (triple.matched) {
-      out.measurements = mergeMeasurements(out.measurements, triple.measurements);
+      if (segmentLooksUncertainForMeasurement(segment)) {
+        pushUnique(out.otherPhrases, segment);
+      } else {
+        out.measurements = mergeMeasurements(out.measurements, triple.measurements);
+      }
       continue;
     }
 
     const singleMeas = parseSingleMeasurement(segment);
     if (Object.keys(singleMeas).length > 0) {
-      out.measurements = mergeMeasurements(out.measurements, singleMeas);
+      if (segmentLooksUncertainForMeasurement(segment)) {
+        pushUnique(out.otherPhrases, segment);
+      } else {
+        out.measurements = mergeMeasurements(out.measurements, singleMeas);
+      }
       continue;
     }
 
@@ -447,13 +455,71 @@ export function parseSimpleProductCardContent(
   out.warrantyTrust = out.warrantyTrust.slice(0, lim.maxWarrantyTrust);
   out.otherPhrases = out.otherPhrases.slice(0, lim.maxOtherPhrases);
 
-  return out;
+  return sanitizeParsedContentMeasurements(out, lim);
 }
 
-export function hasConfirmedMeasurements(m: SimpleProductCardMeasurements): boolean {
+function parseMmNumber(value: string): number | null {
+  const m = value.trim().match(/^(\d+(?:[.,]\d+)?)\s*(?:мм|mm)/iu);
+  if (!m?.[1]) return null;
+  return Number.parseFloat(m[1].replace(",", "."));
+}
+
+/** Трёхсторонние габариты в мм с max < 100 — частый copy-paste/placeholder (напр. 60×27×32 мм у геймпада). */
+function tripleMmDimensionsLookImplausible(m: SimpleProductCardMeasurements): boolean {
+  const w = m.width ? parseMmNumber(m.width) : null;
+  const h = m.height ? parseMmNumber(m.height) : null;
+  const d = m.depth ? parseMmNumber(m.depth) : null;
+  if (w == null || h == null || d == null) return false;
+  const max = Math.max(w, h, d);
+  const min = Math.min(w, h, d);
+  return max > 0 && max < 100 && min > 0;
+}
+
+function segmentLooksUncertainForMeasurement(segment: string): boolean {
+  return /(?:пример|example|placeholder|образец|xx+|xxx|\?\?\?|sample\s+text)/iu.test(segment);
+}
+
+function measurementsObjectHasAny(m: SimpleProductCardMeasurements): boolean {
   return Boolean(
     m.width || m.height || m.depth || m.length || m.diameter || m.thickness,
   );
+}
+
+export function hasConfirmedMeasurements(m: SimpleProductCardMeasurements): boolean {
+  if (!measurementsObjectHasAny(m)) return false;
+  if (tripleMmDimensionsLookImplausible(m)) return false;
+  return true;
+}
+
+/** Убирает сомнительные габариты из prompt-блока measurements; переносит hint в otherPhrases. */
+export function sanitizeParsedContentMeasurements(
+  content: SimpleProductCardParsedContent,
+  limits: SimpleProductCardParseLimits = SIMPLE_CARD_PARSE_DEFAULT_LIMITS,
+): SimpleProductCardParsedContent {
+  if (!measurementsObjectHasAny(content.measurements)) return content;
+  if (hasConfirmedMeasurements(content.measurements)) return content;
+
+  const hints: string[] = [];
+  if (content.measurements.width) hints.push(`width ${content.measurements.width}`);
+  if (content.measurements.height) hints.push(`height ${content.measurements.height}`);
+  if (content.measurements.depth) hints.push(`depth ${content.measurements.depth}`);
+  if (content.measurements.length) hints.push(`length ${content.measurements.length}`);
+  if (content.measurements.diameter) hints.push(`diameter ${content.measurements.diameter}`);
+  if (content.measurements.thickness) hints.push(`thickness ${content.measurements.thickness}`);
+
+  const hintLine =
+    hints.length > 0
+      ? `Possible unverified size hints (do not render as measurement lines or verified specs): ${hints.join("; ")}`
+      : null;
+
+  return {
+    ...content,
+    measurements: {},
+    otherPhrases: [
+      ...(hintLine ? [hintLine] : []),
+      ...content.otherPhrases,
+    ].slice(0, limits.maxOtherPhrases),
+  };
 }
 
 export function hasConfirmedSpecs(s: SimpleProductCardSpecs): boolean {
@@ -524,7 +590,9 @@ export function formatUserProvidedContentBlock(content: SimpleProductCardParsedC
     bulletList(content.benefits),
     "",
     "CONFIRMED MEASUREMENTS:",
-    measurementsList(content.measurements),
+    hasConfirmedMeasurements(content.measurements)
+      ? measurementsList(content.measurements)
+      : "(none — do not invent or render unconfirmed dimensions)",
     "",
     "CONFIRMED SPECS:",
     specsList(content.specs),

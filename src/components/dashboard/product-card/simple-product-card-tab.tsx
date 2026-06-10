@@ -352,17 +352,15 @@ export function SimpleProductCardTab({
         setProductPhotoId(saved.productPhotoId);
       }
       const refPreview = parsed.data.simpleCardReferencePreview;
-      if (
-        refPreview?.fileId &&
-        saved.referenceImageId === refPreview.fileId &&
-        refPreview.url
-      ) {
-        setReferenceImage({
-          fileId: refPreview.fileId,
-          url: refPreview.url,
-          fileName: refPreview.fileName,
-          size: refPreview.size,
-        });
+      if (refPreview?.fileId && refPreview.url) {
+        if (!saved.referenceImageId || saved.referenceImageId === refPreview.fileId) {
+          setReferenceImage({
+            fileId: refPreview.fileId,
+            url: refPreview.url,
+            fileName: refPreview.fileName,
+            size: refPreview.size,
+          });
+        }
       }
       if (block?.vision && !block.vision.analysisFailed) {
         setVisionSummary(block.vision);
@@ -882,7 +880,7 @@ export function SimpleProductCardTab({
                 userTextTouchedRef.current = true;
                 setUserText(e.target.value);
               }}
-              placeholder="Например: 20 л, 700 Вт, LED дисплей, быстрый старт, разморозка"
+              placeholder="Например: удобный хват, Bluetooth, Type-C, быстрая зарядка, для PlayStation"
               rows={5}
               maxLength={SIMPLE_CARD_USER_TEXT_MAX}
               className="resize-y"

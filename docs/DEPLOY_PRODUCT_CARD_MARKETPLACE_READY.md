@@ -158,6 +158,28 @@ curl -sf http://127.0.0.1:3000/api/health && echo OK
    - Блок «Перед созданием карточки» — без slug модели / apiModelId / endpoint
    - **Не нажимать** «Создать карточку»
 
+### Before go-live (Reference Real Test checklist)
+
+Reference Real Test **пройден** (`generationId` `cmq7npl0p000201of5pnfkxzm`, billing −25, `input_urls` product→reference, Kie File Upload OK).
+
+Перед production go-live дополнительно проверить:
+
+| Check | Ожидание |
+|-------|----------|
+| Product identity | Товар из **основного фото** (Image A), не из reference |
+| Reference scope | Reference (Image B) — только стиль/фон/композиция |
+| Specs in card | **Не выдумывать** точные размеры, вес, гарантию, сертификаты — только если пользователь явно указал |
+| Placeholder text | Placeholder в поле преимуществ **не** попадает в prompt, пока пользователь не отредактировал поле |
+| Estimate | **25** токенов (classic и reference) |
+| Classifier gate | `PRODUCT_CLASSIFIER_ALLOW_REAL_KIE` disabled — classifier не блокирует marketplace |
+
+Smoke без Kie:
+
+```bash
+docker compose run --rm app npm run smoke:product-card-marketplace
+docker compose run --rm app npm run smoke:product-card-classifier
+```
+
 ---
 
 ## 6. Stop conditions (остановить деплой / не переходить к real test)

@@ -56,6 +56,7 @@ import { buildKieMarketPayloadFromMapping, isStrictKiePayloadMapping } from "../
 import { modelSupportsSimpleCardReferenceImage } from "../src/lib/simple-product-card-model";
 import { getSchemaFields } from "../src/lib/generation-form-settings-schema";
 import { buildSimpleProductCardPrompt } from "../src/server/services/simpleProductCardPromptBuilder";
+import { hasConfirmedMeasurements } from "../src/lib/simple-product-card-parsed-content";
 import { mergeSimpleProductCardPromptsWithDefaults } from "../src/lib/validations/simple-product-card-prompts-setting";
 
 const MARKETPLACE_MODEL_SLUG = "gpt-image-2-product-marketplace-card";
@@ -536,6 +537,29 @@ async function main() {
   }
   if (!promptLower.includes("do not replace the product")) {
     fail("reference prompt must forbid replacing product with reference objects");
+  }
+  if (
+    !promptLower.includes("do not invent exact dimensions") &&
+    !promptLower.includes("no invented specs")
+  ) {
+    fail("reference prompt must include anti-fake-spec rules");
+  }
+
+  const promptImplausibleDims = buildSimpleProductCardPrompt({
+    payload: {
+      productPhotoId: "verify-photo",
+      userText: "Wireless Controller\nРазмер 60×27×32 мм\nудобный хват",
+      styleMode: "reference",
+      useReference: true,
+      referenceImageId: "verify-ref",
+      referenceCreativity: 50,
+      aspectRatio: "1:1",
+    },
+    prompts: mergedPrompts,
+    aspectRatio: "1:1",
+  });
+  if (hasConfirmedMeasurements(promptImplausibleDims.parsedContent.measurements)) {
+    fail("implausible triple mm must not be confirmed measurements in prompt");
   }
 
   const priceWithRef = await calculateProductCardMarketplaceCardCredits(marketplaceModel, {
