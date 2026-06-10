@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { ProductCategory, ProductCategoryId } from "@/config/product-card-categories";
+import type { ProductCategoryId } from "@/config/product-card-categories";
 import { MANUAL_PRODUCT_CATEGORY_OPTIONS } from "@/config/product-card-manual-categories";
 import { PRODUCT_CLASSIFIER_MISSING_HINT } from "@/lib/product-classifier-result";
 import { publicUserErrorMessage } from "@/lib/user-facing-copy";
@@ -23,7 +23,6 @@ export type ProductAiAnalysisStatus =
 type Props = {
   hasImage: boolean;
   canPersist: boolean;
-  categories: readonly ProductCategory[];
   selectedCategory: ProductCategoryId | null;
   categorySource: CategorySourceUi;
   classifierEnabled: boolean;
@@ -57,7 +56,6 @@ function aiStatusMessage(status: ProductAiAnalysisStatus): string | null {
 export function ProductDataSection({
   hasImage,
   canPersist,
-  categories,
   selectedCategory,
   classifierEnabled,
   aiAnalysisStatus,
@@ -85,7 +83,7 @@ export function ProductDataSection({
   }
 
   const statusLine = aiStatusMessage(aiAnalysisStatus);
-  const categoryOptions = classifierEnabled ? categories : MANUAL_PRODUCT_CATEGORY_OPTIONS;
+  const categoryOptions = MANUAL_PRODUCT_CATEGORY_OPTIONS;
 
   return (
     <section className="space-y-4" aria-label="Данные товара">
