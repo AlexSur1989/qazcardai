@@ -8,8 +8,9 @@ import pg from "pg";
 
 import { PrismaClient, Prisma } from "../src/generated/prisma/client";
 import { parseKiePayloadJson } from "../src/lib/kie-import-wizard";
-import { productCardVideoMatrixCellsToSchemaMatrix } from "../src/lib/pricing-admin/product-card-video";
+import { productCardVideoMatrixCellsToSchemaMatrix, readMatrixCellCredits } from "../src/lib/pricing-admin/product-card-video";
 import type { KiePayloadMapping } from "../src/server/services/kiePayloadMapping";
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 import {
   buildDryRunKiePayloadForModel,
   DRY_RUN_FAKE_PRODUCT_IMAGE_URL,
@@ -208,7 +209,10 @@ async function main() {
     metadata: metadata as Prisma.InputJsonValue,
   };
 
-  const existing = await prisma.aiModel.findUnique({ where: { slug: SLUG } });
+  const existing = await prisma.aiModel.findUnique({
+    where: { slug: SLUG },
+    select: { isActive: true, pricingSchema: true, metadata: true },
+  });
 
   let model = await prisma.aiModel.upsert({
     where: { slug: SLUG },
@@ -217,10 +221,10 @@ async function main() {
       ...common,
       isActive: false,
     },
-    update: {
+    update: omitSeedPricingWhenPinned(existing, {
       ...common,
       isActive: existing?.isActive === true ? true : false,
-    },
+    }),
   });
 
   console.log(

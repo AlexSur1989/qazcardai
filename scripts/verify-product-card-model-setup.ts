@@ -62,6 +62,7 @@ import {
   getManualConceptsForCategory,
   MANUAL_CONCEPT_CATEGORY_IDS,
 } from "../src/config/product-card-concept-catalog";
+import { readMatrixCellCredits } from "../src/lib/pricing-admin/product-card-video";
 
 const MARKETPLACE_MODEL_SLUG = "gpt-image-2-product-marketplace-card";
 const CONCEPT_MODEL_SLUG = "gpt-image-2-product-concept-image";
@@ -287,12 +288,14 @@ async function main() {
     fail(`${MARKETPLACE_MODEL_SLUG}: costCredits=${marketplaceModel.costCredits}`);
   }
   const ps = marketplaceModel.pricingSchema as Record<string, unknown> | null;
-  if (
-    !ps ||
-    ps.type !== "fixed" ||
-    ps.credits !== marketplaceModel.costCredits
-  ) {
-    fail(`${MARKETPLACE_MODEL_SLUG}: pricingSchema invalid (fixed credits must match costCredits)`);
+  const psCredits = typeof ps?.credits === "number" ? ps.credits : Number(ps?.credits);
+  if (!ps || ps.type !== "fixed" || !Number.isFinite(psCredits) || psCredits < 1) {
+    fail(`${MARKETPLACE_MODEL_SLUG}: pricingSchema invalid (expected fixed with credits >= 1)`);
+  }
+  if (ps.adminPricingPinned !== true && psCredits !== marketplaceModel.costCredits) {
+    fail(
+      `${MARKETPLACE_MODEL_SLUG}: pricingSchema.credits (${psCredits}) must match costCredits (${marketplaceModel.costCredits})`,
+    );
   }
   const pm = marketplaceModel.payloadMapping as Record<string, unknown> | null;
   if (!pm || !pm.input || typeof pm.input !== "object") {
@@ -826,8 +829,8 @@ async function main() {
     if (videoModel.apiModelId !== "bytedance/seedance-2") {
       fail(`${VIDEO_MODEL_SLUG} apiModelId=${videoModel.apiModelId}`);
     }
-    if (videoModel.costCredits !== 40) {
-      fail(`${VIDEO_MODEL_SLUG} costCredits must be 40, got ${videoModel.costCredits}`);
+    if (videoModel.costCredits < 1) {
+      fail(`${VIDEO_MODEL_SLUG} costCredits must be >= 1, got ${videoModel.costCredits}`);
     }
     const vps = videoModel.pricingSchema as Record<string, unknown> | null;
     if (!vps || vps.type !== "product_card_matrix") {
@@ -875,6 +878,8 @@ async function main() {
       fail("video dry-run payload generate_audio must be false");
     }
 
+    const matrix5 = readMatrixCellCredits(vps.matrix, 5, "720p", videoModel.costCredits);
+    const matrix10 = readMatrixCellCredits(vps.matrix, 10, "1080p", videoModel.costCredits);
     const price5 = await calculateProductCardVideoCredits(videoModel, {
       duration: 5,
       resolution: "720p",
@@ -883,14 +888,18 @@ async function main() {
       duration: 10,
       resolution: "1080p",
     });
-    if (price5.credits !== 40) fail(`video 5s/720p credits=${price5.credits}, expected 40`);
-    if (price10.credits !== 95) fail(`video 10s/1080p credits=${price10.credits}, expected 95`);
+    if (price5.credits < matrix5) {
+      fail(`video 5s/720p credits=${price5.credits}, matrix=${matrix5}`);
+    }
+    if (price10.credits < matrix10) {
+      fail(`video 10s/1080p credits=${price10.credits}, matrix=${matrix10}`);
+    }
     if (price5.credits >= price10.credits) {
       fail("video pricing must increase with duration/resolution");
     }
 
     console.log(
-      `  video model ${VIDEO_MODEL_SLUG}: active, dry-run OK, matrix 40/55/70/95`,
+      `  video model ${VIDEO_MODEL_SLUG}: active, dry-run OK, estimate ${price5.credits}/${price10.credits} tok (matrix ${matrix5}/${matrix10})`,
     );
   } else {
     console.log(`  note: ${VIDEO_MODEL_SLUG} not Ready — run seed:seedance-2-0-product-video`);
