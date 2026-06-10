@@ -20,6 +20,8 @@ const IMAGE_MAPPING_KEYS = new Set([
   "input_image",
   "input_images",
   "url",
+  "first_frame_url",
+  "first_clip_url",
 ]);
 
 function mappingHasImageInput(model: AiModel): boolean {
@@ -131,11 +133,23 @@ export function validateDryRunPayloadShape(
   }
 
   if (model.supportsImageInput) {
-    if (!("input_urls" in input) && !("image_urls" in input) && !("image_url" in input)) {
+    const hasImageField =
+      "input_urls" in input ||
+      "image_urls" in input ||
+      "image_url" in input ||
+      "first_frame_url" in input ||
+      "first_clip_url" in input;
+    if (!hasImageField) {
       warnings.push("dry-run payload missing input.input_urls");
     }
     if ("input_urls" in input && !Array.isArray(input.input_urls)) {
       warnings.push("dry-run payload input.input_urls is not an array");
+    }
+    if (
+      "first_frame_url" in input &&
+      !String(input.first_frame_url ?? "").trim()
+    ) {
+      warnings.push("dry-run payload missing input.first_frame_url");
     }
   }
 

@@ -28,6 +28,7 @@
     "seed:gpt-image-2-product-concept-image": "npx tsx scripts/seed-gpt-image-2-product-concept-image.ts",
     "seed:gemini-3-flash-product-classifier": "npx tsx scripts/seed-gemini-3-flash-product-classifier.ts",
     "seed:gemini-2.5-flash-product-classifier": "npx tsx scripts/seed-gemini-2.5-flash-product-classifier.ts",
+    "seed:seedance-2-0-product-video": "npx tsx scripts/seed-seedance-2-0-product-video.ts",
     "verify:product-card-model-setup": "npx tsx scripts/verify-product-card-model-setup.ts",
     "verify:reference-image-preflight": "npx tsx scripts/verify-reference-image-preflight.ts",
     "smoke:product-card-marketplace": "npx tsx scripts/smoke-product-card-marketplace.ts",

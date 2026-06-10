@@ -49,7 +49,7 @@ import {
   validateDryRunPayloadShape,
 } from "../src/server/services/adminModelPayloadDryRun";
 import { defaultSlugForProductCardType, getProductCardSettings } from "../src/server/services/productCardSettings";
-import { calculateProductCardMarketplaceCardCredits } from "../src/server/services/productCardPricing";
+import { calculateProductCardMarketplaceCardCredits, calculateProductCardVideoCredits } from "../src/server/services/productCardPricing";
 import { getMarketplaceCardPricingSummary } from "../src/server/services/marketplaceCardPricingSummary";
 import { runMarketplaceCardPreflight } from "../src/server/services/marketplaceCardPreflight";
 import { buildKieMarketPayloadFromMapping, isStrictKiePayloadMapping } from "../src/server/services/kiePayloadMapping";
@@ -65,8 +65,10 @@ import {
 
 const MARKETPLACE_MODEL_SLUG = "gpt-image-2-product-marketplace-card";
 const CONCEPT_MODEL_SLUG = "gpt-image-2-product-concept-image";
+const VIDEO_MODEL_SLUG = "seedance-2-0-product-video";
 const CLASSIFIER_MODEL_SLUG = "gemini-2.5-flash-product-classifier";
 const MARKETPLACE_APP_SETTING_KEY = "PRODUCT_CARD_DEFAULT_MARKETPLACE_CARD_MODEL_SLUG";
+const VIDEO_APP_SETTING_KEY = "PRODUCT_CARD_DEFAULT_VIDEO_MODEL_SLUG";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("В .env нужен DATABASE_URL");
@@ -807,7 +809,87 @@ async function main() {
   }
 
   if (videoSlot?.readinessStatus === "Ready") {
-    console.log("  note: video unexpectedly Ready");
+    const videoModel = await prisma.aiModel.findUnique({
+      where: { slug: VIDEO_MODEL_SLUG },
+    });
+    if (!videoModel) {
+      fail(`video slot Ready but model ${VIDEO_MODEL_SLUG} missing`);
+    }
+    if (!videoModel.isActive) fail(`${VIDEO_MODEL_SLUG} must be active`);
+    if (videoModel.productCardModelType !== "PRODUCT_VIDEO") {
+      fail(`${VIDEO_MODEL_SLUG} wrong productCardModelType`);
+    }
+    if (videoModel.apiModelId !== "bytedance/seedance-2") {
+      fail(`${VIDEO_MODEL_SLUG} apiModelId=${videoModel.apiModelId}`);
+    }
+    if (videoModel.costCredits !== 40) {
+      fail(`${VIDEO_MODEL_SLUG} costCredits must be 40, got ${videoModel.costCredits}`);
+    }
+    const vps = videoModel.pricingSchema as Record<string, unknown> | null;
+    if (!vps || vps.type !== "product_card_matrix") {
+      fail(`${VIDEO_MODEL_SLUG}: pricingSchema must be product_card_matrix`);
+    }
+
+    const videoSetting = await prisma.appSetting.findUnique({
+      where: { key: VIDEO_APP_SETTING_KEY },
+    });
+    const videoAssignedSlug =
+      typeof videoSetting?.value === "string"
+        ? videoSetting.value
+        : String(videoSetting?.value ?? "");
+    if (videoAssignedSlug !== VIDEO_MODEL_SLUG) {
+      fail(`${VIDEO_APP_SETTING_KEY}=${videoAssignedSlug || "empty"}, expected ${VIDEO_MODEL_SLUG}`);
+    }
+    if (pcSettings.videoModelSlug !== VIDEO_MODEL_SLUG) {
+      fail(`getProductCardSettings videoModelSlug=${pcSettings.videoModelSlug}`);
+    }
+    if (!videoSlot.generationReady) {
+      fail(`video slot generationReady=false issues=${videoSlot.readinessIssues.join(", ")}`);
+    }
+
+    const videoDryRun = await buildDryRunKiePayloadForModel(videoModel, {
+      settings: {
+        scenario: "first-frame",
+        firstFrameUrl: "https://app.qazcardai.kz/uploads/verify/product-video-frame.jpg",
+        duration: 5,
+        resolution: "720p",
+        aspectRatio: "16:9",
+        generateAudio: false,
+        webSearch: false,
+      },
+    });
+    if (!videoDryRun.ok) fail(`video dry-run failed: ${videoDryRun.error}`);
+    const videoCritical = videoDryRun.warnings.filter(isCriticalModelDryRunWarning);
+    if (videoCritical.length > 0) {
+      fail(`video dry-run critical warnings: ${videoCritical.join("; ")}`);
+    }
+    const videoInput = (videoDryRun.payload as { input?: Record<string, unknown> }).input;
+    if (!videoInput || !String(videoInput.first_frame_url ?? "").trim()) {
+      fail("video dry-run payload missing input.first_frame_url");
+    }
+    if (videoInput.generate_audio !== false) {
+      fail("video dry-run payload generate_audio must be false");
+    }
+
+    const price5 = await calculateProductCardVideoCredits(videoModel, {
+      duration: 5,
+      resolution: "720p",
+    });
+    const price10 = await calculateProductCardVideoCredits(videoModel, {
+      duration: 10,
+      resolution: "1080p",
+    });
+    if (price5.credits !== 40) fail(`video 5s/720p credits=${price5.credits}, expected 40`);
+    if (price10.credits !== 95) fail(`video 10s/1080p credits=${price10.credits}, expected 95`);
+    if (price5.credits >= price10.credits) {
+      fail("video pricing must increase with duration/resolution");
+    }
+
+    console.log(
+      `  video model ${VIDEO_MODEL_SLUG}: active, dry-run OK, matrix 40/55/70/95`,
+    );
+  } else {
+    console.log(`  note: ${VIDEO_MODEL_SLUG} not Ready — run seed:seedance-2-0-product-video`);
   }
   if (!marketplaceSlot.generationReady) {
     fail("other missing slots must not block marketplace Ready");
