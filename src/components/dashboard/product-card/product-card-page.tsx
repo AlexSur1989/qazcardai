@@ -232,7 +232,6 @@ export function ProductCardPage({
       <ProductDataSection
         hasImage={hasImage}
         canPersist={canUseBackend}
-        categories={CATEGORIES}
         selectedCategory={selectedCategory}
         categorySource={categorySource}
         classifierEnabled={classifierEnabled}
