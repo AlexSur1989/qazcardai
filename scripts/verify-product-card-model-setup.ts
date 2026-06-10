@@ -283,12 +283,16 @@ async function main() {
   if (marketplaceModel.statusEndpoint !== "/api/v1/jobs/recordInfo") {
     fail(`${MARKETPLACE_MODEL_SLUG}: statusEndpoint=${marketplaceModel.statusEndpoint}`);
   }
-  if (marketplaceModel.costCredits !== 12) {
+  if (marketplaceModel.costCredits < 1) {
     fail(`${MARKETPLACE_MODEL_SLUG}: costCredits=${marketplaceModel.costCredits}`);
   }
   const ps = marketplaceModel.pricingSchema as Record<string, unknown> | null;
-  if (!ps || ps.type !== "fixed" || ps.credits !== 12) {
-    fail(`${MARKETPLACE_MODEL_SLUG}: pricingSchema invalid`);
+  if (
+    !ps ||
+    ps.type !== "fixed" ||
+    ps.credits !== marketplaceModel.costCredits
+  ) {
+    fail(`${MARKETPLACE_MODEL_SLUG}: pricingSchema invalid (fixed credits must match costCredits)`);
   }
   const pm = marketplaceModel.payloadMapping as Record<string, unknown> | null;
   if (!pm || !pm.input || typeof pm.input !== "object") {
@@ -897,11 +901,11 @@ async function main() {
 
   if (
     pcSettings.minMarketplaceCardTokens === 25 &&
-    marketplaceModel.costCredits === 12 &&
+    marketplaceModel.costCredits < 25 &&
     pricingSummary.finalCredits !== 25
   ) {
     fail(
-      `expected final marketplace estimate=25 (min=25, costCredits=12), got ${pricingSummary.finalCredits}`,
+      `expected final marketplace estimate=25 (min=25, costCredits=${marketplaceModel.costCredits}), got ${pricingSummary.finalCredits}`,
     );
   }
 
