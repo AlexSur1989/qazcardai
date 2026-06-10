@@ -5,7 +5,6 @@ import { Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import type { ProductCategoryId } from "@/config/product-card-categories";
 import { MANUAL_PRODUCT_CATEGORY_OPTIONS } from "@/config/product-card-manual-categories";
 import { PRODUCT_CLASSIFIER_MISSING_HINT } from "@/lib/product-classifier-result";
@@ -29,11 +28,7 @@ type Props = {
   aiAnalysisStatus: ProductAiAnalysisStatus;
   classifyError: string | null;
   productTitle: string;
-  productDescription: string;
-  productBenefitsText: string;
   onProductTitleChange: (value: string) => void;
-  onProductDescriptionChange: (value: string) => void;
-  onProductBenefitsTextChange: (value: string) => void;
   onSelectCategory: (id: ProductCategoryId) => void;
   onRetryAnalysis?: () => void | Promise<void>;
   classifierAdminHint?: string | null;
@@ -45,7 +40,7 @@ function aiStatusMessage(status: ProductAiAnalysisStatus): string | null {
     case "analyzing":
       return "ИИ анализирует фото товара…";
     case "filled":
-      return "ИИ заполнил данные товара. Вы можете изменить их вручную.";
+      return "ИИ определил название и категорию. При необходимости измените их вручную.";
     case "unavailable":
       return "Автоматическое заполнение временно недоступно. Заполните данные вручную.";
     default:
@@ -61,11 +56,7 @@ export function ProductDataSection({
   aiAnalysisStatus,
   classifyError,
   productTitle,
-  productDescription,
-  productBenefitsText,
   onProductTitleChange,
-  onProductDescriptionChange,
-  onProductBenefitsTextChange,
   onSelectCategory,
   onRetryAnalysis,
   classifierAdminHint = null,
@@ -76,7 +67,7 @@ export function ProductDataSection({
       <div className="space-y-2">
         <h3 className="text-foreground text-base font-semibold">Данные товара</h3>
         <p className="text-muted-foreground text-sm">
-          После загрузки фото здесь появятся поля названия, категории и описания.
+          После загрузки фото здесь появятся название и категория товара.
         </p>
       </div>
     );
@@ -90,7 +81,8 @@ export function ProductDataSection({
       <div className="space-y-1">
         <h3 className="text-foreground text-base font-semibold">Данные товара</h3>
         <p className="text-muted-foreground text-sm">
-          Эти поля используются во всех сценариях: карточка, референс и концепции.
+          Название и категория используются во всех сценариях. Преимущества для карточки
+          заполняются во вкладке «Карточка товара».
         </p>
       </div>
 
@@ -152,35 +144,6 @@ export function ProductDataSection({
               </option>
             ))}
           </select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="pc-product-benefits">Преимущества и характеристики</Label>
-          <Textarea
-            id="pc-product-benefits"
-            value={productBenefitsText}
-            disabled={!canPersist}
-            rows={4}
-            maxLength={2000}
-            placeholder="Например: удобный хват, Bluetooth, Type-C, быстрая зарядка"
-            onChange={(e) => onProductBenefitsTextChange(e.target.value)}
-          />
-          <p className="text-muted-foreground text-xs">
-            Укажите 2–3 факта через запятую или с новой строки.
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="pc-product-description">Описание / что видно на фото</Label>
-          <Textarea
-            id="pc-product-description"
-            value={productDescription}
-            disabled={!canPersist}
-            rows={3}
-            maxLength={1000}
-            placeholder="Кратко опишите товар на фото"
-            onChange={(e) => onProductDescriptionChange(e.target.value)}
-          />
         </div>
 
         {onRetryAnalysis && classifierEnabled ? (

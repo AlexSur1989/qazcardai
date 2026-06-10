@@ -114,10 +114,8 @@ export function ProductCardPage({
     classifyLoading,
     setManualCategory,
     productTitle,
-    productDescription,
     productBenefitsText,
     setProductTitleManual,
-    setProductDescriptionManual,
     setProductBenefitsTextManual,
     aiAnalysisStatus,
     retryProductAnalysis,
@@ -238,11 +236,7 @@ export function ProductCardPage({
         aiAnalysisStatus={aiAnalysisStatus}
         classifyError={classifyError}
         productTitle={productTitle}
-        productDescription={productDescription}
-        productBenefitsText={productBenefitsText}
         onProductTitleChange={setProductTitleManual}
-        onProductDescriptionChange={setProductDescriptionManual}
-        onProductBenefitsTextChange={setProductBenefitsTextManual}
         onSelectCategory={setManualCategory}
         onRetryAnalysis={classifierEnabled ? retryProductAnalysis : undefined}
         retryDisabled={classifyLoading}

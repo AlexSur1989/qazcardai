@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import type { UserRole } from "@/generated/prisma/enums";
 import {
   PRODUCT_CLASSIFIER_COOLDOWN_ERROR,
-  PRODUCT_CLASSIFIER_DAILY_LIMIT_ERROR,
   PRODUCT_CLASSIFIER_INSUFFICIENT_CREDITS_ERROR,
 } from "@/lib/product-classifier-commercial-copy";
 import type { ProductClassifierResult } from "@/lib/product-classifier-result";
@@ -45,8 +44,6 @@ import { isProductClassifierReady } from "@/server/services/productClassifierFlo
 import {
   checkProductClassifyCooldown,
   markProductClassifyCooldown,
-  peekRateLimit,
-  recordProductClassifyDailyAttempt,
 } from "@/server/services/rateLimitService";
 
 export type ProductClassifierClassifyApiOutcome =
@@ -146,22 +143,6 @@ export async function executeProductClassifierClassify(args: {
     };
   }
 
-  const dailyPeek = await peekRateLimit(
-    "classify_daily",
-    args.userId,
-    commercial.dailyLimit,
-    86_400,
-  );
-  if (!dailyPeek.allowed) {
-    await logBlocked("daily_limit", 429);
-    return {
-      ok: false,
-      error: PRODUCT_CLASSIFIER_DAILY_LIMIT_ERROR,
-      code: "daily_limit",
-      retryAfter: dailyPeek.retryAfterSec,
-    };
-  }
-
   if (costCredits > 0) {
     const balance = await getBalance(args.userId);
     if (balance < costCredits) {
@@ -207,7 +188,6 @@ export async function executeProductClassifierClassify(args: {
     }
 
     await markProductClassifyCooldown(args.userId, commercial.cooldownSeconds);
-    await recordProductClassifyDailyAttempt(args.userId);
 
     const result = await classifyProductWithKieChat({
       imageUrl,

@@ -677,8 +677,9 @@ export function SimpleProductCardTab({
           <CardHeader>
             <CardTitle className="text-base">Текст карточки</CardTitle>
             <CardDescription>
-              Название и преимущества берутся из блока «Данные товара» выше — здесь можно
-              отредактировать их перед генерацией.
+              Название подставляется из блока «Данные товара» выше. Преимущества и характеристики
+              укажите здесь — они попадут на карточку (ИИ может предзаполнить их после
+              распознавания фото).
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">

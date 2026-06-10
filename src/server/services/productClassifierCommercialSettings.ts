@@ -47,7 +47,7 @@ export async function getProductClassifierCommercialSettings(): Promise<ProductC
   return {
     accessMode: parseProductClassifierAccessMode(accessRaw),
     costCredits: clampNonNegativeInt(costRaw, 1),
-    dailyLimit: Math.max(1, clampNonNegativeInt(dailyRaw, 10)),
+    dailyLimit: clampNonNegativeInt(dailyRaw, 0),
     cooldownSeconds: Math.max(1, clampNonNegativeInt(cooldownRaw, 10)),
     timeoutMs: clampClassifierTimeoutMs(timeoutRaw),
   };
@@ -144,8 +144,8 @@ export function validateClassifierCommercialPatch(input: {
     }
   }
   if (input.dailyLimit !== undefined) {
-    if (!Number.isInteger(input.dailyLimit) || input.dailyLimit < 1) {
-      return { ok: false, error: "dailyLimit: целое число ≥ 1" };
+    if (!Number.isInteger(input.dailyLimit) || input.dailyLimit < 0) {
+      return { ok: false, error: "dailyLimit: целое число ≥ 0 (0 = без лимита)" };
     }
   }
   if (input.cooldownSeconds !== undefined) {
