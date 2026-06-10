@@ -92,6 +92,7 @@ function ManualCategoryPicker({
   );
 }
 
+/** @deprecated Legacy panel with manual «Распознать» / «Применить». USER flow uses ProductDataSection. */
 export function ProductClassifierPanel({
   hasImage,
   canPersist,

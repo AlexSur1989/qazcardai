@@ -123,6 +123,77 @@ function categoryIdOrNull(s: string | null | undefined): ProductCategoryId | nul
   return s as ProductCategoryId;
 }
 
+function readProjectMetadata(p: ProjectApiRow): Record<string, unknown> {
+  if (p.metadata && typeof p.metadata === "object" && !Array.isArray(p.metadata)) {
+    return p.metadata as Record<string, unknown>;
+  }
+  return {};
+}
+
+function readSimpleCardSettingsFromMeta(meta: Record<string, unknown>): {
+  productLabel?: string;
+  userText?: string;
+} | null {
+  const marketplaceCard = meta.marketplaceCard;
+  if (marketplaceCard && typeof marketplaceCard === "object" && !Array.isArray(marketplaceCard)) {
+    const simpleCard = (marketplaceCard as Record<string, unknown>).simpleCard;
+    if (simpleCard && typeof simpleCard === "object" && !Array.isArray(simpleCard)) {
+      const settings = (simpleCard as Record<string, unknown>).settings;
+      if (settings && typeof settings === "object" && !Array.isArray(settings)) {
+        const s = settings as Record<string, unknown>;
+        return {
+          productLabel:
+            typeof s.productLabel === "string" ? s.productLabel : undefined,
+          userText: typeof s.userText === "string" ? s.userText : undefined,
+        };
+      }
+    }
+  }
+  const cardBuilder = meta.cardBuilder;
+  if (cardBuilder && typeof cardBuilder === "object" && !Array.isArray(cardBuilder)) {
+    const simpleCard = (cardBuilder as Record<string, unknown>).simpleCard;
+    if (simpleCard && typeof simpleCard === "object" && !Array.isArray(simpleCard)) {
+      const settings = (simpleCard as Record<string, unknown>).settings;
+      if (settings && typeof settings === "object" && !Array.isArray(settings)) {
+        const s = settings as Record<string, unknown>;
+        return {
+          productLabel:
+            typeof s.productLabel === "string" ? s.productLabel : undefined,
+          userText: typeof s.userText === "string" ? s.userText : undefined,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function extractProductDataFromProject(p: ProjectApiRow): {
+  productTitle: string;
+  productDescription: string;
+  productBenefitsText: string;
+} {
+  const meta = readProjectMetadata(p);
+  const simpleSettings = readSimpleCardSettingsFromMeta(meta);
+  const classifierResult = meta.classifierResult as ProductClassifierResult | undefined;
+
+  const productTitle =
+    p.title?.trim() ||
+    simpleSettings?.productLabel?.trim() ||
+    classifierResult?.productTitle?.trim() ||
+    "";
+
+  const productDescription =
+    classifierResult?.visibleProduct?.trim() ||
+    p.classificationReason?.trim() ||
+    "";
+
+  const productBenefitsText =
+    simpleSettings?.userText?.trim() ||
+    benefitsToUserText(classifierResult?.suggestedBenefits ?? []);
+
+  return { productTitle, productDescription, productBenefitsText };
+}
+
 function unwrapProject(
   d: { project?: ProjectApiRow; error?: string } | ProjectApiRow,
 ): ProjectApiRow | null {
@@ -144,8 +215,12 @@ export type ClassifierPrefill = ClassifierPrefillPayload & {
   appliedAt: number;
 } | null;
 
-export function useProductCardProject(options?: { classifierDevMock?: string | null }) {
+export function useProductCardProject(options?: {
+  classifierDevMock?: string | null;
+  classifierAutoEnabled?: boolean;
+}) {
   const classifierDevMock = options?.classifierDevMock?.trim() || null;
+  const classifierAutoEnabled = options?.classifierAutoEnabled ?? false;
   const [projectId, setProjectId] = useState<string | null>(null);
   const [source, setSourceState] = useState<SourceImageValue>(null);
   const [sourceImages, setSourceImagesState] = useState<SourceImagesValue>([]);
@@ -157,9 +232,18 @@ export function useProductCardProject(options?: { classifierDevMock?: string | n
   const [pendingClassifierResult, setPendingClassifierResult] =
     useState<ProductClassifierResult | null>(null);
   const [showClassifierResult, setShowClassifierResult] = useState(false);
+  const [productTitle, setProductTitle] = useState("");
+  const [productDescription, setProductDescription] = useState("");
+  const [productBenefitsText, setProductBenefitsText] = useState("");
   const simpleCardPrefillHandlerRef = useRef<
     ((payload: ClassifierPrefillPayload) => void) | null
   >(null);
+  const productTitleTouchedRef = useRef(false);
+  const productDescriptionTouchedRef = useRef(false);
+  const productBenefitsTouchedRef = useRef(false);
+  const persistProductDataTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const classifyInFlightRef = useRef(false);
+  const triggerAutoClassifyRef = useRef<(() => void) | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [initDone, setInitDone] = useState(false);
 
@@ -173,6 +257,12 @@ export function useProductCardProject(options?: { classifierDevMock?: string | n
     setSourceState(nextSources[0] ?? null);
     setSelectedCategory(categoryIdOrNull(p.selectedCategory));
     setCategorySource(categorySourceToUi(p.categorySource));
+
+    const productData = extractProductDataFromProject(p);
+    if (!productTitleTouchedRef.current) setProductTitle(productData.productTitle);
+    if (!productDescriptionTouchedRef.current) setProductDescription(productData.productDescription);
+    if (!productBenefitsTouchedRef.current) setProductBenefitsText(productData.productBenefitsText);
+
     if (p.classificationConfidence != null && p.classificationReason != null) {
       const meta =
         p.metadata && typeof p.metadata === "object" && !Array.isArray(p.metadata)
@@ -395,6 +485,14 @@ export function useProductCardProject(options?: { classifierDevMock?: string | n
     async (nextImages: SourceImagesValue) => {
       const sorted = [...nextImages].sort((a, b) => a.order - b.order);
       const main = sorted[0] ?? null;
+      const prevMainId =
+        sourceImages.find((img) => img.role === "main")?.fileId ?? sourceImages[0]?.fileId;
+      const newMainId = main?.fileId;
+      if (newMainId && newMainId !== prevMainId) {
+        productTitleTouchedRef.current = false;
+        productDescriptionTouchedRef.current = false;
+        productBenefitsTouchedRef.current = false;
+      }
       setSourceImagesState(sorted);
       setSourceState(main);
 
@@ -405,6 +503,12 @@ export function useProductCardProject(options?: { classifierDevMock?: string | n
         setClassifyInfo(null);
         setClassifyFlow("not_started");
         setClassifyError(null);
+        setProductTitle("");
+        setProductDescription("");
+        setProductBenefitsText("");
+        productTitleTouchedRef.current = false;
+        productDescriptionTouchedRef.current = false;
+        productBenefitsTouchedRef.current = false;
         clearSession();
         return;
       }
@@ -419,8 +523,11 @@ export function useProductCardProject(options?: { classifierDevMock?: string | n
         pid = newId;
       }
       await persistSourceImages(pid, sorted);
+      if (newMainId && newMainId !== prevMainId && classifierAutoEnabled) {
+        triggerAutoClassifyRef.current?.();
+      }
     },
-    [clearSession, createEmptyProject, persistSourceImages, projectId],
+    [clearSession, classifierAutoEnabled, createEmptyProject, persistSourceImages, projectId, sourceImages],
   );
 
   const didHydrate = useRef(false);
@@ -441,11 +548,116 @@ export function useProductCardProject(options?: { classifierDevMock?: string | n
     })();
   }, [loadProject]);
 
+  const persistProductDataFields = useCallback(
+    async (fields: {
+      title?: string;
+      productDescription?: string;
+      productBenefitsText?: string;
+      selectedCategory?: ProductCategoryId;
+      categorySource?: CategorySourceUi;
+    }) => {
+      if (!projectId) return;
+      const title = fields.title?.trim();
+      const benefits = fields.productBenefitsText?.trim();
+      await patchProject({
+        ...(title !== undefined ? { title: title || undefined } : {}),
+        ...(fields.selectedCategory ? { selectedCategory: fields.selectedCategory } : {}),
+        ...(fields.categorySource ? { categorySource: fields.categorySource } : {}),
+        metadata: {
+          marketplaceCard: {
+            simpleCard: {
+              settings: {
+                ...(title !== undefined ? { productLabel: title || undefined } : {}),
+                ...(benefits !== undefined ? { userText: benefits || undefined } : {}),
+              },
+            },
+          },
+          ...(fields.productDescription !== undefined
+            ? { productDescription: fields.productDescription.trim() || undefined }
+            : {}),
+        },
+      });
+    },
+    [patchProject, projectId],
+  );
+
+  const schedulePersistProductData = useCallback(
+    (fields: {
+      title?: string;
+      productDescription?: string;
+      productBenefitsText?: string;
+    }) => {
+      if (persistProductDataTimerRef.current) {
+        clearTimeout(persistProductDataTimerRef.current);
+      }
+      persistProductDataTimerRef.current = setTimeout(() => {
+        void persistProductDataFields(fields);
+      }, 700);
+    },
+    [persistProductDataFields],
+  );
+
+  const applyClassifierResultInternal = useCallback(
+    async (result: ProductClassifierResult, opts?: { silent?: boolean }) => {
+      if (!projectId) return;
+      const benefitsText = benefitsToUserText(result.suggestedBenefits);
+      if (!productTitleTouchedRef.current) {
+        setProductTitle(result.productTitle.trim());
+      }
+      if (!productDescriptionTouchedRef.current) {
+        setProductDescription(result.visibleProduct.trim());
+      }
+      if (!productBenefitsTouchedRef.current) {
+        setProductBenefitsText(benefitsText);
+      }
+      await patchProject({
+        title: result.productTitle.trim() || undefined,
+        selectedCategory: result.category,
+        categorySource: "ai",
+        metadata: {
+          classifierConfidence: result.confidence,
+          classifierAppliedAt: new Date().toISOString(),
+          classifierResult: result,
+          productDescription: result.visibleProduct.trim() || undefined,
+          marketplaceCard: {
+            simpleCard: {
+              settings: {
+                productLabel: result.productTitle.trim(),
+                userText: benefitsText,
+              },
+            },
+          },
+        },
+      });
+      setSelectedCategory(result.category);
+      setCategorySource("ai");
+      setClassifyInfo({
+        confidence: result.confidence,
+        reason: result.visibleProduct,
+        provider: "ai",
+        label: result.categoryLabel,
+        classifierFailed: false,
+      });
+      simpleCardPrefillHandlerRef.current?.({
+        productTitle: result.productTitle.trim(),
+        benefitsText,
+      });
+      setShowClassifierResult(false);
+      setPendingClassifierResult(null);
+      if (!opts?.silent) {
+        toast.success("Данные товара обновлены");
+      }
+    },
+    [patchProject, projectId],
+  );
+
   const runClassify = useCallback(async () => {
     if (!projectId) {
       toast.error("Нет проекта (загрузите фото на сервер)");
       return;
     }
+    if (classifyInFlightRef.current) return;
+    classifyInFlightRef.current = true;
     setClassifyFlow("loading");
     setClassifyError(null);
     setShowClassifierResult(false);
@@ -466,7 +678,6 @@ export function useProductCardProject(options?: { classifierDevMock?: string | n
       if (!parsed.ok) {
         setClassifyFlow("error");
         setClassifyError(parsed.message);
-        toast.error(parsed.message);
         return;
       }
       const d = parsed.data;
@@ -474,7 +685,6 @@ export function useProductCardProject(options?: { classifierDevMock?: string | n
         const msg = d.error ?? "Распознавание не удалось";
         setClassifyFlow("error");
         setClassifyError(msg);
-        toast.error(msg);
         return;
       }
       if (!d.result) {
@@ -482,58 +692,30 @@ export function useProductCardProject(options?: { classifierDevMock?: string | n
         setClassifyError("Пустой ответ сервера");
         return;
       }
-      setPendingClassifierResult(d.result);
-      setShowClassifierResult(true);
+      await applyClassifierResultInternal(d.result, { silent: true });
       setClassifyFlow("success");
       setClassifyError(null);
       if (d.billing?.credits && d.billing.credits > 0) {
-        toast.success(`Списано ${d.billing.credits} токен(ов) за распознавание`);
+        toast.success(`Списано ${d.billing.credits} токен(ов) за анализ фото`);
       }
     } catch {
       setClassifyFlow("error");
       setClassifyError("Сеть или сервер недоступен");
+    } finally {
+      classifyInFlightRef.current = false;
     }
-  }, [classifierDevMock, projectId]);
+  }, [applyClassifierResultInternal, classifierDevMock, projectId, sourceImages]);
+
+  useEffect(() => {
+    triggerAutoClassifyRef.current = () => {
+      void runClassify();
+    };
+  }, [runClassify]);
 
   const applyClassifierResult = useCallback(async () => {
-    if (!projectId || !pendingClassifierResult) return;
-    const result = pendingClassifierResult;
-    const benefitsText = benefitsToUserText(result.suggestedBenefits);
-    await patchProject({
-      title: result.productTitle.trim() || undefined,
-      selectedCategory: result.category,
-      categorySource: "ai",
-      metadata: {
-        classifierConfidence: result.confidence,
-        classifierAppliedAt: new Date().toISOString(),
-        classifierResult: result,
-        marketplaceCard: {
-          simpleCard: {
-            settings: {
-              productLabel: result.productTitle.trim(),
-              userText: benefitsText,
-            },
-          },
-        },
-      },
-    });
-    setSelectedCategory(result.category);
-    setCategorySource("ai");
-    setClassifyInfo({
-      confidence: result.confidence,
-      reason: result.visibleProduct,
-      provider: "ai",
-      label: result.categoryLabel,
-      classifierFailed: false,
-    });
-    simpleCardPrefillHandlerRef.current?.({
-      productTitle: result.productTitle.trim(),
-      benefitsText,
-    });
-    setShowClassifierResult(false);
-    setPendingClassifierResult(null);
-    toast.success("Данные применены");
-  }, [patchProject, pendingClassifierResult, projectId]);
+    if (!pendingClassifierResult) return;
+    await applyClassifierResultInternal(pendingClassifierResult);
+  }, [applyClassifierResultInternal, pendingClassifierResult]);
 
   const dismissClassifierResult = useCallback(() => {
     setShowClassifierResult(false);
@@ -555,6 +737,68 @@ export function useProductCardProject(options?: { classifierDevMock?: string | n
     },
     [patchProject, projectId],
   );
+
+  const setProductTitleManual = useCallback(
+    (value: string) => {
+      productTitleTouchedRef.current = true;
+      setProductTitle(value);
+      schedulePersistProductData({
+        title: value,
+        productDescription,
+        productBenefitsText,
+      });
+    },
+    [productBenefitsText, productDescription, schedulePersistProductData],
+  );
+
+  const setProductDescriptionManual = useCallback(
+    (value: string) => {
+      productDescriptionTouchedRef.current = true;
+      setProductDescription(value);
+      schedulePersistProductData({
+        title: productTitle,
+        productDescription: value,
+        productBenefitsText,
+      });
+    },
+    [productBenefitsText, productTitle, schedulePersistProductData],
+  );
+
+  const setProductBenefitsTextManual = useCallback(
+    (value: string) => {
+      productBenefitsTouchedRef.current = true;
+      setProductBenefitsText(value);
+      schedulePersistProductData({
+        title: productTitle,
+        productDescription,
+        productBenefitsText: value,
+      });
+    },
+    [productDescription, productTitle, schedulePersistProductData],
+  );
+
+  const aiAnalysisStatus = (():
+    | "idle"
+    | "analyzing"
+    | "filled"
+    | "unavailable"
+    | "error" => {
+    if (!source?.fileId) return "idle";
+    if (!classifierAutoEnabled && !classifierDevMock) return "unavailable";
+    if (classifyFlow === "loading") return "analyzing";
+    if (classifyFlow === "error") return "error";
+    if (categorySource === "ai" || productTitle.trim() || productBenefitsText.trim()) {
+      return "filled";
+    }
+    return "idle";
+  })();
+
+  const retryProductAnalysis = useCallback(async () => {
+    productTitleTouchedRef.current = false;
+    productDescriptionTouchedRef.current = false;
+    productBenefitsTouchedRef.current = false;
+    await runClassify();
+  }, [runClassify]);
 
   const reloadProject = useCallback(async () => {
     if (!projectId) return false;
@@ -592,5 +836,13 @@ export function useProductCardProject(options?: { classifierDevMock?: string | n
     classifierDevMockActive: Boolean(classifierDevMock),
     setManualCategory,
     reloadProject,
+    productTitle,
+    productDescription,
+    productBenefitsText,
+    setProductTitleManual,
+    setProductDescriptionManual,
+    setProductBenefitsTextManual,
+    aiAnalysisStatus,
+    retryProductAnalysis,
   };
 }

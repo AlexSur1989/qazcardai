@@ -79,11 +79,12 @@ type Props = {
   ensureProjectId: () => Promise<string | null>;
   sourceImages: SourceImagesValue;
   balanceCredits: number;
+  productLabel: string;
+  userText: string;
+  onProductLabelChange: (value: string) => void;
+  onUserTextChange: (value: string) => void;
   selectedCategoryLabel?: string | null;
   showAdminHints?: boolean;
-  registerPrefillHandler?: (
-    handler: ((payload: { productTitle: string; benefitsText: string }) => void) | null,
-  ) => void;
 };
 
 type PlanPreviewResponse = {
@@ -152,9 +153,12 @@ export function SimpleProductCardTab({
   ensureProjectId,
   sourceImages,
   balanceCredits,
+  productLabel,
+  userText,
+  onProductLabelChange,
+  onUserTextChange,
   selectedCategoryLabel = null,
   showAdminHints = false,
-  registerPrefillHandler,
 }: Props) {
   const refFieldId = useId();
   const photosWithId = useMemo(
@@ -163,11 +167,6 @@ export function SimpleProductCardTab({
   );
 
   const [productPhotoId, setProductPhotoId] = useState<string>("");
-  const [productLabel, setProductLabel] = useState("");
-  const [userText, setUserText] = useState("");
-  const [visionLoading, setVisionLoading] = useState(false);
-  const [visionSummary, setVisionSummary] = useState<SimpleCardVisionResponse | null>(null);
-  const [analyzedPhotoId, setAnalyzedPhotoId] = useState<string | null>(null);
   const [styleMode, setStyleMode] = useState<SimpleCardStyleMode>(SIMPLE_CARD_DEFAULT_STYLE_MODE);
   const [classicUseReference, setClassicUseReference] = useState(false);
   const [referenceImage, setReferenceImage] = useState<ReferenceRow | null>(null);
@@ -230,25 +229,6 @@ export function SimpleProductCardTab({
 
   const activeSnapshot = devMockSnapshot ?? generationSnapshot;
   const refInputRef = useRef<HTMLInputElement>(null);
-  const userTextTouchedRef = useRef(false);
-  const productLabelTouchedRef = useRef(false);
-  const visionRequestRef = useRef<string | null>(null);
-  const autoVisionRanForPhotoRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (!registerPrefillHandler) return;
-    registerPrefillHandler(({ productTitle, benefitsText }) => {
-      if (productTitle.trim()) {
-        setProductLabel(productTitle.trim());
-        productLabelTouchedRef.current = true;
-      }
-      if (benefitsText.trim()) {
-        setUserText(benefitsText.trim());
-        userTextTouchedRef.current = true;
-      }
-    });
-    return () => registerPrefillHandler(null);
-  }, [registerPrefillHandler]);
 
   const defaultProductPhotoId = useMemo(() => {
     const main = photosWithId.find((p) => p.role === "main") ?? photosWithId[0];
@@ -256,62 +236,6 @@ export function SimpleProductCardTab({
   }, [photosWithId]);
 
   const selectedProductPhotoId = productPhotoId || defaultProductPhotoId;
-
-  const runVisionAnalysis = useCallback(
-    async (options?: { force?: boolean; photoId?: string }) => {
-      const pid = projectId;
-      const photoId = options?.photoId ?? selectedProductPhotoId;
-      if (!pid || !initDone || !photoId.trim()) return;
-      if (!options?.force && analyzedPhotoId === photoId && visionSummary) {
-        return;
-      }
-      if (visionRequestRef.current === photoId) return;
-      visionRequestRef.current = photoId;
-      setVisionLoading(true);
-      try {
-        const res = await fetch(`/api/product-card-projects/${pid}/product-analysis/vision`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ productPhotoId: photoId, saveToSimpleCard: true }),
-        });
-        const parsed = await readJsonSafe<SimpleCardVisionResponse>(res);
-        if (visionRequestRef.current !== photoId) return;
-        if (!parsed.ok || !res.ok) {
-          setVisionSummary({ analysisFailed: true, warnings: [parsed.ok ? "Не удалось распознать товар" : parsed.message] });
-          setAnalyzedPhotoId(photoId);
-          return;
-        }
-        const d = parsed.data;
-        setVisionSummary(d);
-        setAnalyzedPhotoId(photoId);
-
-        if (d.analysisFailed) {
-          return;
-        }
-
-        const label = (d.productLabel ?? d.productNameGuess ?? "").trim();
-        if (label && !productLabelTouchedRef.current) {
-          setProductLabel(label);
-        }
-        const suggested = d.suggestedUserText?.trim() ?? "";
-        if (suggested && !userTextTouchedRef.current) {
-          setUserText(suggested);
-        }
-      } finally {
-        if (visionRequestRef.current === photoId) {
-          setVisionLoading(false);
-        }
-      }
-    },
-    [projectId, initDone, selectedProductPhotoId, analyzedPhotoId, visionSummary],
-  );
-
-  useEffect(() => {
-    if (!projectId || !initDone || !selectedProductPhotoId.trim()) return;
-    if (autoVisionRanForPhotoRef.current.has(selectedProductPhotoId)) return;
-    autoVisionRanForPhotoRef.current.add(selectedProductPhotoId);
-    void runVisionAnalysis({ photoId: selectedProductPhotoId });
-  }, [projectId, initDone, selectedProductPhotoId, runVisionAnalysis]);
 
   useEffect(() => {
     if (!projectId || !initDone) return;
@@ -336,14 +260,6 @@ export function SimpleProductCardTab({
         meta?.marketplaceCard?.simpleCard ?? meta?.cardBuilder?.simpleCard;
       const saved = block?.settings;
       if (!saved) return;
-      if (saved.productLabel) {
-        setProductLabel(saved.productLabel);
-        productLabelTouchedRef.current = true;
-      }
-      if (saved.userText) {
-        setUserText(saved.userText);
-        userTextTouchedRef.current = true;
-      }
       if (saved.styleMode) setStyleMode(saved.styleMode);
       if (saved.aspectRatio) setAspectRatio(saved.aspectRatio);
       if (saved.styleMode === "classic") setClassicUseReference(Boolean(saved.useReference));
@@ -360,13 +276,6 @@ export function SimpleProductCardTab({
             fileName: refPreview.fileName,
             size: refPreview.size,
           });
-        }
-      }
-      if (block?.vision && !block.vision.analysisFailed) {
-        setVisionSummary(block.vision);
-        if (block.vision.productPhotoId) {
-          setAnalyzedPhotoId(block.vision.productPhotoId);
-          visionRequestRef.current = block.vision.productPhotoId;
         }
       }
     })();
@@ -741,12 +650,7 @@ export function SimpleProductCardTab({
                       <button
                         key={img.fileId}
                         type="button"
-                        onClick={() => {
-                          setProductPhotoId(img.fileId!);
-                          if (analyzedPhotoId !== img.fileId) {
-                            setVisionSummary(null);
-                          }
-                        }}
+                        onClick={() => setProductPhotoId(img.fileId!)}
                         className={cn(
                           "overflow-hidden rounded-xl border-2 text-left transition-colors",
                           selected ? "border-primary ring-primary/30 ring-2" : "border-border hover:border-primary/40",
@@ -763,12 +667,6 @@ export function SimpleProductCardTab({
                     );
                   })}
                 </div>
-                {visionLoading ? (
-                  <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                    <Loader2 className="size-4 animate-spin" />
-                    Распознаём товар на фото…
-                  </div>
-                ) : null}
               </>
             )}
           </CardContent>
@@ -776,124 +674,44 @@ export function SimpleProductCardTab({
 
         <Card className="rounded-2xl border-border">
           <CardHeader>
-            <CardTitle className="text-base">Что это за товар?</CardTitle>
+            <CardTitle className="text-base">Текст карточки</CardTitle>
             <CardDescription>
-              Заполните название и преимущества вручную. Автораспознавание подключим позже — для генерации карточки оно не обязательно.
+              Название и преимущества берутся из блока «Данные товара» выше — здесь можно
+              отредактировать их перед генерацией.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {visionSummary?.analysisFailed ? (
-              <Alert>
-                <AlertDescription>
-                  {visionSummary.warnings?.[0] ??
-                    "Распознавание недоступно — укажите название и преимущества вручную."}
-                </AlertDescription>
-              </Alert>
-            ) : null}
-            {visionLoading && !productLabel.trim() ? (
-              <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                <Loader2 className="size-4 animate-spin" />
-                Анализируем фото…
-              </div>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="simple-card-product-label">Название товара</Label>
-                  <Input
-                    id="simple-card-product-label"
-                    value={productLabel}
-                    onChange={(e) => {
-                      productLabelTouchedRef.current = true;
-                      setProductLabel(e.target.value);
-                    }}
-                    placeholder="Например: Шампунь Clear Men Ледяная свежесть"
-                    maxLength={200}
-                  />
-                </div>
-                {visionSummary && !visionSummary.analysisFailed ? (
-                  <div className="text-muted-foreground grid gap-1 text-xs sm:grid-cols-2">
-                    {visionSummary.productType?.trim() ? (
-                      <div>
-                        <span>Тип: </span>
-                        <span className="text-foreground">{visionSummary.productType.trim()}</span>
-                      </div>
-                    ) : null}
-                    {visionSummary.mainColors?.length ? (
-                      <div>
-                        <span>Цвет: </span>
-                        <span className="text-foreground">{visionSummary.mainColors.slice(0, 4).join(", ")}</span>
-                      </div>
-                    ) : null}
-                    {visionSummary.materialGuess?.trim() ? (
-                      <div>
-                        <span>Материал: </span>
-                        <span className="text-foreground">{visionSummary.materialGuess.trim()}</span>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {visionSummary?.analysisFailed ? (
-                  <Alert>
-                    <AlertTitle>Не удалось распознать товар</AlertTitle>
-                    <AlertDescription>
-                      Укажите название вручную — генерация всё равно доступна.
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-                {selectedProductPhotoId && !visionLoading ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="rounded-xl"
-                    onClick={() => void runVisionAnalysis({ force: true, photoId: selectedProductPhotoId })}
-                  >
-                    Обновить распознавание
-                  </Button>
-                ) : null}
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-border">
-          <CardHeader>
-            <CardTitle className="text-base">Преимущества и характеристики товара</CardTitle>
-            <CardDescription>
-              Напишите факты о товаре. ИИ превратит их в короткие продающие преимущества.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-muted-foreground text-xs">
-              Для лучшего результата используйте описание, которое относится к загруженному фото. Генерация
-              доступна и при несовпадении — вы сами отвечаете за введённый текст.
-            </p>
-            {visionLoading && !userText.trim() ? (
-              <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                <Loader2 className="size-4 animate-spin" />
-                Подбираем текст для карточки…
-              </div>
-            ) : null}
-            <Textarea
-              value={userText}
-              onChange={(e) => {
-                userTextTouchedRef.current = true;
-                setUserText(e.target.value);
-              }}
-              placeholder="Например: удобный хват, Bluetooth, Type-C, быстрая зарядка, для PlayStation"
-              rows={5}
-              maxLength={SIMPLE_CARD_USER_TEXT_MAX}
-              className="resize-y"
-            />
-            <div className="text-muted-foreground flex justify-between gap-3 text-xs">
-              <span>Укажите 2–3 факта через запятую или с новой строки.</span>
-              <span>
-                {textLen} / {SIMPLE_CARD_USER_TEXT_MAX}
-              </span>
+            <div className="space-y-2">
+              <Label htmlFor="simple-card-product-label">Название товара</Label>
+              <Input
+                id="simple-card-product-label"
+                value={productLabel}
+                onChange={(e) => onProductLabelChange(e.target.value)}
+                placeholder="Например: Беспроводной геймпад"
+                maxLength={200}
+              />
             </div>
-            {userText.trim() && !hasEnoughProductBenefits(userText) ? (
-              <p className="text-destructive text-xs">{SIMPLE_CARD_BENEFITS_REQUIRED_MESSAGE}</p>
-            ) : null}
+            <div className="space-y-2">
+              <Label htmlFor="simple-card-user-text">Преимущества и характеристики</Label>
+              <Textarea
+                id="simple-card-user-text"
+                value={userText}
+                onChange={(e) => onUserTextChange(e.target.value)}
+                placeholder="Например: удобный хват, Bluetooth, Type-C, быстрая зарядка"
+                rows={5}
+                maxLength={SIMPLE_CARD_USER_TEXT_MAX}
+                className="resize-y"
+              />
+              <div className="text-muted-foreground flex justify-between gap-3 text-xs">
+                <span>Укажите 2–3 факта через запятую или с новой строки.</span>
+                <span>
+                  {textLen} / {SIMPLE_CARD_USER_TEXT_MAX}
+                </span>
+              </div>
+              {userText.trim() && !hasEnoughProductBenefits(userText) ? (
+                <p className="text-destructive text-xs">{SIMPLE_CARD_BENEFITS_REQUIRED_MESSAGE}</p>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
 

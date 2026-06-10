@@ -18,7 +18,7 @@ import type { ClassifierAccessForUser } from "@/server/services/productClassifie
 import { ScenarioSetupNotice } from "./scenario-setup-notice";
 
 import { SimpleProductCardTab } from "./simple-product-card-tab";
-import { ProductClassifierPanel } from "./product-classifier-panel";
+import { ProductDataSection } from "./product-data-section";
 import { ConceptPhotoTab } from "./concept-photo-tab";
 import { ProductVideoTab } from "./product-video-tab";
 import { SourceImagesUpload, type UploadFlowState } from "./source-images-upload";
@@ -111,16 +111,21 @@ export function ProductCardPage({
     canUseBackend,
     ensureProjectId,
     classifyLoading,
-    runClassify,
-    applyClassifierResult,
-    dismissClassifierResult,
-    pendingClassifierResult,
-    showClassifierResult,
-    registerSimpleCardPrefillHandler,
-    classifierDevMockActive,
     setManualCategory,
-  } = useProductCardProject({ classifierDevMock });
+    productTitle,
+    productDescription,
+    productBenefitsText,
+    setProductTitleManual,
+    setProductDescriptionManual,
+    setProductBenefitsTextManual,
+    aiAnalysisStatus,
+    retryProductAnalysis,
+  } = useProductCardProject({
+    classifierDevMock,
+    classifierAutoEnabled: classifierAccess.canClassify || Boolean(classifierDevMock),
+  });
 
+  const classifierDevMockActive = Boolean(classifierDevMock);
   const classifierEnabled = classifierAccess.uiEnabled || classifierDevMockActive;
 
   const visibleTabs = useMemo(
@@ -211,6 +216,11 @@ export function ProductCardPage({
             {uploadFlow === "error" && "ошибка (см. ниже)"}
           </p>
         )}
+        {aiAnalysisStatus === "analyzing" && hasImage ? (
+          <p className="text-muted-foreground flex items-center gap-2 text-xs" aria-live="polite">
+            ИИ анализирует фото товара…
+          </p>
+        ) : null}
         <SourceImagesUpload
           value={sourceImages}
           onChange={onSourceImagesChange}
@@ -218,29 +228,25 @@ export function ProductCardPage({
         />
       </div>
 
-      <ProductClassifierPanel
+      <ProductDataSection
         hasImage={hasImage}
         canPersist={canUseBackend}
         categories={CATEGORIES}
         selectedCategory={selectedCategory}
         categorySource={categorySource}
         classifierEnabled={classifierEnabled}
-        classifyLoading={classifyLoading}
+        aiAnalysisStatus={aiAnalysisStatus}
         classifyError={classifyError}
-        pendingResult={pendingClassifierResult}
-        showResult={showClassifierResult}
-        onClassify={runClassify}
-        onApply={applyClassifierResult}
-        onEditManually={dismissClassifierResult}
-        onRetry={runClassify}
+        productTitle={productTitle}
+        productDescription={productDescription}
+        productBenefitsText={productBenefitsText}
+        onProductTitleChange={setProductTitleManual}
+        onProductDescriptionChange={setProductDescriptionManual}
+        onProductBenefitsTextChange={setProductBenefitsTextManual}
         onSelectCategory={setManualCategory}
+        onRetryAnalysis={classifierEnabled ? retryProductAnalysis : undefined}
+        retryDisabled={classifyLoading}
         classifierAdminHint={showAdminHints ? classifierAdminHint : null}
-        devMockActive={classifierDevMockActive}
-        costCredits={classifierAccess.costCredits}
-        dailyLimit={classifierAccess.dailyLimit}
-        balanceCredits={balanceCredits}
-        canClassify={classifierAccess.canClassify}
-        insufficientCredits={classifierAccess.insufficientCredits}
       />
 
       <section className="space-y-3" aria-label="Сценарии">
@@ -300,6 +306,8 @@ export function ProductCardPage({
             ) : (
               <ConceptPhotoTab
                 selectedCategory={selectedCategory}
+                productTitle={productTitle}
+                productBenefitsText={productBenefitsText}
                 hasImage={hasImage}
                 canUseBackend={canUseBackend}
                 projectId={projectId}
@@ -318,6 +326,10 @@ export function ProductCardPage({
                 projectId={projectId}
                 sourceImages={sourceImages}
                 balanceCredits={balanceDisplay}
+                productLabel={productTitle}
+                userText={productBenefitsText}
+                onProductLabelChange={setProductTitleManual}
+                onUserTextChange={setProductBenefitsTextManual}
                 selectedCategoryLabel={
                   selectedCategory
                     ? getManualProductCategoryLabel(selectedCategory) ??
@@ -326,7 +338,6 @@ export function ProductCardPage({
                     : null
                 }
                 showAdminHints={showAdminHints}
-                registerPrefillHandler={registerSimpleCardPrefillHandler}
               />
             )}
           </TabsContent>

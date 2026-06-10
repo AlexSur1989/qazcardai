@@ -30,6 +30,8 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   selectedCategory: ProductCategoryId | null;
+  productTitle?: string;
+  productBenefitsText?: string;
   hasImage: boolean;
   canUseBackend: boolean;
   projectId: string | null;
@@ -75,6 +77,8 @@ function ConceptPreviewImage({
 
 export function ConceptPhotoTab({
   selectedCategory,
+  productTitle = "",
+  productBenefitsText = "",
   hasImage,
   canUseBackend,
   projectId,
@@ -279,6 +283,21 @@ export function ConceptPhotoTab({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {(productTitle.trim() || productBenefitsText.trim()) ? (
+          <div className="rounded-xl border border-border/80 bg-muted/20 p-3 text-sm">
+            <p className="text-foreground mb-1 font-medium">Данные товара</p>
+            {productTitle.trim() ? (
+              <p className="text-muted-foreground">
+                <span className="text-foreground">{productTitle.trim()}</span>
+              </p>
+            ) : null}
+            {productBenefitsText.trim() ? (
+              <p className="text-muted-foreground mt-1 whitespace-pre-wrap text-xs">
+                {productBenefitsText.trim()}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <p className="text-muted-foreground text-sm leading-relaxed">
           Выберите визуальное направление. Превью показывает пример стиля, а итоговое изображение
           будет создано по вашему товару.
