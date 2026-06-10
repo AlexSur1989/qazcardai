@@ -52,6 +52,10 @@ export async function GET(_req: Request, context: RouteContext) {
 
   const isAdmin = canAccessAdminPanel(current.user.role);
   const errorRaw = fixUtf8MojibakeDisplay(generation.errorMessage);
+  const metaRoot =
+    generation.metadata && typeof generation.metadata === "object" && !Array.isArray(generation.metadata)
+      ? (generation.metadata as Record<string, unknown>)
+      : null;
 
   const snapshot = serializeGenerationPollSnapshotForUser({
     id: generation.id,
@@ -74,6 +78,17 @@ export async function GET(_req: Request, context: RouteContext) {
             providerTaskId: generation.providerTaskId,
             modelSlug: generation.model.slug,
             apiModelId: generation.model.apiModelId,
+            providerInputImages: metaRoot
+              ? {
+                  originalProductUrl: metaRoot.originalProductUrl ?? null,
+                  originalReferenceUrl: metaRoot.originalReferenceUrl ?? null,
+                  providerProductUrl: metaRoot.providerProductUrl ?? null,
+                  providerReferenceUrl: metaRoot.providerReferenceUrl ?? null,
+                  providerUploadMethod: metaRoot.providerUploadMethod ?? null,
+                  preflight: metaRoot.providerInputImagesPreflight ?? null,
+                  preparedAt: metaRoot.providerInputImagesPreparedAt ?? null,
+                }
+              : null,
           },
         }
       : {}),

@@ -13,6 +13,10 @@ import { prisma } from "@/lib/prisma";
 import { publicApiErrorMessage } from "@/lib/safe-api-error";
 import { validateVideoInputFiles } from "@/lib/video-input-limits";
 import { CreditServiceError, getBalance, refundCredits, reserveCredits } from "@/server/services/credits";
+import {
+  prepareProviderInputImages,
+  type ProviderInputImageRole,
+} from "@/server/services/prepareProviderInputImages";
 import { enqueueGenerationJob } from "@/server/queues/generationQueue";
 import { getQueueMode } from "@/server/queue-mode";
 import { isRedisReachableForQueue } from "@/server/queues/redisConnection";
@@ -137,6 +141,37 @@ function isJsonObject(x: unknown): x is Record<string, unknown> {
  * — payloadMapping: imageUrls / inputUrls / referenceImageUrls, imageUrl / firstFrameUrl;
  * — Seedance 2.x без payloadMapping: firstFrameUrl (см. buildSeedance2MarketCreateTaskPayload).
  */
+function applyProviderUrlsToImageSettings(
+  settings: Record<string, unknown>,
+  providerUrls: string[],
+): Record<string, unknown> {
+  if (providerUrls.length === 0) return settings;
+  const next = { ...settings };
+  for (const key of ["inputUrls", "imageUrls", "referenceImageUrls"] as const) {
+    if (Array.isArray(next[key])) {
+      next[key] = [...providerUrls];
+    }
+  }
+  const first = providerUrls[0]?.trim();
+  if (first) {
+    for (const key of ["imageUrl", "firstFrameUrl"] as const) {
+      if (typeof next[key] === "string" || next[key] == null) {
+        next[key] = first;
+      }
+    }
+  }
+  return next;
+}
+
+function inferProviderInputRoles(inputCount: number, styleRefCount: number): ProviderInputImageRole[] {
+  const roles: ProviderInputImageRole[] = [];
+  const productCount = Math.max(1, inputCount - styleRefCount);
+  for (let i = 0; i < inputCount; i++) {
+    roles.push(i < productCount ? "product" : "reference");
+  }
+  return roles;
+}
+
 function mergeProductCardInputIntoKieSettings(
   metadata: Record<string, unknown>,
   model: AiModel,
@@ -532,6 +567,35 @@ export async function queueProductCardImage(
   }
   if (balance < costCreditsCalculated) {
     return { ok: false, error: "Недостаточно кредитов", status: 402 };
+  }
+
+  if (
+    !isMockKie() &&
+    model.provider === "KIE_AI" &&
+    model.supportsImageInput &&
+    inputFilesCombined.length > 0
+  ) {
+    const styleRefCount = styleReferenceUrls?.length ?? 0;
+    const prep = await prepareProviderInputImages({
+      inputUrls: inputFilesCombined,
+      roles: inferProviderInputRoles(inputFilesCombined.length, styleRefCount),
+    });
+    if (!prep.ok) {
+      return { ok: false, error: prep.error, status: 400 };
+    }
+    inputFilesCombined = prep.providerUrls;
+    normalizedSettings = applyProviderUrlsToImageSettings(normalizedSettings, prep.providerUrls);
+    if (isJsonObject(metadata.settings)) {
+      metadata.settings = applyProviderUrlsToImageSettings(metadata.settings, prep.providerUrls);
+    }
+    mergeProductCardInputIntoKieSettings(metadata, model, inputFilesCombined);
+    metadata.originalProductUrl = prep.metadata.originalProductUrl;
+    metadata.originalReferenceUrl = prep.metadata.originalReferenceUrl;
+    metadata.providerProductUrl = prep.metadata.providerProductUrl;
+    metadata.providerReferenceUrl = prep.metadata.providerReferenceUrl;
+    metadata.providerUploadMethod = prep.metadata.providerUploadMethod;
+    metadata.providerInputImagesPreflight = prep.metadata.preflight;
+    metadata.providerInputImagesPreparedAt = prep.metadata.preparedAt;
   }
 
   const gen = await prisma.generation.create({

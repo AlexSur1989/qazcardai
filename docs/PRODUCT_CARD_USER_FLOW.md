@@ -76,6 +76,8 @@ Polling: каждые **4 с** пока `QUEUED` или `PROCESSING`; остан
 
 **С референсом** в Kie уходит два URL: `[product, reference]` — порядок фиксирован; USER не видит технические поля.
 
+Перед RESERVE сервер проверяет доступность URL (HEAD/GET, content-type, magic bytes). Если прямой S3/CDN URL ненадёжен для Kie, изображения зеркалируются через **Kie File Upload API**; в metadata сохраняются `originalProductUrl`, `providerProductUrl`, preflight и метод загрузки.
+
 Подсказка в UI: *«Референс используется только для стиля. Товар берётся с основного фото.»*
 
 ---
@@ -110,6 +112,9 @@ Admin debug — только при `showAdminHints` (ADMIN / SUPER_ADMIN).
 ```bash
 npm run verify:product-card-model-setup
 npm run smoke:product-card-marketplace
+# Диагностика URL product/reference + опционально Kie upload (без Generation/credits):
+PRODUCT_URL=https://... REFERENCE_URL=https://... npm run verify:reference-image-preflight
+TRY_KIE_UPLOAD=1 PRODUCT_URL=https://... npm run verify:reference-image-preflight
 ```
 
 ---

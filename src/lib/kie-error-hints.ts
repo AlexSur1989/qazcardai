@@ -1,3 +1,4 @@
+import { PRODUCT_CARD_IMAGE_PROCESSING_FAILED_RU } from "@/lib/product-card-provider-image-copy";
 
 /**
  * Текст про «Credits insufficient…» в ответе Kie — это баланс на стороне Kie.ai,
@@ -37,14 +38,22 @@ function isLikelyKieImageUrlError(msg: string): boolean {
   const m = msg.toLowerCase();
   return (
     m.includes("image download failed") ||
+    m.includes("image fetch failed") ||
     m.includes("image url") ||
     m.includes("failed to download") ||
     m.includes("cannot download") ||
+    m.includes("file upload api") ||
     (m.includes("http 403") && (m.includes("forbidden") || m.includes("image"))) ||
     m.includes("403: forbidden") ||
     m.includes("url not accessible") ||
     m.includes("invalid image url")
   );
+}
+
+/** Ошибка Kie при скачивании input image — не ретраить job. */
+export function isLikelyKieImageFetchFailure(msg: string | null | undefined): boolean {
+  if (!msg?.trim()) return false;
+  return isLikelyKieImageUrlError(msg.trim());
 }
 
 function isLikelyKieAuthError(msg: string): boolean {
@@ -93,7 +102,7 @@ export function explainKieErrorForUser(
     return "Сервис генерации временно недоступен. Попробуйте позже или обратитесь в поддержку.";
   }
   if (isLikelyKieImageUrlError(raw)) {
-    return "Не удалось использовать загруженное изображение. Загрузите файл ещё раз или выберите другой.";
+    return PRODUCT_CARD_IMAGE_PROCESSING_FAILED_RU;
   }
   if (isLikelyKieAuthError(raw)) {
     return "Генерация временно недоступна. Попробуйте позже.";

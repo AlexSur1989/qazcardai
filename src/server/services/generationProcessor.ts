@@ -10,6 +10,7 @@ import {
 } from "@/lib/kie-mock";
 import {
   explainKieErrorForUser,
+  isLikelyKieImageFetchFailure,
   isLikelyKieOverloadMessage,
 } from "@/lib/kie-error-hints";
 import {
@@ -163,6 +164,9 @@ function outputObjectKey(
 function shouldRetryProviderKie(
   result: { httpStatus: number; errorMessage?: string },
 ): boolean {
+  if (isLikelyKieImageFetchFailure(result.errorMessage)) {
+    return false;
+  }
   const s = result.httpStatus;
   if (s === 0) return true;
   if (s === 502 || s === 503 || s === 429) return true;
