@@ -5,6 +5,7 @@ import { AlertTriangle } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getPublicProductCategories } from "@/config/product-card-categories";
 import { getManualProductCategoryLabel } from "@/config/product-card-manual-categories";
@@ -291,7 +292,12 @@ export function ProductCardPage({
                   disabled={!hasImage}
                   className="rounded-lg border border-transparent px-4 py-2.5 text-sm data-active:border-primary data-active:bg-primary/10 data-active:shadow-sm"
                 >
-                  {tabLabel(t.scenario)}
+                  <span className="inline-flex items-center gap-1">
+                    {tabLabel(t.scenario)}
+                    {t.id === "concepts" ? (
+                      <InfoTooltip content="AI создаст несколько вариантов визуальной подачи товара." />
+                    ) : null}
+                  </span>
                   {hasImage && !ready ? (
                     <span className="text-muted-foreground ml-1 text-[10px]">· настройка</span>
                   ) : null}

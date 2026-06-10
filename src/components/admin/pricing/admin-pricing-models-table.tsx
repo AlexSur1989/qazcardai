@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { AdminPricingModelRow } from "@/server/services/adminPricingOverview";
+import { LabelWithInfoTooltip } from "@/components/ui/info-tooltip";
 import { cn } from "@/lib/utils";
 
 type FilterId = "all" | "GENERAL" | "PRODUCT_CARD" | "IMAGE" | "VIDEO" | "VISION";
@@ -75,7 +76,13 @@ export function AdminPricingModelsTable({ models }: Props) {
               <TableHead>Active</TableHead>
               <TableHead>Schema</TableHead>
               <TableHead className="text-right">Min</TableHead>
-              <TableHead className="text-right">Sample</TableHead>
+              <TableHead className="text-right">
+                <LabelWithInfoTooltip
+                  label="Sample"
+                  tooltip="Сколько токенов списывается за одну генерацию."
+                  align="end"
+                />
+              </TableHead>
               <TableHead className="text-right">Маржа %</TableHead>
               <TableHead />
             </TableRow>

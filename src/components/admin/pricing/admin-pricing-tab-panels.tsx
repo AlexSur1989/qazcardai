@@ -32,6 +32,7 @@ import type { KaspiManualPricingApi } from "@/lib/pricing-admin/kaspi-manual";
 import type { ProductCardVideoPricingApi } from "@/lib/pricing-admin/product-card-video";
 import type { ProductCardVideoMatrixCellPreview } from "@/lib/pricing-admin/product-card-video";
 import type { AppSettingMeta } from "@/lib/pricing-admin/types";
+import { InfoTooltip, LabelWithInfoTooltip } from "@/components/ui/info-tooltip";
 import { cn } from "@/lib/utils";
 
 function statusBadge(status: string) {
@@ -119,6 +120,10 @@ export function AdminPricingTabPanels({
                 {data.economics.defaultMarkupPercent ?? "—"}% /{" "}
                 {data.economics.productCardMarkupPercent}%
               </strong>
+            </p>
+            <p className="inline-flex flex-wrap items-center gap-1">
+              <span>1 credit ≈ $0.005 USD</span>
+              <InfoTooltip content="Внутренний курс токена для расчёта себестоимости." />
             </p>
           </CardContent>
         </Card>
@@ -281,7 +286,13 @@ export function AdminPricingTabPanels({
                       <TableHead>Label</TableHead>
                       <TableHead>Resolution</TableHead>
                       <TableHead>Duration</TableHead>
-                      <TableHead className="text-right">Credits</TableHead>
+                      <TableHead className="text-right">
+                        <LabelWithInfoTooltip
+                          label="Credits"
+                          tooltip="Сколько токенов списывается за одну генерацию."
+                          align="end"
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

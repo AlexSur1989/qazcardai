@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -755,7 +756,10 @@ export function SimpleProductCardTab({
         {styleMode === "classic" ? (
           <Card className="rounded-2xl border-border">
             <CardHeader>
-              <CardTitle className="text-base">По фото-референсу</CardTitle>
+              <CardTitle className="flex items-center gap-1 text-base">
+                По фото-референсу
+                <InfoTooltip content="Товар берётся с основного фото. Референс используется только для стиля, фона и композиции." />
+              </CardTitle>
               <CardDescription>
                 Загрузите пример дизайна. AI возьмёт из него стиль, фон, композицию и визуальную подачу.
               </CardDescription>
@@ -799,7 +803,10 @@ export function SimpleProductCardTab({
         {styleMode === "reference" ? (
           <Card className="rounded-2xl border-border">
             <CardHeader>
-              <CardTitle className="text-base">По фото-референсу</CardTitle>
+              <CardTitle className="flex items-center gap-1 text-base">
+                По фото-референсу
+                <InfoTooltip content="Товар берётся с основного фото. Референс используется только для стиля, фона и композиции." />
+              </CardTitle>
               <CardDescription>
                 Загрузите пример дизайна. AI возьмёт из него стиль, фон, композицию и визуальную подачу.
               </CardDescription>
@@ -883,7 +890,10 @@ export function SimpleProductCardTab({
                   <dd className="text-foreground">{resolutionLabel}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt>Стоимость</dt>
+                  <dt className="inline-flex items-center gap-1">
+                    Стоимость
+                    <InfoTooltip content="Токены списываются только после запуска генерации. При ошибке токены возвращаются." />
+                  </dt>
                   <dd className="text-foreground font-semibold">
                     {estimating ? (
                       "…"

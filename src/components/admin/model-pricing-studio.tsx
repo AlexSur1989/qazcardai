@@ -22,6 +22,7 @@ import {
   type CalculatedPricingRow,
   type PerSecondMotionPreviewRow,
 } from "@/lib/model-pricing-shared";
+import { LabelWithInfoTooltip } from "@/components/ui/info-tooltip";
 import { cn } from "@/lib/utils";
 
 type StudioModel = {
@@ -1084,7 +1085,10 @@ export function ModelPricingStudio({ model, canEdit }: Props) {
                 {adminTerm("usdPerSecond")}
               </TableHead>
               <TableHead className="w-[140px] whitespace-normal break-words py-3 align-top text-xs leading-snug">
-                {adminTerm("providerUsdTotal")}
+                <LabelWithInfoTooltip
+                  label={adminTerm("providerUsdTotal")}
+                  tooltip="Официальная стоимость провайдера для сравнения."
+                />
               </TableHead>
               <TableHead className="w-[140px] whitespace-normal break-words py-3 align-top text-xs leading-snug">
                 {adminTerm("providerKztTotal")}
@@ -1099,10 +1103,16 @@ export function ModelPricingStudio({ model, canEdit }: Props) {
                 {adminTerm("manualClientTokens")}
               </TableHead>
               <TableHead className="w-[150px] whitespace-normal break-words py-3 align-top text-xs leading-snug">
-                {adminTerm("finalClientTokens")}
+                <LabelWithInfoTooltip
+                  label={adminTerm("finalClientTokens")}
+                  tooltip="Сколько токенов списывается за одну генерацию."
+                />
               </TableHead>
               <TableHead className="w-[130px] whitespace-normal break-words py-3 align-top text-xs leading-snug">
-                {adminTerm("clientKztPrice")}
+                <LabelWithInfoTooltip
+                  label={adminTerm("clientKztPrice")}
+                  tooltip="Ваша цена с учётом наценки и минимального порога."
+                />
               </TableHead>
               <TableHead className="w-[120px] whitespace-normal break-words py-3 align-top text-xs leading-snug">
                 {adminTerm("marginKzt")}
