@@ -178,7 +178,7 @@ export function ProductCardPage({
   };
 
   return (
-    <div className="space-y-10">
+    <div className="min-w-0 max-w-full space-y-8 overflow-x-clip sm:space-y-10">
       <p className="text-muted-foreground text-sm">
         Баланс (токены):{" "}
         <span className="text-foreground font-medium tabular-nums">{balanceDisplay}</span>
@@ -269,11 +269,11 @@ export function ProductCardPage({
             const next = v as TabId;
             if (hasImage) setTab(next);
           }}
-          className="gap-4"
+          className="min-w-0 max-w-full gap-4"
         >
           <TabsList
             variant="line"
-            className="h-auto w-full max-w-3xl flex-wrap justify-start gap-1.5 rounded-xl border border-border bg-white p-1.5"
+            className="grid h-auto w-full min-w-0 grid-cols-1 gap-1.5 rounded-xl border border-border bg-white p-1.5 sm:grid-cols-3"
           >
             {visibleTabs.map((t) => {
               const ready = tabReady(t.id);
@@ -282,10 +282,10 @@ export function ProductCardPage({
                   key={t.id}
                   value={t.id}
                   disabled={!hasImage}
-                  className="rounded-lg border border-transparent px-4 py-2.5 text-sm data-active:border-primary data-active:bg-primary/10 data-active:shadow-sm"
+                  className="min-w-0 rounded-lg border border-transparent px-3 py-2.5 text-sm whitespace-normal sm:truncate data-active:border-primary data-active:bg-primary/10 data-active:shadow-sm"
                 >
-                  <span className="inline-flex items-center gap-1">
-                    {tabLabel(t.scenario)}
+                  <span className="inline-flex min-w-0 items-center justify-center gap-1 text-center sm:justify-start">
+                    <span className="truncate">{tabLabel(t.scenario)}</span>
                     {t.id === "concepts" ? (
                       <InfoTooltip content="AI создаст несколько вариантов визуальной подачи товара." />
                     ) : null}
@@ -298,7 +298,7 @@ export function ProductCardPage({
             })}
           </TabsList>
 
-          <TabsContent value="concepts" className="mt-4">
+          <TabsContent value="concepts" className="mt-4 min-w-0 max-w-full">
             {!tabReady("concepts") ? (
               <ScenarioSetupNotice adminHint={adminHintForTab("concepts")} showAdminLink={showAdminHints} />
             ) : (
@@ -314,7 +314,7 @@ export function ProductCardPage({
               />
             )}
           </TabsContent>
-          <TabsContent value="card" className="mt-4">
+          <TabsContent value="card" className="mt-4 min-w-0 max-w-full">
             {!tabReady("card") ? (
               <ScenarioSetupNotice adminHint={adminHintForTab("card")} showAdminLink={showAdminHints} />
             ) : (
@@ -339,7 +339,7 @@ export function ProductCardPage({
               />
             )}
           </TabsContent>
-          <TabsContent value="video" className="mt-4">
+          <TabsContent value="video" className="mt-4 min-w-0 max-w-full">
             {!tabReady("video") ? (
               <ScenarioSetupNotice
                 title="Видео для товаров скоро"

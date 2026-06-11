@@ -295,7 +295,7 @@ export function ConceptPhotoTab({
     creditsToShow != null;
 
   return (
-    <Card className="border-primary/15">
+    <Card className="min-w-0 max-w-full border-primary/15">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
           <ImageIcon className="size-5" />

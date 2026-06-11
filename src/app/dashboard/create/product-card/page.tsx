@@ -73,25 +73,15 @@ export default async function ProductCardCreatePage({ searchParams }: Props) {
 
 
   return (
-
-    <div className="space-y-6">
-
+    <div className="min-h-0 min-w-0 max-w-full space-y-6 overflow-x-clip">
       <PageHeader
-
         variant="qaz"
-
         title="Создать карточку товара"
-
         description="Загрузите фото товара, уточните категорию, затем сгенерируйте фото с концепциями, карточку для витрин и видео."
-
         breadcrumbs={[
-
           { label: "Кабинет", href: "/dashboard" },
-
           { label: "Создать карточку товара" },
-
         ]}
-
       />
 
       <Suspense fallback={<CreateFormSkeleton />}>

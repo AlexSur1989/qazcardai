@@ -91,7 +91,7 @@ export function ProductCardGenerationStatusPanel({
   }, [snapshot.previewUrl]);
 
   return (
-    <Card className="border-primary/20 rounded-2xl shadow-sm">
+    <Card className="min-w-0 max-w-full border-primary/20 rounded-2xl shadow-sm">
       <CardHeader className="pb-3">
         <div className="flex items-start gap-3">
           {phase === "QUEUED" || phase === "PROCESSING" ? (
@@ -234,10 +234,24 @@ export function ProductCardGenerationStatusPanel({
         ) : null}
 
         {showAdminHints && adminDebug ? (
-          <div className="border-border/60 space-y-0.5 border-t pt-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
+          <details className="border-border/60 border-t pt-3 md:hidden">
+            <summary className="text-muted-foreground cursor-pointer text-xs">Admin debug</summary>
+            <div className="text-muted-foreground mt-2 space-y-0.5 break-all font-mono text-[10px] leading-relaxed">
+              {Object.entries(adminDebug).map(([k, v]) =>
+                v ? (
+                  <p key={k}>
+                    {k}: {v}
+                  </p>
+                ) : null,
+              )}
+            </div>
+          </details>
+        ) : null}
+        {showAdminHints && adminDebug ? (
+          <div className="border-border/60 hidden space-y-0.5 border-t pt-3 font-mono text-[10px] leading-relaxed text-muted-foreground md:block">
             {Object.entries(adminDebug).map(([k, v]) =>
               v ? (
-                <p key={k}>
+                <p key={k} className="break-all">
                   {k}: {v}
                 </p>
               ) : null,

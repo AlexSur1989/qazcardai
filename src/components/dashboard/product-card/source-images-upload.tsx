@@ -110,7 +110,7 @@ function SourceImageSlot({
         handleFile(e.dataTransfer.files?.[0]);
       }}
       className={cn(
-        "relative rounded-2xl border-2 border-dashed bg-card p-3 transition-all",
+        "relative w-full min-w-0 max-w-full rounded-2xl border-2 border-dashed bg-card p-3 transition-all",
         drag
           ? "border-primary bg-primary/8 shadow-[0_4px_24px_rgba(0,80,100,0.1)]"
           : "border-primary/25 hover:border-primary hover:bg-white hover:shadow-sm",
@@ -137,16 +137,16 @@ function SourceImageSlot({
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row">
         <button
           type="button"
           onClick={choose}
           disabled={disabled || uploading}
-          className="bg-background relative flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border text-muted-foreground sm:size-28"
+          className="bg-background relative flex aspect-square w-full max-w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border text-muted-foreground sm:aspect-auto sm:size-24"
         >
           {value?.url ? (
             // eslint-disable-next-line @next/next/no-img-element -- uploaded product source preview
-            <img src={value.url} alt={slot.title} className="h-full w-full object-cover" />
+            <img src={value.url} alt={slot.title} className="max-h-full max-w-full object-contain sm:h-full sm:w-full sm:object-cover" />
           ) : (
             <div className="flex flex-col items-center gap-1">
               <ImageIcon className="h-7 w-7" strokeWidth={1.3} />
@@ -290,7 +290,7 @@ export function SourceImagesUpload({
   );
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 max-w-full space-y-4">
       <div>
         <h2 className="text-foreground text-lg font-semibold tracking-tight">
           Загрузите фото товара
@@ -311,7 +311,7 @@ export function SourceImagesUpload({
         )}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-2">
         {SLOTS.map((slot) => (
           <SourceImageSlot
             key={slot.role}

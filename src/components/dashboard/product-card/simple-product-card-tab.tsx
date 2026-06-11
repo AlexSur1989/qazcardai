@@ -644,10 +644,10 @@ export function SimpleProductCardTab({
     !insufficientBalance;
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-      <div className="space-y-4">
-        <Card className="rounded-2xl border-border">
+    <div className="min-w-0 max-w-full space-y-6 overflow-x-clip">
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+      <div className="min-w-0 max-w-full space-y-4">
+        <Card className="min-w-0 max-w-full rounded-2xl border-border">
           <CardHeader>
             <CardTitle className="text-base">Выберите фото товара</CardTitle>
             <CardDescription>
@@ -664,7 +664,7 @@ export function SimpleProductCardTab({
               </Alert>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
                   {photosWithId.map((img) => {
                     const selected = selectedProductPhotoId === img.fileId;
                     return (
@@ -673,7 +673,7 @@ export function SimpleProductCardTab({
                         type="button"
                         onClick={() => setProductPhotoId(img.fileId!)}
                         className={cn(
-                          "overflow-hidden rounded-xl border-2 text-left transition-colors",
+                          "min-w-0 max-w-full overflow-hidden rounded-xl border-2 text-left transition-colors",
                           selected ? "border-primary ring-primary/30 ring-2" : "border-border hover:border-primary/40",
                         )}
                       >
@@ -693,7 +693,7 @@ export function SimpleProductCardTab({
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-border">
+        <Card className="min-w-0 max-w-full rounded-2xl border-border">
           <CardHeader>
             <CardTitle className="text-base">Текст карточки</CardTitle>
             <CardDescription>
@@ -707,6 +707,7 @@ export function SimpleProductCardTab({
               <Label htmlFor="simple-card-product-label">Название товара</Label>
               <Input
                 id="simple-card-product-label"
+                className="w-full min-w-0"
                 value={productLabel}
                 onChange={(e) => onProductLabelChange(e.target.value)}
                 placeholder="Например: Беспроводной геймпад"
@@ -722,7 +723,7 @@ export function SimpleProductCardTab({
                 placeholder="Например: удобный хват, Bluetooth, Type-C, быстрая зарядка"
                 rows={5}
                 maxLength={SIMPLE_CARD_USER_TEXT_MAX}
-                className="resize-y"
+                className="min-w-0 resize-y"
               />
               <div className="text-muted-foreground flex justify-between gap-3 text-xs">
                 <span>Укажите 2–3 факта через запятую или с новой строки.</span>
@@ -876,8 +877,8 @@ export function SimpleProductCardTab({
         </Card>
       </div>
 
-      <div className="lg:sticky lg:top-24 space-y-3">
-        <Card className="rounded-2xl border-border">
+      <div className="min-w-0 max-w-full space-y-3 lg:sticky lg:top-24">
+        <Card className="min-w-0 max-w-full rounded-2xl border-border">
           <CardHeader>
             <CardTitle className="text-base">Генерация</CardTitle>
           </CardHeader>
@@ -903,7 +904,7 @@ export function SimpleProductCardTab({
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt>Преимущества</dt>
-                  <dd className="text-foreground max-w-[60%] truncate text-right">
+                  <dd className="text-foreground min-w-0 max-w-[60%] truncate text-right">
                     {userText.trim() || "—"}
                   </dd>
                 </div>
@@ -1012,7 +1013,22 @@ export function SimpleProductCardTab({
                   </ul>
                 ) : null}
                 {showAdminHints && planPreview.admin ? (
-                  <div className="border-border/60 space-y-1 border-t pt-2 font-mono text-[10px] leading-relaxed">
+                  <details className="border-border/60 border-t pt-2 md:hidden">
+                    <summary className="text-muted-foreground cursor-pointer text-xs">Admin debug</summary>
+                    <div className="mt-2 space-y-1 break-all font-mono text-[10px] leading-relaxed">
+                      <p>model: {planPreview.admin.modelSlug}</p>
+                      <p>apiModelId: {planPreview.admin.apiModelId}</p>
+                      <p>
+                        <Link href={planPreview.admin.adminModelEditUrl} className="text-primary underline">
+                          Редактировать модель
+                        </Link>
+                      </p>
+                      <p>dry-run: POST {planPreview.admin.payloadDryRunUrl}</p>
+                    </div>
+                  </details>
+                ) : null}
+                {showAdminHints && planPreview.admin ? (
+                  <div className="border-border/60 hidden space-y-1 border-t pt-2 font-mono text-[10px] leading-relaxed md:block">
                     <p>model: {planPreview.admin.modelSlug}</p>
                     <p>apiModelId: {planPreview.admin.apiModelId}</p>
                     <p>
@@ -1020,7 +1036,7 @@ export function SimpleProductCardTab({
                         Редактировать модель
                       </Link>
                       {" · "}
-                      <span>dry-run: POST {planPreview.admin.payloadDryRunUrl}</span>
+                      <span className="break-all">dry-run: POST {planPreview.admin.payloadDryRunUrl}</span>
                     </p>
                   </div>
                 ) : null}

@@ -430,7 +430,7 @@ export function ProductVideoTab({
   }
 
   return (
-    <Card className="border-primary/15">
+    <Card className="min-w-0 max-w-full border-primary/15">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
           <Clapperboard className="size-5" />
@@ -448,7 +448,7 @@ export function ProductVideoTab({
             <p className="text-xs text-[#4a6e7a]">
               Фотооснова проекта или уже сгенерированные кадры из других вкладок.
             </p>
-            <div className="flex flex-wrap items-start gap-3">
+            <div className="flex min-w-0 max-w-full flex-wrap items-start gap-3">
               {originalSources.map((opt) => {
                 const active = sourceType === "original" && selectedSourceImageUrl === opt.url;
                 return (

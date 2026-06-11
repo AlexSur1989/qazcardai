@@ -77,7 +77,7 @@ export function ProductDataSection({
   const categoryOptions = MANUAL_PRODUCT_CATEGORY_OPTIONS;
 
   return (
-    <section className="space-y-4" aria-label="Данные товара">
+    <section className="min-w-0 max-w-full space-y-4" aria-label="Данные товара">
       <div className="space-y-1">
         <h3 className="text-foreground text-base font-semibold">Данные товара</h3>
         <p className="text-muted-foreground text-sm">
@@ -110,11 +110,12 @@ export function ProductDataSection({
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
-        <div className="space-y-2">
+      <div className="grid w-full min-w-0 max-w-full gap-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
+        <div className="min-w-0 space-y-2">
           <Label htmlFor="pc-product-title">Название товара</Label>
           <Input
             id="pc-product-title"
+            className="w-full min-w-0"
             value={productTitle}
             disabled={!canPersist}
             maxLength={200}
@@ -123,11 +124,11 @@ export function ProductDataSection({
           />
         </div>
 
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label htmlFor="pc-product-category">Категория</Label>
           <select
             id="pc-product-category"
-            className="border-input w-full max-w-md rounded-xl border bg-card px-3 py-2.5 text-sm text-foreground shadow-sm"
+            className="border-input w-full min-w-0 max-w-full rounded-xl border bg-card px-3 py-2.5 text-sm text-foreground shadow-sm"
             value={selectedCategory ?? ""}
             disabled={!canPersist}
             onChange={(e) => {
@@ -161,7 +162,15 @@ export function ProductDataSection({
       </div>
 
       {classifierAdminHint ? (
-        <p className="text-muted-foreground font-mono text-[10px]">Admin: {classifierAdminHint}</p>
+        <details className="md:hidden">
+          <summary className="text-muted-foreground cursor-pointer text-xs">Admin debug</summary>
+          <p className="text-muted-foreground mt-1 break-all font-mono text-[10px]">{classifierAdminHint}</p>
+        </details>
+      ) : null}
+      {classifierAdminHint ? (
+        <p className="text-muted-foreground hidden break-all font-mono text-[10px] md:block">
+          Admin: {classifierAdminHint}
+        </p>
       ) : null}
     </section>
   );
