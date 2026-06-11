@@ -272,9 +272,9 @@ export function ProductCardPage({
             const next = v as TabId;
             if (hasImage) setTab(next);
           }}
-          className="min-w-0 max-w-full gap-5"
+          className="flex min-w-0 max-w-full flex-col gap-5"
         >
-          <TabsList className="grid h-auto w-full min-w-0 grid-cols-1 gap-2 rounded-xl border border-border bg-[#f6fcfe]/70 p-2 sm:grid-cols-3 [&_[data-slot=tabs-trigger]]:after:hidden">
+          <TabsList className="grid h-auto w-full min-w-0 grid-cols-1 items-stretch gap-2 rounded-xl border border-border bg-[#f6fcfe]/70 p-2 sm:grid-cols-3 [&_[data-slot=tabs-trigger]]:after:hidden">
             {visibleTabs.map((t) => {
               const ready = tabReady(t.id);
               return (
