@@ -99,7 +99,6 @@ function AuthHeroPreview() {
 export function AuthHero() {
   return (
     <div className="relative hidden flex-1 flex-col justify-center px-8 py-10 lg:flex xl:px-14">
-      <AuthBrandLogo linkToLanding className="mb-8" />
       <h2 className="text-foreground max-w-xl text-balance text-3xl font-semibold tracking-tight xl:text-4xl">
         AI-генерация товарных карточек, которые продают
       </h2>

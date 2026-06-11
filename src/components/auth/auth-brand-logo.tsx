@@ -14,11 +14,11 @@ export function AuthBrandLogo({ className, linkToLanding = true }: Props) {
   const inner = (
     <>
       <Image
-        src="/brand/qazcard-logo.svg"
+        src="/brand/new-logo.png"
         alt=""
         width={36}
         height={36}
-        className="size-9 shrink-0"
+        className="size-9 shrink-0 object-contain"
         priority
       />
       <span className="text-foreground text-base font-semibold tracking-tight">
