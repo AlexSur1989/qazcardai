@@ -137,12 +137,12 @@ function SourceImageSlot({
         </div>
       )}
 
-      <div className="flex min-w-0 items-start gap-2.5">
+      <div className="flex min-w-0 flex-col items-stretch gap-2.5">
         <button
           type="button"
           onClick={choose}
           disabled={disabled || uploading}
-          className="bg-background relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border text-muted-foreground sm:h-16 sm:w-16"
+          className="bg-background relative mx-auto flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border text-muted-foreground sm:h-[72px] sm:w-[72px]"
         >
           {value?.url ? (
             // eslint-disable-next-line @next/next/no-img-element -- uploaded product source preview
@@ -154,7 +154,7 @@ function SourceImageSlot({
             </div>
           )}
         </button>
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-0 space-y-1 text-center">
           <div>
             <p className="text-foreground text-xs leading-snug font-semibold">{slot.title}</p>
             <p className="text-muted-foreground text-[11px] leading-snug">{slot.hint}</p>
@@ -166,7 +166,7 @@ function SourceImageSlot({
           ) : (
             <p className="text-muted-foreground text-[10px] leading-snug">PNG/JPG/WebP · {MAX_MB}MB</p>
           )}
-          <div className="flex flex-wrap gap-1 pt-0.5">
+          <div className="flex flex-wrap justify-center gap-1 pt-0.5">
             <Button
               type="button"
               variant="secondary"
@@ -315,7 +315,7 @@ export function SourceImagesUpload({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {SLOTS.map((slot) => (
           <SourceImageSlot
             key={slot.role}

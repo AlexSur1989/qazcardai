@@ -205,29 +205,29 @@ export function ProductCardPage({
         </Alert>
       )}
 
-      <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,400px)_minmax(0,1fr)] xl:items-start xl:gap-8">
-        <div className="min-w-0 space-y-5">
-          <div className="space-y-2">
-            {uploadFlow !== "idle" && (
-              <p className="text-muted-foreground text-xs" aria-live="polite">
-                Загрузка:{" "}
-                {uploadFlow === "uploading" && "идёт…"}
-                {uploadFlow === "uploaded" && "файл на сервере"}
-                {uploadFlow === "error" && "ошибка (см. ниже)"}
-              </p>
-            )}
-            {aiAnalysisStatus === "analyzing" && hasImage ? (
-              <p className="text-muted-foreground flex items-center gap-2 text-xs" aria-live="polite">
-                ИИ анализирует фото товара…
-              </p>
-            ) : null}
-            <SourceImagesUpload
-              value={sourceImages}
-              onChange={onSourceImagesChange}
-              onUploadFlowChange={setUploadFlow}
-            />
-          </div>
+      <div className="min-w-0 space-y-2">
+        {uploadFlow !== "idle" && (
+          <p className="text-muted-foreground text-xs" aria-live="polite">
+            Загрузка:{" "}
+            {uploadFlow === "uploading" && "идёт…"}
+            {uploadFlow === "uploaded" && "файл на сервере"}
+            {uploadFlow === "error" && "ошибка (см. ниже)"}
+          </p>
+        )}
+        {aiAnalysisStatus === "analyzing" && hasImage ? (
+          <p className="text-muted-foreground flex items-center gap-2 text-xs" aria-live="polite">
+            ИИ анализирует фото товара…
+          </p>
+        ) : null}
+        <SourceImagesUpload
+          value={sourceImages}
+          onChange={onSourceImagesChange}
+          onUploadFlowChange={setUploadFlow}
+        />
+      </div>
 
+      <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)] xl:items-start xl:gap-8">
+        <div className="min-w-0">
           <ProductDataSection
             hasImage={hasImage}
             canPersist={canUseBackend}
@@ -276,7 +276,7 @@ export function ProductCardPage({
         >
           <TabsList
             variant="line"
-            className="grid h-auto w-full min-w-0 grid-cols-1 gap-1.5 rounded-xl border border-border bg-white p-1.5 sm:grid-cols-3"
+            className="grid h-auto w-full min-w-0 grid-cols-1 gap-1.5 rounded-xl border border-border bg-white p-1.5 md:grid-cols-3 [&_[data-slot=tabs-trigger]]:after:hidden"
           >
             {visibleTabs.map((t) => {
               const ready = tabReady(t.id);
@@ -285,17 +285,19 @@ export function ProductCardPage({
                   key={t.id}
                   value={t.id}
                   disabled={!hasImage}
-                  className="min-w-0 rounded-lg border border-transparent px-3 py-2.5 text-sm whitespace-normal sm:truncate data-active:border-primary data-active:bg-primary/10 data-active:shadow-sm"
+                  className="h-auto min-w-0 flex-none rounded-lg border border-transparent px-3 py-2.5 text-sm whitespace-normal data-active:border-primary data-active:bg-primary/10 data-active:shadow-sm"
                 >
-                  <span className="inline-flex min-w-0 items-center justify-center gap-1 text-center sm:justify-start">
-                    <span className="truncate">{tabLabel(t.scenario)}</span>
-                    {t.id === "concepts" ? (
-                      <InfoTooltip content="AI создаст несколько вариантов визуальной подачи товара." />
+                  <span className="flex min-w-0 flex-col items-center gap-0.5 text-center md:items-start md:text-left">
+                    <span className="inline-flex min-w-0 items-center justify-center gap-1 md:justify-start">
+                      <span className="leading-snug">{tabLabel(t.scenario)}</span>
+                      {t.id === "concepts" ? (
+                        <InfoTooltip content="AI создаст несколько вариантов визуальной подачи товара." />
+                      ) : null}
+                    </span>
+                    {hasImage && !ready ? (
+                      <span className="text-muted-foreground text-[10px] leading-none">· настройка</span>
                     ) : null}
                   </span>
-                  {hasImage && !ready ? (
-                    <span className="text-muted-foreground ml-1 text-[10px]">· настройка</span>
-                  ) : null}
                 </TabsTrigger>
               );
             })}

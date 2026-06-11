@@ -431,12 +431,12 @@ export function ProductVideoTab({
 
   return (
     <Card className="min-w-0 max-w-full border-primary/15">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <Clapperboard className="size-5" />
-          Видео товара
+      <CardHeader className="grid-rows-none flex min-w-0 flex-col gap-1.5">
+        <CardTitle className="flex min-w-0 flex-wrap items-center gap-2 text-lg">
+          <Clapperboard className="size-5 shrink-0" />
+          <span className="min-w-0">Видео товара</span>
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="min-w-0 text-pretty">
           Короткий ролик из фото товара или сгенерированного кадра. Укажите пожелания, стиль движения
           и длительность — остальное настроим автоматически.
         </CardDescription>
