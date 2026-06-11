@@ -272,12 +272,9 @@ export function ProductCardPage({
             const next = v as TabId;
             if (hasImage) setTab(next);
           }}
-          className="min-w-0 max-w-full gap-4"
+          className="min-w-0 max-w-full gap-5"
         >
-          <TabsList
-            variant="line"
-            className="grid h-auto w-full min-w-0 grid-cols-1 gap-1.5 rounded-xl border border-border bg-white p-1.5 md:grid-cols-3 [&_[data-slot=tabs-trigger]]:after:hidden"
-          >
+          <TabsList className="grid h-auto w-full min-w-0 grid-cols-1 gap-2 rounded-xl border border-border bg-[#f6fcfe]/70 p-2 sm:grid-cols-3 [&_[data-slot=tabs-trigger]]:after:hidden">
             {visibleTabs.map((t) => {
               const ready = tabReady(t.id);
               return (
@@ -285,17 +282,19 @@ export function ProductCardPage({
                   key={t.id}
                   value={t.id}
                   disabled={!hasImage}
-                  className="h-auto min-w-0 flex-none rounded-lg border border-transparent px-3 py-2.5 text-sm whitespace-normal data-active:border-primary data-active:bg-primary/10 data-active:shadow-sm"
+                  className="h-auto min-h-[3.25rem] w-full min-w-0 flex-none justify-center rounded-lg border border-border/80 bg-white px-3 py-2.5 text-sm font-medium whitespace-normal text-muted-foreground shadow-sm transition-colors hover:border-primary/35 hover:text-foreground data-active:border-primary data-active:bg-primary/10 data-active:text-foreground data-active:shadow-md"
                 >
-                  <span className="flex min-w-0 flex-col items-center gap-0.5 text-center md:items-start md:text-left">
-                    <span className="inline-flex min-w-0 items-center justify-center gap-1 md:justify-start">
+                  <span className="flex min-w-0 flex-col items-center gap-1 text-center">
+                    <span className="inline-flex min-w-0 items-center justify-center gap-1">
                       <span className="leading-snug">{tabLabel(t.scenario)}</span>
                       {t.id === "concepts" ? (
                         <InfoTooltip content="AI создаст несколько вариантов визуальной подачи товара." />
                       ) : null}
                     </span>
                     {hasImage && !ready ? (
-                      <span className="text-muted-foreground text-[10px] leading-none">· настройка</span>
+                      <span className="text-muted-foreground text-[10px] leading-none">
+                        настройка
+                      </span>
                     ) : null}
                   </span>
                 </TabsTrigger>
@@ -303,7 +302,7 @@ export function ProductCardPage({
             })}
           </TabsList>
 
-          <TabsContent value="concepts" className="mt-4 min-w-0 max-w-full">
+          <TabsContent value="concepts" className="mt-0 min-w-0 max-w-full">
             {!tabReady("concepts") ? (
               <ScenarioSetupNotice adminHint={adminHintForTab("concepts")} showAdminLink={showAdminHints} />
             ) : (
@@ -319,7 +318,7 @@ export function ProductCardPage({
               />
             )}
           </TabsContent>
-          <TabsContent value="card" className="mt-4 min-w-0 max-w-full">
+          <TabsContent value="card" className="mt-0 min-w-0 max-w-full">
             {!tabReady("card") ? (
               <ScenarioSetupNotice adminHint={adminHintForTab("card")} showAdminLink={showAdminHints} />
             ) : (
@@ -344,7 +343,7 @@ export function ProductCardPage({
               />
             )}
           </TabsContent>
-          <TabsContent value="video" className="mt-4 min-w-0 max-w-full">
+          <TabsContent value="video" className="mt-0 min-w-0 max-w-full">
             {!tabReady("video") ? (
               <ScenarioSetupNotice
                 title="Видео для товаров скоро"

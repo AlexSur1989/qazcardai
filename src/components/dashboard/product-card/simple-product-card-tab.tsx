@@ -254,7 +254,26 @@ export function SimpleProductCardTab({
     return main?.fileId ?? "";
   }, [photosWithId]);
 
-  const selectedProductPhotoId = productPhotoId || defaultProductPhotoId;
+  const selectedProductPhotoId = useMemo(() => {
+    const validIds = new Set(photosWithId.map((p) => p.fileId));
+    if (productPhotoId && validIds.has(productPhotoId)) return productPhotoId;
+    return defaultProductPhotoId;
+  }, [productPhotoId, photosWithId, defaultProductPhotoId]);
+
+  const prevMainPhotoIdRef = useRef(defaultProductPhotoId);
+  useEffect(() => {
+    const prevMain = prevMainPhotoIdRef.current;
+    const nextMain = defaultProductPhotoId;
+    prevMainPhotoIdRef.current = nextMain;
+    if (!nextMain) return;
+
+    setProductPhotoId((prev) => {
+      const validIds = new Set(photosWithId.map((p) => p.fileId));
+      if (!prev || !validIds.has(prev)) return nextMain;
+      if (prevMain && prevMain !== nextMain && prev === prevMain) return nextMain;
+      return prev;
+    });
+  }, [defaultProductPhotoId, photosWithId]);
 
   useEffect(() => {
     if (!projectId || !initDone) return;
