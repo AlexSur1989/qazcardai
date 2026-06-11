@@ -24,9 +24,16 @@ import {
 import { getUserFacingGenerationStatusFromRaw } from "@/lib/generation-display";
 import { cn } from "@/lib/utils";
 
-import type { SourceImagesValue } from "./source-images-upload";
+import type { SourceImagesValue, SourceImageRole } from "./source-images-upload";
 
 const motions = getPublicProductVideoMotionStyles();
+
+const SOURCE_ROLE_LABELS: Record<SourceImageRole, string> = {
+  main: "Главное",
+  side: "Сбоку",
+  back: "Сзади",
+  detail: "Детали",
+};
 
 type SourceTab = "original" | "concept_generation" | "marketplace_card_generation";
 
@@ -61,11 +68,21 @@ function presetForDuration(
   };
 }
 
-function originalPreviewUrl(sourceImages: SourceImagesValue): string | null {
+function defaultOriginalSourceUrl(sourceImages: SourceImagesValue): string | null {
   const main = sourceImages.find((img) => img.role === "main" && img.url.trim());
   const first = sourceImages.find((img) => img.url.trim());
   const url = (main ?? first)?.url?.trim();
   return url || null;
+}
+
+function originalSourceOptions(sourceImages: SourceImagesValue): Array<{ url: string; label: string }> {
+  return sourceImages
+    .filter((img) => img.url.trim())
+    .sort((a, b) => a.order - b.order)
+    .map((img) => ({
+      url: img.url.trim(),
+      label: SOURCE_ROLE_LABELS[img.role] ?? "Фото",
+    }));
 }
 
 export function ProductVideoTab({
@@ -82,6 +99,7 @@ export function ProductVideoTab({
 
   const [sourceType, setSourceType] = useState<SourceTab>("original");
   const [sourceGenerationId, setSourceGenerationId] = useState<string | null>(null);
+  const [selectedSourceImageUrl, setSelectedSourceImageUrl] = useState<string | null>(null);
   const [generatedOptions, setGeneratedOptions] = useState<GeneratedSourceOption[]>([]);
   const [genPreviews, setGenPreviews] = useState<Record<string, GenPreview | undefined>>({});
 
@@ -97,7 +115,18 @@ export function ProductVideoTab({
     [duration, videoPresets],
   );
 
-  const originalUrl = useMemo(() => originalPreviewUrl(sourceImages), [sourceImages]);
+  const originalSources = useMemo(() => originalSourceOptions(sourceImages), [sourceImages]);
+
+  useEffect(() => {
+    if (originalSources.length === 0) {
+      setSelectedSourceImageUrl(null);
+      return;
+    }
+    setSelectedSourceImageUrl((prev) => {
+      if (prev && originalSources.some((o) => o.url === prev)) return prev;
+      return defaultOriginalSourceUrl(sourceImages);
+    });
+  }, [originalSources, sourceImages]);
 
   const [estimating, setEstimating] = useState(false);
   const [estimateCredits, setEstimateCredits] = useState<number | null>(null);
@@ -175,6 +204,12 @@ export function ProductVideoTab({
     }
   }, [generatedOptions, sourceGenerationId, sourceType]);
 
+  useEffect(() => {
+    if (!loopVideo) return;
+    setUseLastFrame(false);
+    setLastFrameUrl("");
+  }, [loopVideo]);
+
   const previewIdsKey = generatedOptions.map((o) => o.generationId).join(",");
 
   useEffect(() => {
@@ -197,17 +232,29 @@ export function ProductVideoTab({
     })();
   }, [previewIdsKey]);
 
-  const effectiveLastFrameUrl = useLastFrame && lastFrameUrl.trim() ? lastFrameUrl.trim() : null;
+  const effectiveLastFrameUrl =
+    !loopVideo && useLastFrame && lastFrameUrl.trim() ? lastFrameUrl.trim() : null;
 
   const canEstimate = useMemo(
     () =>
       Boolean(
         projectId &&
           canUseBackend &&
+          (sourceType !== "original" ||
+            (selectedSourceImageUrl &&
+              originalSources.some((o) => o.url === selectedSourceImageUrl))) &&
           (sourceType === "original" ||
             (sourceGenerationId && generatedOptions.some((o) => o.generationId === sourceGenerationId))),
       ),
-    [projectId, canUseBackend, sourceType, sourceGenerationId, generatedOptions],
+    [
+      projectId,
+      canUseBackend,
+      sourceType,
+      sourceGenerationId,
+      generatedOptions,
+      selectedSourceImageUrl,
+      originalSources,
+    ],
   );
 
   useEffect(() => {
@@ -222,6 +269,7 @@ export function ProductVideoTab({
         body: JSON.stringify({
           sourceType,
           sourceGenerationId: sourceType === "original" ? null : sourceGenerationId,
+          sourceImageUrl: sourceType === "original" ? selectedSourceImageUrl : null,
           duration,
           resolution,
           aspectRatio,
@@ -254,6 +302,7 @@ export function ProductVideoTab({
     projectId,
     sourceType,
     sourceGenerationId,
+    selectedSourceImageUrl,
     duration,
     resolution,
     aspectRatio,
@@ -267,9 +316,10 @@ export function ProductVideoTab({
   const notEnough = creditsToShow != null && balanceCredits < creditsToShow;
   const canSubmit = showEstimate && !estimating && creditsToShow != null && !errToShow && !notEnough;
 
-  const pickOriginal = () => {
+  const pickOriginal = (url: string) => {
     setSourceType("original");
     setSourceGenerationId(null);
+    setSelectedSourceImageUrl(url);
   };
 
   const pickGenerated = (opt: GeneratedSourceOption) => {
@@ -286,6 +336,7 @@ export function ProductVideoTab({
       const body: Record<string, unknown> = {
         sourceType,
         sourceGenerationId: sourceType === "original" ? null : sourceGenerationId,
+        sourceImageUrl: sourceType === "original" ? selectedSourceImageUrl : null,
         duration,
         resolution,
         aspectRatio,
@@ -394,27 +445,32 @@ export function ProductVideoTab({
         {canUseBackend && (
           <div className="space-y-3">
             <Label className="text-[#0C2D38]">Источник изображения</Label>
+            <p className="text-xs text-[#4a6e7a]">
+              Фотооснова проекта или уже сгенерированные кадры из других вкладок.
+            </p>
             <div className="flex flex-wrap items-start gap-3">
-              <button
-                type="button"
-                onClick={pickOriginal}
-                className={cn(
-                  "w-[120px] shrink-0 overflow-hidden rounded-2xl border-2 text-left transition-colors",
-                  sourceType === "original"
-                    ? "border-[#00AFCA] bg-[#F4FBFD] ring-2 ring-[#00AFCA]/25"
-                    : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
-                )}
-              >
-                <div className="flex h-24 items-center justify-center bg-[#F4FBFD]">
-                  {originalUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- product source preview
-                    <img src={originalUrl} alt="" className="max-h-24 w-full object-contain" />
-                  ) : (
-                    <span className="text-muted-foreground px-2 text-center text-xs">Нет превью</span>
-                  )}
-                </div>
-                <p className="px-2 py-2 text-xs font-medium text-[#0C2D38]">Исходное фото</p>
-              </button>
+              {originalSources.map((opt) => {
+                const active = sourceType === "original" && selectedSourceImageUrl === opt.url;
+                return (
+                  <button
+                    key={`original-${opt.url}`}
+                    type="button"
+                    onClick={() => pickOriginal(opt.url)}
+                    className={cn(
+                      "w-[120px] shrink-0 overflow-hidden rounded-2xl border-2 text-left transition-colors",
+                      active
+                        ? "border-[#00AFCA] bg-[#F4FBFD] ring-2 ring-[#00AFCA]/25"
+                        : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
+                    )}
+                  >
+                    <div className="flex h-24 items-center justify-center bg-[#F4FBFD]">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- product source preview */}
+                      <img src={opt.url} alt="" className="max-h-24 w-full object-contain" />
+                    </div>
+                    <p className="px-2 py-2 text-xs font-medium text-[#0C2D38]">{opt.label}</p>
+                  </button>
+                );
+              })}
 
               {generatedOptions.map((opt) => {
                 const pr = genPreviews[opt.generationId];
@@ -534,24 +590,40 @@ export function ProductVideoTab({
           </Label>
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-[#B8DCE6] bg-[#F4FBFD]/40 p-4">
+        <div
+          className={cn(
+            "space-y-3 rounded-2xl border border-[#B8DCE6] bg-[#F4FBFD]/40 p-4",
+            loopVideo && "opacity-60",
+          )}
+        >
           <div className="flex items-center gap-2">
             <input
               id={lastFrameToggleId}
               type="checkbox"
               checked={useLastFrame}
+              disabled={loopVideo}
               onChange={(e) => {
+                if (loopVideo) return;
                 const on = e.target.checked;
                 setUseLastFrame(on);
                 if (!on) setLastFrameUrl("");
               }}
-              className="border-input accent-primary size-4 rounded border"
+              className="border-input accent-primary size-4 rounded border disabled:cursor-not-allowed"
             />
-            <Label htmlFor={lastFrameToggleId} className="text-[#0C2D38]">
-              Добавить последний кадр <span className="text-muted-foreground font-normal">(необязательно)</span>
+            <Label
+              htmlFor={lastFrameToggleId}
+              className={cn("text-[#0C2D38]", loopVideo ? "cursor-not-allowed" : "cursor-pointer")}
+            >
+              Добавить последний кадр{" "}
+              <span className="text-muted-foreground font-normal">(необязательно)</span>
             </Label>
           </div>
-          {useLastFrame ? (
+          {loopVideo ? (
+            <p className="text-xs text-[#4a6e7a]">
+              При цикличном видео последний кадр недоступен — ролик должен плавно замыкаться.
+            </p>
+          ) : null}
+          {useLastFrame && !loopVideo ? (
             <SeedanceSingleImageUpload
               fieldName="productVideoLastFrame"
               label="Последний кадр"

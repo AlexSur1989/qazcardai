@@ -28,6 +28,13 @@ import {
 } from "@/lib/generation-display";
 import { cn } from "@/lib/utils";
 
+import { ProductCardImageResolutionPicker } from "./product-card-image-resolution-picker";
+import {
+  isProductCardImageResolutionAllowed,
+  PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT,
+  type ProductCardImageResolution,
+} from "@/config/product-card-image-resolution";
+
 type Props = {
   selectedCategory: ProductCategoryId | null;
   productTitle?: string;
@@ -88,6 +95,9 @@ export function ConceptPhotoTab({
   const router = useRouter();
   const [conceptId, setConceptId] = useState<string | null>(null);
   const [size, setSize] = useState(sizePresets[0]?.id ?? "1x1");
+  const [resolution, setResolution] = useState<ProductCardImageResolution>(
+    PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT,
+  );
   const [userAdd, setUserAdd] = useState("");
   const [estimating, setEstimating] = useState(false);
   const [estimateCredits, setEstimateCredits] = useState<number | null>(null);
@@ -103,6 +113,15 @@ export function ConceptPhotoTab({
   } | null>(null);
 
   const concepts = selectedCategory ? getConceptsForCategory(selectedCategory) : [];
+  const selectedAspectRatio =
+    sizePresets.find((p) => p.id === size)?.aspectRatio ?? "1:1";
+
+  useEffect(() => {
+    if (!isProductCardImageResolutionAllowed(resolution, selectedAspectRatio)) {
+      setResolution(PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT);
+    }
+  }, [resolution, selectedAspectRatio]);
+
   const showEstimate = Boolean(
     projectId && selectedCategory && conceptId && canUseBackend,
   );
@@ -117,7 +136,11 @@ export function ConceptPhotoTab({
       setEstErr(null);
       const res = await fetch(
         `/api/product-card-projects/${projectId}/estimate/concept-photo`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ size }) },
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ size, resolution }),
+        },
       );
       const parsed = await readJsonSafe<{ credits?: number; modelName?: string; error?: string }>(
         res,
@@ -143,7 +166,7 @@ export function ConceptPhotoTab({
     return () => {
       cancelled = true;
     };
-  }, [showEstimate, projectId, selectedCategory, conceptId, canUseBackend, size]);
+  }, [showEstimate, projectId, selectedCategory, conceptId, canUseBackend, size, resolution]);
 
   const pollOnce = useCallback(async (id: string) => {
     const res = await fetch(`/api/generations/${id}`);
@@ -168,6 +191,7 @@ export function ConceptPhotoTab({
             conceptId,
             userPrompt: userAdd.trim(),
             size,
+            resolution,
             clientEstimateCredits:
               typeof estimateCredits === "number" ? estimateCredits : null,
           }),
@@ -377,6 +401,12 @@ export function ConceptPhotoTab({
             </div>
           </div>
         )}
+
+        <ProductCardImageResolutionPicker
+          value={resolution}
+          onChange={setResolution}
+          aspectRatio={selectedAspectRatio}
+        />
 
         <div className="space-y-2">
           <Label>Что добавить или изменить</Label>

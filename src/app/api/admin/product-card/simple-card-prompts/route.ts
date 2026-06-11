@@ -122,6 +122,7 @@ export async function POST(req: Request) {
       referenceImageId: p.useReference || p.styleMode === "reference" ? "preview-ref" : null,
       referenceCreativity: p.referenceCreativity ?? 50,
       aspectRatio: p.aspectRatio,
+      resolution: "1K",
     });
 
     const built = buildSimpleProductCardPrompt({

@@ -12,6 +12,11 @@ import {
   type SimpleCardAspectRatio,
   type SimpleCardStyleMode,
 } from "@/config/simple-product-card";
+import {
+  isProductCardImageResolutionAllowed,
+  PRODUCT_CARD_IMAGE_RESOLUTIONS,
+  PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT,
+} from "@/config/product-card-image-resolution";
 
 function enumFrom<K extends string>(ids: readonly K[]): [K, ...K[]] {
   if (ids.length === 0) throw new Error("simple card: empty id list");
@@ -20,6 +25,7 @@ function enumFrom<K extends string>(ids: readonly K[]): [K, ...K[]] {
 
 const Z_STYLE = z.enum(enumFrom(SIMPLE_CARD_STYLE_MODES));
 const Z_ASPECT = z.enum(enumFrom(SIMPLE_CARD_ASPECT_RATIOS));
+const Z_RESOLUTION = z.enum(enumFrom(PRODUCT_CARD_IMAGE_RESOLUTIONS));
 
 export const simpleProductCardRequestSchema = z
   .object({
@@ -36,9 +42,18 @@ export const simpleProductCardRequestSchema = z
       .nullable()
       .optional(),
     aspectRatio: Z_ASPECT.default(SIMPLE_CARD_DEFAULT_ASPECT_RATIO),
+    resolution: Z_RESOLUTION.default(PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT),
   })
   .strict()
   .superRefine((data, ctx) => {
+    if (!isProductCardImageResolutionAllowed(data.resolution, data.aspectRatio)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Для формата 1:1 недоступно разрешение 4K",
+        path: ["resolution"],
+      });
+    }
+
     if (data.styleMode === "premium") {
       if (data.referenceImageId) {
         ctx.addIssue({

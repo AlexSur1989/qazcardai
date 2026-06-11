@@ -14,6 +14,7 @@ import {
   simpleProductCardRequestSchema,
 } from "@/lib/validations/simple-product-card";
 import { mergeSimpleCardProductLabelIntoUserText } from "@/lib/simple-product-card-vision-text";
+import { coerceProductCardImageResolution } from "@/config/product-card-image-resolution";
 import { assertMarketplaceCardScenarioEnabled } from "@/server/services/productCardScenarios";
 import { getProductCardModelSetupOverview } from "@/server/services/productCardModelSetup";
 import {
@@ -27,13 +28,9 @@ import {
 } from "@/server/services/simpleProductCardSettings";
 import { prisma } from "@/lib/prisma";
 
-const OUTPUT_RESOLUTION: Record<SimpleCardAspectRatio, string> = {
-  "1:1": "1K",
-  "4:3": "1K",
-  "3:4": "1K",
-  "16:9": "1K",
-  "9:16": "1K",
-};
+function resolutionLabelForPayload(parsed: SimpleProductCardRequest): string {
+  return coerceProductCardImageResolution(parsed.resolution);
+}
 
 export type SimpleCardPlanPreview = {
   ok: true;
@@ -142,6 +139,7 @@ export async function previewSimpleProductCardPlan(
     const br = await calculateProductCardMarketplaceCardCredits(modelRes.model, {
       cardSize: aspectRatioToSimpleCardSizeId(parsed.aspectRatio),
       styleMode: parsed.styleMode,
+      resolution: coerceProductCardImageResolution(parsed.resolution),
     });
     credits = br.credits;
   }
@@ -167,7 +165,7 @@ export async function previewSimpleProductCardPlan(
     productLabel,
     benefitsText: mergeSimpleCardProductLabelIntoUserText(productLabel ?? "", benefitsText),
     aspectRatio: parsed.aspectRatio,
-    resolution: OUTPUT_RESOLUTION[parsed.aspectRatio] ?? "1K",
+    resolution: resolutionLabelForPayload(parsed),
     styleMode: parsed.styleMode,
     credits,
     planHash: computeSimpleCardPlanHash(parsed),

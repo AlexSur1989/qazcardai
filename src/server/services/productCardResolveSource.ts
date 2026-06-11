@@ -86,9 +86,24 @@ export async function resolveProductVideoImageSource(
   project: ProductCardProject,
   sourceType: ProductVideoImageSourceType,
   sourceGenerationId: string | null | undefined,
+  sourceImageUrl?: string | null,
 ): Promise<{ ok: true; url: string } | { ok: false; message: string }> {
   if (sourceType === "original") {
-    const u = normalizeProductSourceImages(project)[0]?.url ?? project.sourceImageUrl?.trim();
+    const sources = normalizeProductSourceImages(project);
+    const allowedUrls = new Set(
+      sources.map((s) => s.url.trim()).filter(Boolean),
+    );
+    const legacy = project.sourceImageUrl?.trim();
+    if (legacy) allowedUrls.add(legacy);
+
+    const requested = sourceImageUrl?.trim();
+    let u =
+      requested && allowedUrls.has(requested)
+        ? requested
+        : sources.find((s) => s.role === "main")?.url?.trim() ||
+          sources[0]?.url?.trim() ||
+          legacy;
+
     if (!u) {
       return { ok: false, message: "Загрузите исходное фото товара" };
     }

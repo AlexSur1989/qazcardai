@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import {
+  PRODUCT_CARD_IMAGE_RESOLUTIONS,
+  PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT,
+} from "@/config/product-card-image-resolution";
+import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
@@ -14,6 +18,7 @@ const bodySchema = z.object({
   conceptId: z.string().min(1, "Выберите концепцию"),
   userPrompt: z.string().max(1000).optional().default(""),
   size: z.string().trim().min(1).max(64).optional().default("1x1"),
+  resolution: z.enum(PRODUCT_CARD_IMAGE_RESOLUTIONS).optional().default(PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT),
   clientEstimateCredits: z.number().finite().nullable().optional(),
 });
 
@@ -55,6 +60,7 @@ export async function POST(req: Request, ctx: Ctx) {
     conceptId: parsed.data.conceptId,
     userPrompt: parsed.data.userPrompt.trim(),
     size: parsed.data.size,
+    resolution: parsed.data.resolution,
     clientEstimateCredits: parsed.data.clientEstimateCredits ?? null,
   });
 

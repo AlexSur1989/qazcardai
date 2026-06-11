@@ -24,6 +24,11 @@ import {
   type SimpleCardAspectRatio,
   type SimpleCardStyleMode,
 } from "@/config/simple-product-card";
+import {
+  isProductCardImageResolutionAllowed,
+  PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT,
+  type ProductCardImageResolution,
+} from "@/config/product-card-image-resolution";
 import { SIMPLE_CARD_REFERENCE_UNSUPPORTED_MESSAGE } from "@/lib/simple-product-card-model";
 import {
   PRODUCT_CARD_GENERATION_POLL_INTERVAL_MS,
@@ -45,6 +50,7 @@ import {
   buildProductCardGenerationMock,
   ProductCardGenerationStatusPanel,
 } from "./product-card-generation-status";
+import { ProductCardImageResolutionPicker } from "./product-card-image-resolution-picker";
 
 const REF_MAX_MB = 10;
 const REF_MAX_BYTES = REF_MAX_MB * 1024 * 1024;
@@ -126,6 +132,7 @@ function buildPayload(input: {
   referenceImage: ReferenceRow | null;
   referenceCreativity: number;
   aspectRatio: SimpleCardAspectRatio;
+  resolution: ProductCardImageResolution;
 }): SimpleProductCardRequest {
   return {
     productPhotoId: input.productPhotoId,
@@ -145,6 +152,7 @@ function buildPayload(input: {
           ? input.referenceCreativity
           : null,
     aspectRatio: input.aspectRatio,
+    resolution: input.resolution,
   };
 }
 
@@ -173,6 +181,9 @@ export function SimpleProductCardTab({
   const [referenceImage, setReferenceImage] = useState<ReferenceRow | null>(null);
   const [referenceCreativity, setReferenceCreativity] = useState(SIMPLE_CARD_CREATIVITY_DEFAULT);
   const [aspectRatio, setAspectRatio] = useState<SimpleCardAspectRatio>(SIMPLE_CARD_DEFAULT_ASPECT_RATIO);
+  const [resolution, setResolution] = useState<ProductCardImageResolution>(
+    PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT,
+  );
 
   const [supportsReference, setSupportsReference] = useState(true);
   const [estimating, setEstimating] = useState(false);
@@ -263,6 +274,7 @@ export function SimpleProductCardTab({
       if (!saved) return;
       if (saved.styleMode) setStyleMode(saved.styleMode);
       if (saved.aspectRatio) setAspectRatio(saved.aspectRatio);
+      if (saved.resolution) setResolution(saved.resolution);
       if (saved.styleMode === "classic") setClassicUseReference(Boolean(saved.useReference));
       if (saved.referenceCreativity != null) setReferenceCreativity(saved.referenceCreativity);
       if (saved.productPhotoId && photosWithId.some((p) => p.fileId === saved.productPhotoId)) {
@@ -288,6 +300,12 @@ export function SimpleProductCardTab({
   const usesReference =
     styleMode === "reference" || (styleMode === "classic" && classicUseReference);
 
+  useEffect(() => {
+    if (!isProductCardImageResolutionAllowed(resolution, aspectRatio)) {
+      setResolution(PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT);
+    }
+  }, [resolution, aspectRatio]);
+
   const payload = useMemo(
     () =>
       buildPayload({
@@ -299,6 +317,7 @@ export function SimpleProductCardTab({
         referenceImage,
         referenceCreativity,
         aspectRatio,
+        resolution,
       }),
     [
       selectedProductPhotoId,
@@ -309,6 +328,7 @@ export function SimpleProductCardTab({
       referenceImage,
       referenceCreativity,
       aspectRatio,
+      resolution,
     ],
   );
 
@@ -847,6 +867,11 @@ export function SimpleProductCardTab({
                 </Button>
               ))}
             </div>
+            <ProductCardImageResolutionPicker
+              value={resolution}
+              onChange={setResolution}
+              aspectRatio={aspectRatio}
+            />
           </CardContent>
         </Card>
       </div>

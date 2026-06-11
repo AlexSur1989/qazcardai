@@ -8,11 +8,12 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
 import { PrismaClient, Prisma } from "../src/generated/prisma/client";
+import { buildProductCardImageResolutionPricingSchema } from "../src/config/product-card-image-resolution";
 import {
-  buildFixedPricingSchema,
   detectFieldsFromKieInput,
   parseKiePayloadJson,
 } from "../src/lib/kie-import-wizard";
+import { omitSeedPricingWhenPinned } from "./lib/omit-seed-pricing";
 import {
   buildDryRunKiePayloadForModel,
   isCriticalModelDryRunWarning,
@@ -116,7 +117,7 @@ async function main() {
   const parsed = validateModelData();
   const detected = detectFieldsFromKieInput(parsed.input);
   const settingsSchema = buildSettingsSchema(detected.settingsSchema);
-  const pricingSchema = buildFixedPricingSchema(COST_CREDITS);
+  const pricingSchema = buildProductCardImageResolutionPricingSchema(COST_CREDITS);
 
   const metadata = {
     docsUrl: "https://docs.kie.ai/market/gpt/gpt-image-2-image-to-image",
@@ -125,6 +126,7 @@ async function main() {
     source: "docs.kie.ai + kie.ai playground",
     purpose: "product_marketplace_card",
     ownerHint: "Use for product photo → marketplace card generation",
+    seedAllowKieOverrides: true,
     rawPayloadExample: RAW_PAYLOAD_EXAMPLE,
     kieNotes: {
       inputImageField: "input.input_urls",
@@ -159,7 +161,10 @@ async function main() {
     metadata: metadata as Prisma.InputJsonValue,
   };
 
-  const existing = await prisma.aiModel.findUnique({ where: { slug: SLUG } });
+  const existing = await prisma.aiModel.findUnique({
+    where: { slug: SLUG },
+    select: { isActive: true, pricingSchema: true, metadata: true },
+  });
 
   let model = await prisma.aiModel.upsert({
     where: { slug: SLUG },
@@ -168,10 +173,10 @@ async function main() {
       ...common,
       isActive: false,
     },
-    update: {
+    update: omitSeedPricingWhenPinned(existing, {
       ...common,
       isActive: existing?.isActive === true ? true : false,
-    },
+    }),
   });
 
   console.log(

@@ -15,6 +15,10 @@ import {
   type ProductCategoryId,
 } from "@/config/product-card-categories";
 import {
+  coerceProductCardImageResolution,
+  type ProductCardImageResolution,
+} from "@/config/product-card-image-resolution";
+import {
   getProductCardLayoutKey,
   getProductCardTemplatePreset,
   getProductCardTypographyPreset,
@@ -73,6 +77,7 @@ import {
   resolveMarketplaceCardSize,
   type MarketplaceCardResolvedSize,
 } from "@/server/services/marketplaceCardSizing";
+import { validateStrictKieMarketPayload } from "@/server/services/kieModelPayloadValidation";
 import { getFullModerationConfig } from "@/server/services/moderation";
 
 function clampMarketplacePrompt(prompt: string, maxLen: number): string {
@@ -98,6 +103,7 @@ function buildConceptPhotoModelSettings(
   model: AiModel,
   sourceImageUrl: string | string[],
   resolvedSize: MarketplaceCardResolvedSize,
+  resolutionOverride?: ProductCardImageResolution,
 ):
   | { ok: true; merged: Record<string, unknown> }
   | { ok: false; error: string } {
@@ -106,17 +112,27 @@ function buildConceptPhotoModelSettings(
       { settingsSchema: model.settingsSchema, supportsImageInput: model.supportsImageInput },
       sourceImageUrl,
     );
-    return {
-      ok: true,
-      merged: {
-        ...b.normalizedSettings,
-        size: resolvedSize.id,
-        aspectRatio: resolvedSize.kieAspectRatio,
-        resolution: resolvedSize.kieResolution,
-        outputWidth: resolvedSize.width,
-        outputHeight: resolvedSize.height,
-      },
+    const resolution = coerceProductCardImageResolution(
+      resolutionOverride ?? resolvedSize.kieResolution,
+    );
+    const merged = {
+      ...b.normalizedSettings,
+      size: resolvedSize.id,
+      aspectRatio: resolvedSize.kieAspectRatio,
+      resolution,
+      outputWidth: resolvedSize.width,
+      outputHeight: resolvedSize.height,
     };
+    const gptVal = validateStrictKieMarketPayload(
+      { apiModelId: model.apiModelId, payloadMapping: model.payloadMapping },
+      "product card concept",
+      merged,
+      Array.isArray(sourceImageUrl) ? sourceImageUrl : [sourceImageUrl],
+    );
+    if (!gptVal.ok) {
+      return { ok: false, error: gptVal.message };
+    }
+    return { ok: true, merged };
   } catch (e) {
     return {
       ok: false,
@@ -153,6 +169,7 @@ export async function generateConceptPhotoForProductCard(
     conceptId: string;
     userPrompt: string;
     size?: string;
+    resolution?: string;
     clientEstimateCredits?: number | null;
   },
 ): Promise<GenerateConceptPhotoResult> {
@@ -231,6 +248,7 @@ export async function generateConceptPhotoForProductCard(
     conceptId: input.conceptId,
     userPrompt: input.userPrompt,
     size: sizePreset.id,
+    resolution: coerceProductCardImageResolution(input.resolution),
     sourceImageUrl: sourceUrl,
     sourceImages,
     sourceImagesCount: sourceImages.length,
@@ -244,6 +262,7 @@ export async function generateConceptPhotoForProductCard(
     model,
     sourceImageUrls.length > 0 ? sourceImageUrls : sourceUrl,
     sizePreset,
+    coerceProductCardImageResolution(input.resolution),
   );
   if (!mergedSettings.ok) {
     return {
@@ -1056,6 +1075,7 @@ export async function estimateProductVideoCredits(
   input: {
     sourceType: ProductVideoImageSourceType;
     sourceGenerationId: string | null;
+    sourceImageUrl?: string | null;
     duration: 5 | 10;
     motionStyle: string;
     resolution?: string;
@@ -1080,6 +1100,7 @@ export async function estimateProductVideoCredits(
     project,
     input.sourceType,
     input.sourceGenerationId,
+    input.sourceImageUrl,
   );
   if (!src.ok) {
     return { ok: false, error: src.message, status: 400 };
@@ -1092,15 +1113,11 @@ export async function estimateProductVideoCredits(
       status: 400,
     };
   }
-  const sourceImages =
-    input.sourceType === "original" ? normalizeProductSourceImages(project) : [];
-  const sourceImageUrls =
-    sourceImages.length > 0 ? sourceImages.map((img) => img.url) : [src.url];
   const built = buildProductCardVideoModelSettings(
     model,
     src.url,
     input.duration,
-    sourceImageUrls,
+    [src.url],
     input.resolution ?? "720p",
     input.aspectRatio ?? "16:9",
     lastFrameTrimmed || null,
@@ -1134,6 +1151,7 @@ export async function generateProductVideoForProductCard(p: {
   projectId: string;
   sourceType: ProductVideoImageSourceType;
   sourceGenerationId: string | null;
+  sourceImageUrl?: string | null;
   duration: 5 | 10;
   motionStyle: string;
   resolution?: string;
@@ -1152,7 +1170,15 @@ export async function generateProductVideoForProductCard(p: {
   if (!isValidProductVideoMotionStyle(input.motionStyle)) {
     return { ok: false, error: "Некорректный стиль движения", status: 400 };
   }
-  const lastFrameTrimmed = input.lastFrameUrl?.trim() ?? "";
+  const loopVideo = p.loopVideo === true;
+  const lastFrameTrimmed = loopVideo ? "" : (input.lastFrameUrl?.trim() ?? "");
+  if (loopVideo && input.lastFrameUrl?.trim()) {
+    return {
+      ok: false,
+      error: "При цикличном видео последний кадр недоступен",
+      status: 400,
+    };
+  }
   if (lastFrameTrimmed && !(await assertUserOwnsFileUrl(userId, lastFrameTrimmed))) {
     return { ok: false, error: "Последний кадр: недоступный URL загрузки", status: 400 };
   }
@@ -1162,6 +1188,7 @@ export async function generateProductVideoForProductCard(p: {
     project,
     input.sourceType,
     input.sourceGenerationId,
+    input.sourceImageUrl,
   );
   if (!src.ok) {
     return { ok: false, error: src.message, status: 400 };
@@ -1178,13 +1205,11 @@ export async function generateProductVideoForProductCard(p: {
 
   const sourceImages =
     input.sourceType === "original" ? normalizeProductSourceImages(project) : [];
-  const sourceImageUrls =
-    sourceImages.length > 0 ? sourceImages.map((img) => img.url) : [src.url];
   const built = buildProductCardVideoModelSettings(
     model,
     src.url,
     input.duration,
-    sourceImageUrls,
+    [src.url],
     input.resolution ?? "720p",
     input.aspectRatio ?? "16:9",
     lastFrameTrimmed || null,
@@ -1210,7 +1235,7 @@ export async function generateProductVideoForProductCard(p: {
   const finalPrompt = buildProductVideoPrompt({
     motionStyle: input.motionStyle,
     userPrompt: input.userPrompt,
-    loopVideo: p.loopVideo === true,
+    loopVideo,
   });
 
   const metadataRoot: Record<string, unknown> = {
@@ -1227,7 +1252,7 @@ export async function generateProductVideoForProductCard(p: {
     aspectRatio: input.aspectRatio ?? "16:9",
     motionStyle: input.motionStyle,
     userPrompt: input.userPrompt,
-    loopVideo: p.loopVideo === true,
+    loopVideo,
     lastFrameUrl: lastFrameTrimmed || null,
     modelSlug: model.slug,
     pricingScope: "PRODUCT_CARD",

@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import {
+  PRODUCT_CARD_IMAGE_RESOLUTIONS,
+  PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT,
+} from "@/config/product-card-image-resolution";
+import {
   getMaxJsonBodyBytes,
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
@@ -23,6 +27,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 const bodySchema = z.object({
   size: z.string().trim().min(1).max(64).optional().default("1x1"),
+  resolution: z.enum(PRODUCT_CARD_IMAGE_RESOLUTIONS).optional().default(PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT),
 });
 
 /**
@@ -54,13 +59,16 @@ export async function POST(req: Request, ctx: Ctx) {
 
   const tooLarge = rejectOversizedBody(req, getMaxJsonBodyBytes());
   if (tooLarge) return tooLarge;
-  let body = { size: "1x1" };
+  let body: z.infer<typeof bodySchema> = {
+    size: "1x1",
+    resolution: PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT,
+  };
   try {
     const json = await req.json();
     const parsed = bodySchema.safeParse(json);
     if (parsed.success) body = parsed.data;
   } catch {
-    body = { size: "1x1" };
+    body = { size: "1x1", resolution: PRODUCT_CARD_IMAGE_RESOLUTION_DEFAULT };
   }
 
   const model = await resolveDefaultProductConceptImageModel();
@@ -86,7 +94,7 @@ export async function POST(req: Request, ctx: Ctx) {
     const price = await calculateProductCardConceptImageCredits(model, {
       size: resolvedSize.size.id,
       aspectRatio: resolvedSize.size.kieAspectRatio,
-      resolution: resolvedSize.size.kieResolution,
+      resolution: body.resolution,
     });
     return NextResponse.json({
       credits: price.credits,
@@ -112,7 +120,7 @@ export async function POST(req: Request, ctx: Ctx) {
     ...settings,
     size: resolvedSize.size.id,
     aspectRatio: resolvedSize.size.kieAspectRatio,
-    resolution: resolvedSize.size.kieResolution,
+    resolution: body.resolution,
     outputWidth: resolvedSize.size.width,
     outputHeight: resolvedSize.size.height,
   });

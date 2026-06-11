@@ -19,6 +19,7 @@ const bodySchema = z.object({
     "marketplace_card_generation",
   ]),
   sourceGenerationId: z.string().nullable().optional(),
+  sourceImageUrl: z.string().trim().url().max(2048).optional().nullable(),
   duration: z.union([z.literal(5), z.literal(10)]),
   resolution: z.string().trim().min(1).max(32).optional(),
   aspectRatio: z.string().trim().min(1).max(32).optional(),
@@ -74,6 +75,7 @@ export async function POST(req: Request, ctx: Ctx) {
   const result = await estimateProductVideoCredits(userId, id, {
     sourceType: parsed.data.sourceType,
     sourceGenerationId: parsed.data.sourceGenerationId?.trim() ?? null,
+    sourceImageUrl: parsed.data.sourceImageUrl?.trim() ?? null,
     duration: parsed.data.duration,
     resolution: parsed.data.resolution,
     aspectRatio: parsed.data.aspectRatio,
