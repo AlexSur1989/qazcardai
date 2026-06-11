@@ -671,8 +671,7 @@ export function SimpleProductCardTab({
 
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-clip">
-      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-      <div className="min-w-0 max-w-full space-y-4">
+      <div className="flex min-w-0 max-w-full flex-col gap-6">
         <Card className="min-w-0 max-w-full rounded-2xl border-border">
           <CardHeader>
             <CardTitle className="text-base">Выберите фото товара</CardTitle>
@@ -914,9 +913,7 @@ export function SimpleProductCardTab({
             />
           </CardContent>
         </Card>
-      </div>
 
-      <div className="min-w-0 max-w-full space-y-3 lg:sticky lg:top-24">
         <Card className="min-w-0 max-w-full rounded-2xl border-border">
           <CardHeader>
             <CardTitle className="text-base">Генерация</CardTitle>
@@ -1087,7 +1084,6 @@ export function SimpleProductCardTab({
             {genError ? <p className="text-destructive text-sm">{genError}</p> : null}
           </CardContent>
         </Card>
-      </div>
       </div>
 
       {activeSnapshot ? (

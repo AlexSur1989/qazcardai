@@ -226,7 +226,7 @@ export function ProductCardPage({
         />
       </div>
 
-      <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)] xl:items-start xl:gap-8">
+      <div className="flex min-w-0 flex-col gap-8">
         <div className="min-w-0">
           <ProductDataSection
             hasImage={hasImage}
