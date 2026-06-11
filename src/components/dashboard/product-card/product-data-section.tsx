@@ -162,15 +162,12 @@ export function ProductDataSection({
       </div>
 
       {classifierAdminHint ? (
-        <details className="md:hidden">
+        <details className="max-w-full">
           <summary className="text-muted-foreground cursor-pointer text-xs">Admin debug</summary>
-          <p className="text-muted-foreground mt-1 break-all font-mono text-[10px]">{classifierAdminHint}</p>
+          <p className="text-muted-foreground mt-1 break-all font-mono text-[10px] leading-relaxed">
+            {classifierAdminHint}
+          </p>
         </details>
-      ) : null}
-      {classifierAdminHint ? (
-        <p className="text-muted-foreground hidden break-all font-mono text-[10px] md:block">
-          Admin: {classifierAdminHint}
-        </p>
       ) : null}
     </section>
   );

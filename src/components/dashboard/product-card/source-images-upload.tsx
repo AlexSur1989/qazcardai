@@ -110,10 +110,10 @@ function SourceImageSlot({
         handleFile(e.dataTransfer.files?.[0]);
       }}
       className={cn(
-        "relative w-full min-w-0 max-w-full rounded-2xl border-2 border-dashed bg-card p-3 transition-all",
+        "relative w-full min-w-0 max-w-full rounded-xl border border-dashed bg-card p-2.5 transition-all sm:p-3",
         drag
-          ? "border-primary bg-primary/8 shadow-[0_4px_24px_rgba(0,80,100,0.1)]"
-          : "border-primary/25 hover:border-primary hover:bg-white hover:shadow-sm",
+          ? "border-primary bg-primary/8"
+          : "border-primary/25 hover:border-primary/60 hover:bg-white",
         disabled && "pointer-events-none opacity-60",
       )}
     >
@@ -132,57 +132,64 @@ function SourceImageSlot({
       />
 
       {uploading && (
-        <div className="bg-background/85 absolute inset-0 z-10 flex items-center justify-center rounded-[calc(1rem-2px)] backdrop-blur-[1px]">
-          <Loader2 className="text-primary h-7 w-7 animate-spin" />
+        <div className="bg-background/85 absolute inset-0 z-10 flex items-center justify-center rounded-[calc(0.75rem-1px)] backdrop-blur-[1px]">
+          <Loader2 className="text-primary h-5 w-5 animate-spin" />
         </div>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="flex min-w-0 items-start gap-2.5">
         <button
           type="button"
           onClick={choose}
           disabled={disabled || uploading}
-          className="bg-background relative flex aspect-square w-full max-w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border text-muted-foreground sm:aspect-auto sm:size-24"
+          className="bg-background relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border text-muted-foreground sm:h-16 sm:w-16"
         >
           {value?.url ? (
             // eslint-disable-next-line @next/next/no-img-element -- uploaded product source preview
-            <img src={value.url} alt={slot.title} className="max-h-full max-w-full object-contain sm:h-full sm:w-full sm:object-cover" />
+            <img src={value.url} alt={slot.title} className="h-full w-full object-cover" />
           ) : (
-            <div className="flex flex-col items-center gap-1">
-              <ImageIcon className="h-7 w-7" strokeWidth={1.3} />
-              <Upload className="text-primary h-4 w-4" />
+            <div className="flex flex-col items-center gap-0.5">
+              <ImageIcon className="h-5 w-5" strokeWidth={1.3} />
+              <Upload className="text-primary h-3.5 w-3.5" />
             </div>
           )}
         </button>
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className="min-w-0 flex-1 space-y-1">
           <div>
-            <p className="text-foreground text-sm font-semibold">{slot.title}</p>
-            <p className="text-muted-foreground text-xs">{slot.hint}</p>
+            <p className="text-foreground text-xs leading-snug font-semibold">{slot.title}</p>
+            <p className="text-muted-foreground text-[11px] leading-snug">{slot.hint}</p>
           </div>
           {value ? (
-            <p className="text-muted-foreground truncate text-xs">
+            <p className="text-muted-foreground truncate text-[10px]">
               {value.fileName} · {formatBytes(value.size)}
             </p>
           ) : (
-            <p className="text-muted-foreground text-xs">PNG, JPG или WebP до {MAX_MB}MB</p>
+            <p className="text-muted-foreground text-[10px] leading-snug">PNG/JPG/WebP · {MAX_MB}MB</p>
           )}
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={choose}>
+          <div className="flex flex-wrap gap-1 pt-0.5">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={choose}
+            >
               {value ? "Заменить" : "Загрузить"}
             </Button>
-            {value && (
+            {value ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
+                className="h-7 px-2 text-xs"
                 disabled={!canRemove}
                 onClick={() => onRemove(slot)}
                 title={!canRemove ? "Главное фото обязательно" : undefined}
               >
-                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                <Trash2 className="mr-0.5 h-3 w-3" />
                 Удалить
               </Button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -290,28 +297,25 @@ export function SourceImagesUpload({
   );
 
   return (
-    <div className="min-w-0 max-w-full space-y-4">
+    <div className="min-w-0 max-w-full space-y-3">
       <div>
-        <h2 className="text-foreground text-lg font-semibold tracking-tight">
+        <h2 className="text-foreground text-base font-semibold tracking-tight sm:text-lg">
           Загрузите фото товара
         </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Добавьте до 4 фото товара с разных ракурсов. Главное фото будет использоваться как
-          основное.
-        </p>
-        <p className="text-muted-foreground mt-1 text-xs">
-          Добавьте несколько ракурсов, чтобы AI точнее сохранил форму, цвет и детали товара.
+        <p className="text-muted-foreground mt-1 text-xs leading-snug sm:text-sm">
+          До 4 ракурсов. Главное фото — основа для всех сценариев; дополнительные помогают AI
+          точнее сохранить форму и детали.
         </p>
       </div>
 
       <div className="flex items-center justify-between gap-3">
         <p className="text-muted-foreground text-xs">Загружено {uploadedCount} из 4</p>
-        {uploadedCount === 0 && (
+        {uploadedCount === 0 ? (
           <p className="text-destructive text-xs">Главное фото обязательно</p>
-        )}
+        ) : null}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {SLOTS.map((slot) => (
           <SourceImageSlot
             key={slot.role}
@@ -326,11 +330,11 @@ export function SourceImagesUpload({
         ))}
       </div>
 
-      {err && (
+      {err ? (
         <p className="text-destructive text-sm" role="alert">
           {err}
         </p>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -27,10 +27,13 @@ export function ScenarioSetupNotice({
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription className="space-y-2">
         <p>{body}</p>
-        {adminHint ? (
-          <p className="text-muted-foreground border-border/60 border-t pt-2 font-mono text-xs leading-relaxed">
-            Admin: {adminHint}
-          </p>
+        {adminHint && showAdminLink ? (
+          <details className="border-border/60 border-t pt-2">
+            <summary className="text-muted-foreground cursor-pointer text-xs">Admin debug</summary>
+            <p className="text-muted-foreground mt-2 break-all font-mono text-[10px] leading-relaxed">
+              {adminHint}
+            </p>
+          </details>
         ) : null}
         {showAdminLink ? (
           <p className="text-sm">

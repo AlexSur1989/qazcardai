@@ -56,6 +56,13 @@ const REF_MAX_MB = 10;
 const REF_MAX_BYTES = REF_MAX_MB * 1024 * 1024;
 const REF_ACCEPT = "image/png,image/jpeg,image/jpg,image/webp";
 
+const PRODUCT_PHOTO_ROLE_LABELS: Record<string, string> = {
+  main: "Главное",
+  side: "Сбоку",
+  back: "Сзади",
+  detail: "Детали",
+};
+
 type ReferenceRow = {
   url: string;
   fileName: string;
@@ -632,7 +639,7 @@ export function SimpleProductCardTab({
 
   const textLen = graphemeLen(userText);
   const clientErr = validateClient();
-  const resolutionLabel = "1K";
+  const resolutionLabel = resolution;
   const insufficientBalance =
     displayEstimateCredits != null && balanceCredits < displayEstimateCredits;
   const canGenerate =
@@ -663,32 +670,45 @@ export function SimpleProductCardTab({
                 </AlertDescription>
               </Alert>
             ) : (
-              <>
-                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-                  {photosWithId.map((img) => {
-                    const selected = selectedProductPhotoId === img.fileId;
-                    return (
-                      <button
-                        key={img.fileId}
-                        type="button"
-                        onClick={() => setProductPhotoId(img.fileId!)}
-                        className={cn(
-                          "min-w-0 max-w-full overflow-hidden rounded-xl border-2 text-left transition-colors",
-                          selected ? "border-primary ring-primary/30 ring-2" : "border-border hover:border-primary/40",
-                        )}
-                      >
-                        <div className="bg-muted aspect-square w-full">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={img.url} alt="" className="h-full w-full object-cover" />
-                        </div>
-                        <div className="px-2 py-1.5 text-xs font-medium">
-                          {img.role === "main" ? "Главное" : img.role}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
+              <div
+                className={cn(
+                  "grid min-w-0 gap-2",
+                  photosWithId.length === 1
+                    ? "max-w-[320px] grid-cols-1"
+                    : "grid-cols-2 sm:grid-cols-3 lg:max-w-xl lg:grid-cols-4",
+                )}
+              >
+                {photosWithId.map((img) => {
+                  const selected = selectedProductPhotoId === img.fileId;
+                  const label =
+                    PRODUCT_PHOTO_ROLE_LABELS[img.role] ?? img.role ?? "Фото";
+                  return (
+                    <button
+                      key={img.fileId}
+                      type="button"
+                      onClick={() => setProductPhotoId(img.fileId!)}
+                      className={cn(
+                        "flex min-w-0 flex-col items-center gap-1.5 rounded-xl border-2 p-2 text-center transition-colors",
+                        selected
+                          ? "border-primary bg-primary/5 ring-primary/25 ring-2"
+                          : "border-border hover:border-primary/40",
+                      )}
+                    >
+                      <div className="bg-muted h-16 w-16 shrink-0 overflow-hidden rounded-lg sm:h-[4.5rem] sm:w-[4.5rem]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={img.url}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      <span className="text-foreground w-full truncate text-xs font-medium">
+                        {label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -1013,9 +1033,9 @@ export function SimpleProductCardTab({
                   </ul>
                 ) : null}
                 {showAdminHints && planPreview.admin ? (
-                  <details className="border-border/60 border-t pt-2 md:hidden">
+                  <details className="border-border/60 border-t pt-2">
                     <summary className="text-muted-foreground cursor-pointer text-xs">Admin debug</summary>
-                    <div className="mt-2 space-y-1 break-all font-mono text-[10px] leading-relaxed">
+                    <div className="text-muted-foreground mt-2 space-y-1 break-all font-mono text-[10px] leading-relaxed">
                       <p>model: {planPreview.admin.modelSlug}</p>
                       <p>apiModelId: {planPreview.admin.apiModelId}</p>
                       <p>
@@ -1026,19 +1046,6 @@ export function SimpleProductCardTab({
                       <p>dry-run: POST {planPreview.admin.payloadDryRunUrl}</p>
                     </div>
                   </details>
-                ) : null}
-                {showAdminHints && planPreview.admin ? (
-                  <div className="border-border/60 hidden space-y-1 border-t pt-2 font-mono text-[10px] leading-relaxed md:block">
-                    <p>model: {planPreview.admin.modelSlug}</p>
-                    <p>apiModelId: {planPreview.admin.apiModelId}</p>
-                    <p>
-                      <Link href={planPreview.admin.adminModelEditUrl} className="text-primary underline">
-                        Редактировать модель
-                      </Link>
-                      {" · "}
-                      <span className="break-all">dry-run: POST {planPreview.admin.payloadDryRunUrl}</span>
-                    </p>
-                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -1100,7 +1107,7 @@ function ReferenceUploadBlock({
   onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 max-w-full space-y-2">
       <input
         ref={refInputRef}
         id={`${refFieldId}-file`}
@@ -1110,8 +1117,8 @@ function ReferenceUploadBlock({
         onChange={onUpload}
       />
       {referenceImage ? (
-        <div className="flex items-start gap-3 rounded-lg border p-2">
-          <div className="bg-muted size-16 shrink-0 overflow-hidden rounded-md">
+        <div className="flex max-w-full items-start gap-2.5 rounded-lg border p-2 sm:max-w-[320px]">
+          <div className="bg-muted h-14 w-14 shrink-0 overflow-hidden rounded-md sm:h-16 sm:w-16">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={referenceImage.url} alt="" className="h-full w-full object-cover" />
           </div>

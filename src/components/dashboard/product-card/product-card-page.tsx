@@ -178,7 +178,7 @@ export function ProductCardPage({
   };
 
   return (
-    <div className="min-w-0 max-w-full space-y-8 overflow-x-clip sm:space-y-10">
+    <div className="min-w-0 max-w-full space-y-6 overflow-x-clip sm:space-y-8">
       <p className="text-muted-foreground text-sm">
         Баланс (токены):{" "}
         <span className="text-foreground font-medium tabular-nums">{balanceDisplay}</span>
@@ -205,44 +205,47 @@ export function ProductCardPage({
         </Alert>
       )}
 
-      <div className="space-y-2">
-        {uploadFlow !== "idle" && (
-          <p className="text-muted-foreground text-xs" aria-live="polite">
-            Загрузка:{" "}
-            {uploadFlow === "uploading" && "идёт…"}
-            {uploadFlow === "uploaded" && "файл на сервере"}
-            {uploadFlow === "error" && "ошибка (см. ниже)"}
-          </p>
-        )}
-        {aiAnalysisStatus === "analyzing" && hasImage ? (
-          <p className="text-muted-foreground flex items-center gap-2 text-xs" aria-live="polite">
-            ИИ анализирует фото товара…
-          </p>
-        ) : null}
-        <SourceImagesUpload
-          value={sourceImages}
-          onChange={onSourceImagesChange}
-          onUploadFlowChange={setUploadFlow}
-        />
-      </div>
+      <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,400px)_minmax(0,1fr)] xl:items-start xl:gap-8">
+        <div className="min-w-0 space-y-5">
+          <div className="space-y-2">
+            {uploadFlow !== "idle" && (
+              <p className="text-muted-foreground text-xs" aria-live="polite">
+                Загрузка:{" "}
+                {uploadFlow === "uploading" && "идёт…"}
+                {uploadFlow === "uploaded" && "файл на сервере"}
+                {uploadFlow === "error" && "ошибка (см. ниже)"}
+              </p>
+            )}
+            {aiAnalysisStatus === "analyzing" && hasImage ? (
+              <p className="text-muted-foreground flex items-center gap-2 text-xs" aria-live="polite">
+                ИИ анализирует фото товара…
+              </p>
+            ) : null}
+            <SourceImagesUpload
+              value={sourceImages}
+              onChange={onSourceImagesChange}
+              onUploadFlowChange={setUploadFlow}
+            />
+          </div>
 
-      <ProductDataSection
-        hasImage={hasImage}
-        canPersist={canUseBackend}
-        selectedCategory={selectedCategory}
-        categorySource={categorySource}
-        classifierEnabled={classifierEnabled}
-        aiAnalysisStatus={aiAnalysisStatus}
-        classifyError={classifyError}
-        productTitle={productTitle}
-        onProductTitleChange={setProductTitleManual}
-        onSelectCategory={setManualCategory}
-        onRetryAnalysis={classifierEnabled ? retryProductAnalysis : undefined}
-        retryDisabled={classifyLoading}
-        classifierAdminHint={showAdminHints ? classifierAdminHint : null}
-      />
+          <ProductDataSection
+            hasImage={hasImage}
+            canPersist={canUseBackend}
+            selectedCategory={selectedCategory}
+            categorySource={categorySource}
+            classifierEnabled={classifierEnabled}
+            aiAnalysisStatus={aiAnalysisStatus}
+            classifyError={classifyError}
+            productTitle={productTitle}
+            onProductTitleChange={setProductTitleManual}
+            onSelectCategory={setManualCategory}
+            onRetryAnalysis={classifierEnabled ? retryProductAnalysis : undefined}
+            retryDisabled={classifyLoading}
+            classifierAdminHint={showAdminHints ? classifierAdminHint : null}
+          />
+        </div>
 
-      <section className="space-y-3" aria-label="Сценарии">
+      <section className="min-w-0 space-y-3" aria-label="Сценарии">
         <h3 className="text-foreground text-base font-semibold">Сценарии</h3>
         {!hasImage && (
           <Alert>
@@ -360,6 +363,7 @@ export function ProductCardPage({
           </TabsContent>
         </Tabs>
       </section>
+      </div>
     </div>
   );
 }

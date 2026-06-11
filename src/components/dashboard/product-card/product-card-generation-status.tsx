@@ -234,7 +234,7 @@ export function ProductCardGenerationStatusPanel({
         ) : null}
 
         {showAdminHints && adminDebug ? (
-          <details className="border-border/60 border-t pt-3 md:hidden">
+          <details className="border-border/60 border-t pt-3">
             <summary className="text-muted-foreground cursor-pointer text-xs">Admin debug</summary>
             <div className="text-muted-foreground mt-2 space-y-0.5 break-all font-mono text-[10px] leading-relaxed">
               {Object.entries(adminDebug).map(([k, v]) =>
@@ -246,17 +246,6 @@ export function ProductCardGenerationStatusPanel({
               )}
             </div>
           </details>
-        ) : null}
-        {showAdminHints && adminDebug ? (
-          <div className="border-border/60 hidden space-y-0.5 border-t pt-3 font-mono text-[10px] leading-relaxed text-muted-foreground md:block">
-            {Object.entries(adminDebug).map(([k, v]) =>
-              v ? (
-                <p key={k} className="break-all">
-                  {k}: {v}
-                </p>
-              ) : null,
-            )}
-          </div>
         ) : null}
       </CardContent>
     </Card>
