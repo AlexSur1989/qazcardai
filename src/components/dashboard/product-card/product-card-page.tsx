@@ -22,7 +22,7 @@ import { SimpleProductCardTab } from "./simple-product-card-tab";
 import { ProductDataSection } from "./product-data-section";
 import { ConceptPhotoTab } from "./concept-photo-tab";
 import { ProductVideoTab } from "./product-video-tab";
-import { SourceImagesUpload, type UploadFlowState } from "./source-images-upload";
+import { SourceImagesUpload, type SourceImagesValue, type UploadFlowState } from "./source-images-upload";
 import { useProductCardProject } from "./use-product-card-project";
 
 const SCENARIO_TAB: Array<{
@@ -70,8 +70,9 @@ type Props = {
   conceptImageSizes: SizePreset[];
   marketplaceCardSizes: SizePreset[];
   videoPresets: VideoPreset[];
-  productVideoModels: ProductVideoModelOption[];
-  defaultProductVideoModelSlug: string;
+  /** @deprecated не показываем клиенту; оставлено для совместимости пропсов страницы */
+  productVideoModels?: ProductVideoModelOption[];
+  defaultProductVideoModelSlug?: string;
   /** Показать режим разметки оверлея (админ) */
   canMarketplaceLayoutDebug?: boolean;
   modelSetupByScenario: Partial<
@@ -89,8 +90,6 @@ export function ProductCardPage({
   conceptImageSizes,
   marketplaceCardSizes,
   videoPresets,
-  productVideoModels,
-  defaultProductVideoModelSlug,
   canMarketplaceLayoutDebug = false,
   modelSetupByScenario,
   classifierAccess,
@@ -355,8 +354,7 @@ export function ProductCardPage({
                 projectId={projectId}
                 balanceCredits={balanceDisplay}
                 videoPresets={videoPresets}
-                productVideoModels={productVideoModels}
-                defaultProductVideoModelSlug={defaultProductVideoModelSlug}
+                sourceImages={sourceImages}
               />
             )}
           </TabsContent>

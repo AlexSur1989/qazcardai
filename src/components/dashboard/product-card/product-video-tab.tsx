@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Clapperboard, Download, ExternalLink, Loader2 } from "lucide-react";
 
+import { SeedanceSingleImageUpload } from "@/components/dashboard/seedance-single-image-upload";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,12 +24,17 @@ import {
 import { getUserFacingGenerationStatusFromRaw } from "@/lib/generation-display";
 import { cn } from "@/lib/utils";
 
+import type { SourceImagesValue } from "./source-images-upload";
+
 const motions = getPublicProductVideoMotionStyles();
 
 type SourceTab = "original" | "concept_generation" | "marketplace_card_generation";
 
-type ConceptRow = { generationId: string };
-type MarketplaceRow = { generationId: string };
+type GeneratedSourceOption = {
+  generationId: string;
+  sourceType: "concept_generation" | "marketplace_card_generation";
+  label: string;
+};
 
 type GenPreview = { id: string; status: string; outputUrl: string | null };
 
@@ -38,9 +44,29 @@ type Props = {
   projectId: string | null;
   balanceCredits: number;
   videoPresets: { duration: number; resolution: string; aspectRatio: string }[];
-  productVideoModels: { slug: string; name: string }[];
-  defaultProductVideoModelSlug: string;
+  sourceImages: SourceImagesValue;
 };
+
+function presetForDuration(
+  duration: 5 | 10,
+  presets: Props["videoPresets"],
+): { resolution: string; aspectRatio: string } {
+  const match =
+    presets.find((p) => p.duration === duration) ??
+    presets.find((p) => p.duration === 5) ??
+    presets[0];
+  return {
+    resolution: match?.resolution ?? "720p",
+    aspectRatio: match?.aspectRatio ?? "16:9",
+  };
+}
+
+function originalPreviewUrl(sourceImages: SourceImagesValue): string | null {
+  const main = sourceImages.find((img) => img.role === "main" && img.url.trim());
+  const first = sourceImages.find((img) => img.url.trim());
+  const url = (main ?? first)?.url?.trim();
+  return url || null;
+}
 
 export function ProductVideoTab({
   hasImage,
@@ -48,27 +74,30 @@ export function ProductVideoTab({
   projectId,
   balanceCredits,
   videoPresets,
-  productVideoModels,
-  defaultProductVideoModelSlug,
+  sourceImages,
 }: Props) {
   const router = useRouter();
+  const loopFieldId = useId();
+  const lastFrameToggleId = useId();
+
   const [sourceType, setSourceType] = useState<SourceTab>("original");
   const [sourceGenerationId, setSourceGenerationId] = useState<string | null>(null);
-  const [conceptRows, setConceptRows] = useState<ConceptRow[]>([]);
-  const [cardRows, setCardRows] = useState<MarketplaceRow[]>([]);
+  const [generatedOptions, setGeneratedOptions] = useState<GeneratedSourceOption[]>([]);
   const [genPreviews, setGenPreviews] = useState<Record<string, GenPreview | undefined>>({});
 
   const [duration, setDuration] = useState<5 | 10>(5);
-  const [resolution, setResolution] = useState(videoPresets[0]?.resolution ?? "720p");
-  const [aspectRatio, setAspectRatio] = useState(videoPresets[0]?.aspectRatio ?? "16:9");
   const [motion, setMotion] = useState<ProductVideoMotionStyle>("none");
   const [userPrompt, setUserPrompt] = useState("");
-  const initialModelSlug =
-    productVideoModels.find((m) => m.slug === defaultProductVideoModelSlug)?.slug ??
-    productVideoModels[0]?.slug ??
-    defaultProductVideoModelSlug;
-  const [modelSlug, setModelSlug] = useState(initialModelSlug);
-  const [modelName, setModelName] = useState<string | null>(null);
+  const [loopVideo, setLoopVideo] = useState(false);
+  const [useLastFrame, setUseLastFrame] = useState(false);
+  const [lastFrameUrl, setLastFrameUrl] = useState("");
+
+  const { resolution, aspectRatio } = useMemo(
+    () => presetForDuration(duration, videoPresets),
+    [duration, videoPresets],
+  );
+
+  const originalUrl = useMemo(() => originalPreviewUrl(sourceImages), [sourceImages]);
 
   const [estimating, setEstimating] = useState(false);
   const [estimateCredits, setEstimateCredits] = useState<number | null>(null);
@@ -82,22 +111,9 @@ export function ProductVideoTab({
     outputUrl: string | null;
   } | null>(null);
 
-  const canEstimate = useMemo(
-    () =>
-      Boolean(
-        projectId &&
-          canUseBackend &&
-          (sourceType === "original" ||
-            (sourceType === "concept_generation" && sourceGenerationId) ||
-            (sourceType === "marketplace_card_generation" && sourceGenerationId)),
-      ),
-    [projectId, canUseBackend, sourceType, sourceGenerationId],
-  );
-
   const loadProjectMeta = useCallback(async () => {
     if (!projectId) {
-      setConceptRows([]);
-      setCardRows([]);
+      setGeneratedOptions([]);
       return;
     }
     const res = await fetch(`/api/product-card-projects/${projectId}`);
@@ -109,78 +125,60 @@ export function ProductVideoTab({
         };
       };
     }>(res);
-    if (!parsed.ok || !res.ok) {
-      return;
-    }
+    if (!parsed.ok || !res.ok) return;
+
+    const options: GeneratedSourceOption[] = [];
     const cList = parsed.data.project?.metadata?.conceptGenerations;
-    const cRows: ConceptRow[] = Array.isArray(cList)
-      ? cList
-          .map((x) => {
-            if (x && typeof x === "object" && "generationId" in x) {
-              const g = (x as { generationId: unknown }).generationId;
-              if (typeof g === "string" && g.trim()) {
-                return { generationId: g.trim() } as ConceptRow;
-              }
-            }
-            return null;
-          })
-          .filter((x): x is ConceptRow => x != null)
-      : [];
-    setConceptRows(cRows);
+    if (Array.isArray(cList)) {
+      for (const x of cList) {
+        if (x && typeof x === "object" && "generationId" in x) {
+          const g = (x as { generationId: unknown }).generationId;
+          if (typeof g === "string" && g.trim()) {
+            options.push({
+              generationId: g.trim(),
+              sourceType: "concept_generation",
+              label: "AI-фото",
+            });
+          }
+        }
+      }
+    }
     const mList = parsed.data.project?.metadata?.marketplaceCardGenerations;
-    const mRows: MarketplaceRow[] = Array.isArray(mList)
-      ? mList
-          .map((x) => {
-            if (x && typeof x === "object" && "generationId" in x) {
-              const g = (x as { generationId: unknown }).generationId;
-              if (typeof g === "string" && g.trim()) {
-                return { generationId: g.trim() } as MarketplaceRow;
-              }
-            }
-            return null;
-          })
-          .filter((x): x is MarketplaceRow => x != null)
-      : [];
-    setCardRows(mRows);
+    if (Array.isArray(mList)) {
+      for (const x of mList) {
+        if (x && typeof x === "object" && "generationId" in x) {
+          const g = (x as { generationId: unknown }).generationId;
+          if (typeof g === "string" && g.trim()) {
+            options.push({
+              generationId: g.trim(),
+              sourceType: "marketplace_card_generation",
+              label: "Карточка",
+            });
+          }
+        }
+      }
+    }
+    setGeneratedOptions(options);
   }, [projectId]);
 
   useEffect(() => {
     if (!projectId || !canUseBackend) return;
-    void (async () => {
-      await loadProjectMeta();
-    })();
+    void loadProjectMeta();
   }, [projectId, canUseBackend, loadProjectMeta]);
 
   useEffect(() => {
-    if (sourceType === "concept_generation" && conceptRows.length === 0) {
-      void (async () => {
-        await Promise.resolve();
-        setSourceType("original");
-        setSourceGenerationId(null);
-      })();
+    if (sourceType === "original") return;
+    const stillExists = generatedOptions.some((o) => o.generationId === sourceGenerationId);
+    if (!stillExists) {
+      setSourceType("original");
+      setSourceGenerationId(null);
     }
-  }, [sourceType, conceptRows.length]);
+  }, [generatedOptions, sourceGenerationId, sourceType]);
+
+  const previewIdsKey = generatedOptions.map((o) => o.generationId).join(",");
 
   useEffect(() => {
-    if (sourceType === "marketplace_card_generation" && cardRows.length === 0) {
-      void (async () => {
-        await Promise.resolve();
-        setSourceType("original");
-        setSourceGenerationId(null);
-      })();
-    }
-  }, [sourceType, cardRows.length]);
-
-  const idsToPreviewKey = useMemo(() => {
-    if (sourceType === "original") return "";
-    if (sourceType === "concept_generation") {
-      return conceptRows.map((r) => r.generationId).join(",");
-    }
-    return cardRows.map((r) => r.generationId).join(",");
-  }, [sourceType, conceptRows, cardRows]);
-
-  useEffect(() => {
-    const ids = idsToPreviewKey ? idsToPreviewKey.split(",").filter(Boolean) : [];
+    const ids = previewIdsKey ? previewIdsKey.split(",").filter(Boolean) : [];
     if (ids.length === 0) return;
     void (async () => {
       const next: Record<string, GenPreview> = {};
@@ -197,12 +195,23 @@ export function ProductVideoTab({
       }
       setGenPreviews((prev) => ({ ...prev, ...next }));
     })();
-  }, [idsToPreviewKey]);
+  }, [previewIdsKey]);
+
+  const effectiveLastFrameUrl = useLastFrame && lastFrameUrl.trim() ? lastFrameUrl.trim() : null;
+
+  const canEstimate = useMemo(
+    () =>
+      Boolean(
+        projectId &&
+          canUseBackend &&
+          (sourceType === "original" ||
+            (sourceGenerationId && generatedOptions.some((o) => o.generationId === sourceGenerationId))),
+      ),
+    [projectId, canUseBackend, sourceType, sourceGenerationId, generatedOptions],
+  );
 
   useEffect(() => {
-    if (!canEstimate) {
-      return;
-    }
+    if (!canEstimate) return;
     let cancelled = false;
     void (async () => {
       setEstimating(true);
@@ -217,10 +226,10 @@ export function ProductVideoTab({
           resolution,
           aspectRatio,
           motionStyle: motion,
-          modelSlug,
+          lastFrameUrl: effectiveLastFrameUrl,
         }),
       });
-      const parsed = await readJsonSafe<{ credits?: number; error?: string; modelName?: string }>(res);
+      const parsed = await readJsonSafe<{ credits?: number; error?: string }>(res);
       if (cancelled) return;
       if (!parsed.ok) {
         setEstErr(parsed.message);
@@ -235,13 +244,22 @@ export function ProductVideoTab({
         return;
       }
       setEstimateCredits(typeof parsed.data.credits === "number" ? parsed.data.credits : null);
-      setModelName(typeof parsed.data.modelName === "string" ? parsed.data.modelName : null);
       setEstimating(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [canEstimate, projectId, sourceType, sourceGenerationId, duration, resolution, aspectRatio, motion, modelSlug]);
+  }, [
+    canEstimate,
+    projectId,
+    sourceType,
+    sourceGenerationId,
+    duration,
+    resolution,
+    aspectRatio,
+    motion,
+    effectiveLastFrameUrl,
+  ]);
 
   const showEstimate = canEstimate;
   const creditsToShow = showEstimate ? estimateCredits : null;
@@ -249,38 +267,15 @@ export function ProductVideoTab({
   const notEnough = creditsToShow != null && balanceCredits < creditsToShow;
   const canSubmit = showEstimate && !estimating && creditsToShow != null && !errToShow && !notEnough;
 
-  const resolutionOptions = useMemo(() => {
-    const s = new Set(videoPresets.map((p) => p.resolution));
-    return Array.from(s);
-  }, [videoPresets]);
+  const pickOriginal = () => {
+    setSourceType("original");
+    setSourceGenerationId(null);
+  };
 
-  const applyResolution = useCallback(
-    (res: string) => {
-      setResolution(res);
-      const match =
-        videoPresets.find((p) => p.resolution === res && p.duration === duration) ??
-        videoPresets.find((p) => p.resolution === res);
-      if (match) {
-        setDuration(match.duration === 10 ? 10 : 5);
-        setAspectRatio(match.aspectRatio);
-      }
-    },
-    [videoPresets, duration],
-  );
-
-  const setDurationPick = useCallback(
-    (d: 5 | 10) => {
-      setDuration(d);
-      const match =
-        videoPresets.find((p) => p.duration === d && p.resolution === resolution) ??
-        videoPresets.find((p) => p.duration === d);
-      if (match) {
-        setResolution(match.resolution);
-        setAspectRatio(match.aspectRatio);
-      }
-    },
-    [videoPresets, resolution],
-  );
+  const pickGenerated = (opt: GeneratedSourceOption) => {
+    setSourceType(opt.sourceType);
+    setSourceGenerationId(opt.generationId);
+  };
 
   const onSubmit = async () => {
     if (!projectId || !canUseBackend) return;
@@ -296,7 +291,8 @@ export function ProductVideoTab({
         aspectRatio,
         motionStyle: motion,
         userPrompt: userPrompt.trim(),
-        modelSlug,
+        loopVideo,
+        lastFrameUrl: effectiveLastFrameUrl,
       };
       if (typeof estimateCredits === "number" && Number.isFinite(estimateCredits)) {
         body.clientEstimateCredits = estimateCredits;
@@ -390,253 +386,90 @@ export function ProductVideoTab({
           Видео товара
         </CardTitle>
         <CardDescription>
-          Короткий ролик из исходного фото, AI-кадра или готовой карточки. На сервере добавляются
-          технические правила качества; здесь — длительность, разрешение и ваши пожелания.
+          Короткий ролик из фото товара или сгенерированного кадра. Укажите пожелания, стиль движения
+          и длительность — остальное настроим автоматически.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5">
         {canUseBackend && (
           <div className="space-y-3">
             <Label className="text-[#0C2D38]">Источник изображения</Label>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={sourceType === "original" ? "default" : "outline"}
-                className="rounded-xl"
-                onClick={() => {
-                  setSourceType("original");
-                  setSourceGenerationId(null);
-                }}
-              >
-                Исходные фото
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={sourceType === "concept_generation" ? "default" : "outline"}
-                className="rounded-xl"
-                onClick={() => {
-                  if (conceptRows.length > 0) {
-                    setSourceType("concept_generation");
-                    setSourceGenerationId(conceptRows[0]!.generationId);
-                  }
-                }}
-                disabled={conceptRows.length === 0}
-              >
-                Сгенерированное фото
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={sourceType === "marketplace_card_generation" ? "default" : "outline"}
-                className="rounded-xl"
-                onClick={() => {
-                  if (cardRows.length > 0) {
-                    setSourceType("marketplace_card_generation");
-                    setSourceGenerationId(cardRows[0]!.generationId);
-                  }
-                }}
-                disabled={cardRows.length === 0}
-              >
-                Карточка товара
-              </Button>
-            </div>
-            {conceptRows.length === 0 && (
-              <p className="text-xs text-[#4a6e7a]">
-                Сначала создайте AI-фото во вкладке «Фото с концепциями».
-              </p>
-            )}
-            {cardRows.length === 0 && (
-              <p className="text-xs text-[#4a6e7a]">
-                Сначала создайте карточку во вкладке «Карточка товара».
-              </p>
-            )}
-            {sourceType === "concept_generation" && conceptRows.length > 0 && (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {conceptRows.map((r) => {
-                  const pr = genPreviews[r.generationId];
-                  return (
-                    <button
-                      key={r.generationId}
-                      type="button"
-                      onClick={() => setSourceGenerationId(r.generationId)}
-                      className={cn(
-                        "rounded-2xl border-2 p-2 text-left text-xs transition-colors",
-                        sourceGenerationId === r.generationId
-                          ? "border-[#00AFCA] bg-[#F4FBFD]"
-                          : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
-                      )}
-                    >
-                      <p className="text-[#0C2D38] font-medium">Фото с концепциями</p>
-                      {pr && (
-                        <p className="mt-1 text-[#4a6e7a]">
-                          {getUserFacingGenerationStatusFromRaw(pr.status)}
-                          {pr.outputUrl ? "" : " · нет превью"}
-                        </p>
-                      )}
-                      {pr?.outputUrl && (
-                        <div className="mt-2 max-h-24 overflow-hidden rounded-xl border border-[#B8DCE6] bg-white">
-                          {/* eslint-disable-next-line @next/next/no-img-element -- remote URL */}
-                          <img
-                            src={pr.outputUrl}
-                            alt=""
-                            className="max-h-24 w-full object-contain"
-                          />
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {sourceType === "marketplace_card_generation" && cardRows.length > 0 && (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {cardRows.map((r) => {
-                  const pr = genPreviews[r.generationId];
-                  return (
-                    <button
-                      key={r.generationId}
-                      type="button"
-                      onClick={() => setSourceGenerationId(r.generationId)}
-                      className={cn(
-                        "rounded-2xl border-2 p-2 text-left text-xs transition-colors",
-                        sourceGenerationId === r.generationId
-                          ? "border-[#00AFCA] bg-[#F4FBFD]"
-                          : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
-                      )}
-                    >
-                      <p className="text-[#0C2D38] font-medium">Карточка товара</p>
-                      {pr && (
-                        <p className="mt-1 text-[#4a6e7a]">
-                          {getUserFacingGenerationStatusFromRaw(pr.status)}
-                          {pr.outputUrl ? "" : " · нет превью"}
-                        </p>
-                      )}
-                      {pr?.outputUrl && (
-                        <div className="mt-2 max-h-24 overflow-hidden rounded-xl border border-[#B8DCE6] bg-white">
-                          {/* eslint-disable-next-line @next/next/no-img-element -- remote URL */}
-                          <img
-                            src={pr.outputUrl}
-                            alt=""
-                            className="max-h-24 w-full object-contain"
-                          />
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="space-y-2">
-          <Label className="text-[#0C2D38]">Модель анимации</Label>
-          {productVideoModels.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {productVideoModels.map((m) => (
-                <button
-                  key={m.slug}
-                  type="button"
-                  onClick={() => setModelSlug(m.slug)}
-                  className={cn(
-                    "rounded-full border px-4 py-2 text-sm font-medium transition",
-                    modelSlug === m.slug
-                      ? "border-[#00AFCA] bg-[#e8f8fb] text-[#006b82]"
-                      : "border-[#B8DCE6] bg-white text-[#0C2D38]",
-                  )}
-                >
-                  {m.name}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-[#4a6e7a]">
-              Модели видео не настроены. Запустите seed:product-card-models на сервере.
-            </p>
-          )}
-          {modelName ? (
-            <p className="text-xs text-[#4a6e7a]">Выбрано: {modelName}</p>
-          ) : null}
-        </div>
-
-        <div className="space-y-2">
-          <Label className="text-[#0C2D38]">Длительность</Label>
-          <div className="flex flex-wrap gap-2">
-            {([5, 10] as const).map((d) => (
+            <div className="flex flex-wrap items-start gap-3">
               <button
-                key={d}
                 type="button"
-                onClick={() => setDurationPick(d)}
+                onClick={pickOriginal}
                 className={cn(
-                  "rounded-full border px-4 py-2 text-sm font-medium transition",
-                  duration === d
-                    ? "border-[#00AFCA] bg-[#e8f8fb] text-[#006b82]"
-                    : "border-[#B8DCE6] bg-white text-[#0C2D38]",
+                  "w-[120px] shrink-0 overflow-hidden rounded-2xl border-2 text-left transition-colors",
+                  sourceType === "original"
+                    ? "border-[#00AFCA] bg-[#F4FBFD] ring-2 ring-[#00AFCA]/25"
+                    : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
                 )}
               >
-                {d} сек
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {resolutionOptions.length > 0 && (
-          <div className="space-y-2">
-            <Label className="text-[#0C2D38]">Разрешение</Label>
-            <div className="flex flex-wrap gap-2">
-              {resolutionOptions.map((res) => (
-                <button
-                  key={res}
-                  type="button"
-                  onClick={() => applyResolution(res)}
-                  className={cn(
-                    "rounded-full border px-4 py-2 text-sm font-medium transition",
-                    resolution === res
-                      ? "border-[#00AFCA] bg-[#e8f8fb] text-[#006b82]"
-                      : "border-[#B8DCE6] bg-white text-[#0C2D38]",
+                <div className="flex h-24 items-center justify-center bg-[#F4FBFD]">
+                  {originalUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- product source preview
+                    <img src={originalUrl} alt="" className="max-h-24 w-full object-contain" />
+                  ) : (
+                    <span className="text-muted-foreground px-2 text-center text-xs">Нет превью</span>
                   )}
-                >
-                  {res}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+                </div>
+                <p className="px-2 py-2 text-xs font-medium text-[#0C2D38]">Исходное фото</p>
+              </button>
 
-        {videoPresets.length > 0 && (
-          <div className="space-y-2">
-            <Label className="text-[#0C2D38]">Быстрый пресет</Label>
-            <div className="flex flex-wrap gap-2">
-              {videoPresets.map((preset) => {
+              {generatedOptions.map((opt) => {
+                const pr = genPreviews[opt.generationId];
                 const active =
-                  duration === preset.duration &&
-                  resolution === preset.resolution &&
-                  aspectRatio === preset.aspectRatio;
+                  sourceType === opt.sourceType && sourceGenerationId === opt.generationId;
                 return (
                   <button
-                    key={`${preset.duration}-${preset.resolution}-${preset.aspectRatio}`}
+                    key={`${opt.sourceType}-${opt.generationId}`}
                     type="button"
-                    onClick={() => {
-                      setDuration(preset.duration === 10 ? 10 : 5);
-                      setResolution(preset.resolution);
-                      setAspectRatio(preset.aspectRatio);
-                    }}
+                    onClick={() => pickGenerated(opt)}
                     className={cn(
-                      "rounded-full border px-3 py-1.5 text-xs transition",
+                      "w-[120px] shrink-0 overflow-hidden rounded-2xl border-2 text-left transition-colors",
                       active
-                        ? "border-[#00AFCA] bg-[#e8f8fb] text-[#006b82]"
-                        : "border-border bg-background text-foreground",
+                        ? "border-[#00AFCA] bg-[#F4FBFD] ring-2 ring-[#00AFCA]/25"
+                        : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
                     )}
                   >
-                    {preset.duration}s · {preset.resolution} · {preset.aspectRatio}
+                    <div className="flex h-24 items-center justify-center bg-[#F4FBFD]">
+                      {pr?.outputUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- generation preview
+                        <img src={pr.outputUrl} alt="" className="max-h-24 w-full object-contain" />
+                      ) : (
+                        <span className="text-muted-foreground px-2 text-center text-xs">
+                          {pr ? getUserFacingGenerationStatusFromRaw(pr.status) : "…"}
+                        </span>
+                      )}
+                    </div>
+                    <p className="px-2 py-2 text-xs font-medium text-[#0C2D38]">{opt.label}</p>
                   </button>
                 );
               })}
             </div>
+            {generatedOptions.length === 0 && (
+              <p className="text-xs text-[#4a6e7a]">
+                Сгенерированные фото появятся здесь после вкладок «Фото с концепциями» или «Карточка
+                товара».
+              </p>
+            )}
           </div>
         )}
+
+        <div className="space-y-2">
+          <Label htmlFor="v-notes" className="text-[#0C2D38]">
+            Пожелания к видео
+          </Label>
+          <Textarea
+            id="v-notes"
+            value={userPrompt}
+            onChange={(e) => setUserPrompt(e.target.value)}
+            maxLength={1000}
+            rows={3}
+            placeholder="Например: премиум-свет, мягкий фон, акцент на упаковке"
+            className="rounded-xl border-[#B8DCE6]"
+          />
+        </div>
 
         <div className="space-y-2">
           <Label htmlFor="v-motion" className="text-[#0C2D38]">
@@ -654,26 +487,80 @@ export function ProductVideoTab({
               </option>
             ))}
           </select>
-          {motion === "none" && (
-            <p className="text-xs text-[#4a6e7a]">
-              Без пресета камеры: в описание попадут только ваши пожелания и базовые правила качества.
-            </p>
-          )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="v-notes" className="text-[#0C2D38]">
-            Пожелания к видео
+          <Label className="text-[#0C2D38]">Длительность</Label>
+          <div className="flex flex-wrap gap-2">
+            {([5, 10] as const).map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDuration(d)}
+                className={cn(
+                  "rounded-full border px-4 py-2 text-sm font-medium transition",
+                  duration === d
+                    ? "border-[#00AFCA] bg-[#e8f8fb] text-[#006b82]"
+                    : "border-[#B8DCE6] bg-white text-[#0C2D38]",
+                )}
+              >
+                {d} сек
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            id={loopFieldId}
+            role="switch"
+            aria-checked={loopVideo}
+            onClick={() => setLoopVideo((v) => !v)}
+            className={cn(
+              "relative inline-flex h-7 w-12 shrink-0 rounded-full border transition-colors",
+              loopVideo ? "border-[#00AFCA] bg-[#00AFCA]" : "border-[#B8DCE6] bg-[#e8eef0]",
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 size-6 rounded-full bg-white shadow transition-transform",
+                loopVideo ? "translate-x-5" : "translate-x-0.5",
+              )}
+            />
+          </button>
+          <Label htmlFor={loopFieldId} className="cursor-pointer text-[#0C2D38]">
+            Цикличное видео
           </Label>
-          <Textarea
-            id="v-notes"
-            value={userPrompt}
-            onChange={(e) => setUserPrompt(e.target.value)}
-            maxLength={1000}
-            rows={3}
-            placeholder="Например: премиум-свет, мягкий фон, акцент на упаковке"
-            className="rounded-xl border-[#B8DCE6]"
-          />
+        </div>
+
+        <div className="space-y-3 rounded-2xl border border-[#B8DCE6] bg-[#F4FBFD]/40 p-4">
+          <div className="flex items-center gap-2">
+            <input
+              id={lastFrameToggleId}
+              type="checkbox"
+              checked={useLastFrame}
+              onChange={(e) => {
+                const on = e.target.checked;
+                setUseLastFrame(on);
+                if (!on) setLastFrameUrl("");
+              }}
+              className="border-input accent-primary size-4 rounded border"
+            />
+            <Label htmlFor={lastFrameToggleId} className="text-[#0C2D38]">
+              Добавить последний кадр <span className="text-muted-foreground font-normal">(необязательно)</span>
+            </Label>
+          </div>
+          {useLastFrame ? (
+            <SeedanceSingleImageUpload
+              fieldName="productVideoLastFrame"
+              label="Последний кадр"
+              value={lastFrameUrl}
+              onChange={setLastFrameUrl}
+              hint="JPEG, PNG или WebP до 10 МБ. Видео будет стремиться к этому кадру в конце."
+              disabled={!canUseBackend}
+            />
+          ) : null}
         </div>
 
         {canUseBackend && (
@@ -748,6 +635,7 @@ export function ProductVideoTab({
                     className="max-h-80 w-full object-contain"
                     controls
                     playsInline
+                    loop={loopVideo}
                   />
                 </div>
                 <div className="flex flex-wrap items-center gap-2">

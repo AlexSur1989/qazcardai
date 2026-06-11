@@ -34,6 +34,10 @@ import {
   resolveProductVideoModel,
 } from "@/server/services/productCardModelResolver";
 import {
+  isSeedanceScenarioModel,
+  validateSeedanceScenario,
+} from "@/server/services/seedance-settings";
+import {
   resolveMarketplaceCardSource,
   type MarketplaceImageSource,
   type ProductVideoImageSourceType,
@@ -964,6 +968,7 @@ function buildProductCardVideoModelSettings(
   referenceImageUrls: string[] = [sourceImageUrl],
   resolution = "720p",
   aspectRatio = "16:9",
+  lastFrameUrl: string | null = null,
 ):
   | { ok: true; settings: Record<string, unknown> }
   | { ok: false; error: string } {
@@ -973,14 +978,16 @@ function buildProductCardVideoModelSettings(
   const base = defaultsFromSchema(model.settingsSchema);
   const fieldNames = new Set(getSchemaFields(model.settingsSchema).map((f) => f.name));
   const draft: Record<string, unknown> = { ...base };
+  const lastTrimmed = lastFrameUrl?.trim() ?? "";
+  const hasLastFrame = lastTrimmed !== "";
 
   if (fieldNames.has("scenario")) {
-    draft.scenario = "first-frame";
+    draft.scenario = hasLastFrame ? "first-last-frame" : "first-frame";
   } else if (
     model.apiModelId === "bytedance/seedance-2" ||
     model.apiModelId === "bytedance/seedance-2-fast"
   ) {
-    draft.scenario = "first-frame";
+    draft.scenario = hasLastFrame ? "first-last-frame" : "first-frame";
   }
   if (fieldNames.has("firstFrameUrl")) {
     const urls =
@@ -1015,10 +1022,19 @@ function buildProductCardVideoModelSettings(
   if (fieldNames.has("webSearch")) {
     draft.webSearch = false;
   }
+  if (fieldNames.has("lastFrameUrl")) {
+    draft.lastFrameUrl = hasLastFrame ? lastTrimmed : "";
+  }
 
   const norm = validateAndNormalizeModelSettings(model.settingsSchema, draft);
   if (!norm.ok) {
     return { ok: false, error: norm.message };
+  }
+  if (isSeedanceScenarioModel(model.apiModelId)) {
+    const seedanceVal = validateSeedanceScenario(norm.settings);
+    if (!seedanceVal.ok) {
+      return { ok: false, error: seedanceVal.message };
+    }
   }
   return { ok: true, settings: norm.settings };
 }
@@ -1044,6 +1060,7 @@ export async function estimateProductVideoCredits(
     motionStyle: string;
     resolution?: string;
     aspectRatio?: string;
+    lastFrameUrl?: string | null;
     modelSlug?: string | null;
   },
 ): Promise<EstimateProductVideoResult> {
@@ -1053,6 +1070,10 @@ export async function estimateProductVideoCredits(
   }
   if (!isValidProductVideoMotionStyle(input.motionStyle)) {
     return { ok: false, error: "Некорректный стиль движения", status: 400 };
+  }
+  const lastFrameTrimmed = input.lastFrameUrl?.trim() ?? "";
+  if (lastFrameTrimmed && !(await assertUserOwnsFileUrl(userId, lastFrameTrimmed))) {
+    return { ok: false, error: "Последний кадр: недоступный URL загрузки", status: 400 };
   }
   const src = await resolveProductVideoImageSource(
     userId,
@@ -1082,6 +1103,7 @@ export async function estimateProductVideoCredits(
     sourceImageUrls,
     input.resolution ?? "720p",
     input.aspectRatio ?? "16:9",
+    lastFrameTrimmed || null,
   );
   if (!built.ok) {
     return { ok: false, error: built.error, status: 400 };
@@ -1117,6 +1139,8 @@ export async function generateProductVideoForProductCard(p: {
   resolution?: string;
   aspectRatio?: string;
   userPrompt: string;
+  loopVideo?: boolean;
+  lastFrameUrl?: string | null;
   clientEstimateCredits?: number | null;
   modelSlug?: string | null;
 }): Promise<GenerateProductVideoResult> {
@@ -1127,6 +1151,10 @@ export async function generateProductVideoForProductCard(p: {
   }
   if (!isValidProductVideoMotionStyle(input.motionStyle)) {
     return { ok: false, error: "Некорректный стиль движения", status: 400 };
+  }
+  const lastFrameTrimmed = input.lastFrameUrl?.trim() ?? "";
+  if (lastFrameTrimmed && !(await assertUserOwnsFileUrl(userId, lastFrameTrimmed))) {
+    return { ok: false, error: "Последний кадр: недоступный URL загрузки", status: 400 };
   }
 
   const src = await resolveProductVideoImageSource(
@@ -1159,6 +1187,7 @@ export async function generateProductVideoForProductCard(p: {
     sourceImageUrls,
     input.resolution ?? "720p",
     input.aspectRatio ?? "16:9",
+    lastFrameTrimmed || null,
   );
   if (!built.ok) {
     return { ok: false, error: built.error, status: 400 };
@@ -1181,6 +1210,7 @@ export async function generateProductVideoForProductCard(p: {
   const finalPrompt = buildProductVideoPrompt({
     motionStyle: input.motionStyle,
     userPrompt: input.userPrompt,
+    loopVideo: p.loopVideo === true,
   });
 
   const metadataRoot: Record<string, unknown> = {
@@ -1197,6 +1227,8 @@ export async function generateProductVideoForProductCard(p: {
     aspectRatio: input.aspectRatio ?? "16:9",
     motionStyle: input.motionStyle,
     userPrompt: input.userPrompt,
+    loopVideo: p.loopVideo === true,
+    lastFrameUrl: lastFrameTrimmed || null,
     modelSlug: model.slug,
     pricingScope: "PRODUCT_CARD",
     productCardModelType: model.productCardModelType,

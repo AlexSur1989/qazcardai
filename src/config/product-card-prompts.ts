@@ -454,9 +454,13 @@ function normalizeVideoMotion(motion: string): ProductVideoMotionStyle {
   return "smooth_zoom";
 }
 
+export const PRODUCT_VIDEO_LOOP_HINT =
+  "The video must loop seamlessly: motion and composition should return to the opening state so the clip can play on repeat without a visible jump cut.";
+
 export type BuildProductVideoPromptInput = {
   motionStyle: string;
   userPrompt?: string;
+  loopVideo?: boolean;
 };
 
 export function buildProductVideoPrompt(input: BuildProductVideoPromptInput): string;
@@ -471,18 +475,18 @@ export function buildProductVideoPrompt(
   if (typeof a === "object" && a !== null) {
     const m = normalizeVideoMotion(a.motionStyle);
     const u = (a.userPrompt ?? "").trim();
-    if (m === "none") {
-      return [PRODUCT_VIDEO_BASE_PROMPT, u ? `User notes: ${u}.` : ""]
-        .filter(Boolean)
-        .join("\n\n");
+    const loop = a.loopVideo === true;
+    const parts = [PRODUCT_VIDEO_BASE_PROMPT];
+    if (m !== "none") {
+      parts.push(PRODUCT_VIDEO_MOTION[m as Exclude<typeof m, "none">]);
     }
-    return [
-      PRODUCT_VIDEO_BASE_PROMPT,
-      PRODUCT_VIDEO_MOTION[m as Exclude<typeof m, "none">],
-      u ? `User notes: ${u}.` : "",
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    if (loop) {
+      parts.push(PRODUCT_VIDEO_LOOP_HINT);
+    }
+    if (u) {
+      parts.push(`User notes: ${u}.`);
+    }
+    return parts.filter(Boolean).join("\n\n");
   }
   return buildProductVideoPrompt({ motionStyle: a, userPrompt: b });
 }

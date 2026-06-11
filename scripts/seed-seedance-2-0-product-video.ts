@@ -68,6 +68,12 @@ const SETTINGS_SCHEMA = {
       helpText: "System: исходное фото товара для first-frame. Hidden from USER.",
     },
     {
+      name: "lastFrameUrl",
+      type: "hidden",
+      label: "Last frame (system)",
+      helpText: "System: опциональный последний кадр для first-last-frame. Hidden from USER.",
+    },
+    {
       name: "duration",
       type: "number",
       label: "Длительность (сек)",
@@ -116,6 +122,7 @@ const PAYLOAD_MAPPING: KiePayloadMapping = {
   adapter: "market-create-task",
   input: {
     first_frame_url: "$settings.firstFrameUrl",
+    last_frame_url: "$settings.lastFrameUrl",
     resolution: "$settings.resolution",
     aspect_ratio: "$settings.aspectRatio",
     duration: "$settings.duration",
@@ -179,12 +186,14 @@ async function main() {
     ownerHint: "Product Card → Видео товара (first-frame / image-to-video)",
     rawPayloadExample: RAW_PAYLOAD_EXAMPLE,
     kieNotes: {
-      scenario: "first-frame",
+      scenario: "first-frame | first-last-frame",
       inputImageField: "input.first_frame_url",
+      lastFrameField: "input.last_frame_url",
       supportedDurations: [5, 10],
       supportedResolutions: ["720p", "1080p"],
       generateAudioDefault: false,
     },
+    seedAllowKieOverrides: true,
   };
 
   const common = {
