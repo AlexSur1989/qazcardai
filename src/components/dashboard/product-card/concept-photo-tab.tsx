@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
   getConceptsForCategory,
   type ProductCategoryId,
@@ -302,8 +303,7 @@ export function ConceptPhotoTab({
           Фото с концепциями
         </CardTitle>
         <CardDescription>
-          Выберите концепцию и при необходимости опишите пожелания. Текст для генерации собирается на
-          сервере автоматически.
+          Выберите концепцию и при необходимости опишите пожелания.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -322,9 +322,9 @@ export function ConceptPhotoTab({
             ) : null}
           </div>
         ) : null}
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Выберите визуальное направление. Превью показывает пример стиля, а итоговое изображение
-          будет создано по вашему товару.
+        <p className="text-muted-foreground inline-flex items-center gap-1 text-sm">
+          Выберите визуальное направление.
+          <InfoTooltip content="Превью показывает пример стиля, а итоговое изображение будет создано по вашему товару." />
         </p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {concepts.map((c) => {
@@ -381,7 +381,10 @@ export function ConceptPhotoTab({
 
         {sizePresets.length > 0 && (
           <div className="space-y-2">
-            <Label>Размер / aspect ratio</Label>
+            <Label className="inline-flex items-center gap-1">
+              Размер
+              <InfoTooltip content="Соотношение сторон будущего изображения. Выберите формат, который подходит для маркетплейса или рекламы." />
+            </Label>
             <div className="flex flex-wrap gap-2">
               {sizePresets.map((preset) => (
                 <button
@@ -409,7 +412,10 @@ export function ConceptPhotoTab({
         />
 
         <div className="space-y-2">
-          <Label>Что добавить или изменить</Label>
+          <Label className="inline-flex items-center gap-1">
+            Что добавить или изменить
+            <InfoTooltip content="Опишите пожелания к сцене, свету или фону. Например: «мягкий свет, светлый фон, акцент на упаковке»." />
+          </Label>
           <Textarea
             value={userAdd}
             onChange={(e) => setUserAdd(e.target.value)}

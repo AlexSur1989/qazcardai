@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { InfoTooltip, LabelWithInfoTooltip } from "@/components/ui/info-tooltip";
 import {
   getPublicProductVideoMotionStyles,
   type ProductVideoMotionStyle,
@@ -34,6 +35,49 @@ const SOURCE_ROLE_LABELS: Record<SourceImageRole, string> = {
   back: "Сзади",
   detail: "Детали",
 };
+
+const VIDEO_SOURCE_TYPE_OPTIONS = [
+  {
+    id: "original" as const,
+    title: "Фото товара",
+    subtitle: "Обычное загруженное фото",
+    tooltip:
+      "Подходит для чистого рекламного видео товара. Можно использовать движение камеры, свет, фон и коммерческую подачу.",
+    emptyHint: null as string | null,
+  },
+  {
+    id: "concept_generation" as const,
+    title: "Фото с концепциями",
+    subtitle: "Готовая визуальная сцена",
+    tooltip:
+      "Подходит, если вы уже создали красивую визуальную сцену и хотите оживить её в видео.",
+    emptyHint: "Пока нет фото с концепциями",
+  },
+  {
+    id: "marketplace_card_generation" as const,
+    title: "Карточка товара",
+    subtitle: "Изображение с текстом и инфографикой",
+    tooltip:
+      "Подходит для готовых карточек с текстом и инфографикой. Включите «Режим карточки товара», чтобы AI старался сохранить текст и расположение блоков.",
+    emptyHint: "Пока нет готовых карточек",
+  },
+] as const;
+
+const VIDEO_SECTION_TOOLTIPS = {
+  source:
+    "Выберите изображение, из которого будет создан ролик: обычное фото товара, фото с концепциями или готовая карточка товара.",
+  motion:
+    "Плавный наезд подходит для карточек и спокойной рекламы. Облет и wow-эффект лучше использовать для обычных фото товара без текста. Если включён режим карточки товара, движение автоматически смягчается.",
+  cardMode:
+    "Включите, если выбранное изображение уже является готовой карточкой товара с заголовками, преимуществами, характеристиками, бейджами или инфографикой. В этом режиме AI будет стараться не менять текст, расположение блоков и дизайн, а движение камеры станет мягче.",
+  duration:
+    "Короткие ролики дешевле и лучше подходят для быстрых промо. Более длинные дают модели больше времени на движение и раскрытие товара.",
+  loop: "Видео будет стараться вернуться к начальному кадру, чтобы его можно было воспроизводить по кругу без заметной склейки.",
+  lastFrame:
+    "Используется, если нужно задать, чем должен закончиться ролик. Не используйте вместе с бесшовным циклом, если финальный кадр сильно отличается от первого.",
+  notes:
+    "Опишите желаемую сцену или движение. Например: «мягкий свет, премиальный фон, медленный наезд камеры». Не указывайте новые характеристики товара, если их нет на изображении.",
+} as const;
 
 type SourceTab = "original" | "concept_generation" | "marketplace_card_generation";
 
@@ -120,6 +164,24 @@ export function ProductVideoTab({
   );
 
   const originalSources = useMemo(() => originalSourceOptions(sourceImages), [sourceImages]);
+
+  const conceptOptions = useMemo(
+    () => generatedOptions.filter((o) => o.sourceType === "concept_generation"),
+    [generatedOptions],
+  );
+  const marketplaceOptions = useMemo(
+    () => generatedOptions.filter((o) => o.sourceType === "marketplace_card_generation"),
+    [generatedOptions],
+  );
+
+  const isSourceTypeDisabled = useCallback(
+    (type: SourceTab) => {
+      if (type === "original") return originalSources.length === 0;
+      if (type === "concept_generation") return conceptOptions.length === 0;
+      return marketplaceOptions.length === 0;
+    },
+    [originalSources.length, conceptOptions.length, marketplaceOptions.length],
+  );
 
   useEffect(() => {
     if (originalSources.length === 0) {
@@ -381,6 +443,45 @@ export function ProductVideoTab({
     applyAutoProductCardMode(opt.sourceType);
   };
 
+  const selectSourceType = useCallback(
+    (type: SourceTab) => {
+      if (isSourceTypeDisabled(type)) return;
+      if (type === "original") {
+        const url =
+          sourceType === "original" &&
+          selectedSourceImageUrl &&
+          originalSources.some((o) => o.url === selectedSourceImageUrl)
+            ? selectedSourceImageUrl
+            : defaultOriginalSourceUrl(sourceImages);
+        setSourceType("original");
+        setSourceGenerationId(null);
+        if (url) setSelectedSourceImageUrl(url);
+        applyAutoProductCardMode("original");
+        return;
+      }
+      const opts = type === "concept_generation" ? conceptOptions : marketplaceOptions;
+      const existing =
+        sourceType === type && sourceGenerationId
+          ? opts.find((o) => o.generationId === sourceGenerationId)
+          : null;
+      const target = existing ?? opts[0]!;
+      setSourceType(target.sourceType);
+      setSourceGenerationId(target.generationId);
+      applyAutoProductCardMode(target.sourceType);
+    },
+    [
+      isSourceTypeDisabled,
+      sourceType,
+      selectedSourceImageUrl,
+      originalSources,
+      sourceImages,
+      conceptOptions,
+      marketplaceOptions,
+      sourceGenerationId,
+      applyAutoProductCardMode,
+    ],
+  );
+
   const onSubmit = async () => {
     if (!projectId || !canUseBackend) return;
     setGenError(null);
@@ -492,84 +593,150 @@ export function ProductVideoTab({
           <span className="min-w-0">Видео товара</span>
         </CardTitle>
         <CardDescription className="min-w-0 text-pretty">
-          Короткий ролик из фото товара или сгенерированного кадра. Укажите пожелания, стиль движения
-          и длительность — остальное настроим автоматически.
+          Короткий ролик из выбранного изображения.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         {canUseBackend && (
-          <div className="space-y-3">
-            <Label className="text-[#0C2D38]">Источник изображения</Label>
-            <p className="text-xs text-[#4a6e7a]">
-              Фотооснова проекта или уже сгенерированные кадры из других вкладок.
-            </p>
-            <div className="flex min-w-0 max-w-full flex-wrap items-start gap-3">
-              {originalSources.map((opt) => {
-                const active = sourceType === "original" && selectedSourceImageUrl === opt.url;
-                return (
-                  <button
-                    key={`original-${opt.url}`}
-                    type="button"
-                    onClick={() => pickOriginal(opt.url)}
-                    className={cn(
-                      "w-[120px] shrink-0 overflow-hidden rounded-2xl border-2 text-left transition-colors",
-                      active
-                        ? "border-[#00AFCA] bg-[#F4FBFD] ring-2 ring-[#00AFCA]/25"
-                        : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
-                    )}
-                  >
-                    <div className="flex h-24 items-center justify-center bg-[#F4FBFD]">
-                      {/* eslint-disable-next-line @next/next/no-img-element -- product source preview */}
-                      <img src={opt.url} alt="" className="max-h-24 w-full object-contain" />
-                    </div>
-                    <p className="px-2 py-2 text-xs font-medium text-[#0C2D38]">{opt.label}</p>
-                  </button>
-                );
-              })}
+          <div className="min-w-0 max-w-full space-y-4">
+            <LabelWithInfoTooltip
+              label="Источник для видео"
+              tooltip={VIDEO_SECTION_TOOLTIPS.source}
+            />
 
-              {generatedOptions.map((opt) => {
-                const pr = genPreviews[opt.generationId];
-                const active =
-                  sourceType === opt.sourceType && sourceGenerationId === opt.generationId;
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
+              {VIDEO_SOURCE_TYPE_OPTIONS.map((opt) => {
+                const disabled = isSourceTypeDisabled(opt.id);
+                const selected = sourceType === opt.id;
                 return (
                   <button
-                    key={`${opt.sourceType}-${opt.generationId}`}
+                    key={opt.id}
                     type="button"
-                    onClick={() => pickGenerated(opt)}
+                    disabled={disabled}
+                    onClick={() => selectSourceType(opt.id)}
                     className={cn(
-                      "w-[120px] shrink-0 overflow-hidden rounded-2xl border-2 text-left transition-colors",
-                      active
+                      "min-w-0 rounded-2xl border-2 p-4 text-left transition-colors",
+                      selected && !disabled
                         ? "border-[#00AFCA] bg-[#F4FBFD] ring-2 ring-[#00AFCA]/25"
-                        : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
+                        : "border-[#B8DCE6] bg-white",
+                      disabled
+                        ? "cursor-not-allowed opacity-55"
+                        : !selected && "hover:border-[#00AFCA]/45",
                     )}
                   >
-                    <div className="flex h-24 items-center justify-center bg-[#F4FBFD]">
-                      {pr?.outputUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- generation preview
-                        <img src={pr.outputUrl} alt="" className="max-h-24 w-full object-contain" />
-                      ) : (
-                        <span className="text-muted-foreground px-2 text-center text-xs">
-                          {pr ? getUserFacingGenerationStatusFromRaw(pr.status) : "…"}
-                        </span>
-                      )}
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <span className="text-sm font-semibold text-[#0C2D38]">{opt.title}</span>
+                      <InfoTooltip content={opt.tooltip} side="top" align="end" />
                     </div>
-                    <p className="px-2 py-2 text-xs font-medium text-[#0C2D38]">{opt.label}</p>
+                    <p className="mt-1 text-pretty text-xs text-[#4a6e7a]">{opt.subtitle}</p>
+                    {disabled && opt.emptyHint ? (
+                      <p className="mt-2 text-pretty text-xs text-[#4a6e7a]">{opt.emptyHint}</p>
+                    ) : null}
                   </button>
                 );
               })}
             </div>
-            {generatedOptions.length === 0 && (
-              <p className="text-xs text-[#4a6e7a]">
-                Сгенерированные фото появятся здесь после вкладок «Фото с концепциями» или «Карточка
-                товара».
-              </p>
-            )}
+
+            <div className="min-w-0 space-y-2">
+              <p className="text-xs font-medium text-[#0C2D38]">Выберите конкретное изображение</p>
+              <div className="flex min-w-0 max-w-full flex-wrap items-start gap-3">
+                {sourceType === "original" &&
+                  originalSources.map((opt) => {
+                    const active =
+                      sourceType === "original" && selectedSourceImageUrl === opt.url;
+                    return (
+                      <button
+                        key={`original-${opt.url}`}
+                        type="button"
+                        onClick={() => pickOriginal(opt.url)}
+                        className={cn(
+                          "w-[120px] shrink-0 overflow-hidden rounded-2xl border-2 text-left transition-colors",
+                          active
+                            ? "border-[#00AFCA] bg-[#F4FBFD] ring-2 ring-[#00AFCA]/25"
+                            : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
+                        )}
+                      >
+                        <div className="flex h-24 items-center justify-center bg-[#F4FBFD]">
+                          {/* eslint-disable-next-line @next/next/no-img-element -- product source preview */}
+                          <img src={opt.url} alt="" className="max-h-24 w-full object-contain" />
+                        </div>
+                        <p className="px-2 py-2 text-xs font-medium text-[#0C2D38]">{opt.label}</p>
+                      </button>
+                    );
+                  })}
+
+                {sourceType === "concept_generation" &&
+                  conceptOptions.map((opt) => {
+                    const pr = genPreviews[opt.generationId];
+                    const active =
+                      sourceType === opt.sourceType && sourceGenerationId === opt.generationId;
+                    return (
+                      <button
+                        key={`${opt.sourceType}-${opt.generationId}`}
+                        type="button"
+                        onClick={() => pickGenerated(opt)}
+                        className={cn(
+                          "w-[120px] shrink-0 overflow-hidden rounded-2xl border-2 text-left transition-colors",
+                          active
+                            ? "border-[#00AFCA] bg-[#F4FBFD] ring-2 ring-[#00AFCA]/25"
+                            : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
+                        )}
+                      >
+                        <div className="flex h-24 items-center justify-center bg-[#F4FBFD]">
+                          {pr?.outputUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element -- generation preview
+                            <img src={pr.outputUrl} alt="" className="max-h-24 w-full object-contain" />
+                          ) : (
+                            <span className="text-muted-foreground px-2 text-center text-xs">
+                              {pr ? getUserFacingGenerationStatusFromRaw(pr.status) : "…"}
+                            </span>
+                          )}
+                        </div>
+                        <p className="px-2 py-2 text-xs font-medium text-[#0C2D38]">{opt.label}</p>
+                      </button>
+                    );
+                  })}
+
+                {sourceType === "marketplace_card_generation" &&
+                  marketplaceOptions.map((opt) => {
+                    const pr = genPreviews[opt.generationId];
+                    const active =
+                      sourceType === opt.sourceType && sourceGenerationId === opt.generationId;
+                    return (
+                      <button
+                        key={`${opt.sourceType}-${opt.generationId}`}
+                        type="button"
+                        onClick={() => pickGenerated(opt)}
+                        className={cn(
+                          "w-[120px] shrink-0 overflow-hidden rounded-2xl border-2 text-left transition-colors",
+                          active
+                            ? "border-[#00AFCA] bg-[#F4FBFD] ring-2 ring-[#00AFCA]/25"
+                            : "border-[#B8DCE6] bg-white hover:border-[#00AFCA]/45",
+                        )}
+                      >
+                        <div className="flex h-24 items-center justify-center bg-[#F4FBFD]">
+                          {pr?.outputUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element -- generation preview
+                            <img src={pr.outputUrl} alt="" className="max-h-24 w-full object-contain" />
+                          ) : (
+                            <span className="text-muted-foreground px-2 text-center text-xs">
+                              {pr ? getUserFacingGenerationStatusFromRaw(pr.status) : "…"}
+                            </span>
+                          )}
+                        </div>
+                        <p className="px-2 py-2 text-xs font-medium text-[#0C2D38]">{opt.label}</p>
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
           </div>
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="v-notes" className="text-[#0C2D38]">
-            Пожелания к видео
+          <Label htmlFor="v-notes" className="inline-flex items-center gap-1 text-[#0C2D38]">
+            Дополнительные пожелания
+            <InfoTooltip content={VIDEO_SECTION_TOOLTIPS.notes} />
           </Label>
           <Textarea
             id="v-notes"
@@ -583,8 +750,9 @@ export function ProductVideoTab({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="v-motion" className="text-[#0C2D38]">
-            Стиль движения
+          <Label htmlFor="v-motion" className="inline-flex items-center gap-1 text-[#0C2D38]">
+            Движение камеры
+            <InfoTooltip content={VIDEO_SECTION_TOOLTIPS.motion} />
           </Label>
           <select
             id="v-motion"
@@ -623,23 +791,20 @@ export function ProductVideoTab({
               />
             </button>
             <div className="min-w-0 space-y-1">
-              <Label htmlFor={productCardModeFieldId} className="cursor-pointer text-[#0C2D38]">
+              <Label htmlFor={productCardModeFieldId} className="inline-flex cursor-pointer items-center gap-1 text-[#0C2D38]">
                 Режим карточки товара
+                <InfoTooltip content={VIDEO_SECTION_TOOLTIPS.cardMode} />
               </Label>
-              <p className="text-xs text-[#4a6e7a]">
-                В этом режиме AI будет стараться не двигать камеру и не менять текст/инфографику на
-                изображении.
-              </p>
-              <p className="text-xs text-[#4a6e7a]">
-                Включите, если выбранное изображение уже является готовой карточкой товара с
-                заголовками, преимуществами, характеристиками, бейджами или инфографикой.
-              </p>
+              <p className="text-xs text-[#4a6e7a]">Сохраняет текст и инфографику.</p>
             </div>
           </div>
         </div>
 
         <div className="space-y-2">
-          <Label className="text-[#0C2D38]">Длительность</Label>
+          <Label className="inline-flex items-center gap-1 text-[#0C2D38]">
+            Длительность
+            <InfoTooltip content={VIDEO_SECTION_TOOLTIPS.duration} />
+          </Label>
           <div className="flex flex-wrap gap-2">
             {([5, 10] as const).map((d) => (
               <button
@@ -678,8 +843,9 @@ export function ProductVideoTab({
               )}
             />
           </button>
-          <Label htmlFor={loopFieldId} className="cursor-pointer text-[#0C2D38]">
-            Цикличное видео
+          <Label htmlFor={loopFieldId} className="inline-flex cursor-pointer items-center gap-1 text-[#0C2D38]">
+            Зациклить видео
+            <InfoTooltip content={VIDEO_SECTION_TOOLTIPS.loop} />
           </Label>
         </div>
 
@@ -705,9 +871,13 @@ export function ProductVideoTab({
             />
             <Label
               htmlFor={lastFrameToggleId}
-              className={cn("text-[#0C2D38]", loopVideo ? "cursor-not-allowed" : "cursor-pointer")}
+              className={cn(
+                "inline-flex items-center gap-1 text-[#0C2D38]",
+                loopVideo ? "cursor-not-allowed" : "cursor-pointer",
+              )}
             >
-              Добавить последний кадр{" "}
+              Последний кадр
+              <InfoTooltip content={VIDEO_SECTION_TOOLTIPS.lastFrame} />
               <span className="text-muted-foreground font-normal">(необязательно)</span>
             </Label>
           </div>
@@ -722,7 +892,7 @@ export function ProductVideoTab({
               label="Последний кадр"
               value={lastFrameUrl}
               onChange={setLastFrameUrl}
-              hint="JPEG, PNG или WebP до 10 МБ. Видео будет стремиться к этому кадру в конце."
+              hint="JPEG, PNG или WebP до 10 МБ."
               disabled={!canUseBackend}
             />
           ) : null}

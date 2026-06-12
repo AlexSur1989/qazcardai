@@ -674,10 +674,10 @@ export function SimpleProductCardTab({
       <div className="flex min-w-0 max-w-full flex-col gap-6">
         <Card className="min-w-0 max-w-full rounded-2xl border-border">
           <CardHeader>
-            <CardTitle className="text-base">Выберите фото товара</CardTitle>
-            <CardDescription>
-              Это фото будет основой карточки. AI сохранит товар, форму, цвет, упаковку и ключевые детали.
-            </CardDescription>
+            <CardTitle className="inline-flex items-center gap-1 text-base">
+              Выберите фото товара
+              <InfoTooltip content="Это фото будет основой карточки. AI сохранит товар, форму, цвет, упаковку и ключевые детали." />
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {photosWithId.length === 0 ? (
@@ -733,12 +733,10 @@ export function SimpleProductCardTab({
 
         <Card className="min-w-0 max-w-full rounded-2xl border-border">
           <CardHeader>
-            <CardTitle className="text-base">Текст карточки</CardTitle>
-            <CardDescription>
-              Название подставляется из блока «Данные товара» выше. Преимущества и характеристики
-              укажите здесь — они попадут на карточку (ИИ может предзаполнить их после
-              распознавания фото).
-            </CardDescription>
+            <CardTitle className="inline-flex items-center gap-1 text-base">
+              Текст карточки
+              <InfoTooltip content="Название подставляется из блока «Данные товара» выше. Преимущества и характеристики укажите здесь — они попадут на карточку. ИИ может предзаполнить их после распознавания фото." />
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-2">
@@ -753,7 +751,10 @@ export function SimpleProductCardTab({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="simple-card-user-text">Преимущества и характеристики</Label>
+              <Label htmlFor="simple-card-user-text" className="inline-flex items-center gap-1">
+                Преимущества и характеристики
+                <InfoTooltip content="Укажите 2–3 коротких факта через запятую или с новой строки. Они появятся на карточке как преимущества или характеристики." />
+              </Label>
               <Textarea
                 id="simple-card-user-text"
                 value={userText}
@@ -763,8 +764,7 @@ export function SimpleProductCardTab({
                 maxLength={SIMPLE_CARD_USER_TEXT_MAX}
                 className="min-w-0 resize-y"
               />
-              <div className="text-muted-foreground flex justify-between gap-3 text-xs">
-                <span>Укажите 2–3 факта через запятую или с новой строки.</span>
+              <div className="text-muted-foreground flex justify-end gap-3 text-xs">
                 <span>
                   {textLen} / {SIMPLE_CARD_USER_TEXT_MAX}
                 </span>
@@ -778,7 +778,10 @@ export function SimpleProductCardTab({
 
         <Card className="rounded-2xl border-border">
           <CardHeader>
-            <CardTitle className="text-base">Выберите стиль карточки</CardTitle>
+            <CardTitle className="inline-flex items-center gap-1 text-base">
+              Выберите стиль карточки
+              <InfoTooltip content="Классический стиль создаёт карточку с нуля. Режим по референсу повторяет стиль, фон и композицию загруженного примера, сохраняя ваш товар." />
+            </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
             {SIMPLE_CARD_STYLE_MODE_META.map((meta) => {
@@ -801,8 +804,10 @@ export function SimpleProductCardTab({
                     onChange={() => handleStyleModeChange(meta.id)}
                   />
                   <div className="min-w-0">
-                    <div className="font-medium">{meta.label}</div>
-                    <div className="text-muted-foreground text-sm">{meta.description}</div>
+                    <div className="inline-flex items-center gap-1 font-medium">
+                      {meta.label}
+                      <InfoTooltip content={meta.description} />
+                    </div>
                     {disabledRef ? (
                       <div className="text-destructive mt-1 text-xs">{SIMPLE_CARD_REFERENCE_UNSUPPORTED_MESSAGE}</div>
                     ) : null}
@@ -820,9 +825,7 @@ export function SimpleProductCardTab({
                 По фото-референсу
                 <InfoTooltip content="Товар берётся с основного фото. Референс используется только для стиля, фона и композиции." />
               </CardTitle>
-              <CardDescription>
-                Загрузите пример дизайна. AI возьмёт из него стиль, фон, композицию и визуальную подачу.
-              </CardDescription>
+              <CardDescription>Загрузите пример дизайна для стиля и композиции.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {!supportsReference ? (
@@ -867,9 +870,7 @@ export function SimpleProductCardTab({
                 По фото-референсу
                 <InfoTooltip content="Товар берётся с основного фото. Референс используется только для стиля, фона и композиции." />
               </CardTitle>
-              <CardDescription>
-                Загрузите пример дизайна. AI возьмёт из него стиль, фон, композицию и визуальную подачу.
-              </CardDescription>
+              <CardDescription>Загрузите пример дизайна для стиля и композиции.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {!supportsReference ? (
@@ -890,7 +891,10 @@ export function SimpleProductCardTab({
 
         <Card className="rounded-2xl border-border">
           <CardHeader>
-            <CardTitle className="text-base">Формат фото</CardTitle>
+            <CardTitle className="inline-flex items-center gap-1 text-base">
+              Формат фото
+              <InfoTooltip content="Соотношение сторон и разрешение влияют на итоговый вид карточки и стоимость генерации." />
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
@@ -1170,9 +1174,6 @@ function ReferenceUploadBlock({
           Загрузить референс
         </Button>
       )}
-      <p className="text-muted-foreground text-xs">
-        Референс используется только для стиля. Товар берётся с основного фото.
-      </p>
       <p className="text-muted-foreground text-xs">PNG, JPG, WebP · до {REF_MAX_MB} МБ</p>
     </div>
   );
@@ -1189,10 +1190,10 @@ function CreativitySlider({
 }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor={`${fieldId}-creativity`}>Креативность референса</Label>
-      <p className="text-muted-foreground text-xs">
-        Насколько свободно AI интерпретирует референс. Слева — точное следование, справа — свободное вдохновение.
-      </p>
+      <Label htmlFor={`${fieldId}-creativity`} className="inline-flex items-center gap-1">
+        Креативность референса
+        <InfoTooltip content="Насколько свободно AI интерпретирует референс. Слева — точное следование, справа — свободное вдохновение." />
+      </Label>
       <input
         id={`${fieldId}-creativity`}
         type="range"

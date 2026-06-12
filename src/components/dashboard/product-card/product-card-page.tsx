@@ -289,6 +289,10 @@ export function ProductCardPage({
                       <span className="leading-snug">{tabLabel(t.scenario)}</span>
                       {t.id === "concepts" ? (
                         <InfoTooltip content="AI создаст несколько вариантов визуальной подачи товара." />
+                      ) : t.id === "card" ? (
+                        <InfoTooltip content="Готовая карточка с текстом, преимуществами и инфографикой для маркетплейса." />
+                      ) : t.id === "video" ? (
+                        <InfoTooltip content="Короткий рекламный ролик из фото товара или готовой карточки." />
                       ) : null}
                     </span>
                     {hasImage && !ready ? (

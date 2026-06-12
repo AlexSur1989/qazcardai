@@ -4,6 +4,7 @@ import { useCallback, useId, useRef, useState } from "react";
 import { Image as ImageIcon, Loader2, Trash2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { cn } from "@/lib/utils";
 
 export type SourceImageRole = "main" | "side" | "back" | "detail";
@@ -25,6 +26,13 @@ export type UploadFlowState = "idle" | "uploading" | "uploaded" | "error";
 const MAX_MB = 10;
 const MAX_BYTES = MAX_MB * 1024 * 1024;
 const ACCEPT = "image/png,image/jpeg,image/jpg,image/webp";
+
+const SLOT_TOOLTIPS: Record<SourceImageRole, string> = {
+  main: "Главное фото — основа для всех сценариев. Без него генерация недоступна.",
+  side: "Дополнительный ракурс помогает AI точнее сохранить форму и пропорции товара.",
+  back: "Вид сзади полезен для упаковки и товаров с важными деталями на обратной стороне.",
+  detail: "Крупный план деталей улучшает передачу текстуры, фурнитуры и мелких элементов.",
+};
 
 const SLOTS: Array<{
   role: SourceImageRole;
@@ -156,7 +164,10 @@ function SourceImageSlot({
         </button>
         <div className="min-w-0 space-y-1 text-center">
           <div>
-            <p className="text-foreground text-xs leading-snug font-semibold">{slot.title}</p>
+            <p className="text-foreground inline-flex items-center justify-center gap-1 text-xs leading-snug font-semibold">
+              {slot.title}
+              <InfoTooltip content={SLOT_TOOLTIPS[slot.role]} side="top" />
+            </p>
             <p className="text-muted-foreground text-[11px] leading-snug">{slot.hint}</p>
           </div>
           {value ? (
@@ -299,13 +310,10 @@ export function SourceImagesUpload({
   return (
     <div className="min-w-0 max-w-full space-y-3">
       <div>
-        <h2 className="text-foreground text-base font-semibold tracking-tight sm:text-lg">
+        <h2 className="text-foreground inline-flex items-center gap-1 text-base font-semibold tracking-tight sm:text-lg">
           Загрузите фото товара
+          <InfoTooltip content="До 4 ракурсов. Главное фото — основа для всех сценариев; дополнительные помогают AI точнее сохранить форму и детали." />
         </h2>
-        <p className="text-muted-foreground mt-1 text-xs leading-snug sm:text-sm">
-          До 4 ракурсов. Главное фото — основа для всех сценариев; дополнительные помогают AI
-          точнее сохранить форму и детали.
-        </p>
       </div>
 
       <div className="flex items-center justify-between gap-3">

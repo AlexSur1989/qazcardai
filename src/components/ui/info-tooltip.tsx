@@ -17,7 +17,7 @@ function popupClassName(body: React.ReactNode) {
     "z-50 border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-900 shadow-md outline-none",
     "dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50",
     isLong
-      ? "max-w-[280px] whitespace-normal rounded-xl text-xs leading-snug"
+      ? "max-w-[320px] whitespace-normal rounded-xl text-xs leading-snug"
       : "whitespace-nowrap rounded-full",
   );
 }

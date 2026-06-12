@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import type { ProductCategoryId } from "@/config/product-card-categories";
 import { MANUAL_PRODUCT_CATEGORY_OPTIONS } from "@/config/product-card-manual-categories";
 import { PRODUCT_CLASSIFIER_MISSING_HINT } from "@/lib/product-classifier-result";
@@ -79,11 +80,10 @@ export function ProductDataSection({
   return (
     <section className="min-w-0 max-w-full space-y-4" aria-label="Данные товара">
       <div className="space-y-1">
-        <h3 className="text-foreground text-base font-semibold">Данные товара</h3>
-        <p className="text-muted-foreground text-sm">
-          Название и категория используются во всех сценариях. Преимущества для карточки
-          заполняются во вкладке «Карточка товара».
-        </p>
+        <h3 className="text-foreground inline-flex items-center gap-1 text-base font-semibold">
+          Данные товара
+          <InfoTooltip content="Название и категория используются во всех сценариях. Преимущества для карточки заполняются во вкладке «Карточка товара»." />
+        </h3>
       </div>
 
       {statusLine ? (
@@ -112,7 +112,10 @@ export function ProductDataSection({
 
       <div className="grid w-full min-w-0 max-w-full gap-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
         <div className="min-w-0 space-y-2">
-          <Label htmlFor="pc-product-title">Название товара</Label>
+          <Label htmlFor="pc-product-title" className="inline-flex items-center gap-1">
+            Название товара
+            <InfoTooltip content="Краткое название для всех сценариев. Его можно изменить вручную после автоматического распознавания фото." />
+          </Label>
           <Input
             id="pc-product-title"
             className="w-full min-w-0"
@@ -125,7 +128,10 @@ export function ProductDataSection({
         </div>
 
         <div className="min-w-0 space-y-2">
-          <Label htmlFor="pc-product-category">Категория</Label>
+          <Label htmlFor="pc-product-category" className="inline-flex items-center gap-1">
+            Категория
+            <InfoTooltip content="Категория помогает подобрать подходящие концепции съёмки и стиль карточки товара." />
+          </Label>
           <select
             id="pc-product-category"
             className="border-input w-full min-w-0 max-w-full rounded-xl border bg-card px-3 py-2.5 text-sm text-foreground shadow-sm"

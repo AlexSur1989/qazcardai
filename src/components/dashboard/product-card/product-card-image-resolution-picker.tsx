@@ -1,6 +1,7 @@
 "use client";
 
 import { Label } from "@/components/ui/label";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
   isProductCardImageResolutionAllowed,
   PRODUCT_CARD_IMAGE_RESOLUTIONS,
@@ -25,8 +26,9 @@ export function ProductCardImageResolutionPicker({
 }: Props) {
   return (
     <div className="space-y-2">
-      <Label htmlFor={id} className="text-[#0C2D38]">
+      <Label htmlFor={id} className="inline-flex items-center gap-1 text-[#0C2D38]">
         Разрешение изображения
+        <InfoTooltip content="Выбирайте стандартное качество для тестов и высокое качество для финальных материалов. Чем выше качество, тем выше стоимость." />
       </Label>
       <div className="flex flex-wrap gap-2" id={id}>
         {PRODUCT_CARD_IMAGE_RESOLUTIONS.map((res) => {
