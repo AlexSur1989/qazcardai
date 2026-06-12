@@ -1161,6 +1161,7 @@ export async function generateProductVideoForProductCard(p: {
   lastFrameUrl?: string | null;
   clientEstimateCredits?: number | null;
   modelSlug?: string | null;
+  productCardMode?: boolean;
 }): Promise<GenerateProductVideoResult> {
   const { userId, projectId, clientEstimateCredits, ...input } = p;
   const project = await getOwnedProjectOrNull(userId, projectId);
@@ -1232,10 +1233,13 @@ export async function generateProductVideoForProductCard(p: {
     };
   }
 
+  const productCardMode = p.productCardMode === true;
+
   const finalPrompt = buildProductVideoPrompt({
     motionStyle: input.motionStyle,
     userPrompt: input.userPrompt,
     loopVideo,
+    productCardMode,
   });
 
   const metadataRoot: Record<string, unknown> = {
@@ -1254,6 +1258,9 @@ export async function generateProductVideoForProductCard(p: {
     userPrompt: input.userPrompt,
     loopVideo,
     lastFrameUrl: lastFrameTrimmed || null,
+    productCardMode,
+    preserveTextAndInfographics: productCardMode,
+    videoPromptMode: productCardMode ? "product_card" : "product_image",
     modelSlug: model.slug,
     pricingScope: "PRODUCT_CARD",
     productCardModelType: model.productCardModelType,

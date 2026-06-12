@@ -437,6 +437,30 @@ const PRODUCT_VIDEO_MOTION: Record<Exclude<ProductVideoMotionStyle, "none">, str
     "Camera motion: premium brand promo — slow elegant moves, soft glow, glossy highlights, restrained dynamics, luxe feel.",
 };
 
+const PRODUCT_VIDEO_MOTION_CARD_MODE: Record<Exclude<ProductVideoMotionStyle, "none">, string> = {
+  smooth_zoom:
+    "Camera motion: very subtle, almost imperceptible slow push-in; minimal movement, stable framing.",
+  orbit:
+    "Camera motion: subtle soft parallax only — no orbital camera path, no rotation around the product.",
+  cinematic_movement:
+    "Camera motion: stable cinematic micro motion — tiny drift, no roll, no pan, composition locked.",
+  subtle_animation:
+    "Camera motion: very subtle move — micro dolly, tiny drift, or soft handheld steadiness, emphasis stays on the product, calm pacing.",
+  wow_effect:
+    "Camera motion: restrained premium motion — gentle lighting shimmer only, no fast beats, no aggressive camera moves.",
+  premium_promo:
+    "Camera motion: soft elegant micro motion — gentle glow shifts, minimal drift, luxe feel without layout change.",
+};
+
+export const PRODUCT_VIDEO_CARD_MODE_HINT = [
+  "Product card mode:",
+  "The input image is a finished marketplace product card. Preserve the existing text, infographics, icons, badges, product layout and composition.",
+  "Do not rewrite, replace, translate, remove, or distort any text. Do not change the position, size, color, or style of text blocks.",
+  "Do not invent new claims, prices, benefits, specifications, badges or labels. Keep all typography readable and stable.",
+  "Use only subtle motion, gentle lighting changes, soft parallax, and minimal camera movement.",
+  "The video should feel like the original product card came alive, not like a redesigned card.",
+].join(" ");
+
 const LEGACY_VIDEO_MOTION: Record<string, ProductVideoMotionStyle> = {
   smooth_rotate: "orbit",
   cinematic: "cinematic_movement",
@@ -457,10 +481,23 @@ function normalizeVideoMotion(motion: string): ProductVideoMotionStyle {
 export const PRODUCT_VIDEO_LOOP_HINT =
   "The video must loop seamlessly: motion and composition should return to the opening state so the clip can play on repeat without a visible jump cut.";
 
+export function getSafeVideoMotionPrompt(
+  motionStyle: string,
+  productCardMode: boolean,
+): string | null {
+  const m = normalizeVideoMotion(motionStyle);
+  if (m === "none") return null;
+  if (productCardMode) {
+    return PRODUCT_VIDEO_MOTION_CARD_MODE[m as Exclude<typeof m, "none">];
+  }
+  return PRODUCT_VIDEO_MOTION[m as Exclude<typeof m, "none">];
+}
+
 export type BuildProductVideoPromptInput = {
   motionStyle: string;
   userPrompt?: string;
   loopVideo?: boolean;
+  productCardMode?: boolean;
 };
 
 export function buildProductVideoPrompt(input: BuildProductVideoPromptInput): string;
@@ -473,12 +510,16 @@ export function buildProductVideoPrompt(
   b?: string,
 ): string {
   if (typeof a === "object" && a !== null) {
-    const m = normalizeVideoMotion(a.motionStyle);
     const u = (a.userPrompt ?? "").trim();
     const loop = a.loopVideo === true;
+    const cardMode = a.productCardMode === true;
     const parts = [PRODUCT_VIDEO_BASE_PROMPT];
-    if (m !== "none") {
-      parts.push(PRODUCT_VIDEO_MOTION[m as Exclude<typeof m, "none">]);
+    const motionLine = getSafeVideoMotionPrompt(a.motionStyle, cardMode);
+    if (motionLine) {
+      parts.push(motionLine);
+    }
+    if (cardMode) {
+      parts.push(PRODUCT_VIDEO_CARD_MODE_HINT);
     }
     if (loop) {
       parts.push(PRODUCT_VIDEO_LOOP_HINT);

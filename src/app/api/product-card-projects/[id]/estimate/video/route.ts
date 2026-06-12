@@ -28,6 +28,7 @@ const bodySchema = z.object({
     .min(1)
     .refine((s) => styleSet.has(s as (typeof PRODUCT_VIDEO_MOTION_STYLES)[number]["id"]), "Некорректный стиль движения"),
   lastFrameUrl: z.string().trim().url().max(2048).optional().nullable(),
+  productCardMode: z.boolean().optional().default(false),
 });
 
 type Ctx = { params: Promise<{ id: string }> };

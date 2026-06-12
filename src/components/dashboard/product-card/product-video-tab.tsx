@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Clapperboard, Download, ExternalLink, Loader2 } from "lucide-react";
@@ -96,6 +96,9 @@ export function ProductVideoTab({
   const router = useRouter();
   const loopFieldId = useId();
   const lastFrameToggleId = useId();
+  const productCardModeFieldId = useId();
+  const productCardModeTouchedRef = useRef(false);
+  const videoSettingsRef = useRef<Record<string, unknown>>({});
 
   const [sourceType, setSourceType] = useState<SourceTab>("original");
   const [sourceGenerationId, setSourceGenerationId] = useState<string | null>(null);
@@ -107,6 +110,7 @@ export function ProductVideoTab({
   const [motion, setMotion] = useState<ProductVideoMotionStyle>("none");
   const [userPrompt, setUserPrompt] = useState("");
   const [loopVideo, setLoopVideo] = useState(false);
+  const [productCardMode, setProductCardMode] = useState(false);
   const [useLastFrame, setUseLastFrame] = useState(false);
   const [lastFrameUrl, setLastFrameUrl] = useState("");
 
@@ -151,10 +155,21 @@ export function ProductVideoTab({
         metadata?: {
           conceptGenerations?: unknown;
           marketplaceCardGenerations?: unknown;
+          videoSettings?: unknown;
         };
       };
     }>(res);
     if (!parsed.ok || !res.ok) return;
+
+    const rawVideoSettings = parsed.data.project?.metadata?.videoSettings;
+    if (rawVideoSettings && typeof rawVideoSettings === "object" && rawVideoSettings !== null) {
+      videoSettingsRef.current = rawVideoSettings as Record<string, unknown>;
+      const savedMode = (rawVideoSettings as { productCardMode?: unknown }).productCardMode;
+      if (typeof savedMode === "boolean") {
+        setProductCardMode(savedMode);
+        productCardModeTouchedRef.current = true;
+      }
+    }
 
     const options: GeneratedSourceOption[] = [];
     const cList = parsed.data.project?.metadata?.conceptGenerations;
@@ -189,6 +204,41 @@ export function ProductVideoTab({
     }
     setGeneratedOptions(options);
   }, [projectId]);
+
+  const applyAutoProductCardMode = useCallback((nextSource: SourceTab) => {
+    if (productCardModeTouchedRef.current) return;
+    setProductCardMode(nextSource === "marketplace_card_generation");
+  }, []);
+
+  const persistProductCardMode = useCallback(
+    async (value: boolean) => {
+      if (!projectId) return;
+      const nextVideoSettings = {
+        ...videoSettingsRef.current,
+        productCardMode: value,
+      };
+      videoSettingsRef.current = nextVideoSettings;
+      await fetch(`/api/product-card-projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          metadata: {
+            videoSettings: nextVideoSettings,
+          },
+        }),
+      });
+    },
+    [projectId],
+  );
+
+  const onProductCardModeChange = useCallback(
+    (checked: boolean) => {
+      productCardModeTouchedRef.current = true;
+      setProductCardMode(checked);
+      void persistProductCardMode(checked);
+    },
+    [persistProductCardMode],
+  );
 
   useEffect(() => {
     if (!projectId || !canUseBackend) return;
@@ -275,6 +325,7 @@ export function ProductVideoTab({
           aspectRatio,
           motionStyle: motion,
           lastFrameUrl: effectiveLastFrameUrl,
+          productCardMode,
         }),
       });
       const parsed = await readJsonSafe<{ credits?: number; error?: string }>(res);
@@ -308,6 +359,7 @@ export function ProductVideoTab({
     aspectRatio,
     motion,
     effectiveLastFrameUrl,
+    productCardMode,
   ]);
 
   const showEstimate = canEstimate;
@@ -320,11 +372,13 @@ export function ProductVideoTab({
     setSourceType("original");
     setSourceGenerationId(null);
     setSelectedSourceImageUrl(url);
+    applyAutoProductCardMode("original");
   };
 
   const pickGenerated = (opt: GeneratedSourceOption) => {
     setSourceType(opt.sourceType);
     setSourceGenerationId(opt.generationId);
+    applyAutoProductCardMode(opt.sourceType);
   };
 
   const onSubmit = async () => {
@@ -343,6 +397,7 @@ export function ProductVideoTab({
         motionStyle: motion,
         userPrompt: userPrompt.trim(),
         loopVideo,
+        productCardMode,
         lastFrameUrl: effectiveLastFrameUrl,
       };
       if (typeof estimateCredits === "number" && Number.isFinite(estimateCredits)) {
@@ -543,6 +598,44 @@ export function ProductVideoTab({
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="space-y-2 rounded-2xl border border-[#B8DCE6] bg-[#F4FBFD]/40 p-4">
+          <div className="flex items-start gap-3">
+            <button
+              type="button"
+              id={productCardModeFieldId}
+              role="switch"
+              aria-checked={productCardMode}
+              onClick={() => onProductCardModeChange(!productCardMode)}
+              className={cn(
+                "relative mt-0.5 inline-flex h-7 w-12 shrink-0 rounded-full border transition-colors",
+                productCardMode
+                  ? "border-[#00AFCA] bg-[#00AFCA]"
+                  : "border-[#B8DCE6] bg-[#e8eef0]",
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-0.5 size-6 rounded-full bg-white shadow transition-transform",
+                  productCardMode ? "translate-x-5" : "translate-x-0.5",
+                )}
+              />
+            </button>
+            <div className="min-w-0 space-y-1">
+              <Label htmlFor={productCardModeFieldId} className="cursor-pointer text-[#0C2D38]">
+                Режим карточки товара
+              </Label>
+              <p className="text-xs text-[#4a6e7a]">
+                В этом режиме AI будет стараться не двигать камеру и не менять текст/инфографику на
+                изображении.
+              </p>
+              <p className="text-xs text-[#4a6e7a]">
+                Включите, если выбранное изображение уже является готовой карточкой товара с
+                заголовками, преимуществами, характеристиками, бейджами или инфографикой.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="space-y-2">
