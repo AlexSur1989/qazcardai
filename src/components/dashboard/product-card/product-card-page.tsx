@@ -22,6 +22,10 @@ import { SimpleProductCardTab } from "./simple-product-card-tab";
 import { ProductDataSection } from "./product-data-section";
 import { ConceptPhotoTab } from "./concept-photo-tab";
 import { ProductVideoTab } from "./product-video-tab";
+import {
+  ProductCardResultsPanel,
+  type VideoSourcePick,
+} from "./product-card-results-panel";
 import { SourceImagesUpload, type SourceImagesValue, type UploadFlowState } from "./source-images-upload";
 import { useProductCardProject } from "./use-product-card-project";
 
@@ -139,7 +143,16 @@ export function ProductCardPage({
 
   const [tab, setTab] = useState<TabId>(defaultTab);
   const [uploadFlow, setUploadFlow] = useState<UploadFlowState>("idle");
+  const [resultsRefreshKey, setResultsRefreshKey] = useState(0);
+  const [pendingVideoSource, setPendingVideoSource] = useState<VideoSourcePick | null>(null);
   const hasImage = Boolean(source?.url);
+
+  const bumpResultsPanel = () => setResultsRefreshKey((k) => k + 1);
+
+  const handleUseForVideo = (pick: VideoSourcePick) => {
+    setPendingVideoSource(pick);
+    setTab("video");
+  };
 
   const resolvedTab = useMemo((): TabId => {
     if (visibleTabs.length === 0) return tab;
@@ -205,6 +218,8 @@ export function ProductCardPage({
         </Alert>
       )}
 
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)] lg:items-start lg:gap-8">
+        <div className="min-w-0 space-y-6 sm:space-y-8">
       <div className="min-w-0 space-y-2">
         {uploadFlow !== "idle" && (
           <p className="text-muted-foreground text-xs" aria-live="polite">
@@ -319,6 +334,7 @@ export function ProductCardPage({
                 projectId={projectId}
                 balanceCredits={balanceDisplay}
                 sizePresets={conceptImageSizes}
+                onGenerationFinished={bumpResultsPanel}
               />
             )}
           </TabsContent>
@@ -344,6 +360,7 @@ export function ProductCardPage({
                     : null
                 }
                 showAdminHints={showAdminHints}
+                onGenerationFinished={bumpResultsPanel}
               />
             )}
           </TabsContent>
@@ -363,11 +380,24 @@ export function ProductCardPage({
                 balanceCredits={balanceDisplay}
                 videoPresets={videoPresets}
                 sourceImages={sourceImages}
+                pendingVideoSource={pendingVideoSource}
+                onPendingVideoSourceApplied={() => setPendingVideoSource(null)}
+                onGenerationFinished={bumpResultsPanel}
               />
             )}
           </TabsContent>
         </Tabs>
       </section>
+      </div>
+        </div>
+
+        <aside className="min-w-0 lg:sticky lg:top-24 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+          <ProductCardResultsPanel
+            projectId={projectId}
+            refreshKey={resultsRefreshKey}
+            onUseForVideo={handleUseForVideo}
+          />
+        </aside>
       </div>
     </div>
   );

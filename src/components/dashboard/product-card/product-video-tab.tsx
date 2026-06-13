@@ -26,6 +26,7 @@ import { getUserFacingGenerationStatusFromRaw } from "@/lib/generation-display";
 import { cn } from "@/lib/utils";
 
 import type { SourceImagesValue, SourceImageRole } from "./source-images-upload";
+import type { VideoSourcePick } from "./product-card-results-panel";
 
 const motions = getPublicProductVideoMotionStyles();
 
@@ -96,6 +97,9 @@ type Props = {
   balanceCredits: number;
   videoPresets: { duration: number; resolution: string; aspectRatio: string }[];
   sourceImages: SourceImagesValue;
+  pendingVideoSource?: VideoSourcePick | null;
+  onPendingVideoSourceApplied?: () => void;
+  onGenerationFinished?: () => void;
 };
 
 function presetForDuration(
@@ -136,6 +140,9 @@ export function ProductVideoTab({
   balanceCredits,
   videoPresets,
   sourceImages,
+  pendingVideoSource = null,
+  onPendingVideoSourceApplied,
+  onGenerationFinished,
 }: Props) {
   const router = useRouter();
   const loopFieldId = useId();
@@ -217,6 +224,8 @@ export function ProductVideoTab({
         metadata?: {
           conceptGenerations?: unknown;
           marketplaceCardGenerations?: unknown;
+          marketplaceCard?: unknown;
+          cardBuilder?: unknown;
           videoSettings?: unknown;
         };
       };
@@ -234,6 +243,35 @@ export function ProductVideoTab({
     }
 
     const options: GeneratedSourceOption[] = [];
+    const seenIds = new Set<string>();
+
+    const pushCardOption = (generationId: string) => {
+      if (seenIds.has(generationId)) return;
+      seenIds.add(generationId);
+      options.push({
+        generationId,
+        sourceType: "marketplace_card_generation",
+        label: "Карточка",
+      });
+    };
+
+    const readSimpleCardGenerations = (block: unknown) => {
+      if (!block || typeof block !== "object" || Array.isArray(block)) return;
+      const simpleCard = (block as Record<string, unknown>).simpleCard;
+      if (!simpleCard || typeof simpleCard !== "object" || Array.isArray(simpleCard)) return;
+      const gens = (simpleCard as Record<string, unknown>).generations;
+      if (!Array.isArray(gens)) return;
+      for (const x of gens) {
+        if (x && typeof x === "object" && "generationId" in x) {
+          const g = (x as { generationId: unknown }).generationId;
+          if (typeof g === "string" && g.trim()) pushCardOption(g.trim());
+        }
+      }
+    };
+
+    readSimpleCardGenerations(parsed.data.project?.metadata?.marketplaceCard);
+    readSimpleCardGenerations(parsed.data.project?.metadata?.cardBuilder);
+
     const cList = parsed.data.project?.metadata?.conceptGenerations;
     if (Array.isArray(cList)) {
       for (const x of cList) {
@@ -254,13 +292,7 @@ export function ProductVideoTab({
       for (const x of mList) {
         if (x && typeof x === "object" && "generationId" in x) {
           const g = (x as { generationId: unknown }).generationId;
-          if (typeof g === "string" && g.trim()) {
-            options.push({
-              generationId: g.trim(),
-              sourceType: "marketplace_card_generation",
-              label: "Карточка",
-            });
-          }
+          if (typeof g === "string" && g.trim()) pushCardOption(g.trim());
         }
       }
     }
@@ -301,6 +333,14 @@ export function ProductVideoTab({
     },
     [persistProductCardMode],
   );
+
+  useEffect(() => {
+    if (!pendingVideoSource) return;
+    setSourceType(pendingVideoSource.sourceType);
+    setSourceGenerationId(pendingVideoSource.sourceGenerationId);
+    applyAutoProductCardMode(pendingVideoSource.sourceType);
+    onPendingVideoSourceApplied?.();
+  }, [pendingVideoSource, applyAutoProductCardMode, onPendingVideoSourceApplied]);
 
   useEffect(() => {
     if (!projectId || !canUseBackend) return;
@@ -546,6 +586,7 @@ export function ProductVideoTab({
         setGenError("Нет generationId");
         return;
       }
+      onGenerationFinished?.();
       let st = d.status ?? "QUEUED";
       let outputUrl: string | null = null;
       const terminal = new Set(["COMPLETED", "FAILED", "REFUNDED", "CANCELLED", "BLOCKED"]);
@@ -567,6 +608,9 @@ export function ProductVideoTab({
         costCredits: typeof d.costCredits === "number" ? d.costCredits : 0,
         outputUrl,
       });
+      if (terminal.has(st)) {
+        onGenerationFinished?.();
+      }
       void loadProjectMeta();
       router.refresh();
     } catch {

@@ -45,6 +45,7 @@ type Props = {
   projectId: string | null;
   balanceCredits: number;
   sizePresets: { id: string; label: string; aspectRatio: string }[];
+  onGenerationFinished?: () => void;
 };
 
 type GenPollRow = {
@@ -92,6 +93,7 @@ export function ConceptPhotoTab({
   projectId,
   balanceCredits,
   sizePresets,
+  onGenerationFinished,
 }: Props) {
   const router = useRouter();
   const [conceptId, setConceptId] = useState<string | null>(null);
@@ -231,6 +233,7 @@ export function ConceptPhotoTab({
         setGenError("Сервер не вернул generationId");
         return;
       }
+      onGenerationFinished?.();
       let st = data.status ?? "QUEUED";
       let outputUrl: string | null = null;
       let errMsg: string | null = null;
@@ -256,6 +259,9 @@ export function ConceptPhotoTab({
         outputUrl,
         errorMessage: errMsg,
       });
+      if (terminal.has(st)) {
+        onGenerationFinished?.();
+      }
       router.refresh();
     } catch {
       setGenError("Сеть или сервер недоступен");

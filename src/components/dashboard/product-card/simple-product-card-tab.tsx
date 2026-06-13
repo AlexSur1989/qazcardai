@@ -99,6 +99,7 @@ type Props = {
   onUserTextChange: (value: string) => void;
   selectedCategoryLabel?: string | null;
   showAdminHints?: boolean;
+  onGenerationFinished?: () => void;
 };
 
 type PlanPreviewResponse = {
@@ -175,6 +176,7 @@ export function SimpleProductCardTab({
   onUserTextChange,
   selectedCategoryLabel = null,
   showAdminHints = false,
+  onGenerationFinished,
 }: Props) {
   const refFieldId = useId();
   const photosWithId = useMemo(
@@ -569,6 +571,7 @@ export function SimpleProductCardTab({
       setGenError("Нет ID генерации");
       return;
     }
+    onGenerationFinished?.();
 
     const initialStatus = (parsed.data.status ?? "QUEUED").toUpperCase();
     setGenerationSnapshot({
@@ -643,6 +646,9 @@ export function SimpleProductCardTab({
         setGenerating(false);
         if (snap.status === "FAILED" && snap.errorMessage) {
           setGenError(snap.errorMessage);
+        }
+        if (snap.status === "COMPLETED") {
+          onGenerationFinished?.();
         }
         return;
       }
