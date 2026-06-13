@@ -283,7 +283,7 @@ export function ProductCardResultsPanel({ projectId, refreshKey = 0, onUseForVid
       <CardHeader className="grid-rows-none flex flex-col gap-1.5 pb-3">
         <CardTitle className="text-base">
           <LabelWithInfoTooltip
-            label="Результаты проекта"
+            label="Результаты товара"
             tooltip="Здесь собраны созданные изображения и видео по текущему товару. Вы можете открыть результат, скачать его или использовать изображение как источник для видео."
           />
         </CardTitle>

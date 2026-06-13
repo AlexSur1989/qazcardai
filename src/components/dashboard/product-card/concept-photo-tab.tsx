@@ -332,7 +332,7 @@ export function ConceptPhotoTab({
           Выберите визуальное направление.
           <InfoTooltip content="Превью показывает пример стиля, а итоговое изображение будет создано по вашему товару." />
         </p>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3">
           {concepts.map((c) => {
             const selected = conceptId === c.id;
             return (

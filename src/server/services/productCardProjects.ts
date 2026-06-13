@@ -134,6 +134,30 @@ export async function createProductCardProject(
   });
 }
 
+const PROJECT_LIST_SELECT = {
+  id: true,
+  title: true,
+  sourceImageUrl: true,
+  sourceImages: true,
+  metadata: true,
+  updatedAt: true,
+  createdAt: true,
+} as const;
+
+/** Список товаров пользователя (новые сверху). */
+export async function listProductCardProjectsForUser(
+  userId: string,
+  opts?: { limit?: number },
+) {
+  const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 100);
+  return prisma.productCardProject.findMany({
+    where: { userId },
+    orderBy: { updatedAt: "desc" },
+    take: limit,
+    select: PROJECT_LIST_SELECT,
+  });
+}
+
 export async function getProductCardProject(userId: string, projectId: string) {
   const p = await prisma.productCardProject.findFirst({
     where: { id: projectId, userId },

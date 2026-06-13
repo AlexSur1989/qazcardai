@@ -218,9 +218,12 @@ export type ClassifierPrefill = ClassifierPrefillPayload & {
 export function useProductCardProject(options?: {
   classifierDevMock?: string | null;
   classifierAutoEnabled?: boolean;
+  /** Приоритет над sessionStorage */
+  queryProjectId?: string | null;
 }) {
   const classifierDevMock = options?.classifierDevMock?.trim() || null;
   const classifierAutoEnabled = options?.classifierAutoEnabled ?? false;
+  const queryProjectId = options?.queryProjectId?.trim() || null;
   const [projectId, setProjectId] = useState<string | null>(null);
   const [source, setSourceState] = useState<SourceImageValue>(null);
   const [sourceImages, setSourceImagesState] = useState<SourceImagesValue>([]);
@@ -249,6 +252,29 @@ export function useProductCardProject(options?: {
 
   const clearSession = useCallback(() => {
     if (typeof window !== "undefined") sessionStorage.removeItem(STORAGE_KEY);
+  }, []);
+
+  const resetLocalProjectState = useCallback(() => {
+    productTitleTouchedRef.current = false;
+    productDescriptionTouchedRef.current = false;
+    productBenefitsTouchedRef.current = false;
+    setSourceState(null);
+    setSourceImagesState([]);
+    setSelectedCategory(null);
+    setCategorySource(null);
+    setClassifyInfo(null);
+    setClassifyFlow("not_started");
+    setClassifyError(null);
+    setPendingClassifierResult(null);
+    setShowClassifierResult(false);
+    setProductTitle("");
+    setProductDescription("");
+    setProductBenefitsText("");
+  }, []);
+
+  const rememberProjectId = useCallback((id: string) => {
+    sessionStorage.setItem(STORAGE_KEY, id);
+    setProjectId(id);
   }, []);
 
   const applyProjectRow = useCallback((p: ProjectApiRow) => {
@@ -405,11 +431,34 @@ export function useProductCardProject(options?: {
         setLoadError("Некорректный ответ сервера");
         return false;
       }
-      setProjectId(p.id);
+      rememberProjectId(p.id);
       applyProjectRow(p);
       return true;
     },
-    [applyProjectRow, clearSession],
+    [applyProjectRow, clearSession, rememberProjectId],
+  );
+
+  const startNewProduct = useCallback(async (): Promise<string | null> => {
+    resetLocalProjectState();
+    clearSession();
+    setProjectId(null);
+    setLoadError(null);
+    const newId = await createEmptyProject();
+    return newId;
+  }, [clearSession, createEmptyProject, resetLocalProjectState]);
+
+  const openProduct = useCallback(
+    async (id: string): Promise<boolean> => {
+      resetLocalProjectState();
+      setLoadError(null);
+      const ok = await loadProject(id);
+      if (!ok) {
+        clearSession();
+        setProjectId(null);
+      }
+      return ok;
+    },
+    [clearSession, loadProject, resetLocalProjectState],
   );
 
   const patchProject = useCallback(
@@ -531,22 +580,39 @@ export function useProductCardProject(options?: {
   );
 
   const didHydrate = useRef(false);
+  const lastQueryProjectIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (didHydrate.current) return;
     didHydrate.current = true;
     void (async () => {
-      const id = sessionStorage.getItem(STORAGE_KEY);
+      const id = queryProjectId || sessionStorage.getItem(STORAGE_KEY);
       if (id) {
         const ok = await loadProject(id);
         if (!ok) {
+          clearSession();
           setProjectId(null);
           setSourceState(null);
           setSourceImagesState([]);
+        } else if (queryProjectId) {
+          rememberProjectId(queryProjectId);
         }
       }
+      lastQueryProjectIdRef.current = queryProjectId;
       setInitDone(true);
     })();
-  }, [loadProject]);
+  }, [clearSession, loadProject, queryProjectId, rememberProjectId]);
+
+  useEffect(() => {
+    if (!initDone) return;
+    if (!queryProjectId) {
+      lastQueryProjectIdRef.current = null;
+      return;
+    }
+    if (queryProjectId === lastQueryProjectIdRef.current) return;
+    lastQueryProjectIdRef.current = queryProjectId;
+    if (queryProjectId === projectId) return;
+    void openProduct(queryProjectId);
+  }, [initDone, openProduct, projectId, queryProjectId]);
 
   const persistProductDataFields = useCallback(
     async (fields: {
@@ -810,6 +876,9 @@ export function useProductCardProject(options?: {
     return createEmptyProject();
   }, [projectId, createEmptyProject]);
 
+  const productDisplayName =
+    productTitle.trim() || (projectId ? "Товар без названия" : "Новый товар");
+
   return {
     initDone,
     projectId,
@@ -844,5 +913,8 @@ export function useProductCardProject(options?: {
     setProductBenefitsTextManual,
     aiAnalysisStatus,
     retryProductAnalysis,
+    startNewProduct,
+    openProduct,
+    productDisplayName,
   };
 }

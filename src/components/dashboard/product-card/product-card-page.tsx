@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,6 +29,7 @@ import {
   type VideoSourcePick,
 } from "./product-card-results-panel";
 import { SourceImagesUpload, type SourceImagesValue, type UploadFlowState } from "./source-images-upload";
+import { CurrentProductBar } from "./current-product-bar";
 import { useProductCardProject } from "./use-product-card-project";
 
 const SCENARIO_TAB: Array<{
@@ -101,6 +104,10 @@ export function ProductCardPage({
   showAdminHints,
   classifierDevMock = null,
 }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryProjectId = searchParams.get("projectId");
+
   const {
     initDone,
     projectId,
@@ -122,9 +129,12 @@ export function ProductCardPage({
     setProductBenefitsTextManual,
     aiAnalysisStatus,
     retryProductAnalysis,
+    startNewProduct,
+    productDisplayName,
   } = useProductCardProject({
     classifierDevMock,
     classifierAutoEnabled: classifierAccess.canClassify || Boolean(classifierDevMock),
+    queryProjectId,
   });
 
   const classifierDevMockActive = Boolean(classifierDevMock);
@@ -145,9 +155,34 @@ export function ProductCardPage({
   const [uploadFlow, setUploadFlow] = useState<UploadFlowState>("idle");
   const [resultsRefreshKey, setResultsRefreshKey] = useState(0);
   const [pendingVideoSource, setPendingVideoSource] = useState<VideoSourcePick | null>(null);
+  const [newProductBusy, setNewProductBusy] = useState(false);
   const hasImage = Boolean(source?.url);
+  const projectScopeKey = projectId ?? "none";
+
+  const handleNewProduct = async () => {
+    setNewProductBusy(true);
+    try {
+      const id = await startNewProduct();
+      if (!id) {
+        toast.error("Не удалось создать новый товар");
+        return;
+      }
+      setResultsRefreshKey(0);
+      setPendingVideoSource(null);
+      setTab(defaultTab);
+      router.replace("/dashboard/create/product-card");
+      toast.success("Создан новый товар");
+    } finally {
+      setNewProductBusy(false);
+    }
+  };
 
   const bumpResultsPanel = () => setResultsRefreshKey((k) => k + 1);
+
+  useEffect(() => {
+    setResultsRefreshKey(0);
+    setPendingVideoSource(null);
+  }, [projectScopeKey]);
 
   const handleUseForVideo = (pick: VideoSourcePick) => {
     setPendingVideoSource(pick);
@@ -192,6 +227,15 @@ export function ProductCardPage({
 
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-clip sm:space-y-8">
+      <CurrentProductBar
+        displayName={productDisplayName}
+        hasProject={Boolean(projectId)}
+        canRename={canUseBackend}
+        onRename={setProductTitleManual}
+        onNewProduct={() => void handleNewProduct()}
+        newProductBusy={newProductBusy}
+      />
+
       <p className="text-muted-foreground text-sm">
         Баланс (токены):{" "}
         <span className="text-foreground font-medium tabular-nums">{balanceDisplay}</span>
@@ -326,6 +370,7 @@ export function ProductCardPage({
               <ScenarioSetupNotice adminHint={adminHintForTab("concepts")} showAdminLink={showAdminHints} />
             ) : (
               <ConceptPhotoTab
+                key={projectScopeKey}
                 selectedCategory={selectedCategory}
                 productTitle={productTitle}
                 productBenefitsText={productBenefitsText}
@@ -343,6 +388,7 @@ export function ProductCardPage({
               <ScenarioSetupNotice adminHint={adminHintForTab("card")} showAdminLink={showAdminHints} />
             ) : (
               <SimpleProductCardTab
+                key={projectScopeKey}
                 initDone={initDone}
                 ensureProjectId={ensureProjectId}
                 projectId={projectId}
@@ -374,6 +420,7 @@ export function ProductCardPage({
               />
             ) : (
               <ProductVideoTab
+                key={projectScopeKey}
                 hasImage={hasImage}
                 canUseBackend={canUseBackend}
                 projectId={projectId}
@@ -393,6 +440,7 @@ export function ProductCardPage({
 
         <aside className="min-w-0 lg:sticky lg:top-24 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
           <ProductCardResultsPanel
+            key={projectScopeKey}
             projectId={projectId}
             refreshKey={resultsRefreshKey}
             onUseForVideo={handleUseForVideo}

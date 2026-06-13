@@ -17,6 +17,7 @@ export type DashboardNavItem = {
 
 const ALL_ITEMS: DashboardNavItem[] = [
   { href: "/dashboard/create/product-card", label: "Создать карточку товара", icon: "package" },
+  { href: "/dashboard/products", label: "Мои товары", icon: "package" },
   { href: "/dashboard", label: "Обзор", icon: "layout-dashboard" },
   { href: "/dashboard/models", label: "AI модели", icon: "sparkles" },
   { href: "/dashboard/history", label: "История", icon: "history" },

@@ -7,12 +7,35 @@ import {
   rejectOversizedBody,
 } from "@/lib/request-body-limits";
 import { getFreshSessionUser } from "@/server/services/fresh-session-user";
-import { createProductCardProject } from "@/server/services/productCardProjects";
+import {
+  createProductCardProject,
+  listProductCardProjectsForUser,
+} from "@/server/services/productCardProjects";
 import { enforceGenerationRateLimit } from "@/server/services/rateLimitService";
 
 const createBody = z.object({
   title: z.string().max(200).optional().nullable(),
 });
+
+export async function GET() {
+  const current = await getFreshSessionUser();
+  if (!current.ok) {
+    if (current.reason === "inactive") {
+      return NextResponse.json({ error: "Аккаунт недоступен" }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
+
+  try {
+    const projects = await listProductCardProjectsForUser(current.user.id);
+    return NextResponse.json({ projects });
+  } catch (e) {
+    return prismaErrorToJsonResponse(
+      e,
+      "Не удалось загрузить список товаров.",
+    );
+  }
+}
 
 export async function POST(req: Request) {
   const current = await getFreshSessionUser();
